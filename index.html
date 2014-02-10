@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <title ng-bind-template="WeeChat {{ pageTitle}}"></title>
     <link href="//netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" rel="stylesheet" media="screen">
     <link rel="shortcut icon" sizes="128x128" href="img/weechat_logo_128x128.png">
@@ -35,11 +36,11 @@
         <img alt="logo" src="img/favicon.png">
         glowing bear
         <small>
-          WeeChat web frontend 
+          WeeChat web frontend
         </small>
       </h2>
         <div class="alert alert-danger" ng-show="errorMessage">
-          <strong>Connection error</strong> The client was unable to connect to the WeeChat relay 
+          <strong>Connection error</strong> The client was unable to connect to the WeeChat relay
         </div>
         <div class="panel-group" id="accordion">
           <div class="panel">
@@ -59,7 +60,7 @@
                       <input type="text" class="form-control monospace" id="host" ng-model="host" placeholder="Address">
                       <input type="text" class="form-control monospace" id="port" ng-model="port" placeholder="9001">
                     </div>
-                    <label class="control-label" for="password">WeeChat relay password</label> 
+                    <label class="control-label" for="password">WeeChat relay password</label>
                     <input type="password" class="form-control monospace" id="password" ng-model="password" placeholder="Password">
                     <div class="alert alert-danger" ng-show="passwordError">
                       Error: wrong password
@@ -176,7 +177,7 @@ $ openssl req -nodes -newkey rsa:2048 -keyout relay.pem -x509 -days 365 -out rel
             <div class="actions pull-right vertical-line-left">
               <div class="dropdown pull-left">
                 <a href="#" class="dropdown-toggle" data-toggle="dropdown" title="Options menu">
-                  <i class="glyphicon glyphicon-cog"></i> 
+                  <i class="glyphicon glyphicon-cog"></i>
                 </a>
                 <ul class="dropdown-menu pull-right">
                   <li class="">
@@ -194,7 +195,7 @@ $ openssl req -nodes -newkey rsa:2048 -keyout relay.pem -x509 -days 365 -out rel
                       <div class="checkbox">
                         <label>
                           <input type="checkbox" ng-model="notimestamp">
-                          Hide timestamps 
+                          Hide timestamps
                         </label>
                       </div>
                     </form>
@@ -204,7 +205,7 @@ $ openssl req -nodes -newkey rsa:2048 -keyout relay.pem -x509 -days 365 -out rel
                       <div class="checkbox">
                         <label>
                           <input type="checkbox" ng-model="noembed">
-                           Hide embedded content by default 
+                           Hide embedded content by default
                         </label>
                       </div>
                     </form>
@@ -252,7 +253,7 @@ $ openssl req -nodes -newkey rsa:2048 -keyout relay.pem -x509 -days 365 -out rel
                 </ul>
               </div>
               <a ng-click="disconnect()" title="Disconnect from WeeChat">
-                <i class="glyphicon glyphicon-remove"></i> 
+                <i class="glyphicon glyphicon-remove"></i>
               </a>
             </div>
       </div>
