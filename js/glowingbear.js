@@ -1287,7 +1287,7 @@ weechat.directive('inputBar', function() {
                 });
 
                 // Check for /clear command
-                if ($scope.command === '/clear' || $scope.command === '/c') {
+                if ($scope.command === '/buffer clear' || $scope.command === '/c') {
                     $log.debug('Clearing lines');
                     ab.clear();
                 }
