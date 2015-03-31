@@ -260,8 +260,10 @@ input[type=text], input[type=password], #sendMessage, .badge {
     -webkit-transition:0.2 ease-in-out all;
     transition:0.2s ease-in-out all;
 }
-#bufferlines > table {
+#bufferlines > table:first-child {
     margin-top: 35px;
+}
+#bufferlines > table {
     width: 100%;
 }
 tr.bufferline {
