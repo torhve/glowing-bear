@@ -538,7 +538,7 @@ weechat.controller('WeechatCtrl', ['$rootScope', '$scope', '$store', '$timeout',
                 var readmarker = document.querySelector(".readmarker");
                 if (scrollToReadmarker && readmarker) {
                     // Switching channels, scroll to read marker
-                    bl.scrollTop = readmarker.offsetTop - readmarker.parentElement.scrollHeight + readmarker.scrollHeight;
+                    bl.scrollTop = readmarker.offsetTop - readmarker.scrollHeight;
                 } else if (moreLines) {
                     // We fetched more lines but the read marker is still out of view
                     // Keep the scroll position constant
@@ -555,7 +555,6 @@ weechat.controller('WeechatCtrl', ['$rootScope', '$scope', '$store', '$timeout',
         $timeout(scroll);
         window.requestAnimationFrame(scroll);
     };
-
 
     $scope.connect = function() {
         notifications.requestNotificationPermission();

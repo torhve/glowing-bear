@@ -113,11 +113,9 @@ $scope.BufferLines = React.createClass({
         console.log('render', this, this.props.buffer);
         var lastSeen = this.props.buffer.lastSeen;
         var rows = this.props.bufferlines.map(function(bufferline, i) {
-            if (lastSeen === i) {
-                return React.createElement($scope.ReadMarker);
-            }
             return React.createElement($scope.BufferLine, {bufferline:bufferline});
         })
+        rows.splice(lastSeen, 0, React.createElement($scope.ReadMarker));
         return (
             React.DOM.tbody(null,
                 rows
@@ -133,7 +131,6 @@ $scope.BufferLines = React.createClass({
                     el[0],
                     function() {
                         console.log('rendered');
-                        scope.$root.updateBufferBottom(true);
                         scope.$root.scrollWithBuffer(true);
                     }
                 );
