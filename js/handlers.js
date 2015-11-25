@@ -19,12 +19,60 @@ weechat.factory('handlers', ['$rootScope', '$log', 'models', 'plugins', 'notific
         models.closeBuffer(bufferId);
     };
 
+    // inject a fake buffer line for date change
+    var injectDateChangeMessage = function(message, buffer, old_date, new_date) {
+        var old_date_plus_one = old_date;
+        old_date_plus_one.setDate(old_date.getDate() + 1);
+
+        new_date.setHours(0, 0, 0, 0);
+        old_date.setHours(0, 0, 0, 0);
+        // it's not always true that a date with time 00:00:00
+        // plus one day will be time 00:00:00
+        old_date_plus_one.setHours(0, 0, 0, 0);
+
+        var content = "\u001943" + // styling
+            "Date changed to " + new_date.toDateString();
+        // Comparing dates in javascript is beyond tedious
+        if (old_date_plus_one.valueOf() !== new_date.valueOf()) {
+            var date_diff = Math.round((new_date - old_date)/(24*60*60*1000));
+            if (date_diff < 0) {
+                date_diff = -1*(date_diff + 1);
+                content += " (" + date_diff + " days before " + old_date.toDateString() + ")";
+            } else {
+                content += " (" + date_diff + " days have passed since  " + old_date.toDateString() + ")";
+            }
+        }
+
+        var line = {
+            buffer: buffer,
+            date: new_date,
+            prefix: '\u001943\u2500\u2500',
+            tags_array: [],
+            displayed: true,
+            highlight: 0,
+            message: content
+        };
+        var new_message = new models.BufferLine(line);
+        buffer.addLine(new_message);
+    };
+
     var handleLine = function(line, manually) {
         var message = new models.BufferLine(line);
         var buffer = models.getBuffer(message.buffer);
         buffer.requestedLines++;
         // Only react to line if its displayed
         if (message.displayed) {
+            // Check for date change
+            if (buffer.lines.length > 0) {
+                var previous_date = new Date(buffer.lines[buffer.lines.length - 1].date),
+                    current_date = new Date(message.date);
+                previous_date.setHours(0, 0, 0, 0);
+                current_date.setHours(0, 0, 0, 0);
+                if (previous_date.valueOf() !== current_date.valueOf()) {
+                    injectDateChangeMessage(message, buffer, previous_date, current_date);
+                }
+            }
+
             message = plugins.PluginManager.contentForMessage(message);
             buffer.addLine(message);
 
