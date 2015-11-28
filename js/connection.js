@@ -283,7 +283,7 @@ weechat.factory('connection',
 
     var requestNicklist = function(bufferId, callback) {
         // Prevent requesting nicklist for all buffers if bufferId is invalid
-        if (!bufferId || bufferId === null || bufferId === undefined) {
+        if (!bufferId) {
             return;
         }
         ngWebsockets.send(
