@@ -711,13 +711,19 @@
         var defaultParams = {
             id: null,
             pointer: null,
-            arguments: null
+            args: null
 
         };
         var parts = [];
 
         params = WeeChatProtocol._mergeParams(defaultParams, params);
         parts.push(params.name);
+        if (params.pointer !== null) {
+            parts.push(params.pointer);
+        }
+        if (params.pointer !== null) {
+            parts.push(params.args);
+        }
 
         return WeeChatProtocol._formatCmd(params.id, 'infolist', parts);
     };
