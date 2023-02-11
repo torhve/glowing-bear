@@ -162,9 +162,17 @@ weechat.factory('notifications', ['$rootScope', '$log', 'models', 'settings', 'u
             $rootScope.notificationStatus = '';
         }
 
-        var activeBuffer = models.getActiveBuffer();
+        let activeBuffer = models.getActiveBuffer();
         if (activeBuffer) {
-            let title = activeBuffer.shortName + ' | ' + activeBuffer.rtitle;
+            let titleparts = [];
+            if (activeBuffer.shortName && activeBuffer.shortName !== "") {
+              titleparts.push(activeBuffer.shortName);
+            } else {
+              titleparts.push(activeBuffer.fullName);
+            }
+            titleparts.push(activeBuffer.rtitle); 
+            titleparts = titleparts.filter(n => n); // Remove empty parts
+            let title = titleparts.join(' | ');
             $rootScope.pageTitle = title;
             // If running in Tauri, use platform code to update its window title
             if (utils.isTauri()) {
