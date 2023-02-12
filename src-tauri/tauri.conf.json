@@ -45,7 +45,7 @@
         "certificateThumbprint": null,
         "digestAlgorithm": "sha256",
         "webviewInstallMode": {
-          "type": "downloadBootstrapper"
+          "type": "embedBootstrapper"
         },
         "timestampUrl": ""
       }
