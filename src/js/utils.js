@@ -31,7 +31,7 @@ weechat.factory('utils', function() {
     const _isTauri = window.__TAURI__ !== undefined;
     var isTauri = function() {
         return _isTauri;
-    }
+    };
 
     // Inject a javascript (used by KaTeX)
     var inject_script = function(script_url) {
