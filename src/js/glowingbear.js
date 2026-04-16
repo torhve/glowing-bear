@@ -1019,6 +1019,23 @@ weechat.controller('WeechatCtrl', ['$rootScope', '$scope', '$store', '$timeout',
     $scope.init = function() {
         $scope.parseHost();
         $scope.parseHash();
+        if (utils.isTauri()) {
+            if (/Mac/.test(navigator.userAgent)) {
+                document.body.classList.add('tauri-macos');
+            }
+            // Tauri 2 does not automatically open target="_blank" links in the
+            // system browser — intercept all external link clicks and delegate
+            // to the OS via the opener plugin.
+            document.addEventListener('click', function(e) {
+                var anchor = e.target.closest('a[href]');
+                if (!anchor) { return; }
+                var href = anchor.href;
+                if (href && (href.startsWith('http:') || href.startsWith('https:'))) {
+                    e.preventDefault();
+                    window.__TAURI__.opener.openUrl(href);
+                }
+            }, true);
+        }
     };
 
 }]);
