@@ -143,7 +143,7 @@ weechat.factory('notifications', ['$rootScope', '$log', 'models', 'settings', 'u
             $rootScope.pageTitle = title;
             // If running in Tauri, use platform code to update its window title
             if (utils.isTauri()) {
-                __TAURI__.window.appWindow.setTitle(title);
+                __TAURI__.window.getCurrentWindow().setTitle(title);
             }
             
         }
