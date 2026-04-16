@@ -118,7 +118,7 @@ IrcUtils.service('IrcUtils', [function() {
         var addSpaceChar = (addSpace === undefined || addSpace === 'on') ? ' ' : '';
 
         // new nick list to search in
-        var searchNickList = _ciNickList(nickList);
+        var searchNickList = nickList.map((el) => el.name);
 
         // text before and after caret
         var beforeCaret = text.substring(0, caretPos);
