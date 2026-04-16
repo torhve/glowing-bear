@@ -1029,6 +1029,13 @@ weechat.controller('WeechatCtrl', ['$rootScope', '$scope', '$store', '$timeout',
             document.addEventListener('click', function(e) {
                 var anchor = e.target.closest('a[href]');
                 if (!anchor) { return; }
+
+                // 1. Get the raw href as written in the HTML (e.g., "#section" or "/path")
+                const rawHref = anchor.getAttribute('href');
+
+                // 2. Ignore if it's just an internal anchor/fragment
+                if (rawHref.startsWith('#')) return;
+
                 var href = anchor.href;
                 if (href && (href.startsWith('http:') || href.startsWith('https:'))) {
                     e.preventDefault();

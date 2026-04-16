@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-capability.json",
+  "identifier": "main-capability",
+  "description": "Capability for main window permissions",
+  "windows": ["main"],
+  "permissions": [
+    "core:window:allow-set-title",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://*" },
+        { "url": "http://*" }
+      ]
+    }
+  ]
+}
