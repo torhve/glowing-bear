@@ -53,6 +53,10 @@ function($rootScope, $q) {
      */
     var send = function(message) {
 
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            return $q.reject('WebSocket is not open');
+        }
+
         var cb = createCallback(message);
 
         message = protocol.setId(cb.id,
