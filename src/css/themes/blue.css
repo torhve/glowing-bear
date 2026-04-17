@@ -29,6 +29,20 @@ a {
     color: #ccc;
     background: #141922;
     border: 2px solid #4a5b6c;
+    border-radius: 6px;
+}
+
+/* Override Bootstrap's input-group corner-zeroing */
+.input-group .form-control:first-child {
+    border-top-right-radius: 6px;
+    border-bottom-right-radius: 6px;
+}
+.input-group .form-control:last-child {
+    border-top-left-radius: 6px;
+    border-bottom-left-radius: 6px;
+}
+.input-group .form-control:not(:first-child):not(:last-child) {
+    border-radius: 6px;
 }
 
 .form-control option {
@@ -86,6 +100,7 @@ td.message {
 input[type=text], input[type=password], #sendMessage, .badge {
     /*box-shadow: 0px 1px 0px rgba(255, 255, 255, 0.1), 0px 1px 7px 0px rgba(0, 0, 0, 0.8) inset; */
    border: 1px solid #4a5b6c;
+   border-radius: 6px;
 }
 
 input[type=text], input[type=password], #sendMessage, .badge, .btn-send, .btn-send-image, .btn-complete-nick {
