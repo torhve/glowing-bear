@@ -45,6 +45,11 @@ a {
     border-radius: 6px;
 }
 
+.form-control::placeholder {
+    color: #3a4a5a;
+    opacity: 1;
+}
+
 .form-control option {
    color: #eee;
    background: #282828;
