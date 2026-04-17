@@ -14,8 +14,10 @@ a {
 }
 
 
-.badge {
-   border-radius: 0;
+.badge,
+#sidebar .buffer.unread .badge,
+#sidebar .buffer.notification .badge {
+   border-radius: 6px;
 }
 
 .footer {
