@@ -67,6 +67,7 @@ td.message {
     width: 100%;
     height: 35px;
     resize: none;
+    line-height: 1;
 }
 
 #sendMessage:focus, #sendMessage:active {
