@@ -92,27 +92,6 @@ export const connectionFactory = ['$rootScope', '$log', 'handlers', 'models', 's
             };
 
             // Helper methods for initialization commands
-            // Used for plain-text authentication (non-secure contexts)
-            var _initializeConnectionPre29 = function(passwd, totp) {
-                // Escape comma in password (#937)
-                passwd = passwd.replace(',', '\\,');
-
-                ngWebsockets.send(
-                    weeChat.Protocol.formatInitPre29({
-                        password: passwd,
-                        compression: noCompression ? 'off' : 'zlib',
-                        totp: totp
-                    })
-                );
-
-                // Wait a little bit until the init is sent
-                return new Promise(function(resolve) {
-                    setTimeout(function() { resolve(); }, 5);
-                });
-
-            };
-
-            // Helper methods for initialization commands
             // This method is used to initialize weechat >= 2.9
             var salt;
             var _initializeConnection29 = function(passwd, nonce, iterations, totp) {
@@ -301,7 +280,13 @@ export const connectionFactory = ['$rootScope', '$log', 'handlers', 'models', 's
                     if (passwordMethod == "pbkdf2+sha512") {
                         return _initializeConnection29(passwd, nonce, iterations, totp);
                     } else if (passwordMethod == "plain") {
-                        return _initializeConnectionPre29(passwd, totp);
+                        // Non-secure context: send plain password using the 2.9+ init format
+                        ngWebsockets.send(
+                            weeChat.Protocol.formatInit29('plain:' + passwd, totp)
+                        );
+                        return new Promise(function(resolve) {
+                            setTimeout(function() { resolve(); }, 5);
+                        });
                     }
                 });
             }).then(function(){
