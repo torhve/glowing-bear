@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Glowing Bear is a browser-based frontend for the WeeChat IRC client. It speaks the WeeChat relay protocol directly over WebSockets — there is **no backend service**. All code is client-side JavaScript (AngularJS 1.x) plus an optional Tauri wrapper (Rust) for native desktop apps. The user's browser connects straight to their WeeChat instance.
 
-Requires WeeChat ≥ 0.4.2 on the server side. There is a compatibility shim for WeeChat 2.8 vs ≥ 2.9 around the handshake / password hashing (`settings.compatibilityWeechat28`).
+Requires WeeChat ≥ 2.9 on the server side.
 
 ## Common commands
 

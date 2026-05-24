@@ -533,17 +533,12 @@ weechat.controller('WeechatCtrl', ['$rootScope', '$scope', '$store', '$timeout',
         fullName = fullName.substring(0, fullName.lastIndexOf('.') + 1) + bufferName;  // substitute the last part
 
         if (!$scope.setActiveBuffer(fullName, 'fullName')) {
-            // WeeChat 0.4.0+ supports /join -noswitch
-            // As Glowing Bear requires 0.4.2+, we don't need to check the version
             var command = 'join -noswitch';
 
             // Check if it's a query and we need to use /query instead
             if (['#', '&', '+', '!'].indexOf(bufferName.charAt(0)) < 0) {  // these are the characters a channel name can start with (RFC 2813-2813)
-                command = 'query';
-                // WeeChat 1.2+ supports /query -noswitch. See also #577 (different context)
-                if ((models.version[0] == 1 && models.version[1] >= 2) || models.version[1] > 1) {
-                    command += " -noswitch";
-                }
+                // /query -noswitch is supported since WeeChat 1.2; we require 2.9+
+                command = 'query -noswitch';
             }
             connection.sendMessage('/' + command + ' ' + bufferName);
         }
