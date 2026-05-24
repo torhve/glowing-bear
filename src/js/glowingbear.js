@@ -78,7 +78,6 @@ weechat.controller('WeechatCtrl', ['$rootScope', '$scope', '$store', '$timeout',
         "currentlyViewedBuffers":{},
         'iToken': '',
         'iAlb': '',
-        'freenodeWarningRead': '',
     });
     $scope.settings = settings;
 
