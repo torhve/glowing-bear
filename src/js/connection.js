@@ -116,7 +116,7 @@ export const connectionFactory = ['$rootScope', '$log', 'handlers', 'models', 's
                     );
                 }).then(function (hash) {
                     ngWebsockets.send(
-                        weeChat.Protocol.formatInit29(
+                        weeChat.Protocol.formatInit(
                             'pbkdf2+sha512:' + utils.bytetoHexString(salt) + ':' +
                                 iterations + ':' + utils.bytetoHexString(hash),
                             totp
@@ -282,7 +282,7 @@ export const connectionFactory = ['$rootScope', '$log', 'handlers', 'models', 's
                     } else if (passwordMethod == "plain") {
                         // Non-secure context: send plain password using the 2.9+ init format
                         ngWebsockets.send(
-                            weeChat.Protocol.formatInit29('plain:' + passwd, totp)
+                            weeChat.Protocol.formatInit('plain:' + passwd, totp)
                         );
                         return new Promise(function(resolve) {
                             setTimeout(function() { resolve(); }, 5);
