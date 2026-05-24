@@ -18,6 +18,7 @@ export const connectionFactory = ['$rootScope', '$log', 'handlers', 'models', 's
 
     var connectionData = [];
     var reconnectTimer;
+    var hotlistInterval;
     var handleClose;
 
     // Global connection lock to prevent multiple connections from being opened
@@ -358,7 +359,10 @@ export const connectionFactory = ['$rootScope', '$log', 'handlers', 'models', 's
                     // Schedule hotlist syncing every so often so that this
                     // client will have unread counts (mostly) in sync with
                     // other clients or terminal usage directly.
-                    setInterval(function() {
+                    // Clear any interval left over from a previous connection
+                    // before registering a new one to avoid stacking on reconnect.
+                    clearInterval(hotlistInterval);
+                    hotlistInterval = setInterval(function() {
                         if ($rootScope.connected) {
                             _requestHotlist().then(function(hotlist) {
                                 handlers.handleHotlistInfo(hotlist);
@@ -540,6 +544,7 @@ export const connectionFactory = ['$rootScope', '$log', 'handlers', 'models', 's
     var disconnect = function() {
         $log.info('Disconnecting from relay');
         $rootScope.userdisconnect = true;
+        clearInterval(hotlistInterval);
         ngWebsockets.send(weeChat.Protocol.formatQuit());
         // In case the backend doesn't repond we will close from our end
         var closeTimer = setTimeout(function() {
