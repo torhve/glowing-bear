@@ -558,32 +558,6 @@ plugins.factory('userPlugins', ['$sanitize', function($sanitize) {
         }
     });
 
-    var tweetPlugin = new UrlPlugin('Tweet', function(url) {
-        var regexp = /^https?:\/\/twitter\.com\/(?:#!\/)?(\w+)\/status(?:es)?\/(\d+)/i;
-        var match = url.match(regexp);
-        if (match) {
-            url = 'https://api.twitter.com/1/statuses/oembed.json?omit_script=true&id=' + match[2];
-            return function() {
-                var element = this.getElement();
-                jsonp(url, function(data) {
-                    // Sanitize before insertion; set DNT via setAttribute afterwards
-                    // because $sanitize strips data-* attributes from its output.
-                    element.innerHTML = $sanitize(data.html);
-                    var blockquote = element.querySelector('blockquote.twitter-tweet');
-                    if (blockquote) {
-                        blockquote.setAttribute('data-dnt', 'true');
-                    }
-
-                    // The script tag needs to be generated manually or the browser won't load it
-                    var scriptElem = document.createElement('script');
-                    // Hardcoding the URL here, I don't suppose it's going to change anytime soon
-                    scriptElem.src = "https://platform.twitter.com/widgets.js";
-                    element.appendChild(scriptElem);
-                });
-            };
-        }
-    });
-
     /*
      * Streamable Embedded Player
      */
@@ -636,7 +610,7 @@ plugins.factory('userPlugins', ['$sanitize', function($sanitize) {
     });
 
     return {
-        plugins: [youtubePlugin, twitchPlugin, dailymotionPlugin, allocinePlugin, imagePlugin, videoPlugin, audioPlugin, spotifyPlugin, cloudmusicPlugin, googlemapPlugin, asciinemaPlugin, yrPlugin, gistPlugin, pastebinPlugin, giphyPlugin, tweetPlugin, streamablePlugin, tikTokPlugin]
+        plugins: [youtubePlugin, twitchPlugin, dailymotionPlugin, allocinePlugin, imagePlugin, videoPlugin, audioPlugin, spotifyPlugin, cloudmusicPlugin, googlemapPlugin, asciinemaPlugin, yrPlugin, gistPlugin, pastebinPlugin, giphyPlugin, streamablePlugin, tikTokPlugin]
     };
 
 
