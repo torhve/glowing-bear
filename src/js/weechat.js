@@ -660,45 +660,14 @@ WeeChatProtocol.formatHandshake = function(params) {
 };
 
 /**
- * Formats an init command for weechat versions < 2.9
+ * Formats an init command
  *
  * @param params Parameters:
- *            password: password (optional)
- *            compression: compression ('off' or 'zlib') (optional)
- *            totp: One Time Password (optional)
- * @return Formatted init command string
- */
-WeeChatProtocol.formatInitPre29 = function(params) {
-    var defaultParams = {
-        password: null,
-        compression: 'zlib',
-        totp: null
-    };
-    var keys = [];
-    var parts = [];
-
-    params = WeeChatProtocol._mergeParams(defaultParams, params);
-    keys.push('compression=' + params.compression);
-    if (params.password !== null) {
-        keys.push('password=' + params.password);
-    }
-    if (params.totp !== null) {
-        keys.push('totp=' + params.totp);
-    }
-    parts.push(keys.join(','));
-
-    return WeeChatProtocol._formatCmd(null, 'init', parts);
-};
-
-/**
- * Formats an init command for weechat versions >= 2.9
- *
- * @param params Parameters:
- *            password_hash: hash of password with method and salt
+ *            password_hash: hash of password with method and salt (e.g. "plain:PASSWORD" or "pbkdf2+sha512:SALT:ITER:HASH")
  *            totp: One Time Password (can be null)
  * @return Formatted init command string
  */
-WeeChatProtocol.formatInit29 = function(password_hash, totp) {
+WeeChatProtocol.formatInit = function(password_hash, totp) {
     var keys = [];
     var parts = [];
 
