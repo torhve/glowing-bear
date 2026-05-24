@@ -163,7 +163,7 @@ var UrlPlugin = function(name, urlCallback) {
 plugins.factory('userPlugins', function() {
     // standard JSONp origin policy trick
     var jsonp = function (url, callback) {
-        var callbackName = 'jsonp_callback_' + Math.round(100000 * Math.random());
+        var callbackName = 'jsonp_callback_' + crypto.randomUUID().replace(/-/g, '_');
         window[callbackName] = function(data) {
             delete window[callbackName];
             document.body.removeChild(script);

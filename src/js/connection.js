@@ -103,7 +103,7 @@ export const connectionFactory = ['$rootScope', '$log', 'handlers', 'models', 's
             // This method is used to initialize weechat < 2.9 but only if the User has picked compatibility mode explicitly
             var _initializeConnectionPre29 = function(passwd, totp) {
                 // Escape comma in password (#937)
-                passwd = passwd.replace(',', '\\,');
+                passwd = passwd.replace(/,/g, '\\,');
 
                 ngWebsockets.send(
                     weeChat.Protocol.formatInitPre29({
