@@ -91,10 +91,9 @@ export const connectionFactory = ['$rootScope', '$log', 'handlers', 'models', 's
                 });
             };
 
-            // Helper methods for initialization commands
-            // This method is used to initialize weechat >= 2.9
+            // Initializes the connection using PBKDF2+SHA512 password hashing
             var salt;
-            var _initializeConnection29 = function(passwd, nonce, iterations, totp) {
+            var _initializeConnection = function(passwd, nonce, iterations, totp) {
                 return window.crypto.subtle.importKey(
                     'raw',
                     utils.stringToUTF8Array(passwd),
@@ -278,7 +277,7 @@ export const connectionFactory = ['$rootScope', '$log', 'handlers', 'models', 's
                 return _askTotp(totpRequested)
                 .then(function(totp) {
                     if (passwordMethod == "pbkdf2+sha512") {
-                        return _initializeConnection29(passwd, nonce, iterations, totp);
+                        return _initializeConnection(passwd, nonce, iterations, totp);
                     } else if (passwordMethod == "plain") {
                         // Non-secure context: send plain password using the 2.9+ init format
                         ngWebsockets.send(
