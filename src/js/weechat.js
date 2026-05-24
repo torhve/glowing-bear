@@ -782,7 +782,7 @@ WeeChatProtocol.formatInfolist = function(params) {
     if (params.pointer !== null) {
         parts.push(params.pointer);
     }
-    if (params.pointer !== null) {
+    if (params.args !== null) {
         parts.push(params.args);
     }
 
@@ -1296,7 +1296,7 @@ WeeChatProtocol.prototype = {
      * @return Sliced array
      */
     _getSlice: function(length) {
-        if (this.dataAt + length > this._data.byteLength) {
+        if (this._dataAt + length > this._data.byteLength) {
             return null;
         }
 
