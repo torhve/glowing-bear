@@ -449,8 +449,8 @@ export const connectionFactory = ['$rootScope', '$log', 'handlers', 'models', 's
         if (locked) {
             // We already have an open connection
             $log.debug("Aborting connection (lock in use)");
+            return;
         }
-        // Kinda need a compare-and-swap here...
         locked = true;
 
         try {
@@ -532,6 +532,7 @@ export const connectionFactory = ['$rootScope', '$log', 'handlers', 'models', 's
         var bufferId = models.getActiveBuffer().id,
             timeout = 3000;  // start with a three-second timeout
 
+        clearTimeout(reconnectTimer);
         reconnectTimer = setTimeout(function() {
             attemptReconnect(bufferId, timeout);
         }, timeout);
