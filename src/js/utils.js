@@ -10,13 +10,6 @@ weechat.factory('utils', function() {
 	        e.style[attr] = value;
 	    });
 	};
-	// Helper to get style from a class
-	var getClassStyle = function(classSelector, attr) {
-	    Array.from(document.getElementsByClassName(classSelector)).forEach(function(e) {
-	        return e.style[attr];
-	    });
-	};
-
     var isMobileUi = function() {
         // TODO don't base detection solely on screen width
         // You are right. In the meantime I am renaming isMobileDevice to isMobileUi
@@ -84,7 +77,6 @@ weechat.factory('utils', function() {
 
     return {
     	changeClassStyle: changeClassStyle,
-    	getClassStyle: getClassStyle,
         isMobileUi: isMobileUi,
         isTauri: isTauri,
         inject_script: inject_script,

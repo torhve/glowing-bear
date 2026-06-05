@@ -65,8 +65,8 @@ weechat.factory('handlers', ['$rootScope', '$log', 'models', 'plugins', 'notific
                 // well.
                 ++buffer.lastSeen;
             }
-            var old_date_plus_one = old_date;
-            old_date_plus_one.setDate(old_date.getDate() + 1);
+            var old_date_plus_one = new Date(old_date.getTime());
+            old_date_plus_one.setDate(old_date_plus_one.getDate() + 1);
             // it's not always true that a date with time 00:00:00
             // plus one day will be time 00:00:00
             old_date_plus_one.setHours(0, 0, 0, 0);
@@ -91,7 +91,7 @@ weechat.factory('handlers', ['$rootScope', '$log', 'models', 'plugins', 'notific
                 day: "numeric",
                 month: "long"
             };
-            if (new_date.getYear() !== old_date.getYear()) {
+            if (new_date.getFullYear() !== old_date.getFullYear()) {
                 extra_date_format.year = "numeric";
             }
             content += " (";
