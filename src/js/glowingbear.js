@@ -1000,6 +1000,24 @@ weechat.controller('WeechatCtrl', ['$rootScope', '$scope', '$store', '$timeout',
     $scope.init = function() {
         $scope.parseHost();
         $scope.parseHash();
+
+        // Intercept link clicks in Tauri to open in external browser
+        if (window.__TAURI__) {
+            document.addEventListener('click', function(e) {
+                var target = e.target;
+                while (target && target.tagName !== 'A') {
+                    target = target.parentNode;
+                }
+                if (target && target.href && target.hostname !== window.location.hostname) {
+                    // Don't intercept fragment-only links
+                    if (target.hash === '#' || target.href.indexOf('#') === target.href.length - 1) {
+                        return;
+                    }
+                    e.preventDefault();
+                    window.__TAURI__.opener.openUrl(target.href);
+                }
+            });
+        }
     };
 
 }]);

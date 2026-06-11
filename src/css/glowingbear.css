@@ -149,6 +149,10 @@ input[type=text], input[type=password], #sendMessage {
 #topbar .glyphicon {
     top: 0; /* Fixes alignment issue in top bar */
 }
+.tauri-macos #topbar {
+    padding-top: 16px;
+}
+
 #topbar {
     position: fixed;
     width: 100%;
