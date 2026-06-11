@@ -124,6 +124,9 @@ function($rootScope, $q) {
                            protocol_,
                            properties) {
 
+        if (ws !== null && ws.readyState !== WebSocket.CLOSED) {
+            ws.close();
+        }
         ws = new WebSocket(url);
         protocol = protocol_;
         for (var property in properties) {

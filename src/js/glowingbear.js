@@ -58,8 +58,6 @@ weechat.controller('WeechatCtrl', ['$rootScope', '$scope', '$store', '$timeout',
         'port': 9001,
         'path': 'weechat',
         'tls': (window.location.protocol === "https:"),
-        'compatibilityWeechat28': false,
-        'useTotp': false,
         'savepassword': false,
         'autoconnect': false,
         'nonicklist': utils.isMobileUi(),
@@ -79,7 +77,6 @@ weechat.controller('WeechatCtrl', ['$rootScope', '$scope', '$store', '$timeout',
         "currentlyViewedBuffers":{},
         'iToken': '',
         'iAlb': '',
-        'freenodeWarningRead': '',
     });
     $scope.settings = settings;
 
@@ -537,17 +534,12 @@ weechat.controller('WeechatCtrl', ['$rootScope', '$scope', '$store', '$timeout',
         fullName = fullName.substring(0, fullName.lastIndexOf('.') + 1) + bufferName;  // substitute the last part
 
         if (!$scope.setActiveBuffer(fullName, 'fullName')) {
-            // WeeChat 0.4.0+ supports /join -noswitch
-            // As Glowing Bear requires 0.4.2+, we don't need to check the version
             var command = 'join -noswitch';
 
             // Check if it's a query and we need to use /query instead
             if (['#', '&', '+', '!'].indexOf(bufferName.charAt(0)) < 0) {  // these are the characters a channel name can start with (RFC 2813-2813)
-                command = 'query';
-                // WeeChat 1.2+ supports /query -noswitch. See also #577 (different context)
-                if ((models.version[0] == 1 && models.version[1] >= 2) || models.version[1] > 1) {
-                    command += " -noswitch";
-                }
+                // /query -noswitch is supported since WeeChat 1.2; we require 2.9+
+                command = 'query -noswitch';
             }
             connection.sendMessage('/' + command + ' ' + bufferName);
         }
@@ -698,15 +690,6 @@ weechat.controller('WeechatCtrl', ['$rootScope', '$scope', '$store', '$timeout',
         }
     };
 
-    settings.addCallback('useTotp', function() {
-        if (settings.useTotp) {
-            settings.autoconnect = false;
-        }
-    });
-
-    $scope.parseTotp = function() {
-        $scope.totpInvalid = !/^\d{4,10}$/.test($scope.totp);
-    };
 
     $scope.parseHash = function() {
 
@@ -745,8 +728,7 @@ weechat.controller('WeechatCtrl', ['$rootScope', '$scope', '$store', '$timeout',
         $rootScope.bufferBottom = true;
         $scope.connectbutton = 'Connecting';
         $scope.connectbuttonicon = 'glyphicon-refresh glyphicon-spin';
-        connection.connect(settings.host, settings.port, settings.path, $scope.password, settings.tls, settings.useTotp, $scope.totp);
-        $scope.totp = ""; // Clear for next time
+        connection.connect(settings.host, settings.port, settings.path, $scope.password, settings.tls);
     };
 
     $scope.disconnect = function() {
