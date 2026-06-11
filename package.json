@@ -25,8 +25,7 @@
     "protractor": "^7.0.0",
     "webpack": "^5.94.0",
     "webpack-cli": "^5.1.4",
-    "webpack-dev-server": "^5.2.1",
-    "@tauri-apps/plugin-opener": "^2"
+    "webpack-dev-server": "^5.2.1"
   },
   "scripts": {
     "build": "webpack",
@@ -43,6 +42,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@tauri-apps/plugin-opener": "^2.5.3",
     "angular": "^1.8.3",
     "angular-route": "^1.8.3",
     "angular-sanitize": "^1.8.3",

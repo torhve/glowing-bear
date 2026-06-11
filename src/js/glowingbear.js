@@ -1000,23 +1000,29 @@ weechat.controller('WeechatCtrl', ['$rootScope', '$scope', '$store', '$timeout',
     $scope.init = function() {
         $scope.parseHost();
         $scope.parseHash();
-
-        // Intercept link clicks in Tauri to open in external browser
-        if (window.__TAURI__) {
+        if (utils.isTauri()) {
+            if (/Mac/.test(navigator.userAgent)) {
+                document.body.classList.add('tauri-macos');
+            }
+            // Tauri 2 does not automatically open target="_blank" links in the
+            // system browser — intercept all external link clicks and delegate
+            // to the OS via the opener plugin.
             document.addEventListener('click', function(e) {
-                var target = e.target;
-                while (target && target.tagName !== 'A') {
-                    target = target.parentNode;
-                }
-                if (target && target.href && target.hostname !== window.location.hostname) {
-                    // Don't intercept fragment-only links
-                    if (target.hash === '#' || target.href.indexOf('#') === target.href.length - 1) {
-                        return;
-                    }
+                var anchor = e.target.closest('a[href]');
+                if (!anchor) { return; }
+
+                // 1. Get the raw href as written in the HTML (e.g., "#section" or "/path")
+                const rawHref = anchor.getAttribute('href');
+
+                // 2. Ignore if it's just an internal anchor/fragment
+                if (rawHref.startsWith('#')) return;
+
+                var href = anchor.href;
+                if (href && (href.startsWith('http:') || href.startsWith('https:'))) {
                     e.preventDefault();
-                    window.__TAURI__.opener.openUrl(target.href);
+                    window.__TAURI__.opener.openUrl(href);
                 }
-            });
+            }, true);
         }
     };
 
