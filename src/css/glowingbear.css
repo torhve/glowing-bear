@@ -149,8 +149,9 @@ input[type=text], input[type=password], #sendMessage {
 #topbar .glyphicon {
     top: 0; /* Fixes alignment issue in top bar */
 }
+/* macOS overlay titlebar: push content past the traffic light buttons */
 .tauri-macos #topbar {
-    padding-top: 16px;
+    padding-left: 75px;
 }
 
 #topbar {

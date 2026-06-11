@@ -17,6 +17,7 @@
         "height": 600,
         "resizable": true,
         "title": "Glowing Bear",
+        "titleBarStyle": "Overlay",
         "width": 800
       }
     ],
