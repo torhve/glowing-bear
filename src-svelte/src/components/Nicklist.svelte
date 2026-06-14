@@ -1,0 +1,100 @@
+<script lang="ts">
+  import { get } from 'svelte/store';
+  import type { NickGroup, Nick } from '$lib/types';
+  import Users from '@lucide/svelte/icons/users';
+  import Search from '@lucide/svelte/icons/search';
+  import { currentBuffer, pendingBufferSwitch } from '$lib/stores/models';
+  import { sendBufferCommand } from '$lib/stores/connectionManager';
+  import { settings } from '$lib/stores/settings';
+  import { insertNickIntoInput } from '$lib/utils';
+
+  let searchQuery = $state('');
+
+  let showNicklist = $derived($settings.showNicklist);
+
+  let filteredNickGroups = $derived(
+    $currentBuffer?.nicklist
+      ? (Object.entries($currentBuffer.nicklist) as [string, NickGroup][])
+          // Skip root group (it's just a placeholder, not displayed in Angular either)
+          .filter(([name]) => name !== 'root')
+          .filter(([name, group]) => {
+            if (!searchQuery) return true;
+            const query = searchQuery.toLowerCase();
+            return name.toLowerCase().includes(query) ||
+                   group.nicks.some((nick: Nick) => nick.name.toLowerCase().includes(query));
+          })
+          // Preserve WeeChat order (no alphabetical sort)
+      : []
+  );
+
+  function getPrefixClass(prefix: string): string {
+    switch (prefix) {
+      case '~': return 'text-purple-400';
+      case '&': return 'text-red-400';
+      case '@': return 'text-blue-400';
+      case '%': return 'text-light-blue-400';
+      case '+': return 'text-green-400';
+      default: return 'text-gray-400';
+    }
+  }
+
+  function getPrefix(prefix: string): string {
+    return prefix || '';
+  }
+</script>
+
+{#if showNicklist}
+<div class="w-52 sm:w-28 lg:w-30 bg-surface border-l border-border flex flex-col overflow-hidden" data-testid="nicklist">
+  <div class="h-10 bg-surface-raised border-b border-border flex items-center justify-between px-3">
+    <span class="flex items-center gap-1.5"><Users size={14} />Nicklist</span>
+  </div>
+
+  <div class="px-2 py-1 border-b border-border">
+    <div class="relative">
+      <Search size={14} class="absolute left-2 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+      <input
+        type="text"
+        bind:value={searchQuery}
+        data-testid="nicklist-search"
+        placeholder="Search nicks..."
+        class="w-full pl-7 pr-2 py-1 text-xs bg-input-bg border border-border rounded text-text placeholder-text-muted focus:outline-none focus:border-accent"
+      />
+    </div>
+  </div>
+
+  <div class="flex-1 overflow-y-auto" data-testid="nicklist-items">
+    {#each filteredNickGroups as [groupName, group]}
+        {#if groupName !== 'root'}
+      <div class="border-b border-border">
+        {#each group.nicks as nick (nick.name)}
+          <div
+            data-testid="nick-item"
+            class="px-3 py-0.5 flex items-center hover:bg-surface-raised cursor-pointer"
+            onclick={() => {
+              console.log('[nicklist] clicked', nick.name)
+              pendingBufferSwitch.set(nick.name);
+              sendBufferCommand(nick.buffer, `/query ${nick.name}`);
+              setTimeout(() => {
+                if (get(pendingBufferSwitch) === nick.name) {
+                  pendingBufferSwitch.set(null);
+                }
+              }, 5000);
+            }}
+            role="button"
+            tabindex="0"
+            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); insertNickIntoInput(nick.name); } }}
+          >
+            <span class="text-xs {getPrefixClass(getPrefix(nick.prefix))} mr-1">
+              {getPrefix(nick.prefix)}
+            </span>
+            <span class="text-sm truncate {nick.nameClasses.join(' ')}">
+              {nick.name}
+            </span>
+          </div>
+        {/each}
+      </div>
+        {/if}
+    {/each}
+  </div>
+</div>
+{/if}

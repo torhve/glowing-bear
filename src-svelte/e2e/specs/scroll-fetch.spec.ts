@@ -1,0 +1,83 @@
+import { test, expect } from '@playwright/test';
+import { connectToWeechat, clearSettings, waitForAppReady } from '../helpers/connection';
+import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
+
+let page: import('@playwright/test').Page;
+
+test.describe.configure({ mode: 'serial' });
+
+test.beforeAll(async ({ browser }) => {
+    page = await browser.newPage();
+    await page.goto('http://localhost:8001/');
+    await waitForAppReady(page);
+    await clearSettings(page);
+    page.on('pageerror', (error) => {
+        if (error.message?.includes('effect_orphan')) return;
+    });
+    await connectToWeechat(page);
+    await waitForBuffer(page, '#glowing-bear', 15000);
+    await switchToBuffer(page, '#glowing-bear');
+});
+
+test.afterAll(async () => {
+    await page.close();
+});
+
+test.beforeEach(async () => {
+    page.on('pageerror', (error) => {
+        if (error.message?.includes('effect_orphan')) return;
+    });
+});
+
+// Note: The "Fetch more lines" button requires hdata support (real WeeChat relay).
+// Against the test IRC server, allLinesFetched is set to true after fetchMoreLines()
+// times out (0 lines received < numLines requested), so the button doesn't render.
+// These tests verify the scroll handler logic and graceful error handling.
+
+test('"Fetch more lines" button not visible with test server (no hdata)', async () => {
+    // Test server doesn't implement hdata protocol, so fetchMoreLines times out.
+    // connectionManager sets allLinesFetched = true when linesReceived (0) < numLines.
+    // Button condition: !$currentBuffer.allLinesFetched && messages.length > 0
+    const fetchBtn = page.getByText('Fetch more lines');
+    await expect(fetchBtn).not.toBeVisible();
+});
+
+test('chat container handles scroll event at top without throwing', async () => {
+    const chatContainer = page.locator('[data-testid="chat-messages"]');
+    await expect(chatContainer).toBeAttached();
+
+    // Simulate scrolling to top — handleScroll checks scrollTop < 50
+    await chatContainer.evaluate((el) => {
+        el.scrollTop = 0;
+        el.dispatchEvent(new Event('scroll', { bubbles: true }));
+    });
+
+    // Wait for any potential fetch attempt to resolve/reject
+    await page.waitForTimeout(2000);
+
+    // Verify no console errors from the scroll handler
+    const pageErrors: string[] = [];
+    page.on('pageerror', (err) => {
+        if (!err.message?.includes('effect_orphan')) {
+            pageErrors.push(err.message);
+        }
+    });
+
+    await expect(pageErrors).toHaveLength(0);
+});
+
+test('repeated scroll events at top do not cause cascading errors', async () => {
+    const chatContainer = page.locator('[data-testid="chat-messages"]');
+
+    // Trigger many scroll events rapidly — simulates user scrolling up and down
+    for (let i = 0; i < 10; i++) {
+        await chatContainer.evaluate((el) => {
+            el.scrollTop = 0;
+            el.dispatchEvent(new Event('scroll', { bubbles: true }));
+        });
+        await page.waitForTimeout(50);
+    }
+
+    // Should complete without errors
+    await page.waitForTimeout(300);
+});

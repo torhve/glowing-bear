@@ -1,13 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Glowing Bear",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "identifier": "org.glowing-bear",
   "build": {
-    "beforeBuildCommand": "npm run build",
-    "beforeDevCommand": "npm run start",
-    "devUrl": "http://localhost:8080/",
-    "frontendDist": "../build"
+    "beforeBuildCommand": "cd src-svelte && npm run build",
+    "beforeDevCommand": "cd src-svelte && npm run dev",
+    "devUrl": "http://localhost:8001/",
+    "frontendDist": "../src-svelte/build"
   },
   "app": {
     "withGlobalTauri": true,
@@ -29,11 +29,11 @@
     "category": "SocialNetworking",
     "copyright": "Glowing Bear developers",
     "icon": [
-      "../src/assets/img/favicon.png",
-      "../src/assets/img/glowing_bear_128x128.png",
-      "../src/assets/img/glowing-bear.png",
-      "../src/assets/img/glowing-bear.icns",
-      "../src/assets/img/glowing_bear_128x128.ico"
+      "../src-svelte/static/glowing-bear.png",
+      "../src-svelte/static/glowing-bear.icns",
+      "../src-svelte/static/glowing_bear_128x128.ico",
+      "../src-svelte/static/glowing_bear_128x128.png",
+      "../src-svelte/static/favicon.png"
     ],
     "longDescription": "Glowing Bear is a web frontend for the WeeChat IRC client",
     "linux": {
