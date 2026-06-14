@@ -1,0 +1,225 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: var(--gb-bg);
+  --color-surface: var(--gb-surface);
+  --color-surface-raised: var(--gb-surface-raised);
+  --color-border: var(--gb-border);
+  --color-text: var(--gb-text);
+  --color-text-secondary: var(--gb-text-secondary);
+  --color-text-muted: var(--gb-text-muted);
+  --color-accent: var(--gb-accent);
+  --color-accent-hover: var(--gb-accent-hover);
+  --color-danger: var(--gb-danger);
+  --color-success: var(--gb-success);
+  --color-warning: var(--gb-warning);
+  --color-unread: var(--gb-unread);
+  --color-notification: var(--gb-notification);
+  --color-highlight: var(--gb-highlight);
+  --color-input-bg: var(--gb-input-bg);
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "Fira Mono", "Consolas", "Monaco", "Courier New", monospace;
+  --font-glowingbear: var(--font-mono);
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.875rem;
+  --text-lg: 1rem;
+}
+
+:root {
+  --gb-repeated-time: #444;
+  --gb-repeated-prefix: #555;
+}
+
+body:not([data-app-ready]) {
+  visibility: hidden !important;
+}
+
+body[data-app-ready] {
+  visibility: visible !important;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--gb-bg);
+  color: var(--gb-text);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  height: 100vh;
+}
+
+#svelte {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.favorite-font {
+  font-family: var(--font-mono);
+}
+
+.free-font {
+  font-family: "Fira Mono", "Consolas", "Monaco", "Courier New", monospace;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--gb-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--gb-border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--gb-text-muted);
+}
+
+.cof-black { color: var(--gb-cof-black); }
+.cof-red { color: var(--gb-cof-red); }
+.cof-green { color: var(--gb-cof-green); }
+.cof-yellow { color: var(--gb-cof-yellow); }
+.cof-blue { color: var(--gb-cof-blue); }
+.cof-magenta { color: var(--gb-cof-magenta); }
+.cof-cyan { color: var(--gb-cof-cyan); }
+.cof-white { color: var(--gb-cof-white); }
+.cof-darkgray { color: var(--gb-cof-darkgray); }
+.cof-lightred { color: var(--gb-cof-lightred); }
+.cof-lightgreen { color: var(--gb-cof-lightgreen); }
+.cof-lightblue { color: var(--gb-cof-lightblue); }
+.cof-lightmagenta { color: var(--gb-cof-lightmagenta); }
+.cof-lightcyan { color: var(--gb-cof-lightcyan); }
+.cof-gray { color: var(--gb-cof-gray); }
+.cof-brown { color: var(--gb-cof-brown); }
+.cof-default { color: var(--gb-text); }
+
+.cob-black { background-color: var(--gb-cob-black); }
+.cob-red { background-color: var(--gb-cob-red); }
+.cob-green { background-color: var(--gb-cob-green); }
+.cob-yellow { background-color: var(--gb-cob-yellow); }
+.cob-blue { background-color: var(--gb-cob-blue); }
+.cob-magenta { background-color: var(--gb-cob-magenta); }
+.cob-cyan { background-color: var(--gb-cob-cyan); }
+.cob-white { background-color: var(--gb-cob-white); }
+.cob-darkgray { background-color: var(--gb-cob-darkgray); }
+.cob-lightred { background-color: var(--gb-cob-lightred); }
+.cob-lightgreen { background-color: var(--gb-cob-lightgreen); }
+.cob-lightblue { background-color: var(--gb-cob-lightblue); }
+.cob-lightmagenta { background-color: var(--gb-cob-lightmagenta); }
+.cob-lightcyan { background-color: var(--gb-cob-lightcyan); }
+.cob-gray { background-color: var(--gb-cob-gray); }
+.cob-brown { background-color: var(--gb-cob-brown); }
+.cob-default { background-color: var(--gb-bg); }
+
+.cwf-black { color: var(--gb-cof-black); }
+.cwf-red { color: var(--gb-cof-red); }
+.cwf-green { color: var(--gb-cof-green); }
+.cwf-yellow { color: var(--gb-cof-yellow); }
+.cwf-blue { color: var(--gb-cof-blue); }
+.cwf-magenta { color: var(--gb-cof-magenta); }
+.cwf-cyan { color: var(--gb-cof-cyan); }
+.cwf-white { color: var(--gb-cof-white); }
+.cwf-darkgray { color: var(--gb-cof-darkgray); }
+.cwf-lightred { color: var(--gb-cof-lightred); }
+.cwf-lightgreen { color: var(--gb-cof-lightgreen); }
+.cwf-lightblue { color: var(--gb-cof-lightblue); }
+.cwf-lightmagenta { color: var(--gb-cof-lightmagenta); }
+.cwf-lightcyan { color: var(--gb-cof-lightcyan); }
+.cwf-gray { color: var(--gb-cof-gray); }
+.cwf-brown { color: var(--gb-cof-brown); }
+.cwf-default { color: var(--gb-text); }
+
+.cwb-black { background-color: var(--gb-cob-black); }
+.cwb-red { background-color: var(--gb-cob-red); }
+.cwb-green { background-color: var(--gb-cob-green); }
+.cwb-yellow { background-color: var(--gb-cob-yellow); }
+.cwb-blue { background-color: var(--gb-cob-blue); }
+.cwb-magenta { background-color: var(--gb-cob-magenta); }
+.cwb-cyan { background-color: var(--gb-cob-cyan); }
+.cwb-white { background-color: var(--gb-cob-white); }
+.cwb-darkgray { background-color: var(--gb-cob-darkgray); }
+.cwb-lightred { background-color: var(--gb-cob-lightred); }
+.cwb-lightgreen { background-color: var(--gb-cob-lightgreen); }
+.cwb-lightblue { background-color: var(--gb-cob-lightblue); }
+.cwb-lightmagenta { background-color: var(--gb-cob-lightmagenta); }
+.cwb-lightcyan { background-color: var(--gb-cob-lightcyan); }
+.cwb-gray { background-color: var(--gb-cob-gray); }
+.cwb-brown { background-color: var(--gb-cob-brown); }
+.cwb-default { background-color: var(--gb-bg); }
+
+/* Bufferline — compact TUI-style single-row layout (styles in BufferLineRow.svelte) */
+
+/* Readmarker */
+.readmarker {
+  background-color: var(--gb-surface-raised, #2a2a2a);
+}
+
+#readmarker {
+  border: none;
+  border-top: 2px solid var(--gb-highlight, #e74c3c);
+  margin: 2px 0;
+}
+
+/* Fetch more lines */
+.fetchmorelines {
+  color: var(--gb-accent, #4a90d9);
+  text-decoration: none;
+  font-size: 0.85em;
+}
+
+.fetchmorelines:hover {
+  text-decoration: underline;
+}
+
+/* Date change separator */
+.date-change {
+  color: var(--gb-cof-chat_day_change, #cc0);
+  text-align: center;
+}
+
+.date-change-row {
+  background-color: var(--gb-surface-raised, #2a2a2a);
+}
+
+/* Hidden brackets in prefix - invisible but in text flow for copy-paste */
+.hidden-bracket {
+  color: transparent;
+}
+
+/* Mention link in prefix */
+.mention-link {
+  cursor: pointer;
+}
+
+.mention-link:hover {
+  text-decoration: underline;
+}
+
+/* Global styles for chat view — target BufferLineRow child elements */
+.hideTime td.time,
+.hideTime td.prefix {
+  display: none;
+}
+
+/* Embed styles for PluginEmbed dynamic content */
+.embed img.embed {
+  max-width: 100%;
+  max-height: 300px;
+  height: auto;
+}
+
+.embed iframe.embed {
+  width: 100%;
+  border: none;
+}
+
+.embed video.embed {
+  max-width: 100%;
+}
+
+.embed audio.embed {
+  width: 100%;
+}

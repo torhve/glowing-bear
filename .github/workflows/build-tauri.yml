@@ -41,8 +41,8 @@ jobs:
             librsvg2-dev \
             patchelf
 
-      - name: Install frontend dependencies
-        run: npm install
+      - name: Install src-svelte dependencies
+        run: cd src-svelte && npm ci
 
       - uses: tauri-apps/tauri-action@v0
         env:

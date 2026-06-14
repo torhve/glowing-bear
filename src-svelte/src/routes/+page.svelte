@@ -1,0 +1,489 @@
+<script lang="ts">
+  import '../app.css';
+  import ConnectionForm from '$components/ConnectionForm.svelte';
+  import TopBar from '$components/TopBar.svelte';
+  import ChatView from '$components/ChatView.svelte';
+  import InputBar from '$components/InputBar.svelte';
+  import BufferList from '$components/BufferList.svelte';
+  import Nicklist from '$components/Nicklist.svelte';
+import Toast from '$components/Toast.svelte';
+  import { settings, updateSettings } from '$lib/stores/settings';
+  import { initTheme } from '$lib/stores/theme';
+  import { get } from 'svelte/store';
+  import { onMount, onDestroy } from 'svelte';
+  import { connected, buffers, currentBuffer, setActiveBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig } from '$lib/stores/models';
+  import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist } from '$lib/stores/connectionManager';
+  import { initNotifications, updateFavico, onDisconnect } from '$lib/notifications';
+  import { sortBuffers, parseRelayUrl, computeJumpKeys } from '$lib/utils';
+
+  /* eslint-disable @typescript-eslint/no-explicit-any -- dev-time debug globals on window */
+  if (typeof window !== 'undefined' && import.meta.env.DEV) {
+    (window as any).__wconfig = $wconfig;
+    (window as any).__connected = $connected;
+    (window as any).__sendWeechatCommand = sendWeeChatCommand;
+    (window as any).__setGbSettings = updateSettings;
+  }
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
+  async function tryAutoConnect() {
+    if (!$settings.autoconnect || !$settings.savepassword || !$settings.hostField || !$settings.password) {
+      return;
+    }
+    try {
+      const { host: parsedHost, port: parsedPort, path: parsedPath } = parseRelayUrl($settings.hostField, $settings.port);
+      await connect(parsedHost, parsedPort, parsedPath, $settings.password, $settings.tls, false);
+      parseHashAndNavigate();
+    } catch (e) {
+      console.warn('Auto-connect failed:', e);
+    }
+  }
+
+  function parseHashAndNavigate() {
+    if (typeof window === 'undefined') return;
+    const hash = window.location.hash.slice(1);
+    if (!hash) return;
+
+    // Parse hash parameters (host, port, path, password, autoconnect)
+    const params: Record<string, string> = {};
+    hash.split('&').forEach(val => {
+      const segs = val.split('=');
+      if (segs.length >= 2 && segs[0]) {
+        params[segs[0]] = decodeURIComponent(segs.slice(1).join('='));
+      }
+    });
+
+    if (params.host) {
+      updateSettings({ hostField: params.host });
+    }
+    if (params.port) {
+      updateSettings({ port: params.port });
+    }
+    if (params.autoconnect) {
+      updateSettings({ autoconnect: params.autoconnect === 'true' });
+    }
+  }
+
+  onMount(async () => {
+    initTheme();
+    initNotifications();
+    initTouchGestures();
+    await tryAutoConnect();
+    document.body.setAttribute('data-app-ready', 'true');
+  });
+
+  $effect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if ($connected) {
+        e.preventDefault();
+        (e as any).returnValue = '';
+      }
+    };
+    
+    document.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      document.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  });
+
+  onDestroy(() => {
+    cleanupTouchGestures();
+    onDisconnect();
+  });
+
+  $effect(() => {
+    void $buffers;
+    updateFavico();
+  });
+
+  $effect(() => {
+    document.documentElement.style.setProperty('--font-mono', $settings.fontfamily || 'Fira Mono, Consolas, Monaco, Courier New, monospace');
+    document.documentElement.style.setProperty('--font-size', $settings.fontsize || '14px');
+    document.body.style.fontSize = $settings.fontsize || '14px';
+  });
+
+  $effect(() => {
+    const css = $settings.customCSS;
+    const oldTag = document.getElementById('custom-css-tag');
+    if (oldTag) {
+      oldTag.parentNode?.removeChild(oldTag);
+    }
+    if (css && css.trim()) {
+      const newTag = document.createElement('style');
+      newTag.id = 'custom-css-tag';
+      newTag.type = 'text/css';
+      newTag.appendChild(document.createTextNode(css));
+      document.head.appendChild(newTag);
+    }
+  });
+
+  $effect(() => {
+    void $connected;
+    const svelteEl = document.getElementById('svelte');
+    if (svelteEl) {
+      svelteEl.style.overflow = $connected ? 'hidden' : 'auto';
+    }
+  });
+
+  $effect(() => {
+    void $activeBufferChanged;
+    const buf = $currentBuffer;
+    if (!buf) return;
+    if (buf.requestedLines < 100) {
+      fetchMoreLines(100);
+    }
+    if (!('root' in (buf.nicklist || {}))) {
+      requestNicklist(buf.id);
+    }
+  });
+
+  $effect(() => {
+    if ($settings.enableMathjax) {
+      const linkId = 'katex-css';
+      if (!document.getElementById(linkId)) {
+        const link = document.createElement('link');
+        link.id = linkId;
+        link.rel = 'stylesheet';
+        link.href = 'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.5.1/katex.min.css';
+        document.head.appendChild(link);
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- KaTeX global on window
+      if (typeof (window as any).renderMathInElement === 'undefined') {
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.5.1/katex.min.js';
+        script.onload = () => {
+          const autoRender = document.createElement('script');
+          autoRender.src = 'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.5.1/contrib/auto-render.min.js';
+          document.body.appendChild(autoRender);
+        };
+        document.body.appendChild(script);
+      }
+    }
+  });
+
+  function handleQuickKeys(e: KeyboardEvent) {
+    if (e.altKey && !e.ctrlKey && !e.shiftKey && $settings.enableQuickKeys) {
+      // Use e.code to extract digit — this works on all keyboard layouts
+      const digitMatch = e.code.match(/^Digit(\d)$/);
+      if (digitMatch) {
+        let digitStr = digitMatch[1];
+        if (!digitStr) return;
+        const digit = parseInt(digitStr, 10);
+        const index = digit === 0 ? 9 : digit - 1;
+        e.preventDefault();
+        const sorted = sortBuffers(Object.values($buffers).filter(b => !b.hidden), $settings.orderbyserver);
+        if (index < sorted.length) {
+          const buf = sorted[index];
+          if (buf) setActiveBuffer(buf.id);
+        }
+      }
+    }
+  }
+
+  let _jumpDecimal: number | null = $state(null);
+
+  function handleJumpToBuffer(e: KeyboardEvent) {
+    const code = e.keyCode || e.which;
+    const digit = code - 48;
+
+    // Alt+J -> start jump mode
+    if (e.altKey && !e.ctrlKey && !e.shiftKey && code === 74) {
+      e.preventDefault();
+      _jumpDecimal = null;
+      return;
+    }
+
+    // In jump mode, first digit
+    if (_jumpDecimal !== null && digit >= 0 && digit <= 9 && !e.altKey && !e.ctrlKey && !e.shiftKey) {
+      e.preventDefault();
+      if (_jumpDecimal === null) {
+        _jumpDecimal = digit;
+      } else {
+        // Second digit -> jump to buffer
+        const targetNum = _jumpDecimal * 10 + digit;
+        const allBuffs = get(buffers);
+        const sorted = Object.values(allBuffs)
+          .filter((b: any) => !b.hidden)
+          .sort((a: any, b: any) => a.number - b.number);
+        const targetIdx = targetNum - 1;
+        if (targetIdx >= 0 && targetIdx < sorted.length) {
+          const targetBuf = sorted[targetIdx];
+          if (targetBuf) setActiveBuffer(targetBuf.id);
+        }
+        _jumpDecimal = null;
+      }
+      return;
+    }
+
+    // Non-digit key while in jump mode -> abort
+    if (_jumpDecimal !== null && !(digit >= 0 && digit <= 9)) {
+      _jumpDecimal = null;
+    }
+  }
+
+  let lastEscapeTime = 0;
+
+  function handleGlobalKeyboard(e: KeyboardEvent) {
+    const code = e.keyCode || e.which;
+
+    // Alt+< -> previous buffer
+    if (e.altKey && (e.code === 'Backquote' || e.code === 'IntlBackslash' || code === 60 || code === 226)) {
+      e.preventDefault();
+      const prevId = get(previousBufferId);
+      if (prevId) setActiveBuffer(prevId);
+      return;
+    }
+
+    // Alt+L -> focus input bar
+    if (e.altKey && (code === 76 || code === 108)) {
+      e.preventDefault();
+      const input = document.querySelector<HTMLTextAreaElement>('[data-testid="message-input"]');
+      input?.focus();
+      return;
+    }
+
+    // Alt+n -> toggle nicklist
+    if (e.altKey && !e.ctrlKey && code === 78) {
+      e.preventDefault();
+      updateSettings({ showNicklist: !$settings.showNicklist });
+      return;
+    }
+
+    // Alt+A -> switch to buffer with activity
+    if (e.altKey && (code === 97 || code === 65) && !e.ctrlKey) {
+      e.preventDefault();
+      const allBuffs = get(buffers);
+      /* eslint-disable @typescript-eslint/no-explicit-any -- buffer objects from store */
+      const sortedBuffs = Object.values(allBuffs)
+        .filter((b: any) => !b.hidden)
+        .sort((a: any, b: any) => a.number - b.number);
+      const currentId = get(activeBufferId);
+      let startIndex = sortedBuffs.findIndex((b: any) => b.id === currentId);
+      /* eslint-enable @typescript-eslint/no-explicit-any */
+      if (startIndex === -1) startIndex = 0;
+      for (let i = 1; i < sortedBuffs.length; i++) {
+        const idx = (startIndex + i) % sortedBuffs.length;
+        const b = sortedBuffs[idx];
+        if (b && (b.unread > 0 || b.notification > 0)) {
+          setActiveBuffer(b.id);
+          return;
+        }
+      }
+      return;
+    }
+
+    // Alt+Arrow up/down -> switch to adjacent buffer
+    if (e.altKey && !e.ctrlKey && (code === 38 || code === 40)) {
+      e.preventDefault();
+      /* eslint-disable @typescript-eslint/no-explicit-any -- buffer objects from store */
+      const allB = get(buffers);
+      const visible = Object.values(allB)
+        .filter((b: any) => !b.hidden)
+        .sort((a: any, b: any) => a.number - b.number);
+      const curId = get(activeBufferId);
+      const curIdx = visible.findIndex((b: any) => b.id === curId);
+      /* eslint-enable @typescript-eslint/no-explicit-any */
+      if (curIdx === -1) return;
+      const dir = code === 38 ? -1 : 1;
+      const target = curIdx + dir;
+      if (target >= 0 && target < visible.length) {
+        const targetBuf = visible[target];
+        if (targetBuf) setActiveBuffer(targetBuf.id);
+      }
+      return;
+    }
+
+    // Alt+h -> clear all unread
+    if (e.altKey && !e.ctrlKey && code === 72) {
+      e.preventDefault();
+      clearAllUnread();
+      sendWeeChatCommand('/input hotlist_clear');
+      return;
+    }
+
+    // Ctrl+K -> focus buffer search (when not in readline mode)
+    if (!e.altKey && !e.shiftKey && e.ctrlKey && code === 75 && !$settings.readlineBindings) {
+      e.preventDefault();
+      toggleBufferSearchGlobal();
+      return;
+    }
+
+    // Alt+G -> focus buffer search
+    if (e.altKey && (code === 71 || code === 103)) {
+      e.preventDefault();
+      toggleBufferSearchGlobal();
+      return;
+    }
+
+    // Escape -> close open popovers, double-tap -> disconnect
+    if (code === 27) {
+      e.preventDefault();
+      document.querySelectorAll('dialog[popover]:open').forEach(el => (el as HTMLDialogElement).hidePopover());
+      const now = Date.now();
+      if (now - lastEscapeTime <= 500) {
+        disconnect();
+      }
+      lastEscapeTime = now;
+      return;
+    }
+  }
+
+  function handleGlobalKeyDown(e: KeyboardEvent) {
+    handleGlobalKeyboard(e);
+    if ((e.code === 'AltLeft' || e.code === 'AltRight') && $settings.enableQuickKeys && !$settings.showQuickKeys) {
+      updateSettings({ showQuickKeys: true });
+    }
+  }
+
+  function handleGlobalKeyUp(e: KeyboardEvent) {
+    if (e.code === 'AltLeft' || e.code === 'AltRight') {
+      if ($settings.showQuickKeys) {
+        updateSettings({ showQuickKeys: false });
+      }
+    }
+  }
+
+  function toggleBufferSearchGlobal() {
+    showBufferListOnMobile();
+    const modal = document.getElementById('buffer-search-modal');
+    modal?.showPopover();
+  }
+
+  let _altKeyPressed = $state(false);
+
+  function handleAltKeyDown(e: KeyboardEvent) {
+    if (e.key === 'Alt' || e.key === 'AltRight' || e.key === 'AltLeft') {
+      _altKeyPressed = true;
+    }
+  }
+
+  function handleAltKeyUp() {
+    _altKeyPressed = false;
+  }
+
+  $effect(() => {
+    if (typeof window !== 'undefined') {
+      document.addEventListener('keydown', handleQuickKeys);
+      document.addEventListener('keydown', handleJumpToBuffer);
+      document.addEventListener('keydown', handleGlobalKeyDown);
+      document.addEventListener('keyup', handleGlobalKeyUp);
+      document.addEventListener('keydown', handleAltKeyDown);
+      document.addEventListener('keyup', handleAltKeyUp);
+      return () => {
+        document.removeEventListener('keydown', handleQuickKeys);
+        document.removeEventListener('keydown', handleJumpToBuffer);
+        document.removeEventListener('keydown', handleGlobalKeyDown);
+        document.removeEventListener('keyup', handleGlobalKeyUp);
+        document.removeEventListener('keydown', handleAltKeyDown);
+        document.removeEventListener('keyup', handleAltKeyUp);
+      };
+    }
+  });
+
+  let showBufferList = $state(true);
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchStartTime = 0;
+
+  function hideBufferListOnMobile() {
+    if (isMobile()) showBufferList = false;
+  }
+
+  function showBufferListOnMobile() {
+    if (isMobile()) showBufferList = true;
+  }
+
+  function isMobile() {
+    return typeof window !== 'undefined' && window.innerWidth < 768;
+  }
+
+  function initTouchGestures() {
+    document.addEventListener('touchstart', handleTouchStart, { passive: true });
+    document.addEventListener('touchmove', handleTouchMove, { passive: true });
+    document.addEventListener('touchend', handleTouchEnd, { passive: true });
+  }
+
+  function cleanupTouchGestures() {
+    if (typeof document === 'undefined') return;
+    document.removeEventListener('touchstart', handleTouchStart);
+    document.removeEventListener('touchmove', handleTouchMove);
+    document.removeEventListener('touchend', handleTouchEnd);
+  }
+
+  function handleTouchStart(e: TouchEvent) {
+    if (!isMobile()) return;
+    const firstTouch = e.touches[0];
+    if (!firstTouch) return;
+    touchStartX = firstTouch.clientX;
+    touchStartY = firstTouch.clientY;
+    touchStartTime = Date.now();
+  }
+
+  function handleTouchMove(e: TouchEvent) {
+    if (!isMobile()) return;
+    const firstTouch = e.touches[0];
+    if (!firstTouch) return;
+    const deltaX = Math.abs(firstTouch.clientX - touchStartX);
+    const deltaY = Math.abs(firstTouch.clientY - touchStartY);
+    if (deltaX > deltaY && deltaX > 10) {
+      e.preventDefault();
+    }
+  }
+
+  function handleTouchEnd(e: TouchEvent) {
+    if (!isMobile()) return;
+    const firstTouch = e.changedTouches[0];
+    if (!firstTouch) return;
+    const touchEndX = firstTouch.clientX;
+    const touchEndY = firstTouch.clientY;
+    const deltaX = touchEndX - touchStartX;
+    const deltaY = touchEndY - touchStartY;
+    const deltaTime = Date.now() - touchStartTime;
+
+    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50 && deltaTime < 500) {
+      if (deltaX > 0) {
+        showBufferList = true;
+      } else {
+        showBufferList = false;
+      }
+    }
+
+    if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 80 && deltaTime < 500) {
+      const allBuffers = Object.values($buffers).filter(b => !b.hidden);
+      const currentBuf = $currentBuffer;
+      const currentIndex = allBuffers.findIndex(b => b.id === currentBuf?.id);
+
+      if (currentIndex !== -1) {
+        if (deltaY < 0 && currentIndex < allBuffers.length - 1) {
+          const prev = allBuffers[currentIndex - 1];
+          if (prev) setActiveBuffer(prev.id);
+        } else if (deltaY > 0 && currentIndex > 0) {
+          const next = allBuffers[currentIndex + 1];
+          if (next) setActiveBuffer(next.id);
+        }
+      }
+    }
+  }
+</script>
+
+{#if !$connected}
+  <ConnectionForm />
+{:else}
+  <div class="h-screen flex flex-col bg-bg" data-testid="chat-view">
+    <TopBar onBufferSelect={hideBufferListOnMobile} onSearchOpen={showBufferListOnMobile} />
+    <div class="flex-1 flex overflow-hidden">
+      {#if showBufferList || !isMobile()}
+        <BufferList altKeyPressed={_altKeyPressed} onBufferSelect={hideBufferListOnMobile} />
+      {/if}
+      <div class="flex-1 flex flex-col min-w-0">
+        <ChatView />
+        <InputBar />
+      </div>
+      {#if !isMobile()}
+        <Nicklist />
+      {/if}
+    </div>
+  </div>
+{/if}
+
+<Toast />

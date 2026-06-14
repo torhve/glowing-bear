@@ -1,0 +1,56 @@
+@import "dark.css";
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro", "Helvetica Neue", sans-serif;
+}
+
+.favorite-font {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro", "Helvetica Neue", sans-serif;
+  font-size: 17px;
+}
+
+a {
+  color: var(--gb-accent);
+  transition: color 0.15s ease;
+}
+
+a:hover {
+  color: var(--gb-accent-hover);
+}
+
+input[type="text"],
+input[type="password"] {
+  background: oklch(0.19 0.006 260);
+  border: 1px solid var(--gb-border);
+  border-radius: 6px;
+  color: var(--gb-text);
+  box-shadow: none;
+  transition: border-color 0.15s ease;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus {
+  border-color: oklch(0.48 0.15 255);
+  outline: none;
+}
+
+.gb-modal .backdrop {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.toast {
+  background: var(--gb-surface);
+  border: 1px solid var(--gb-accent);
+  border-radius: 8px;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.color-light-green {
+  color: var(--gb-success);
+}
+
+.color-27 {
+  color: oklch(0.7 0.12 200);
+}
