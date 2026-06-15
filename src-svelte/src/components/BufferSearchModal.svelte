@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { BufferData } from '$lib/types';
-  import { connected, buffers, setActiveBuffer, hotlist } from '$lib/stores/models';
+  import { connected, buffers, hotlist } from '$lib/stores/models';
+  import { switchBuffer } from '$lib/stores/connectionManager';
   import { computeJumpKeys } from '$lib/utils';
   import BaseDialog from '$components/BaseDialog.svelte';
   import Search from '@lucide/svelte/icons/search';
@@ -39,7 +40,7 @@
   );
 
   function handleBufferClick(buffer: BufferData) {
-    setActiveBuffer(buffer.id);
+    switchBuffer(buffer.id);
     bufferSearchQuery = '';
     selectedIndex = 0;
     (document.getElementById('buffer-search-modal') as HTMLElement)?.hidePopover();

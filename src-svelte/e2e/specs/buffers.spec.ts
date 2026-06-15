@@ -39,10 +39,7 @@ test('should display multiple buffer items', async () => {
 });
 
 test('should highlight the active buffer', async () => {
-    const firstItem = page.getByTestId('buffer-item').first();
-    await expect(firstItem).toHaveClass(/bg-surface-raised/);
-    await expect(firstItem).toHaveClass(/border-l-2/);
-    await expect(firstItem).toHaveClass(/border-accent/);
+    await expect(page.locator('[data-testid="buffer-item"].bg-accent\\/20')).toBeVisible();
 });
 
 test('should switch buffers when clicking a buffer item', async () => {
@@ -59,49 +56,40 @@ test('should update topic bar when switching buffers', async () => {
 test('should toggle server grouping in buffer list', async () => {
     const toggleBtn = page.getByTestId('toggle-server-groups');
     await expect(toggleBtn).toBeVisible();
+    await page.evaluate(() => {
+        (window as any).__setGbSettings?.({ orderbyserver: false });
+    });
+    await page.waitForTimeout(200);
+    await expect(toggleBtn).toHaveAttribute('title', 'Group by server');
     await toggleBtn.click();
-    await expect(toggleBtn).toHaveText('Group', { timeout: 5000 });
+    await page.waitForTimeout(300);
+    await expect(toggleBtn).toHaveAttribute('title', 'Switch to list view');
 });
 
 test('should show buffer search input in topbar', async () => {
     await page.getByTestId('search-button').click();
     await page.waitForTimeout(200);
-    await expect(page.locator('#buffer-search')).toBeVisible();
+    await expect(page.getByPlaceholder('Search buffers...')).toBeVisible();
 });
 
 test('should filter buffers when searching', async () => {
     await page.getByTestId('search-button').click();
     await page.waitForTimeout(200);
-    const searchInput = page.locator('#buffer-search');
-    await searchInput.clear();
+    const searchInput = page.getByPlaceholder('Search buffers...');
     await searchInput.fill('weechat');
     const items = page.getByTestId('buffer-item');
     const count = await items.count();
     expect(count).toBeGreaterThanOrEqual(0);
 });
 
-test('should close buffer search on blur when empty', async () => {
+test('should close buffer search with Escape key', async () => {
     // Ensure search is closed, then open fresh
-    const searchInput = page.locator('#buffer-search');
-    const isVisible = await searchInput.isVisible().catch(() => false);
-    if (isVisible) {
-        await searchInput.clear();
-        await page.waitForTimeout(50);
-    }
-    const isOpen = await searchInput.isVisible().catch(() => false);
-    if (isOpen) {
-        await page.getByTestId('search-button').click();
-        await page.waitForTimeout(100);
-    }
     await page.getByTestId('search-button').click();
     await page.waitForTimeout(200);
-    await expect(searchInput).toBeAttached();
-    await searchInput.clear();
-    await page.waitForTimeout(50);
-    await searchInput.focus();
-    await page.waitForTimeout(100);
-    await searchInput.blur();
-    await expect(searchInput).not.toBeVisible({ timeout: 5000 });
+    await expect(page.getByPlaceholder('Search buffers...')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    await expect(page.getByPlaceholder('Search buffers...')).not.toBeVisible({ timeout: 5000 });
 });
 
 test('should show close button on active buffer item', async () => {

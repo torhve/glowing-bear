@@ -11,8 +11,8 @@ import Toast from '$components/Toast.svelte';
   import { initTheme } from '$lib/stores/theme';
   import { get } from 'svelte/store';
   import { onMount, onDestroy } from 'svelte';
-  import { connected, buffers, currentBuffer, setActiveBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig } from '$lib/stores/models';
-  import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist } from '$lib/stores/connectionManager';
+  import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig } from '$lib/stores/models';
+  import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer } from '$lib/stores/connectionManager';
   import { initNotifications, updateFavico, onDisconnect } from '$lib/notifications';
   import { sortBuffers, parseRelayUrl, computeJumpKeys } from '$lib/utils';
 
@@ -174,7 +174,7 @@ import Toast from '$components/Toast.svelte';
         const sorted = sortBuffers(Object.values($buffers).filter(b => !b.hidden), $settings.orderbyserver);
         if (index < sorted.length) {
           const buf = sorted[index];
-          if (buf) setActiveBuffer(buf.id);
+          if (buf) switchBuffer(buf.id);
         }
       }
     }
@@ -208,7 +208,7 @@ import Toast from '$components/Toast.svelte';
         const targetIdx = targetNum - 1;
         if (targetIdx >= 0 && targetIdx < sorted.length) {
           const targetBuf = sorted[targetIdx];
-          if (targetBuf) setActiveBuffer(targetBuf.id);
+          if (targetBuf) switchBuffer(targetBuf.id);
         }
         _jumpDecimal = null;
       }
@@ -230,7 +230,7 @@ import Toast from '$components/Toast.svelte';
     if (e.altKey && (e.code === 'Backquote' || e.code === 'IntlBackslash' || code === 60 || code === 226)) {
       e.preventDefault();
       const prevId = get(previousBufferId);
-      if (prevId) setActiveBuffer(prevId);
+      if (prevId) switchBuffer(prevId);
       return;
     }
 
@@ -265,7 +265,7 @@ import Toast from '$components/Toast.svelte';
         const idx = (startIndex + i) % sortedBuffs.length;
         const b = sortedBuffs[idx];
         if (b && (b.unread > 0 || b.notification > 0)) {
-          setActiveBuffer(b.id);
+          switchBuffer(b.id);
           return;
         }
       }
@@ -288,7 +288,7 @@ import Toast from '$components/Toast.svelte';
       const target = curIdx + dir;
       if (target >= 0 && target < visible.length) {
         const targetBuf = visible[target];
-        if (targetBuf) setActiveBuffer(targetBuf.id);
+        if (targetBuf) switchBuffer(targetBuf.id);
       }
       return;
     }
@@ -456,10 +456,10 @@ import Toast from '$components/Toast.svelte';
       if (currentIndex !== -1) {
         if (deltaY < 0 && currentIndex < allBuffers.length - 1) {
           const prev = allBuffers[currentIndex - 1];
-          if (prev) setActiveBuffer(prev.id);
+          if (prev) switchBuffer(prev.id);
         } else if (deltaY > 0 && currentIndex > 0) {
           const next = allBuffers[currentIndex + 1];
-          if (next) setActiveBuffer(next.id);
+          if (next) switchBuffer(next.id);
         }
       }
     }

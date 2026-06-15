@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
 import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore, connectionState } from '$lib/stores/connectionStore';
-import { buffers, servers, activeBufferId, wconfig, getBuffer, connected } from '$lib/stores/models';
+import { buffers, servers, activeBufferId, wconfig, getBuffer, connected, setActiveBuffer } from '$lib/stores/models';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist } from '$lib/stores/handlers';
 import { IDEAL_NICK_COLORS, IDEAL_COLOR_NICKS_IN_NICKLIST, shouldAutoApply } from '$lib/stores/nickColors';
 import { Protocol } from '$lib/weechat';
@@ -438,6 +438,16 @@ export function sendWeeChatCommand(command: string) {
         data: command
     });
     ws.send(msg);
+}
+
+export function switchBuffer(bufferId: string) {
+    const success = setActiveBuffer(bufferId);
+    if (success && ws && ws.readyState === WebSocket.OPEN) {
+        // Sync read marker with WeeChat (matching Angular behavior)
+        sendWeeChatCommand('/buffer set hotlist -1');
+        sendWeeChatCommand('/input hotlist_clear');
+    }
+    return success;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WeeChat buffer ID is a hex string from protocol
