@@ -18,30 +18,40 @@
   let topicText = $derived($currentBuffer?.title?.map(t => t.text).join('') || '');
 
   let isLoadingMore = $state(false);
+  let wasScrolledUpDuringFetch = $state(false);
+  let maxScrollValBeforeFetch = $state(0);
   let scrollHeightBeforeFetch = $state(0);
   let scrollTopBeforeFetch = $state(0);
 
   function handleScroll() {
     if (!containerRef) return;
-    const { scrollTop, scrollHeight } = containerRef;
+    const { scrollTop, scrollHeight, clientHeight } = containerRef;
 
     if (scrollTop < 50 && !isLoadingMore && $currentBuffer && !$currentBuffer.allLinesFetched) {
       isLoadingMore = true;
+      wasScrolledUpDuringFetch = scrollTop > clientHeight * 0.5 || scrollTop > 200;
+      maxScrollValBeforeFetch = scrollHeight - clientHeight;
       scrollHeightBeforeFetch = scrollHeight;
       scrollTopBeforeFetch = scrollTop;
 
       fetchMoreLines().then(() => {
-        // Defer scroll adjustment to next microtask so DOM has updated
-        Promise.resolve().then(() => {
+        // Defer scroll adjustment to rAF so DOM has updated and we avoid
+        // race with $effect which runs synchronously on store changes.
+        // Set isLoadingMore=false AFTER scroll correction to prevent $effect
+        // from auto-scrolling before the position is restored (AngularJS pattern).
+        requestAnimationFrame(() => {
           if (containerRef) {
             const newScrollHeight = containerRef.scrollHeight;
-            const heightDiff = newScrollHeight - scrollHeightBeforeFetch;
-            containerRef.scrollTop = scrollTopBeforeFetch + heightDiff;
+            const newMaxScrollVal = newScrollHeight - containerRef.clientHeight;
+            // Preserve user's visual position using same formula as AngularJS version
+            // Keeps the user at the same point in the buffer (not scrolled to bottom)
+            containerRef.scrollTop = newMaxScrollVal - maxScrollValBeforeFetch;
           }
+          isLoadingMore = false;
+          wasScrolledUpDuringFetch = false;
         });
       }).catch(err => {
         console.error('Failed to fetch more lines:', err);
-      }).finally(() => {
         isLoadingMore = false;
       });
     }
@@ -49,8 +59,10 @@
 
   $effect(() => {
     // Auto-scroll when new lines arrive on active buffer
-    if ($currentBuffer && !isLoadingMore && messages.length > 0 && containerRef) {
+    // Skip if loading more lines or was scrolled up during fetch
+    if ($currentBuffer && !isLoadingMore && !wasScrolledUpDuringFetch && messages.length > 0 && containerRef) {
       containerRef.scrollTop = containerRef.scrollHeight;
+      wasScrolledUpDuringFetch = false;
     }
   });
 
