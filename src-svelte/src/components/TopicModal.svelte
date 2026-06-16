@@ -15,7 +15,7 @@
 <BaseDialog id="topic-modal" labelledby="topic-title">
   <div class="flex flex-col">
     <div class="flex items-center justify-between px-6 py-4 border-b border-border">
-      <h3 id="topic-title" class="text-lg font-bold text-white">
+      <h3 id="topic-title" class="text-lg font-bold text-text">
         Channel topic {bufferName}
       </h3>
       <button
@@ -23,7 +23,7 @@
         data-testid="topic-modal-close"
         popovertarget="topic-modal"
         popovertargetaction="hide"
-        class="text-text-secondary hover:text-white text-2xl leading-none transition-colors"
+        class="text-text-secondary hover:text-text text-2xl leading-none transition-colors"
         aria-label="Close topic"
       >
         &times;
