@@ -7,6 +7,7 @@
   import { sendBufferCommand } from '$lib/stores/connectionManager';
   import { settings } from '$lib/stores/settings';
   import { insertNickIntoInput } from '$lib/utils';
+import { DEBUG_NICKLIST } from '$lib/debug';
 
   let searchQuery = $state('');
 
@@ -71,7 +72,7 @@
             data-testid="nick-item"
             class="px-3 py-0.5 flex items-center hover:bg-surface-raised cursor-pointer"
             onclick={() => {
-              console.log('[nicklist] clicked', nick.name)
+              if (DEBUG_NICKLIST) console.log('[nicklist] clicked', nick.name);
               pendingBufferSwitch.set(nick.name);
               sendBufferCommand(nick.buffer, `/query ${nick.name}`);
               setTimeout(() => {

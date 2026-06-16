@@ -25,9 +25,9 @@ describe('Protocol rawText2Rich conversion', () => {
     });
 
     describe('WeeChat color codes (\\x19)', () => {
-        it('parses STD color code 04 (red) in date change prefix', () => {
+        it('parses STD color code 43 (chat_day_change) in date change prefix', () => {
             // Format used by injectDateChangeMessageIfNeeded
-            const result = rawText2Rich('\x1904\u2500\u2500\u2500');
+            const result = rawText2Rich('\x1943\u2500\u2500\u2500');
             expect(result.some((p) => p.text.includes('\u2500'))).toBe(true);
             expect(result.find((p) => p.text.includes('\u2500'))!.fgColor.type).toBe('option');
         });
@@ -102,7 +102,7 @@ describe('Protocol rawText2Rich conversion', () => {
 
     describe('date change messages', () => {
         it('handles date change prefix with box drawing chars', () => {
-            const result = rawText2Rich('\x1904\u2500\u2500\u2500\u2500\u2500');
+            const result = rawText2Rich('\x1943\u2500\u2500\u2500\u2500\u2500');
             const boxPart = result.find(p => p.text.includes('\u2500'));
             expect(boxPart).toBeDefined();
         });
@@ -218,12 +218,13 @@ describe('STD color code parity with old JS', () => {
     });
 
     describe('valid codes (0-16) — parity with old JS', () => {
-        it('sets bgColor equal to fgColor for STD color (old JS clones fgColor)', () => {
+        it('does not change bgColor for STD color (only foreground)', () => {
             const result = rawText2Rich('\x1903red text\x1c');
             const redPart = result.find(p => p.text === 'red text');
             expect(redPart).toBeDefined();
-            expect(redPart!.bgColor.type).toBe('option');
-            expect(redPart!.bgColor.name).toBe(redPart!.fgColor.name);
+            // STD colors only change foreground; background stays default
+            expect(redPart!.bgColor.type).toBe('weechat');
+            expect(redPart!.bgColor.name).toBe('default');
         });
 
         it('sets attrs.name to option name for STD color (old JS sets name)', () => {

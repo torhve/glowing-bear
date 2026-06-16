@@ -109,15 +109,19 @@ test('should show buffers div with border and padding', async () => {
 });
 
 test.describe('buffer search arrow navigation', () => {
-    test.beforeEach(async () => {
-        // Toggle twice to ensure clean state
+    test.beforeEach(async ({ page }) => {
+        // Close search modal if already open (from previous test)
+        const modal = page.locator('#buffer-search-modal');
+        if (await modal.isVisible()) {
+            await page.keyboard.press('Escape');
+            await page.waitForTimeout(200);
+        }
+        // Open search modal
         await page.getByTestId('search-button').click();
-        await page.waitForTimeout(100);
-        await page.getByTestId('search-button').click();
-        await page.waitForTimeout(200);
+        await page.waitForTimeout(300);
         const searchInput = page.locator('#buffer-search');
-        await expect(searchInput).toBeAttached();
-        await searchInput.clear();
+        await expect(searchInput).toBeVisible({ timeout: 5000 });
+        await searchInput.fill('');
     });
 
     test('should open search dropdown with matching results', async () => {

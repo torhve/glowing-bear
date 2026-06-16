@@ -14,7 +14,7 @@ import Toast from '$components/Toast.svelte';
   import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig } from '$lib/stores/models';
   import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer } from '$lib/stores/connectionManager';
   import { Protocol } from '$lib/weechat';
-  import { initNotifications, updateFavico, onDisconnect } from '$lib/notifications';
+  import { initNotifications, updateTitle, updateFavico, onDisconnect } from '$lib/notifications';
   import { sortBuffers, parseRelayUrl, computeJumpKeys } from '$lib/utils';
 
   /* eslint-disable @typescript-eslint/no-explicit-any -- dev-time debug globals on window */
@@ -99,6 +99,7 @@ import Toast from '$components/Toast.svelte';
 
   $effect(() => {
     void $buffers;
+    updateTitle();
     updateFavico();
   });
 
@@ -133,10 +134,12 @@ import Toast from '$components/Toast.svelte';
 
   $effect(() => {
     void $activeBufferChanged;
+    void $connected;
+    if (!$connected) return;
     const buf = $currentBuffer;
     if (!buf) return;
     if (buf.requestedLines < 100) {
-      fetchMoreLines(100);
+      fetchMoreLines(100).catch(() => {});
     }
     if (!('root' in (buf.nicklist || {}))) {
       requestNicklist(buf.id);
@@ -168,7 +171,10 @@ import Toast from '$components/Toast.svelte';
   });
 
   function handleQuickKeys(e: KeyboardEvent) {
-    if (e.altKey && !e.ctrlKey && !e.shiftKey && $settings.enableQuickKeys) {
+    // Use get() to avoid $effect dependency on $settings/$buffers (prevents listener re-registration)
+    const s = get(settings);
+    const b = get(buffers);
+    if (e.altKey && !e.ctrlKey && !e.shiftKey && s.enableQuickKeys) {
       // Use e.code to extract digit — this works on all keyboard layouts
       const digitMatch = e.code.match(/^Digit(\d)$/);
       if (digitMatch) {
@@ -177,7 +183,7 @@ import Toast from '$components/Toast.svelte';
         const digit = parseInt(digitStr, 10);
         const index = digit === 0 ? 9 : digit - 1;
         e.preventDefault();
-        const sorted = sortBuffers(Object.values($buffers).filter(b => !b.hidden), $settings.orderbyserver);
+        const sorted = sortBuffers(Object.values(b).filter((bu: any) => !bu.hidden), s.orderbyserver);
         if (index < sorted.length) {
           const buf = sorted[index];
           if (buf) switchBuffer(buf.id);
@@ -251,7 +257,8 @@ import Toast from '$components/Toast.svelte';
     // Alt+n -> toggle nicklist
     if (e.altKey && !e.ctrlKey && code === 78) {
       e.preventDefault();
-      updateSettings({ showNicklist: !$settings.showNicklist });
+      const s = get(settings);
+      updateSettings({ showNicklist: !s.showNicklist });
       return;
     }
 
@@ -307,13 +314,6 @@ import Toast from '$components/Toast.svelte';
       return;
     }
 
-    // Ctrl+K -> focus buffer search (when not in readline mode)
-    if (!e.altKey && !e.shiftKey && e.ctrlKey && code === 75 && !$settings.readlineBindings) {
-      e.preventDefault();
-      toggleBufferSearchGlobal();
-      return;
-    }
-
     // Alt+G -> focus buffer search
     if (e.altKey && (code === 71 || code === 103)) {
       e.preventDefault();
@@ -322,7 +322,7 @@ import Toast from '$components/Toast.svelte';
     }
 
     // Escape -> close open popovers, double-tap -> disconnect
-    if (code === 27) {
+    if (e.code === 'Escape') {
       e.preventDefault();
       document.querySelectorAll('dialog[popover]:open').forEach(el => (el as HTMLDialogElement).hidePopover());
       const now = Date.now();
@@ -334,16 +334,20 @@ import Toast from '$components/Toast.svelte';
     }
   }
 
-  function handleGlobalKeyDown(e: KeyboardEvent) {
+ function handleGlobalKeyDown(e: KeyboardEvent) {
     handleGlobalKeyboard(e);
-    if ((e.code === 'AltLeft' || e.code === 'AltRight') && $settings.enableQuickKeys && !$settings.showQuickKeys) {
+    // Use get() to avoid $effect dependency on $settings (prevents listener re-registration)
+    const s = get(settings);
+    if ((e.code === 'AltLeft' || e.code === 'AltRight') && s.enableQuickKeys && !s.showQuickKeys) {
       updateSettings({ showQuickKeys: true });
     }
   }
 
   function handleGlobalKeyUp(e: KeyboardEvent) {
+    // Use get() to avoid $effect dependency on $settings (prevents listener re-registration)
+    const s = get(settings);
     if (e.code === 'AltLeft' || e.code === 'AltRight') {
-      if ($settings.showQuickKeys) {
+      if (s.showQuickKeys) {
         updateSettings({ showQuickKeys: false });
       }
     }

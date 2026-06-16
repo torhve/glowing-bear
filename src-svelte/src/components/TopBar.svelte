@@ -59,7 +59,7 @@
       <button
         popovertarget="buffer-search-modal"
         class="px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-surface-raised rounded"
-        title="Search buffers (Ctrl+K)"
+        title="Search buffers (Alt+G)"
         data-testid="search-button"
         onclick={() => onSearchOpen()}
       >

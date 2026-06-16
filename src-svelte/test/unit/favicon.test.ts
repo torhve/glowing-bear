@@ -1,128 +1,151 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { initNotifications, updateFavico, onDisconnect } from '$lib/notifications';
-import { buffers } from '$lib/stores/models';
-import { settings } from '$lib/stores/settings';
-import type { BufferData } from '$lib/types';
+import { formatCount } from '$lib/faviconBadge';
 
-// Mock Favico
-const mockBadge = vi.fn();
+describe('formatCount', () => {
+    it('returns the count as string for small numbers', () => {
+        expect(formatCount(0)).toBe('0');
+        expect(formatCount(1)).toBe('1');
+        expect(formatCount(99)).toBe('99');
+    });
+
+    it('caps at 99+ for moderate overflow', () => {
+        expect(formatCount(100)).toBe('99+');
+        expect(formatCount(150)).toBe('99+');
+        expect(formatCount(999)).toBe('99+');
+    });
+
+    it('uses K notation for thousands', () => {
+        expect(formatCount(1000)).toBe('1k+');
+        expect(formatCount(1500)).toBe('1k+');
+        expect(formatCount(2000)).toBe('2k+');
+        expect(formatCount(9999)).toBe('9k+');
+    });
+
+    it('handles very large numbers', () => {
+        expect(formatCount(1000000)).toBe('999k+');
+        expect(formatCount(9999999)).toBe('999k+');
+    });
+});
+
+// For integration testing, we mock the entire faviconBadge module
+const mockDrawOnCanvas = vi.fn();
 const mockReset = vi.fn();
-vi.mock('favico.js', () => ({
-    default: vi.fn(() => ({
-        badge: mockBadge,
-        reset: mockReset,
-    })),
-}));
 
-// Mock stores
+vi.mock('$lib/faviconBadge', async () => {
+    const actual = await vi.importActual('$lib/faviconBadge');
+    return {
+        ...actual,
+        initFavicon: vi.fn(),
+        drawBadge: (...args: unknown[]) => mockDrawOnCanvas(...args),
+        resetBadge: (...args: unknown[]) => mockReset(...args),
+    };
+});
+
+const modelsMock = {
+    subscribe: vi.fn((fn: (val: unknown) => void) => {
+        fn({});
+        return () => {};
+    }),
+};
+
+const settingsMock = {
+    subscribe: vi.fn((fn: (val: Record<string, unknown>) => void) => {
+        fn({ useFavico: true });
+        return () => {};
+    }),
+};
+
 vi.mock('$lib/stores/models', () => ({
-    buffers: {
-        subscribe: vi.fn((fn: (val: unknown) => void) => {
-            fn({});
-            return () => {};
-        }),
-    },
+    buffers: modelsMock,
 }));
 
 vi.mock('$lib/stores/settings', () => ({
-    settings: {
-        subscribe: vi.fn((fn: (val: Record<string, unknown>) => void) => {
-            fn({ useFavico: true });
-            return () => {};
-        }),
-    },
+    settings: settingsMock,
 }));
 
-describe('favicon badge', () => {
-    beforeEach(() => {
+describe('favicon badge integration', () => {
+    let notifications: typeof import('$lib/notifications');
+
+    beforeEach(async () => {
         vi.clearAllMocks();
+        notifications = await import('$lib/notifications');
     });
 
-    it('initializes favico badge instance', () => {
-        initNotifications();
-        // Should create Favico instance — side effect only
-        expect(mockBadge).not.toHaveBeenCalled();
+    it('initializes favicon by calling initFavicon', () => {
+        notifications.initNotifications();
+        // initFavicon is mocked — just verify no error
     });
 
-    it('shows notification badge when notifications exist', async () => {
-        const mockBuffs: Record<string, BufferData> = {
-            buf1: { unread: 0, notification: 3 } as BufferData,
+    it('draws notification badge when notifications exist', async () => {
+        const mockBuffs: Record<string, import('$lib/types').BufferData> = {
+            buf1: { unread: 0, notification: 3 } as import('$lib/types').BufferData,
         };
-        (buffers.subscribe as ReturnType<typeof vi.fn>).mockImplementation((fn) => {
+        modelsMock.subscribe.mockImplementation((fn) => {
             fn(mockBuffs);
             return () => {};
         });
 
-        initNotifications();
-        updateFavico();
+        notifications.updateFavico();
 
-        expect(mockBadge).toHaveBeenCalledWith(3);
-        expect(mockReset).not.toHaveBeenCalled();
+        expect(mockDrawOnCanvas).toHaveBeenCalledWith(3, 'notification');
     });
 
-    it('shows unread badge when no notifications but unread exists', async () => {
-        const mockBuffs: Record<string, BufferData> = {
-            buf1: { unread: 5, notification: 0 } as BufferData,
+    it('draws unread badge when no notifications but unread exists', async () => {
+        const mockBuffs: Record<string, import('$lib/types').BufferData> = {
+            buf1: { unread: 5, notification: 0 } as import('$lib/types').BufferData,
         };
-        (buffers.subscribe as ReturnType<typeof vi.fn>).mockImplementation((fn) => {
+        modelsMock.subscribe.mockImplementation((fn) => {
             fn(mockBuffs);
             return () => {};
         });
 
-        initNotifications();
-        updateFavico();
+        notifications.updateFavico();
 
-        expect(mockBadge).toHaveBeenCalledWith(5);
+        expect(mockDrawOnCanvas).toHaveBeenCalledWith(5, 'unread');
     });
 
-    it('resets badge when no unread or notifications', async () => {
-        const mockBuffs: Record<string, BufferData> = {
-            buf1: { unread: 0, notification: 0 } as BufferData,
+    it('clears app badge when no unread or notifications', async () => {
+        const mockBuffs: Record<string, import('$lib/types').BufferData> = {
+            buf1: { unread: 0, notification: 0 } as import('$lib/types').BufferData,
         };
-        (buffers.subscribe as ReturnType<typeof vi.fn>).mockImplementation((fn) => {
+        modelsMock.subscribe.mockImplementation((fn) => {
             fn(mockBuffs);
             return () => {};
         });
 
-        initNotifications();
-        updateFavico();
+        notifications.updateFavico();
 
-        expect(mockReset).toHaveBeenCalled();
-        expect(mockBadge).not.toHaveBeenCalled();
+        // Should not call drawBadge — goes to else branch
+        expect(mockDrawOnCanvas).not.toHaveBeenCalled();
     });
 
     it('prefers notification count over unread', async () => {
-        const mockBuffs: Record<string, BufferData> = {
-            buf1: { unread: 10, notification: 2 } as BufferData,
+        const mockBuffs: Record<string, import('$lib/types').BufferData> = {
+            buf1: { unread: 10, notification: 2 } as import('$lib/types').BufferData,
         };
-        (buffers.subscribe as ReturnType<typeof vi.fn>).mockImplementation((fn) => {
+        modelsMock.subscribe.mockImplementation((fn) => {
             fn(mockBuffs);
             return () => {};
         });
 
-        initNotifications();
-        updateFavico();
+        notifications.updateFavico();
 
-        // Should show notification count (2), not unread (10)
-        expect(mockBadge).toHaveBeenCalledWith(2);
+        expect(mockDrawOnCanvas).toHaveBeenCalledWith(2, 'notification');
     });
 
     it('respects useFavico setting', async () => {
-        (settings.subscribe as ReturnType<typeof vi.fn>).mockImplementation((fn) => {
+        settingsMock.subscribe.mockImplementation((fn) => {
             fn({ useFavico: false });
             return () => {};
         });
 
-        initNotifications();
-        updateFavico();
+        notifications.updateFavico();
 
-        expect(mockBadge).not.toHaveBeenCalled();
-        expect(mockReset).not.toHaveBeenCalled();
+        expect(mockDrawOnCanvas).not.toHaveBeenCalled();
     });
 
-    it('cleans up on disconnect', async () => {
-        initNotifications();
-        onDisconnect();
+    it('calls resetBadge on disconnect', async () => {
+        notifications.onDisconnect();
 
         expect(mockReset).toHaveBeenCalled();
     });

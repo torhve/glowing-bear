@@ -2,6 +2,12 @@
   import type { BufferLine, PluginMetadata } from '$lib/types';
   import { tokenizeAndCodify, type Token } from '$lib/linkTokens';
   import PluginEmbed from '$components/PluginEmbed.svelte';
+  import ArrowRight from '@lucide/svelte/icons/arrow-right';
+  import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+  import ChevronLeft from '@lucide/svelte/icons/chevron-left';
+  import ChevronRight from '@lucide/svelte/icons/chevron-right';
+  import Minus from '@lucide/svelte/icons/minus';
+  import { detectPrefixIcon, type PrefixIconType } from '$lib/utils/prefixIcons';
 
   let {
     message,
@@ -99,7 +105,7 @@
   }
 
   function isDateChangeMessage(msg: BufferLine): boolean {
-    return msg.text.startsWith('\u00194\u2500') || msg.text.startsWith('\u0019');
+    return msg.text.startsWith('\u001943\u2500') || msg.text.startsWith('\u00194\u2500') || msg.text.startsWith('\u0019');
   }
 
   interface TokenGroup {
@@ -124,6 +130,10 @@
       if (onMention) {
           onMention(message);
       }
+  }
+
+  function getIconType(part: { text: string }): PrefixIconType | null {
+      return detectPrefixIcon(part.text);
   }
 
 </script>
@@ -151,18 +161,38 @@
 {:else}
   <tr class={['bufferline', { highlight: isHighlight }]} data-testid="bufferline-row">
     <td class="time">
-      <span class="date compact-time" class:repeated-time={isRepeatedTime}>{message.shortTime}</span>
+      <span class="date compact-time" class:repeated-time={isRepeatedTime}>
+        {#if message.shortTime.includes(':')}
+          {@const parts = message.shortTime.split(':')}
+          {parts[0]}<span class="time-delimiter">:</span>{parts.slice(1).join(':')}
+        {:else}
+          {message.shortTime}
+        {/if}
+      </span>
     </td>
     <td class="prefix">
       <span class="compact-prefix" class:repeated-prefix={isRepeatedPrefix}>
-        <span
-          onclick={handleMention}
-          role="button"
-          tabindex="0"
-          class="mention-link"
-          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleMention(); } }}
-        >
-          {#if message.showHiddenBrackets}<span class="hidden-bracket">{'<'}</span>{/if}{#each message.prefix as part}<span class="{(part.classes || []).join(' ')}">{part.text}</span>{/each}{#if message.showHiddenBrackets}<span class="hidden-bracket">{'>'}</span>{/if}
+        <span onclick={handleMention} role="button" tabindex="0" class="mention-link" onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleMention(); } }}>
+          {#if message.showHiddenBrackets}<span class="hidden-bracket">{'<'}</span>{/if}
+          {#each message.prefix as part}
+            {@const iconType = getIconType(part)}
+            {#if iconType}
+              {#if iconType === 'arrow-right'}
+                <ArrowRight class={(part.classes || []).join(' ')} width={12} height={12} />
+              {:else if iconType === 'arrow-left'}
+                <ArrowLeft class={(part.classes || []).join(' ')} width={12} height={12} />
+              {:else if iconType === 'chevron-left'}
+                <ChevronLeft class={(part.classes || []).join(' ')} width={12} height={12} />
+              {:else if iconType === 'chevron-right'}
+                <ChevronRight class={(part.classes || []).join(' ')} width={12} height={12} />
+              {:else if iconType === 'minus'}
+                <Minus class={(part.classes || []).join(' ')} width={12} height={12} />
+              {/if}
+            {:else}
+              <span class="{(part.classes || []).join(' ')}">{part.text}</span>
+            {/if}
+          {/each}
+          {#if message.showHiddenBrackets}<span class="hidden-bracket">{'>'}</span>{/if}
         </span>
       </span>
     </td>
@@ -199,6 +229,7 @@
 <style>
   .bufferline {
     line-height: 1;
+    padding: 2px 0;
   }
 
   .bufferline.highlight {
@@ -216,15 +247,29 @@
     visibility: visible;
   }
 
+  .date .time-delimiter {
+    color: #cc843b;
+  }
+
+  .compact-time.repeated-time .time-delimiter {
+    color: #666;
+  }
+
   .prefix {
     max-width: 120px;
-    padding: 0 1px 0 6px;
+    padding: 0 3px 0 1px;
     vertical-align: top;
     white-space: nowrap;
     text-align: right;
-    border-right: 1px solid var(--gb-border, #444);
+    border-right: 1px solid var(--gb-border, #666);
     overflow: hidden;
     text-overflow: ellipsis;
+    box-sizing: border-box;
+  }
+
+  .prefix .compact-prefix {
+    display: flex;
+    justify-content: flex-end;
   }
 
   .prefix .compact-prefix.repeated-prefix {
