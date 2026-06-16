@@ -321,10 +321,8 @@ import Toast from '$components/Toast.svelte';
       return;
     }
 
-    // Escape -> close open popovers, double-tap -> disconnect
+    // Escape -> double-tap -> disconnect (let native popover handle closing modals)
     if (e.code === 'Escape') {
-      e.preventDefault();
-      document.querySelectorAll('dialog[popover]:open').forEach(el => (el as HTMLDialogElement).hidePopover());
       const now = Date.now();
       if (now - lastEscapeTime <= 500) {
         disconnect();
@@ -371,7 +369,8 @@ import Toast from '$components/Toast.svelte';
     _altKeyPressed = false;
   }
 
-  $effect(() => {
+  // Register keyboard event listeners once on mount — no reactive dependencies to avoid listener tear-down/re-add cycles
+  onMount(() => {
     if (typeof window !== 'undefined') {
       document.addEventListener('keydown', handleQuickKeys);
       document.addEventListener('keydown', handleJumpToBuffer);
@@ -379,14 +378,19 @@ import Toast from '$components/Toast.svelte';
       document.addEventListener('keyup', handleGlobalKeyUp);
       document.addEventListener('keydown', handleAltKeyDown);
       document.addEventListener('keyup', handleAltKeyUp);
-      return () => {
-        document.removeEventListener('keydown', handleQuickKeys);
-        document.removeEventListener('keydown', handleJumpToBuffer);
-        document.removeEventListener('keydown', handleGlobalKeyDown);
-        document.removeEventListener('keyup', handleGlobalKeyUp);
-        document.removeEventListener('keydown', handleAltKeyDown);
-        document.removeEventListener('keyup', handleAltKeyUp);
-      };
+    }
+  });
+
+  onDestroy(() => {
+    cleanupTouchGestures();
+    onDisconnect();
+    if (typeof window !== 'undefined') {
+      document.removeEventListener('keydown', handleQuickKeys);
+      document.removeEventListener('keydown', handleJumpToBuffer);
+      document.removeEventListener('keydown', handleGlobalKeyDown);
+      document.removeEventListener('keyup', handleGlobalKeyUp);
+      document.removeEventListener('keydown', handleAltKeyDown);
+      document.removeEventListener('keyup', handleAltKeyUp);
     }
   });
 

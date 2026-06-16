@@ -123,6 +123,8 @@ const colorsOptionsNames = [
     'invalid',
     'invalid',
     'invalid',
+    'invalid',
+    'invalid',
     'chat_host',
     'chat_delimiters',
     'chat_highlight',

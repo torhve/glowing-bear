@@ -61,14 +61,6 @@
       return;
     }
 
-    if (key === 'Escape') {
-      e.preventDefault();
-      bufferSearchQuery = '';
-      selectedIndex = 0;
-      (document.getElementById('buffer-search-modal') as HTMLElement)?.hidePopover();
-      return;
-    }
-
     if (key === 'Enter' && filteredBuffers.length > 0) {
       e.preventDefault();
       const selected = filteredBuffers[selectedIndex]!;
