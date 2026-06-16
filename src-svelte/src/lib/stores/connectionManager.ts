@@ -4,7 +4,7 @@ import { buffers, servers, activeBufferId, previousBufferId, wconfig, getBuffer,
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist } from '$lib/stores/handlers';
 import { IDEAL_NICK_COLORS, IDEAL_COLOR_NICKS_IN_NICKLIST, shouldAutoApply } from '$lib/stores/nickColors';
 import { Protocol } from '$lib/weechat';
-import { DEBUG_NICKLIST } from '$lib/debug';
+import { DEBUG_NICKLIST, DEBUG_WEETCHAT_COMMANDS } from '$lib/debug';
 
 // Protocol instance for instance methods (setId, parse)
 // Static methods (formatHandshake, formatInit, etc.) are called on the constructor directly
@@ -68,7 +68,7 @@ export async function connect(host: string, port: number, path: string, password
                     const initMsg = Protocol.formatInit('plain:' + password, null);
                     // Fire-and-forget: WeeChat increments callback IDs so sendAsync would timeout
                     if (ws && ws.readyState === WebSocket.OPEN) {
-                        ws.send(initMsg);
+                        sendWs(initMsg, 'init(plain)');
                     }
                     await new Promise(r => setTimeout(r, 5));
                 }
@@ -106,7 +106,7 @@ export async function connect(host: string, port: number, path: string, password
                 // Request sync (fire-and-forget, like AngularJS code)
                 const syncMsg = Protocol.formatSync({});
                 if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(syncMsg);
+                    sendWs(syncMsg, 'sync');
                 }
 
                 // Mark connected after buffer info + line loading complete
@@ -192,7 +192,7 @@ async function initializePBKDF2(password: string, nonce: Uint8Array, iterations:
     );
     // Fire-and-forget: WeeChat increments callback IDs so sendAsync would timeout
     if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(initMsg);
+        sendWs(initMsg, 'init(pbkdf2)');
     }
     await new Promise(r => setTimeout(r, 5));
 }
@@ -238,7 +238,7 @@ function fetchConfValue(name: string) {
         const messageWithId = protocolInstance.setId(cbId, message);
         console.debug('[connect] sendAsync id=' + cbId + ' msg=' + message.substring(0, 60));
 
-        ws.send(messageWithId);
+        sendWs(messageWithId, 'async#' + cbId);
 
         // Store callback
         callbacks[cbId] = { resolve, reject };
@@ -284,6 +284,21 @@ function concatenateTypedArrays(...arrays: Uint8Array[]): Uint8Array {
     return result;
 }
 
+// Central WebSocket send wrapper — logs all outbound WS messages
+function sendWs(data: string | ArrayBufferLike, label = '') {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        console.warn('[WS] send skipped — not open');
+        return;
+    }
+    if (DEBUG_WEETCHAT_COMMANDS && data instanceof ArrayBuffer) {
+        const text = new TextDecoder().decode(data);
+        console.log('[WeeChatCmd] SEND', label || '(raw):', text.substring(0, 200));
+    } else if (DEBUG_WEETCHAT_COMMANDS && typeof data === 'string') {
+        console.log('[WeeChatCmd] SEND', label || '(raw):', data.substring(0, 200));
+    }
+    ws.send(data);
+}
+
 // Handle incoming messages
 export function onMessage(data: ArrayBuffer) {
     const message = protocolInstance.parse(data);
@@ -297,31 +312,28 @@ export function onMessage(data: ArrayBuffer) {
 }
 
 export function sendMessage(message: string) {
-    console.log('[sendMessage] sending:', message.substring(0, 50));
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         console.warn('[sendMessage] WebSocket not open');
         return;
     }
 
     const bufferId = get(activeBufferId);
-    console.log('[sendMessage] activeBufferId:', bufferId);
     if (!bufferId) {
         console.warn('[sendMessage] no active buffer ID');
         return;
     }
 
     const buffer = getBuffer(bufferId);
-    console.log('[sendMessage] buffer:', buffer?.shortName, buffer?.id);
     if (!buffer) {
         console.warn('[sendMessage] buffer not found for id:', bufferId);
         return;
     }
 
-    const msg = Protocol.formatInput({
+   const msg = Protocol.formatInput({
         buffer: '0x' + buffer.id,
         data: message
     });
-    ws.send(msg);
+    sendWs(msg, 'msg:' + buffer.shortName);
 }
 
 export function disconnect() {
@@ -329,7 +341,7 @@ export function disconnect() {
     if (hotlistInterval) clearInterval(hotlistInterval);
     if (ws) {
         const quitMsg = Protocol.formatQuit();
-        ws.send(quitMsg);
+        sendWs(quitMsg, 'quit');
         ws.close();
         ws = null;
     }
@@ -386,7 +398,7 @@ export function fetchMoreLines(numLines: number = 0): Promise<any> {
         callbacks[cbId] = { resolve, reject };
 
         const formattedMsg = protocolInstance.setId(cbId, msg);
-        ws.send(formattedMsg);
+        sendWs(formattedMsg, 'fetch#' + cbId);
 
         // Timeout after 30 seconds
         setTimeout(() => {
@@ -443,7 +455,7 @@ export function sendWeeChatCommand(command: string) {
         buffer: '0x0',
         data: command
     });
-    ws.send(msg);
+    sendWs(msg, 'cmd:' + command.substring(0, 50));
 }
 
 export function switchBuffer(bufferId: string) {
@@ -469,7 +481,6 @@ export function switchBuffer(bufferId: string) {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WeeChat buffer ID is a hex string from protocol
 export function sendBufferCommand(bufferId: any, command: string) {
-    console.log('[connectionManager] sendBufferCommand', bufferId, command)
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         console.warn('[sendBufferCommand] WebSocket not open');
         return;
@@ -478,7 +489,7 @@ export function sendBufferCommand(bufferId: any, command: string) {
         buffer: '0x' + bufferId,
         data: command
     });
-    ws.send(msg);
+    sendWs(msg, 'bufcmd:' + command.substring(0, 50));
 }
 
 export function closeBufferOnWeeChat(bufferId: string) {
@@ -490,7 +501,7 @@ export function closeBufferOnWeeChat(bufferId: string) {
         buffer: '0x' + bufferId,
         data: '/close'
     });
-    ws.send(msg);
+    sendWs(msg, 'close:' + bufferId);
 }
 
 export function pinBuffer(bufferId: string) {
@@ -498,13 +509,12 @@ export function pinBuffer(bufferId: string) {
         console.warn('[pinBuffer] WebSocket not open');
         return;
     }
-    console.log('[pinBuffer] pinning buffer:', bufferId);
     const msg = Protocol.formatLocalvarSet({
         buffer: '0x' + bufferId,
         name: 'pinned',
         value: 'true'
     });
-    ws.send(msg);
+    sendWs(msg, 'pin:' + bufferId);
 }
 
 export function unpinBuffer(bufferId: string) {
@@ -512,13 +522,12 @@ export function unpinBuffer(bufferId: string) {
         console.warn('[unpinBuffer] WebSocket not open');
         return;
     }
-    console.log('[unpinBuffer] unpining buffer:', bufferId);
     const msg = Protocol.formatLocalvarSet({
         buffer: '0x' + bufferId,
         name: 'pinned',
         value: 'false'
     });
-    ws.send(msg);
+    sendWs(msg, 'unpin:' + bufferId);
 }
 
 export function getWs() {
