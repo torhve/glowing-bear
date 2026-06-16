@@ -239,7 +239,8 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                     if (server) server.unread++;
                 }
 
-                if (buffer.notify !== 0 && (lineMsg.highlight || lineMsg.tags_array.includes('notify_private'))) {
+                const isPrivate = buffer.type === 'private' && buffer.id !== activeId;
+                if (buffer.notify !== 0 && (lineMsg.highlight || lineMsg.tags_array.includes('notify_private') || isPrivate)) {
                     buffer.notification++;
                     const serverKey = `${buffer.plugin}.${buffer.server}`;
                     const server = get(servers)[serverKey];

@@ -19,22 +19,6 @@ export default defineConfig({
         navigateFallback: '404.html',
       },
     }),
-    {
-      name: 'fflate-global',
-      transform(code, id) {
-        // Inject fflate global before any code that uses it
-        if (id.includes('weechat.js')) {
-          return {
-            code: `
-              import * as _fflate from 'fflate';
-              globalThis.fflate = _fflate;
-              ${code.replace(/const fflate = globalThis\.fflate/, 'const fflate = globalThis.fflate || _fflate')}
-            `,
-            map: null,
-          };
-        }
-      },
-    },
   ],
   resolve: {
     alias: {

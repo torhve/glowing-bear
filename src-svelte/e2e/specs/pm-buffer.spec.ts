@@ -35,7 +35,7 @@ async function getNonChannelBuffer() {
     const count = await items.count();
     for (let i = 0; i < count; i++) {
         const text = await items.nth(i).textContent();
-        if (!text.includes('#glowing-bear')) {
+        if (text && !text.includes('#glowing-bear')) {
             return items.nth(i);
         }
     }
@@ -58,7 +58,7 @@ test('shows unread count on PM buffer', async () => {
 
     // Verify badge shows notification count (unread + notification combined)
     const pmBufferItem = pmItems.first();
-    const badgeText = await pmBufferItem.locator('span.text-xs.mr-2').first().textContent();
+    const badgeText = await pmBufferItem.locator('span.rounded-full').first().textContent();
     expect(badgeText).toBeTruthy();
     const badgeNum = parseInt(badgeText!, 10);
     expect(badgeNum).toBeGreaterThanOrEqual(1);
@@ -99,7 +99,7 @@ test('switches to PM buffer and shows message', async () => {
 
     await expect(page.getByTestId('chat-messages')).toBeVisible();
 
-    const msgRow = page.locator('[data-testid="bufferline-row"] td.message').filter({ hasText: 'Hello from bot!' });
+    const msgRow = page.getByRole('cell', { name: 'Hello from bot!' }).first();
     await expect(msgRow).toBeVisible({ timeout: 10000 });
 });
 
@@ -113,13 +113,16 @@ test('closes PM buffer cleanly', async () => {
     await pmItem.click();
     await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 5000 });
 
-    // Close it using the close button on the active buffer item
-    const activeBufferItem = page.locator('[data-testid="buffer-item"].bg-surface-raised [data-testid="close-buffer"]').first();
-    await activeBufferItem.click();
+    // Close it using the close button on the PM buffer item
+    const closeBtn = pmItem.locator('[data-testid="close-buffer"]');
+    await pmItem.hover();
+    await closeBtn.waitFor({ state: 'visible' });
+    await closeBtn.click();
 
     // Buffer count should have decreased
     const remainingItems = page.getByTestId('buffer-item');
-    await expect(remainingItems).toHaveCount({ min: 1 });
+    const remainingCount = await remainingItems.count();
+    expect(remainingCount).toBeGreaterThanOrEqual(1);
 
     // The closed PM buffer should no longer appear
     const pmItems = page.locator('[data-testid="buffer-item"]').filter({ hasNotText: '#glowing-bear' });

@@ -104,7 +104,7 @@ export function updateTitle(buffer: BufferData): void {
     const allBuffers = get(buffers);
     let totalUnread = 0;
     for (const buf of Object.values(allBuffers) as BufferData[]) {
-        totalUnread += buf.unread;
+        totalUnread += buf.unread + buf.notification;
     }
 
     let prefix = '';

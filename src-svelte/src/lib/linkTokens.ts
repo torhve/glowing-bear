@@ -82,10 +82,10 @@ export function tokenizeLinks(text: string): LinkToken[] {
  * Only matches single or triple backticks (not double). Requires a space or
  * start-of-string before the opening backticks to avoid codifying weird`stuff`.
  */
-export function codifyText(text: string): { type: 'text' | 'code'; value: string }[] {
+export function codifyText(text: string): (LinkToken | CodeSegment)[] {
     if (text == null) return [];
 
-    const segments: { type: 'text' | 'code'; value: string }[] = [];
+    const segments: (LinkToken | CodeSegment)[] = [];
     const re = /(^|\s)(```|`)([^`].*?)\2/gs;
     let lastIndex = 0;
     let match;

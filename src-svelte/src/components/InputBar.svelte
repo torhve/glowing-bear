@@ -23,7 +23,7 @@
     if (!canSend) return;
 
     const text = message.trim();
-    
+
     // Handle /buffer clear command
     if (/^\/buffer\s+clear\s*$/i.test(text)) {
       if ($currentBuffer) {
@@ -43,7 +43,7 @@
       }
       return;
     }
-    
+
     sendMessage(text);
 
     if ($currentBuffer) {
@@ -324,7 +324,7 @@
       ondragleave={handleDragEnd}
       ondragend={handleDragEnd}
       data-testid="message-input"
-      placeholder={$currentBuffer ? `Message: ${$currentBuffer.shortName}` : 'Select a buffer to start chatting...'}
+      placeholder={$currentBuffer ? `Message ${$currentBuffer.shortName}` : 'Select a buffer to start chatting...'}
       rows={1}
       class="flex-1 bg-input-bg border border-border rounded px-3 py-2 text-text text-sm placeholder-text-muted focus:outline-none focus:border-accent resize-none transition-colors {isDraggingFile ? 'border-accent bg-accent/10' : ''}"
       style="min-height: 36px; max-height: 150px;"

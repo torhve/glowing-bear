@@ -104,6 +104,7 @@
       <div class="relative">
         <Search size={14} class="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
         <input
+          id="buffer-search"
           bind:this={searchInputRef}
           type="text"
           bind:value={bufferSearchQuery}

@@ -409,6 +409,11 @@ export function fetchMoreLines(numLines: number = 0): Promise<any> {
             buffer.allLinesFetched = true;
         }
         return message;
+    }).catch((err) => {
+        console.warn('[fetchMoreLines] fetch failed, marking allLinesFetched:', err);
+        if (buffer) {
+            buffer.allLinesFetched = true;
+        }
     }).finally(() => {
         pendingFetchBuffers.delete(bufferIdStr);
     });
