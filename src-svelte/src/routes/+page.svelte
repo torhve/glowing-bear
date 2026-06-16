@@ -19,11 +19,15 @@ import Toast from '$components/Toast.svelte';
 
   /* eslint-disable @typescript-eslint/no-explicit-any -- dev-time debug globals on window */
   if (typeof window !== 'undefined' && import.meta.env.DEV) {
-    (window as any).__wconfig = $wconfig;
-    (window as any).__connected = $connected;
+    (window as any).__wconfig = wconfig;
+    (window as any).__connected = connected;
     (window as any).__sendWeechatCommand = sendWeeChatCommand;
     (window as any).__setGbSettings = updateSettings;
     (window as any).__Protocol = Protocol;
+    $effect(() => {
+      (window as any).__wconfig = $wconfig;
+      (window as any).__connected = $connected;
+    });
   }
   /* eslint-enable @typescript-eslint/no-explicit-any */
 

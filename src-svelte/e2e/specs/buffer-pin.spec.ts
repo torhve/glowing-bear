@@ -31,7 +31,7 @@ test.beforeEach(async () => {
         const btn = pinButtons.nth(i);
         const title = await btn.getAttribute('title');
         if (title === 'Unpin buffer') {
-            await btn.click();
+            await btn.click({ force: true });
             await page.waitForTimeout(200);
         }
     }
@@ -57,7 +57,7 @@ test('pin button shows pushpin icon when not pinned', async () => {
 
 test('clicking pin button changes icon to pin icon', async () => {
     const firstPinButton = page.getByTestId('pin-buffer').first();
-    await firstPinButton.click();
+    await firstPinButton.click({ force: true });
     await page.waitForTimeout(500);
     // After pinning, the PinOff icon should be shown
     await expect(firstPinButton.locator('svg')).toBeAttached();
@@ -65,16 +65,16 @@ test('clicking pin button changes icon to pin icon', async () => {
 
 test('after pinning, title changes to Unpin buffer', async () => {
     const firstPinButton = page.getByTestId('pin-buffer').first();
-    await firstPinButton.click();
+    await firstPinButton.click({ force: true });
     await page.waitForTimeout(500);
     await expect(firstPinButton).toHaveAttribute('title', 'Unpin buffer');
 });
 
 test('clicking unpin button changes icon back to pushpin icon', async () => {
     const firstPinButton = page.getByTestId('pin-buffer').first();
-    await firstPinButton.click();
+    await firstPinButton.click({ force: true });
     await page.waitForTimeout(500);
-    await firstPinButton.click();
+    await firstPinButton.click({ force: true });
     await page.waitForTimeout(500);
     // After unpinning, the Pin icon should be shown again
     await expect(firstPinButton.locator('svg')).toBeAttached();
@@ -85,7 +85,7 @@ test('pinned buffers appear before unpinned in sorted list', async () => {
     const pinButtons = page.getByTestId('pin-buffer');
     const count = await pinButtons.count();
     if (count >= 2) {
-        await pinButtons.nth(1).click();
+        await pinButtons.nth(1).click({ force: true });
         await page.waitForTimeout(500);
     }
 

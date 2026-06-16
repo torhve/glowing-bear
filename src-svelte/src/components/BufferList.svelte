@@ -181,10 +181,10 @@
                  {buffer.shortName}
                </span>
                {#if (buffer.unread + buffer.notification) > 0}
-               <span class="absolute right-4 {buffer.notification > 0 ? 'bg-red-600 text-white' : 'bg-accent/80 text-white'} rounded-full px-1 py-0 text-[10px] font-bold -translate-y-1/2" style="top: 50%;">
-                 {buffer.unread + buffer.notification}
-               </span>
-               {/if}
+                <span class="absolute right-10 {buffer.notification > 0 ? 'bg-red-600 text-white' : 'bg-accent/80 text-white'} rounded-full px-1 py-0 text-[10px] font-bold -translate-y-1/2" style="top: 50%;">
+                  {buffer.unread + buffer.notification}
+                </span>
+                {/if}
              <button
                  onclick={(e) => { e.stopPropagation(); handleTogglePin(buffer.id); }}
                   class="mr-0.5 text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100 focus:opacity-100"

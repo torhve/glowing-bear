@@ -27,6 +27,8 @@ test.beforeEach(async () => {
 });
 
 test('should have wconfig populated after connect', async () => {
+    // Wait for config fetches to complete (they happen asynchronously after connect)
+    await page.waitForTimeout(3000);
     const bufferTimeFormat = await getConfigValue(page, 'weechat.look.buffer_time_format');
     expect(bufferTimeFormat).toBeTruthy();
     expect(bufferTimeFormat.length).toBeGreaterThan(0);

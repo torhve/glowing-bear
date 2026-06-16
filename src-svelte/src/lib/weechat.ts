@@ -200,12 +200,12 @@ interface StyleResult {
 
 function getStyle(txt: string): StyleResult {
     const matchers: { regex: RegExp; fn: (m: RegExpMatchArray) => StyleResult }[] = [
-        // STD color codes: 2 digits (00-16) → option colors (foreground only)
+        // STD color codes: 2 digits (00-43) → option colors (foreground only)
         {
             regex: /^(\d{2})/,
             fn: (m) => {
                 const code = parseInt(m[1]!, 10);
-                if (code < 0 || code > 16) {
+                if (code >= colorsOptionsNames.length) {
                     // Out-of-range: consume digits but don't apply color (matches old JS behavior)
                     return { fgColor: null, bgColor: null, attrs: null, text: txt.substring(2) };
                 }
@@ -302,13 +302,10 @@ function getStyle(txt: string): StyleResult {
 }
 
 function attrsFromStr(str: string): TextAttrs | null {
-    // Per WeeChat spec: empty attrs means "keep current" (null), '|' also means keep current
-    if (str.length === 0 || str === '|') {
-        return null;
-    }
+    // Matches old JS behavior: '|' anywhere means "keep attributes" (null);
+    // an empty string returns a reset (all-false) attributes object.
     const attrs: TextAttrs = { name: null, override: { bold: false, reverse: false, italic: false, underline: false } };
     for (const ch of str) {
-        // '|' anywhere in the string means "keep attributes unchanged"
         if (ch === '|') {
             return null;
         }
@@ -493,10 +490,6 @@ function uia2s(data: Uint8Array): string {
     const nullIdx = data.indexOf(0x00);
     const slice = nullIdx >= 0 ? data.subarray(0, nullIdx) : data;
     return utf8Decoder.decode(slice);
-}
-
-function num2hex(num: number): string {
-    return '0x' + (num >>> 0).toString(16);
 }
 
 // --- Static format methods ---
