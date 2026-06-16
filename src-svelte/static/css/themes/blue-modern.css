@@ -1,6 +1,19 @@
 @import "dark.css";
 
 body {
+  --gb-bg: #0a0a0a;
+  --gb-surface: #0f0f0f;
+  --gb-surface-raised: #161616;
+  --gb-border: #222222;
+  --gb-text: #eeeeee;
+  --gb-text-secondary: #808080;
+  --gb-text-muted: #606060;
+  --gb-accent: #fab283;
+  --gb-accent-hover: #ffc4a3;
+  --gb-danger: #e06c75;
+  --gb-success: #7fd88f;
+  --gb-warning: #f5a742;
+  --gb-input-bg: #111111;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro", "Helvetica Neue", sans-serif;
 }
 

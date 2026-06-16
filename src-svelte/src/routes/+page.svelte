@@ -13,6 +13,7 @@ import Toast from '$components/Toast.svelte';
   import { onMount, onDestroy } from 'svelte';
   import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig } from '$lib/stores/models';
   import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer } from '$lib/stores/connectionManager';
+  import { Protocol } from '$lib/weechat';
   import { initNotifications, updateFavico, onDisconnect } from '$lib/notifications';
   import { sortBuffers, parseRelayUrl, computeJumpKeys } from '$lib/utils';
 
@@ -22,6 +23,7 @@ import Toast from '$components/Toast.svelte';
     (window as any).__connected = $connected;
     (window as any).__sendWeechatCommand = sendWeeChatCommand;
     (window as any).__setGbSettings = updateSettings;
+    (window as any).__Protocol = Protocol;
   }
   /* eslint-enable @typescript-eslint/no-explicit-any */
 

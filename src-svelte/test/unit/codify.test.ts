@@ -10,20 +10,20 @@ describe('codifyText', () => {
         const result = codifyText('z `foo` z');
         expect(result).toHaveLength(3);
         expect(result[0]).toEqual({ type: 'text', value: 'z ' });
-        expect(result[1]).toEqual({ type: 'code', value: 'foo' });
+        expect(result[1]).toEqual({ type: 'code', value: 'foo', delimiter: '`' });
         expect(result[2]).toEqual({ type: 'text', value: ' z' });
     });
 
     it('should codify single character code', () => {
         const result = codifyText('z `a` z');
         expect(result).toHaveLength(3);
-        expect(result[1]).toEqual({ type: 'code', value: 'a' });
+        expect(result[1]).toEqual({ type: 'code', value: 'a', delimiter: '`' });
     });
 
     it('should codify triple backtick blocks', () => {
         const result = codifyText('z ```foo``` z');
         expect(result).toHaveLength(3);
-        expect(result[1]).toEqual({ type: 'code', value: 'foo' });
+        expect(result[1]).toEqual({ type: 'code', value: 'foo', delimiter: '```' });
     });
 
     it('should codify multiple snippets', () => {
@@ -31,9 +31,9 @@ describe('codifyText', () => {
         // 6 segments: text, code, text, code, text, code (no trailing after-text since string ends with code)
         expect(result).toHaveLength(6);
         expect(result.filter(t => t.type === 'code')).toHaveLength(3);
-        expect(result[1]).toEqual({ type: 'code', value: 'foo' });
-        expect(result[3]).toEqual({ type: 'code', value: 'bar' });
-        expect(result[5]).toEqual({ type: 'code', value: 'baz' });
+        expect(result[1]).toEqual({ type: 'code', value: 'foo', delimiter: '`' });
+        expect(result[3]).toEqual({ type: 'code', value: 'bar', delimiter: '`' });
+        expect(result[5]).toEqual({ type: 'code', value: 'baz', delimiter: '`' });
     });
 
     it('should not codify empty snippets (just backticks)', () => {
@@ -60,7 +60,7 @@ describe('codifyText', () => {
     it('should handle code at start of string', () => {
         const result = codifyText('`code` rest');
         expect(result).toHaveLength(2);
-        expect(result[0]).toEqual({ type: 'code', value: 'code' });
+        expect(result[0]).toEqual({ type: 'code', value: 'code', delimiter: '`' });
         expect(result[1]).toEqual({ type: 'text', value: ' rest' });
     });
 
@@ -68,7 +68,7 @@ describe('codifyText', () => {
         const result = codifyText('start `code`');
         expect(result).toHaveLength(2);
         expect(result[0]).toEqual({ type: 'text', value: 'start ' });
-        expect(result[1]).toEqual({ type: 'code', value: 'code' });
+        expect(result[1]).toEqual({ type: 'code', value: 'code', delimiter: '`' });
     });
 
     it('should return empty array for null', () => {
@@ -113,14 +113,14 @@ describe('tokenizeAndCodify', () => {
         const result = tokenizeAndCodify('Use `code` here');
         expect(result).toHaveLength(3);
         expect(result[0]).toEqual({ type: 'text', value: 'Use ' });
-        expect(result[1]).toEqual({ type: 'code', value: 'code' });
+        expect(result[1]).toEqual({ type: 'code', value: 'code', delimiter: '`' });
         expect(result[2]).toEqual({ type: 'text', value: ' here' });
     });
 
     it('codifies code blocks (triple backtick)', () => {
         const result = tokenizeAndCodify('Use ```code``` here');
         expect(result).toHaveLength(3);
-        expect(result[1]).toEqual({ type: 'code', value: 'code' });
+        expect(result[1]).toEqual({ type: 'code', value: 'code', delimiter: '```' });
     });
 
     it('linkifies URLs in plain text', () => {
@@ -146,11 +146,11 @@ describe('tokenizeAndCodify', () => {
         const result = tokenizeAndCodify('Use `foo` then https://example.com then `bar`');
         expect(result).toHaveLength(6);
         expect(result[0]).toEqual({ type: 'text', value: 'Use ' });
-        expect(result[1]).toEqual({ type: 'code', value: 'foo' });
+        expect(result[1]).toEqual({ type: 'code', value: 'foo', delimiter: '`' });
         expect(result[2]).toEqual({ type: 'text', value: ' then ' });
         expect(result[3]).toEqual({ type: 'link', value: 'https://example.com' });
         expect(result[4]).toEqual({ type: 'text', value: ' then ' });
-        expect(result[5]).toEqual({ type: 'code', value: 'bar' });
+        expect(result[5]).toEqual({ type: 'code', value: 'bar', delimiter: '`' });
     });
 
     it('does not codify double backticks', () => {
@@ -167,17 +167,17 @@ describe('tokenizeAndCodify', () => {
         const result = tokenizeAndCodify('`a` https://x.com `b`');
         // 5 segments: code, space, link, space, code
         expect(result).toHaveLength(5);
-        expect(result[0]).toEqual({ type: 'code', value: 'a' });
+        expect(result[0]).toEqual({ type: 'code', value: 'a', delimiter: '`' });
         expect(result[1]).toEqual({ type: 'text', value: ' ' });
         expect(result[2]).toEqual({ type: 'link', value: 'https://x.com' });
         expect(result[3]).toEqual({ type: 'text', value: ' ' });
-        expect(result[4]).toEqual({ type: 'code', value: 'b' });
+        expect(result[4]).toEqual({ type: 'code', value: 'b', delimiter: '`' });
     });
 
     it('handles code at start of string with URL after', () => {
         const result = tokenizeAndCodify('`code` https://example.com');
         expect(result).toHaveLength(3);
-        expect(result[0]).toEqual({ type: 'code', value: 'code' });
+        expect(result[0]).toEqual({ type: 'code', value: 'code', delimiter: '`' });
         expect(result[1]).toEqual({ type: 'text', value: ' ' });
         expect(result[2]).toEqual({ type: 'link', value: 'https://example.com' });
     });
@@ -185,6 +185,6 @@ describe('tokenizeAndCodify', () => {
     it('blocks javascript: protocol in URLs but not in code', () => {
         const result = tokenizeAndCodify('Use `javascript:void(0)` safely');
         expect(result).toHaveLength(3);
-        expect(result[1]).toEqual({ type: 'code', value: 'javascript:void(0)' });
+        expect(result[1]).toEqual({ type: 'code', value: 'javascript:void(0)', delimiter: '`' });
     });
 });

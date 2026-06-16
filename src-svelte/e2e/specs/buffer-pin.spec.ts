@@ -24,6 +24,18 @@ test.beforeEach(async () => {
     page.on('pageerror', (error) => {
         if (error.message?.includes('effect_orphan')) return;
     });
+    // Unpin any pinned buffers from previous serial tests
+    const pinButtons = page.getByTestId('pin-buffer');
+    const pinCount = await pinButtons.count();
+    for (let i = 0; i < pinCount; i++) {
+        const btn = pinButtons.nth(i);
+        const title = await btn.getAttribute('title');
+        if (title === 'Unpin buffer') {
+            await btn.click();
+            await page.waitForTimeout(200);
+        }
+    }
+    await page.waitForTimeout(300);
 });
 
 test('pin button is visible on buffer items', async () => {
