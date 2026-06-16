@@ -504,6 +504,9 @@ export function handleHotlistChanged(message: ProtocolMessage) {
                 const counts = (entry.content as any[])[0]?.count || [0, 0, 0, 0];
                 buffer.unread = counts[1] || 0;
                 buffer.notification = (counts[2] || 0) + (counts[3] || 0);
+                // Calculate last read line position based on total unread count
+                const unreadSum = counts.reduce((sum: number, n: number) => sum + n, 0);
+                buffer.lastSeen = buffer.lines.length - 1 - unreadSum;
             }
         }
     }
