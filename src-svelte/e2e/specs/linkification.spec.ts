@@ -49,7 +49,7 @@ test('does NOT linkify email addresses', async () => {
     await waitForBuffer(page, '#glowing-bear', 15000);
     await switchToBuffer(page, '#glowing-bear');
     await botSay('Contact us at test@example.com');
-    const msgCell = page.locator('[data-testid="bufferline-row"] td.message').filter({ hasText: 'test@example.com' });
+    const msgCell = page.locator('[data-testid="bufferline-row"] td.message').filter({ hasText: 'test@example.com' }).first();
     await expect(msgCell).toBeAttached({ timeout: 10000 });
     const anchor = msgCell.locator('a');
     await expect(anchor).toHaveCount(0);

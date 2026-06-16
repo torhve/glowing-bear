@@ -27,7 +27,13 @@ export async function sendWeechatCommand(page: Page, command: string) {
 }
 
 export async function getConfigValue(page: Page, key: string): Promise<string> {
-  return await page.evaluate((k) => (window as any).__wconfig?.[k] ?? '', key);
+  return await page.evaluate((k) => {
+    const wconfigObj = (window as any).__wconfig;
+    if (!wconfigObj) return '';
+    // Handle both store objects (with .get()) and plain record objects
+    const value = typeof wconfigObj.get === 'function' ? wconfigObj.get() : wconfigObj;
+    return value?.[k] ?? '';
+  }, key);
 }
 
 export async function waitForAppReady(page: Page, timeout = 10000) {

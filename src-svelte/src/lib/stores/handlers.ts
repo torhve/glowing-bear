@@ -40,9 +40,12 @@ export function handleConfValue(message: ProtocolMessage) {
 
     const config: Record<string, string> = {};
     for (const item of infolist) {
+        // Each item is an array of key-value pairs that need to be merged into a single object
+        const merged: Record<string, unknown> = {};
         for (const confitem of item) {
-            if (confitem.full_name) config[confitem.full_name] = confitem.value || '';
+            Object.assign(merged, confitem);
         }
+        if (merged.full_name) config[String(merged.full_name)] = String(merged.value || '');
     }
     wconfig.update(current => ({ ...current, ...config }));
 }
