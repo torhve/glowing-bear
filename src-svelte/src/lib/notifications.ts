@@ -2,19 +2,16 @@
 // Ported from notifications.js
 
 import { settings } from './stores/settings';
-import { buffers, activeBufferId } from './stores/models';
+import { buffers, activeBufferId, currentBuffer } from './stores/models';
 import { get } from 'svelte/store';
 import type { BufferData } from './types';
-import Favico from 'favico.js';
+import { initFavicon, drawBadge, resetBadge } from './faviconBadge';
 
 // Notification permission state
 let notificationPermission = 'default';
 
 // Track active notifications
 const activeNotifications: Map<string, Notification> = new Map();
-
-// Favico.js badge instance
-let favicoBadge: InstanceType<typeof Favico> | null = null;
 
 /**
  * Request notification permission from the browser
@@ -94,12 +91,13 @@ export function cancelAll(): void {
 }
 
 /**
- * Update the document title
+ * Update the document title with total unread count across all buffers
  */
-export function updateTitle(buffer: BufferData): void {
-    const bufferName = buffer.shortName || buffer.fullName;
-    const topic = buffer.rtitle || '';
-    
+export function updateTitle(): void {
+    const activeBuf = get(currentBuffer);
+    const bufferName = activeBuf?.shortName || activeBuf?.fullName || '';
+    const topic = activeBuf?.rtitle || '';
+
     // Get total unread count
     const allBuffers = get(buffers);
     let totalUnread = 0;
@@ -122,7 +120,7 @@ export function updateTitle(buffer: BufferData): void {
  */
 export function updateFavico(): void {
     const s = get(settings);
-    if (!s.useFavico || !favicoBadge) {
+    if (!s.useFavico) {
         return;
     }
 
@@ -136,14 +134,13 @@ export function updateFavico(): void {
     }
 
     if (totalNotifications > 0) {
-        // Red badge for notifications
-        favicoBadge.badge(totalNotifications);
+        drawBadge(totalNotifications, 'notification');
+        try { navigator.setAppBadge(totalNotifications); } catch {}
     } else if (totalUnread > 0) {
-        // Green badge for unread
-        favicoBadge.badge(totalUnread);
+        drawBadge(totalUnread, 'unread');
+        try { navigator.setAppBadge(totalUnread); } catch {}
     } else {
-        // Reset badge
-        favicoBadge.reset();
+        try { navigator.clearAppBadge(); } catch {}
     }
 }
 
@@ -176,7 +173,7 @@ export function initNotifications(): void {
         requestNotificationPermission().catch(() => {});
     }
 
-    favicoBadge = new Favico({ animation: 'none' });
+    initFavicon();
 }
 
 /**
@@ -184,9 +181,7 @@ export function initNotifications(): void {
  */
 export function onDisconnect(): void {
     cancelAll();
-    if (favicoBadge) {
-        favicoBadge.reset();
-    }
+    resetBadge();
     if (typeof document !== 'undefined') {
         document.title = 'Glowing Bear';
     }

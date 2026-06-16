@@ -12,12 +12,15 @@
   import Keyboard from '@lucide/svelte/icons/keyboard';
   import Download from '@lucide/svelte/icons/download';
   import MessageCircle from '@lucide/svelte/icons/message-circle';
+import Eye from '@lucide/svelte/icons/eye';
+import EyeOff from '@lucide/svelte/icons/eye-off';
 
   let hostField = $state('');
   let port = $state('9001');
   let password = $state('');
   let tls = $state(false);
   let hostInvalid = $state(false);
+  let showPassword = $state(false);
   let savepassword = $state(false);
   let autoconnect = $state(false);
 
@@ -155,14 +158,28 @@
 
       <div>
         <label for="password" class="block text-xs text-text-secondary mb-1">WeeChat relay password</label>
-        <input
-          id="password"
-          data-testid="password-input"
-          type="password"
-          bind:value={password}
-          placeholder="Password"
-          class="w-full px-3 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent"
-        />
+        <div class="relative">
+          <input
+            id="password"
+            data-testid="password-input"
+            type={showPassword ? 'text' : 'password'}
+            bind:value={password}
+            placeholder="Password"
+            class="w-full px-3 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent pr-10"
+          />
+          <button
+            type="button"
+            data-testid="toggle-password-visibility"
+            onclick={() => showPassword = !showPassword}
+            class="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text transition-colors"
+          >
+            {#if showPassword}
+              <EyeOff size={18} />
+            {:else}
+              <Eye size={18} />
+            {/if}
+          </button>
+        </div>
       </div>
 
       <div class="flex items-center">
@@ -277,7 +294,7 @@
           <Keyboard size={14} />Usage instructions
         </summary>
         <div class="px-4 pb-3 text-sm text-text-secondary">
-          Alt+0-9: Quick switch buffer, Alt+J: Jump to buffer, Alt+` : Previous buffer, Alt+A: Next activity, Alt+Up/Down: Adjacent buffer, Alt+h: Clear unread, Alt+n: Toggle nicklist, Alt+l: Focus input, Alt+G/Ctrl+K: Search buffers, Double Esc: Disconnect, Tab: Nick completion, Readline: Ctrl+A/E/U/W/B/F/H
+          Alt+0-9: Quick switch buffer, Alt+J: Jump to buffer, Alt+` : Previous buffer, Alt+A: Next activity, Alt+Up/Down: Adjacent buffer, Alt+h: Clear unread, Alt+n: Toggle nicklist, Alt+l: Focus input, Alt+G: Search buffers, Double Esc: Disconnect, Tab: Nick completion, Readline: Ctrl+A/E/U/W/B/F/K
         </div>
       </details>
       <details class="bg-surface rounded border border-border">

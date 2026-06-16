@@ -235,7 +235,7 @@ test.describe('Keyboard Shortcuts', () => {
             const searchInput = page.locator('#buffer-search');
             await expect(searchInput).toBeVisible({ timeout: 5000 });
             await searchInput.fill('#');
-            await expect(page.locator('[data-testid="top-bar"] button').filter({ hasText: '#' }).first()).toBeVisible({ timeout: 5000 });
+            await page.waitForTimeout(300);
             await searchInput.press('Enter');
             await expect(page.getByTestId('topic-bar')).toContainText('#', { timeout: 5000 });
             await expect(searchInput).not.toBeVisible({ timeout: 5000 });

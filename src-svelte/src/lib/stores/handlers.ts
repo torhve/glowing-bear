@@ -18,6 +18,8 @@ import {
 } from '$lib/stores/models';
 import { shouldResume } from '$lib/stores/bufferResume';
 import { createHighlight, playNotificationSound, updateTitle, updateFavico } from '$lib/notifications';
+import { settings } from '$lib/stores/settings';
+import { DEBUG_NICKLIST } from '$lib/debug';
 import type { ProtocolMessage, BufferMessage, BufferLine, BufferLineMessage, NickMessage, NickGroupMessage, HotlistEntry, BufferData } from '$lib/types';
 
 // ---- Version handler ----
@@ -252,7 +254,7 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                     // Trigger notification subsystem
                     createHighlight(buffer, lineMsg.message);
                     playNotificationSound();
-                    updateTitle(buffer);
+                    updateTitle();
                     updateFavico();
                 }
             }
@@ -297,7 +299,7 @@ export function injectDateChangeMessageIfNeeded(buffer: any, manually: boolean, 
     datePlusOne.setDate(datePlusOne.getDate() + 1);
     datePlusOne.setHours(0, 0, 0, 0);
 
-    let content = `\u001904\u2500`; // Day change color + box drawing
+    let content = `\u001943\u2500`; // Day change color (code 43 = chat_day_change) + box drawing
 
     // Add day of week
     const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -323,7 +325,7 @@ export function injectDateChangeMessageIfNeeded(buffer: any, manually: boolean, 
         buffer: buffer.id,
         date: newDate.getTime(),
         date_long: 0,
-        prefix: '\u001904\u2500',
+        prefix: '\u001943\u2500',
         message: content,
         tags_array: [],
         displayed: 1,
@@ -469,23 +471,68 @@ export function handleBufferClosing(message: ProtocolMessage) {
     removeBuffer(bufferId, !!currentBuffers[bufferId]?.active);
 }
 
-// ---- Hotlist handler ----
-export function handleHotlistInfo(message: ProtocolMessage) {
+// ---- Hotlist changed handler ----
+export function handleHotlistChanged(message: ProtocolMessage) {
+    const obj = message.objects[0]?.content?.[0];
+    if (!obj) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WeeChat hotlist object from protocol
+    const content = obj.content as any[];
+    if (content.length < 4) return;
+    const [hotlistPointers] = content;
     const currentBuffers = get(buffers);
     const currentServers = get(servers);
-
-    // Reset all counts
+    // Reset all non-active buffers before applying hotlist entries
     for (const id in currentBuffers) {
         const buf = currentBuffers[id];
-        if (buf) {
+        if (buf && !buf.active) {
             buf.unread = 0;
             buf.notification = 0;
         }
     }
     for (const key in currentServers) {
         const srv = currentServers[key];
-        if (srv) {
-            srv.unread = 0;
+        if (srv) srv.unread = 0;
+    }
+    // Apply hotlist entries from WeeChat
+    if (hotlistPointers) {
+        const pointers = Array.isArray(hotlistPointers) ? hotlistPointers : [hotlistPointers];
+        for (const bufferId of pointers) {
+            const buffer = currentBuffers[bufferId];
+            if (!buffer || buffer.active) continue;
+            const entry = message.objects.find(o => o.pointer === bufferId);
+            if (entry?.content) {
+                const counts = (entry.content as any[])[0]?.count || [0, 0, 0, 0];
+                buffer.unread = counts[1] || 0;
+                buffer.notification = (counts[2] || 0) + (counts[3] || 0);
+            }
+        }
+    }
+    buffers.set({ ...currentBuffers });
+    servers.set({ ...currentServers });
+}
+
+// ---- Hotlist handler ----
+export function handleHotlistInfo(message: ProtocolMessage) {
+    const currentBuffers = get(buffers);
+    const currentServers = get(servers);
+    const hotlistsync = get(settings).hotlistsync;
+
+    // When hotlistsync is enabled, WeeChat manages unread counts natively.
+    // Don't reset non-active buffers — they may have been modified by
+    // /buffer <fullName> commands during buffer switches.
+    if (!hotlistsync) {
+        for (const id in currentBuffers) {
+            const buf = currentBuffers[id];
+            if (buf) {
+                buf.unread = 0;
+                buf.notification = 0;
+            }
+        }
+        for (const key in currentServers) {
+            const srv = currentServers[key];
+            if (srv) {
+                srv.unread = 0;
+            }
         }
     }
 
@@ -520,7 +567,7 @@ function initNicklistIfFresh(nicklist: (NickMessage | NickGroupMessage)[]) {
     const bufferId = firstItem.pointers[0];
     if (!bufferId) return;
     const buffer = getBuffer(bufferId);
-    console.log('[nicklist] clearing nicklist for buffer:', bufferId);
+    if (DEBUG_NICKLIST) console.log('[nicklist] clearing nicklist for buffer:', bufferId);
     if (buffer) {
         buffer.nicklist = { root: buffer.nicklist.root || { name: '', visible: '', nicks: [] } };
     }
@@ -528,7 +575,7 @@ function initNicklistIfFresh(nicklist: (NickMessage | NickGroupMessage)[]) {
 
 export function handleNicklist(message: ProtocolMessage) {
     const nicklist = message.objects[0]?.content as (NickMessage | NickGroupMessage)[];
-    console.log('[nicklist] handleNicklist called, total items:', nicklist?.length ?? 0);
+    if (DEBUG_NICKLIST) console.log('[nicklist] handleNicklist called, total items:', nicklist?.length ?? 0);
     if (!nicklist) return;
 
     initNicklistIfFresh(nicklist);
@@ -540,29 +587,29 @@ export function handleNicklist(message: ProtocolMessage) {
         if (!ptr0) continue;
         const buffer = getBuffer(ptr0);
         if (!buffer) {
-            console.log('[nicklist] buffer not found for ID:', ptr0);
+            if (DEBUG_NICKLIST) console.log('[nicklist] buffer not found for ID:', ptr0);
             continue;
         }
-        console.log('[nicklist] processing item for buffer', buffer.shortName || buffer.id, '- pointers:', JSON.stringify(n.pointers));
+        if (DEBUG_NICKLIST) console.log('[nicklist] processing item for buffer', buffer.shortName || buffer.id, '- pointers:', JSON.stringify(n.pointers));
         // Ensure root group always exists for hasData check
         if (!('root' in buffer.nicklist)) {
             buffer.nicklist.root = { name: '', visible: '', nicks: [] };
-            console.log('[nicklist] created root group for', buffer.shortName);
+            if (DEBUG_NICKLIST) console.log('[nicklist] created root group for', buffer.shortName);
         }
 
         if ((n as NickGroupMessage).group === 1) {
             const g = createNickGroup(n as NickGroupMessage);
             group = g.name;
             buffer.nicklist[group] = g;
-            console.log('[nicklist] added group', group, 'to', buffer.shortName, '- visible:', g.visible);
+            if (DEBUG_NICKLIST) console.log('[nicklist] added group', group, 'to', buffer.shortName, '- visible:', g.visible);
         } else {
             const nick = createNick(n as NickMessage);
-            console.log('[nicklist] adding nick', nick.name, 'with prefix', nick.prefix, 'to group', group, 'in buffer', buffer.shortName);
+            if (DEBUG_NICKLIST) console.log('[nicklist] adding nick', nick.name, 'with prefix', nick.prefix, 'to group', group, 'in buffer', buffer.shortName);
             const nickGroup = buffer.nicklist[group];
             if (nickGroup) {
                 nickGroup.nicks.push(nick);
             } else {
-                console.log('[nicklist] WARNING: no group', group, 'found for nick', nick.name);
+                if (DEBUG_NICKLIST) console.log('[nicklist] WARNING: no group', group, 'found for nick', nick.name);
             }
         }
         modifiedBuffers.add(ptr0);
@@ -577,7 +624,7 @@ export function handleNicklist(message: ProtocolMessage) {
         if (buf) {
             const groups = Object.keys(buf.nicklist || {});
             const nickCounts = groups.map(g => `${g}:${(buf.nicklist?.[g]?.nicks?.length ?? 0)}`).join(', ');
-            console.log('[nicklist] after processing buffer', buf.shortName, 'groups:', groups.join(', '), '- nicks per group:', nickCounts);
+            if (DEBUG_NICKLIST) console.log('[nicklist] after processing buffer', buf.shortName, 'groups:', groups.join(', '), '- nicks per group:', nickCounts);
         }
     }
 
@@ -588,7 +635,7 @@ export function handleNicklist(message: ProtocolMessage) {
             updated[id] = { ...buf, nicklist: { ...buf.nicklist } };
         }
     }
-    console.log('[nicklist] updating buffers store with', modifiedBuffers.size, 'modified buffer(s)');
+    if (DEBUG_NICKLIST) console.log('[nicklist] updating buffers store with', modifiedBuffers.size, 'modified buffer(s)');
     buffers.set(updated);
 }
 
@@ -636,7 +683,7 @@ export function handleNickMessageForSpeak(line: BufferLine) {
 // ---- Nicklist diff handler ----
 export function handleNicklistDiff(message: ProtocolMessage) {
     const nicklist = message.objects[0]?.content as (NickMessage | NickGroupMessage)[];
-    console.log('[nicklist] handleNicklistDiff called, total items:', nicklist?.length ?? 0);
+    if (DEBUG_NICKLIST) console.log('[nicklist] handleNicklistDiff called, total items:', nicklist?.length ?? 0);
     if (!nicklist) return;
 
     let group = 'root';
@@ -646,22 +693,22 @@ export function handleNicklistDiff(message: ProtocolMessage) {
         if (!ptr0) continue;
         const buffer = getBuffer(ptr0);
         if (!buffer) {
-            console.log('[nicklist] buffer not found for diff:', ptr0);
+            if (DEBUG_NICKLIST) console.log('[nicklist] buffer not found for diff:', ptr0);
             continue;
         }
-        console.log('[nicklist] processing diff item for', buffer.shortName || buffer.id, '- pointers:', JSON.stringify(n.pointers));
+        if (DEBUG_NICKLIST) console.log('[nicklist] processing diff item for', buffer.shortName || buffer.id, '- pointers:', JSON.stringify(n.pointers));
 
         if ((n as NickGroupMessage).group === 1) {
             const g = createNickGroup(n as NickGroupMessage);
             group = g.name;
             buffer.nicklist[group] = g;
-            console.log('[nicklist] diff group:', group, 'added to', buffer.shortName);
+            if (DEBUG_NICKLIST) console.log('[nicklist] diff group:', group, 'added to', buffer.shortName);
         } else {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any -- nick object with internal _diff property from WeeChat protocol
             const d = (n as any)._diff;
             const nick = createNick(n as NickMessage);
             const op = d === 43 ? '+' : d === 45 ? '-' : d === 42 ? '*' : '?';
-            console.log('[nicklist] diff nick:', nick.name, 'prefix:', nick.prefix, 'in group', group, 'op:', op);
+            if (DEBUG_NICKLIST) console.log('[nicklist] diff nick:', nick.name, 'prefix:', nick.prefix, 'in group', group, 'op:', op);
             const nickGroup = buffer.nicklist[group];
             if (d === 43) { // +
                 if (nickGroup) {
@@ -690,7 +737,7 @@ export function handleNicklistDiff(message: ProtocolMessage) {
         if (buf) {
             const groups = Object.keys(buf.nicklist || {});
             const nickCounts = groups.map(g => `${g}:${(buf.nicklist?.[g]?.nicks?.length ?? 0)}`).join(', ');
-            console.log('[nicklist] after diff buffer', buf.shortName, 'groups:', groups.join(', '), '- nicks per group:', nickCounts);
+            if (DEBUG_NICKLIST) console.log('[nicklist] after diff buffer', buf.shortName, 'groups:', groups.join(', '), '- nicks per group:', nickCounts);
         }
     }
 
@@ -701,7 +748,7 @@ export function handleNicklistDiff(message: ProtocolMessage) {
             updated[id] = { ...buf, nicklist: { ...buf.nicklist } };
         }
     }
-    console.log('[nicklist] updating buffers store with', modifiedBuffers.size, 'modified buffer(s)');
+    if (DEBUG_NICKLIST) console.log('[nicklist] updating buffers store with', modifiedBuffers.size, 'modified buffer(s)');
     buffers.set(updated);
 }
 
@@ -768,6 +815,7 @@ const eventHandlers: Record<string, (msg: ProtocolMessage) => void> = {
     '_buffer_renamed': handleBufferRenamed,
     '_buffer_hidden': handleBufferHidden,
     '_buffer_unhidden': handleBufferUnhidden,
+    '_hotlist_changed': handleHotlistChanged,
     '_nicklist': handleNicklist,
     '_nicklist_diff': handleNicklistDiff
 };

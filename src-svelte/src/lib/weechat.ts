@@ -12,13 +12,6 @@ export interface TextAttrs {
     override: Record<string, boolean>;
 }
 
-interface RawStyle {
-    fgColor: ColorInfo | null;
-    bgColor: ColorInfo | null;
-    attrs: TextAttrs | null;
-    text: string;
-}
-
 interface RichPart {
     text: string;
     fgColor: ColorInfo;
@@ -167,10 +160,6 @@ function getDefaultAttributes(): TextAttrs {
     return { name: null, override: { bold: false, reverse: false, italic: false, underline: false } };
 }
 
-function getDefaultStyle(): { fgColor: ColorInfo; bgColor: ColorInfo; attrs: TextAttrs } {
-    return { fgColor: getDefaultColor(), bgColor: getDefaultColor(), attrs: getDefaultAttributes() };
-}
-
 function cloneColor(color: ColorInfo): ColorInfo {
     return { ...color };
 }
@@ -206,14 +195,15 @@ function getStyle(txt: string): StyleResult {
             fn: (m) => {
                 const code = parseInt(m[1]!, 10);
                 if (code >= colorsOptionsNames.length) {
-                    // Out-of-range: consume digits but don't apply color (matches old JS behavior)
+                    // Out-of-range: preserve current colors (matches old JS behavior)
                     return { fgColor: null, bgColor: null, attrs: null, text: txt.substring(2) };
                 }
                 const optionName = colorsOptionsNames[code] || 'default';
                 const color = { type: 'option' as const, name: optionName };
+                // STD color codes only change foreground (old JS bug: cloned fg to bg)
                 return {
                     fgColor: color,
-                    bgColor: cloneColor(color),
+                    bgColor: null,
                     attrs: { name: optionName, override: {} },
                     text: txt.substring(m[0].length)
                 };
@@ -283,7 +273,7 @@ function getStyle(txt: string): StyleResult {
             regex: /^E/,
             fn: () => ({
                 fgColor: { type: 'option', name: 'emphasis' },
-                bgColor: cloneColor({ type: 'option', name: 'emphasis' }),
+                bgColor: null,
                 attrs: { name: 'emphasis', override: {} },
                 text: txt.substring(1)
             })

@@ -1,9 +1,10 @@
 import { get } from 'svelte/store';
 import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore, connectionState } from '$lib/stores/connectionStore';
-import { buffers, servers, activeBufferId, wconfig, getBuffer, connected, setActiveBuffer } from '$lib/stores/models';
+import { buffers, servers, activeBufferId, previousBufferId, wconfig, getBuffer, connected, setActiveBuffer } from '$lib/stores/models';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist } from '$lib/stores/handlers';
 import { IDEAL_NICK_COLORS, IDEAL_COLOR_NICKS_IN_NICKLIST, shouldAutoApply } from '$lib/stores/nickColors';
 import { Protocol } from '$lib/weechat';
+import { DEBUG_NICKLIST } from '$lib/debug';
 
 // Protocol instance for instance methods (setId, parse)
 // Static methods (formatHandshake, formatInit, etc.) are called on the constructor directly
@@ -336,20 +337,20 @@ export function disconnect() {
 
 export function requestNicklist(bufferId: string) {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
-        console.log('[nicklist] requestNicklist skipped - WebSocket not open');
+        if (DEBUG_NICKLIST) console.log('[nicklist] requestNicklist skipped - WebSocket not open');
         return;
     }
-    console.log('[nicklist] requesting nicklist for buffer:', bufferId);
+    if (DEBUG_NICKLIST) console.log('[nicklist] requesting nicklist for buffer:', bufferId);
     const msg = Protocol.formatNicklist({ buffer: '0x' + bufferId });
     sendAsync(msg).then((response) => {
-        console.log('[nicklist] received nicklist response, objects:', response?.objects?.length ?? 0);
+        if (DEBUG_NICKLIST) console.log('[nicklist] received nicklist response, objects:', response?.objects?.length ?? 0);
         // Call handleNicklist directly since callback responses don't have event IDs
         const nicklist = response.objects[0]?.content;
         if (nicklist) {
             handleNicklist(response);
         }
     }).catch((err) => {
-        console.error('[nicklist] request failed:', err);
+        if (DEBUG_NICKLIST) console.error('[nicklist] request failed:', err);
     });
 }
 
@@ -446,9 +447,20 @@ export function sendWeeChatCommand(command: string) {
 }
 
 export function switchBuffer(bufferId: string) {
+    const prevBufferId = get(activeBufferId);
     const success = setActiveBuffer(bufferId);
-    if (success && ws && ws.readyState === WebSocket.OPEN) {
-        // Sync read marker with WeeChat (matching Angular behavior)
+    if (!success || !ws || ws.readyState !== WebSocket.OPEN) {
+        return success;
+    }
+    // Sync read marker with WeeChat (matching Angular behavior)
+    if (get(wconfig).hotlistsync) {
+        // Clear hotlist for the buffer we're leaving, not the one we're switching to
+        const prevBuffer = prevBufferId ? getBuffer(prevBufferId) : null;
+        if (prevBuffer) {
+            sendWeeChatCommand('/buffer ' + prevBuffer.fullName + ' set hotlist -1');
+        }
+        sendWeeChatCommand('/input set_unread_current_buffer');
+    } else {
         sendWeeChatCommand('/buffer set hotlist -1');
         sendWeeChatCommand('/input hotlist_clear');
     }
