@@ -52,8 +52,7 @@ export function parseRichText(text: string | undefined | null): RichTextPart[] {
         return [{ text: text || '', fgColor: { type: 'option', name: 'default' }, bgColor: { type: 'option', name: 'default' }, attrs: { name: null, override: {} } }];
     }
     const rawParts = Protocol.rawText2Rich(text);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- protocol raw text parts type
-    return rawParts.map((p: any) => ({
+    return rawParts.map((p) => ({
         text: p.text,
         fgColor: p.fgColor,
         bgColor: p.bgColor,

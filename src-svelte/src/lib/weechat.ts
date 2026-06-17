@@ -1,23 +1,10 @@
 import * as fflate from 'fflate';
+import type { ColorInfo, TextAttrs, RichTextPart } from '$lib/types';
 
 // --- Type definitions ---
 
-export interface ColorInfo {
-    type: 'option' | 'weechat' | 'ext';
-    name: string;
-}
-
-export interface TextAttrs {
-    name: string | null;
-    override: Record<string, boolean>;
-}
-
-interface RichPart {
-    text: string;
-    fgColor: ColorInfo;
-    bgColor: ColorInfo;
-    attrs: TextAttrs;
-}
+type RichPart = RichTextPart;
+export type { RichPart };
 
 interface FormatHandshakeOpts {
     password_hash_algo?: string;
@@ -670,27 +657,27 @@ type HandlerMap = Record<string, TypeHandler>;
 type StrHandlerMap = Record<string, TypeStrHandler>;
 
 export class Protocol {
-    private static readonly _types: HandlerMap = {
-        chr: function (this: Protocol) { return this._getChar(); },
-        int: function (this: Protocol) { return this._getInt(); },
-        str: function (this: Protocol) { return this._getString(); },
-        inf: function (this: Protocol) { return this._getInfo(); },
-        hda: function (this: Protocol) { return this._getHdata(); },
-        ptr: function (this: Protocol) { return this._getPointer(); },
-        lon: function (this: Protocol) { return this._getStrNumber(); },
-        tim: function (this: Protocol) { return this._getTime(); },
-        buf: function (this: Protocol) { return this._getString(); },
-        arr: function (this: Protocol) { return this._getArray(); },
-        htb: function (this: Protocol) { return this._getHashTable(); },
-        inl: function (this: Protocol) { return this._getInfolist(); }
+    private static readonly types: HandlerMap = {
+        chr: function (this: Protocol) { return this.getByte(); },
+        int: function (this: Protocol) { return this.getInt(); },
+        str: function (this: Protocol) { return this.getString(); },
+        inf: function (this: Protocol) { return this.getInfo(); },
+        hda: function (this: Protocol) { return this.getHdata(); },
+        ptr: function (this: Protocol) { return this.getPointer(); },
+        lon: function (this: Protocol) { return this.getStrNumber(); },
+        tim: function (this: Protocol) { return this.getTime(); },
+        buf: function (this: Protocol) { return this.getString(); },
+        arr: function (this: Protocol) { return this.getArray(); },
+        htb: function (this: Protocol) { return this.getHashTable(); },
+        inl: function (this: Protocol) { return this.getInfolist(); }
     };
 
-    private static readonly _typesStr: StrHandlerMap = {
-        chr: function (this: Protocol, obj: unknown) { return this._strDirect(obj); },
-        str: function (this: Protocol, obj: unknown) { return this._strDirect(obj); },
-        int: function (this: Protocol, obj: unknown) { return this._strToString(obj); },
-        tim: function (this: Protocol, obj: unknown) { return this._strToString(obj); },
-        ptr: function (this: Protocol, obj: unknown) { return this._strDirect(obj); }
+    private static readonly typesStr: StrHandlerMap = {
+        chr: function (this: Protocol, obj: unknown) { return this.strDirect(obj); },
+        str: function (this: Protocol, obj: unknown) { return this.strDirect(obj); },
+        int: function (this: Protocol, obj: unknown) { return this.strToString(obj); },
+        tim: function (this: Protocol, obj: unknown) { return this.strToString(obj); },
+        ptr: function (this: Protocol, obj: unknown) { return this.strDirect(obj); }
     };
 
     // Static utility: parse raw WeeChat formatted text into rich text parts
@@ -715,66 +702,119 @@ export class Protocol {
     static formatPing(opts: FormatPingOpts): string { return formatPing(opts); }
 
     // Internal state for parsing
-    private _data!: ArrayBuffer;
-    private _dataAt = 0;
+    private view!: DataView;
+    private offset = 0;
 
-    private _getType(): string {
-        const t = this._getSlice(3);
-        if (!t) {
+    private static readonly MAX_STRING_LENGTH = 10 * 1024 * 1024;
+
+    private getSlice(length: number): Uint8Array {
+        if (this.offset >= this.view.byteLength) {
+            return new Uint8Array(0);
+        }
+        if (this.offset + length > this.view.byteLength) {
+            throw new RangeError(
+                `Short read during protocol parsing: offset=${this.offset} length=${length} ` +
+                `available=${this.view.byteLength - this.offset}`
+            );
+        }
+        const slice = new Uint8Array(this.view.buffer, this.offset, length);
+        this.offset += length;
+        return slice;
+    }
+
+    private setData(data: ArrayBuffer): void {
+        this.view = new DataView(data);
+        this.offset = 0;
+    }
+
+    private getInt(): number {
+        const val = this.view.getInt32(this.offset);
+        this.offset += 4;
+        return val;
+    }
+
+    private getByte(): number {
+        return this.view.getUint8(this.offset++);
+    }
+
+    private getString(): string {
+        const l = this.getInt();
+        if (l > 0) {
+            if (l > Protocol.MAX_STRING_LENGTH) {
+                throw new RangeError(`String length ${l} exceeds max ${Protocol.MAX_STRING_LENGTH}`);
+            }
+            return uia2s(this.getSlice(l));
+        }
+        return '';
+    }
+
+    private getStrNumber(): string {
+        const len = this.getByte();
+        if (len <= 0) {
             return '';
         }
-        const data = new Uint8Array(t);
+        if (len > Protocol.MAX_STRING_LENGTH) {
+            throw new RangeError(`String length ${len} exceeds max ${Protocol.MAX_STRING_LENGTH}`);
+        }
+        return uia2s(this.getSlice(len));
+    }
+
+    private getType(): string {
+        const data = this.getSlice(3);
+        if (data.length === 0) {
+            return '';
+        }
         return utf8Decoder.decode(data);
     }
 
-    private _runType(type: string): unknown {
-        const handler = Protocol._types[type];
+    private runType(type: string): unknown {
+        const handler = Protocol.types[type];
         if (!handler) {
             throw new Error('Unknown type: ' + type);
         }
         return handler.call(this);
     }
 
-    private _strDirect(obj: unknown): string {
+    private strDirect(obj: unknown): string {
         return obj as string;
     }
 
-    private _strToString(value: unknown): string {
+    private strToString(value: unknown): string {
         if (value instanceof Date) {
             return value.toISOString();
         }
         return String(value);
     }
 
-    private _objToString(obj: Record<string, unknown>, type: string): string {
-        const cb = Protocol._typesStr[type];
+    private objToString(obj: Record<string, unknown>, type: string): string {
+        const cb = Protocol.typesStr[type];
         if (!cb) {
             return String(obj);
         }
         return cb.call(this, obj);
     }
 
-    private _getInfo(): { key: string; value: string } {
+    private getInfo(): { key: string; value: string } {
         return {
-            key: this._getString(),
-            value: this._getString()
+            key: this.getString(),
+            value: this.getString()
         };
     }
 
-    private _getHdata(): Array<Record<string, unknown>> {
-        const hpath = this._getString();
-        const keys = this._getString().split(',').map(k => k.split(':'));
+    private getHdata(): Array<Record<string, unknown>> {
+        const hpath = this.getString();
+        const keys = this.getString().split(',').map(k => k.split(':'));
         const paths = hpath.split('/');
-        const count = this._getInt();
+        const count = this.getInt();
         const objs: Array<Record<string, unknown>> = [];
 
         for (let i = 0; i < count; i++) {
             const tmp: Record<string, unknown> = {};
-            tmp.pointers = paths.map(() => this._getPointer());
+            tmp.pointers = paths.map(() => this.getPointer());
             for (const keyEntry of keys) {
                 const key = keyEntry[0]!;
                 const type = keyEntry[1] ?? '';
-                tmp[key] = this._runType(type);
+                tmp[key] = this.runType(type);
             }
             objs.push(tmp);
         }
@@ -782,102 +822,75 @@ export class Protocol {
         return objs;
     }
 
-    private _getPointer(): string {
-        return this._getStrNumber();
+    private getPointer(): string {
+        return this.getStrNumber();
     }
 
-    private _getTime(): Date {
-        const str = this._getStrNumber();
+    private getTime(): Date {
+        const str = this.getStrNumber();
         return new Date(parseInt(str, 10) * 1000);
     }
 
-    private _getInt(): number {
-        const parsedData = new Uint8Array(this._getSlice(4));
-        return ((parsedData[0]! & 0xff) << 24) |
-            ((parsedData[1]! & 0xff) << 16) |
-            ((parsedData[2]! & 0xff) << 8) |
-            (parsedData[3]! & 0xff);
-    }
-
-    private _getByte(): number {
-        const parsedData = new Uint8Array(this._getSlice(1));
-        return parsedData[0]!;
-    }
-
-    private _getChar(): number {
-        return this._getByte();
-    }
-
-    private _getString(): string {
-        const l = this._getInt();
-        if (l > 0) {
-            const s = this._getSlice(l);
-            const parsedData = new Uint8Array(s);
-            return uia2s(parsedData);
-        }
-        return '';
-    }
-
-    private _getHeader(): { length: number; compression: number } {
-        const len = this._getInt();
-        const comp = this._getByte();
+    private getHeader(): { length: number; compression: number } {
+        const len = this.getInt();
+        const comp = this.getByte();
         return { length: len, compression: comp };
     }
 
-    private _getId(): string {
-        return this._getString();
+    private getId(): string {
+        return this.getString();
     }
 
-    private _getObject(): ParsedObject | undefined {
-        const type = this._getType();
+    private getObject(): ParsedObject | undefined {
+        const type = this.getType();
         if (type) {
             return {
                 type,
-                content: this._runType(type)
+                content: this.runType(type)
             };
         }
         return undefined;
     }
 
-    private _getHashTable(): Record<string, unknown> {
-        const typeKeys = this._getType();
-        const typeValues = this._getType();
-        const count = this._getInt();
+    private getHashTable(): Record<string, unknown> {
+        const typeKeys = this.getType();
+        const typeValues = this.getType();
+        const count = this.getInt();
         const dict: Record<string, unknown> = {};
 
         for (let i = 0; i < count; i++) {
-            const key = this._runType(typeKeys);
-            const keyStr = this._objToString(key as Record<string, unknown>, typeKeys);
-            const value = this._runType(typeValues);
+            const key = this.runType(typeKeys);
+            const keyStr = this.objToString(key as Record<string, unknown>, typeKeys);
+            const value = this.runType(typeValues);
             dict[keyStr] = value;
         }
 
         return dict;
     }
 
-    private _getArray(): unknown[] {
-        const type = this._getType();
-        const count = this._getInt();
+    private getArray(): unknown[] {
+        const type = this.getType();
+        const count = this.getInt();
         const values: unknown[] = [];
 
         for (let i = 0; i < count; i++) {
-            values.push(this._runType(type));
+            values.push(this.runType(type));
         }
 
         return values;
     }
 
-    private _getInfolist(): Array<Array<Record<string, unknown>>> {
-        this._getString(); // discard infolist name
-        const count = this._getInt();
+    private getInfolist(): Array<Array<Record<string, unknown>>> {
+        this.getString(); // discard infolist name
+        const count = this.getInt();
         const values: Array<Array<Record<string, unknown>>> = [];
 
         for (let i = 0; i < count; i++) {
-            const itemcount = this._getInt();
+            const itemcount = this.getInt();
             const litem: Array<Record<string, unknown>> = [];
             for (let j = 0; j < itemcount; j++) {
                 const item: Record<string, unknown> = {};
-                item[this._getString()] = this._runType(this._getType());
+                item[this.getString()] = this.runType(this.getType());
                 litem.push(item);
             }
             values.push(litem);
@@ -886,54 +899,28 @@ export class Protocol {
         return values;
     }
 
-    private _getSlice(length: number): ArrayBuffer {
-        if (this._dataAt + length > this._data.byteLength) {
-            return new ArrayBuffer(0);
-        }
-        const slice = this._data.slice(this._dataAt, this._dataAt + length);
-        this._dataAt += length;
-        return slice;
-    }
-
-    private _setData(data: ArrayBuffer): void {
-        this._data = data;
-    }
-
-    // Reads a string with 1-byte length prefix (used by ptr, lon, tim per protocol spec)
-    private _getStrNumber(): string {
-        const len = this._getByte();
-        if (len <= 0) {
-            return '';
-        }
-        const s = this._getSlice(len);
-        const parsedData = new Uint8Array(s);
-        return uia2s(parsedData);
-    }
-
     setId(id: number, command: string): string {
         return '(' + id + ') ' + command;
     }
 
     parse(data: ArrayBuffer): ParsedMessage {
-        this._setData(data);
-        this._dataAt = 0;
+        this.setData(data);
 
-        const header = this._getHeader();
+        const header = this.getHeader();
 
         if (header.compression) {
             const raw = new Uint8Array(data, 5);
             const plain = decompressZlib(raw);
-            this._setData(plain);
-            this._dataAt = 0;
+            this.setData(plain);
         }
 
-        const id = this._getId();
+        const id = this.getId();
         const objects: ParsedObject[] = [];
-        let object = this._getObject();
+        let object = this.getObject();
 
         while (object) {
             objects.push(object);
-            object = this._getObject();
+            object = this.getObject();
         }
 
         return { header, id, objects };
