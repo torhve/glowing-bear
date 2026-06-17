@@ -66,14 +66,7 @@ function injectThemeCSSVariables(colors: ThemeColors) {
     styleEl.textContent = `:root {\n  ${vars.join('\n  ')}\n}`;
 }
 
-export function setTheme(theme: Theme) {
-    themeStore.set(theme);
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('gb_theme', theme);
-
-    const colors = getThemeColors(theme);
-    injectThemeCSSVariables(colors);
-
+function ensureThemeLinkElement(theme: Theme) {
     const existingLink = document.getElementById('themeCSS') as HTMLLinkElement;
     if (existingLink) {
         existingLink.href = `/css/themes/${theme}.css`;
@@ -84,6 +77,16 @@ export function setTheme(theme: Theme) {
         link.href = `/css/themes/${theme}.css`;
         document.head.appendChild(link);
     }
+}
+
+export function setTheme(theme: Theme) {
+    themeStore.set(theme);
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('gb_theme', theme);
+
+    const colors = getThemeColors(theme);
+    injectThemeCSSVariables(colors);
+    ensureThemeLinkElement(theme);
 }
 
 export function loadTheme(): Theme {
@@ -101,15 +104,5 @@ export function initTheme() {
 
     const colors = getThemeColors(theme);
     injectThemeCSSVariables(colors);
-
-    const existingLink = document.getElementById('themeCSS') as HTMLLinkElement;
-    if (existingLink) {
-        existingLink.href = `/css/themes/${theme}.css`;
-    } else {
-        const link = document.createElement('link');
-        link.id = 'themeCSS';
-        link.rel = 'stylesheet';
-        link.href = `/css/themes/${theme}.css`;
-        document.head.appendChild(link);
-    }
+    ensureThemeLinkElement(theme);
 }

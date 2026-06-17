@@ -11,8 +11,8 @@
   import Megaphone from '@lucide/svelte/icons/megaphone';
   import { get } from 'svelte/store';
 
-  let inputRef: HTMLTextAreaElement;
-  let fileInputRef: HTMLInputElement;
+  let inputRef = $state<HTMLTextAreaElement>();
+  let fileInputRef = $state<HTMLInputElement>();
   let message = $state('');
   let _iterCandidate: string | null = $state(null);
   let isDraggingFile = $state(false);
@@ -257,7 +257,7 @@
         void handleFileUpload(file);
       }
     }
-    fileInputRef.value = '';
+    if (fileInputRef) fileInputRef.value = '';
   }
 
   function handleDrop(e: DragEvent) {
@@ -340,7 +340,7 @@
     </button>
 
     <button
-      onclick={() => { if (inputRef) { const caret = getCaretPos(); const result = completeNick(message, caret); if (result) { message = result.text; setTimeout(() => setCaretPos(result.cursor), 0); } } }}
+      onclick={() => { if (inputRef) { const caret = getCaretPos(); const result = completeNick(message, caret, _iterCandidate); if (result) { message = result.text; _iterCandidate = result.iterCandidate; setTimeout(() => setCaretPos(result.cursor), 0); } } }}
       data-testid="nick-complete-button"
       class="px-2 py-2 text-text-secondary hover:text-text hover:bg-border rounded transition-colors"
       title="Complete nick"

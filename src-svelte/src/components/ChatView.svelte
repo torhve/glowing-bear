@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { BufferLine } from '$lib/types';
-  import { currentBuffer, saveScrollPosition, getBuffer } from '$lib/stores/models';
+  import { currentBuffer, saveScrollPosition } from '$lib/stores/models';
   import { settings } from '$lib/stores/settings';
   import { fetchMoreLines } from '$lib/stores/connectionManager';
   import { buildMentionText, insertNickIntoInput, isFreeBuffer } from '$lib/utils';

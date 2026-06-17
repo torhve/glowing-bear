@@ -51,29 +51,4 @@ export function escapeHtml(text: string | undefined): string {
     return text.replace(/[&<>"']/g, (m) => map[m] ?? m);
 }
 
-/**
- * Wrap text in backticks for inline code formatting.
- */
-export function codify(text: string | undefined): string {
-    if (text === undefined || text === null) return '';
-    return `\`${text}\``;
-}
-
-/**
- * Convert hex color codes (#RRGGBB) to span with style attribute.
- */
-export function inlinecolour(text: string | undefined): string {
-    if (!text) return '';
-    return text.replace(/#([0-9A-Fa-f]{6})/g, '<span style="color: #$1">#$1</span>');
-}
-
-/**
- * Truncate long strings with ellipsis, preserving the first N characters.
- */
-export function prefixlimit(text: string | undefined, limit: number = 50): string {
-    if (!text) return '';
-    if (text.length <= limit) return text;
-    return text.substring(0, limit) + '...';
-}
-
 
