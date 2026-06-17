@@ -3,7 +3,28 @@ import { get } from 'svelte/store';
 import { buffers, activeBufferId } from '$lib/stores/models';
 import type { BufferData, ProtocolMessage } from '$lib/types';
 
-// Mock notification functions before importing handlers (which imports settings -> localStorage)
+// Mock settings store to avoid localStorage access at module load time
+vi.mock('$lib/stores/settings', () => ({
+    settings: {
+        subscribe: (fn: (val: any) => void) => {
+            fn({
+                hostField: '', port: '9001', tls: false, password: '',
+                savepassword: false, autoconnect: false, useTotp: false,
+                theme: 'dark', fontfamily: '', fontsize: '', customCSS: '',
+                iToken: '', iAlb: '', onlyUnread: false, noembed: false,
+              alwaysnicklist: false, orderbyserver: false,
+                readlineBindings: false, useFavico: false, soundnotification: false,
+                enableMathjax: false, enableQuickKeys: false, showNicklist: true,
+                showQuickKeys: false, showJumpKeys: false, highlightWords: ''
+            });
+            return () => {};
+        }
+    },
+    updateSettings: vi.fn(),
+    updatePartialSettings: vi.fn()
+}));
+
+// Mock notification functions before importing handlers
 vi.mock('$lib/notifications', () => ({
     createHighlight: vi.fn(),
     playNotificationSound: vi.fn(),

@@ -14,7 +14,8 @@ import {
     createNickGroup,
     parseRichText,
     removeBuffer,
-    pendingBufferSwitch
+    pendingBufferSwitch,
+    getLastLineCount
 } from '$lib/stores/models';
 import { shouldResume } from '$lib/stores/bufferResume';
 import { createHighlight, playNotificationSound, updateTitle, updateFavico } from '$lib/notifications';
@@ -159,9 +160,7 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
         console.debug('[handler] _buffer_line_added: no content');
         return;
     }
-    console.debug('[handler] _buffer_line_added: buffers=' + Object.keys(get(buffers)).length + ' active=' + get(activeBufferId) + ' lines=' + lines.length);
-
-    const currentBuffers = get(buffers);
+          const currentBuffers = get(buffers);
     const activeId = get(activeBufferId);
     const isWindowFocused = typeof document !== 'undefined' && document.hasFocus();
     const newBufferMap: Record<string, BufferData> = {};
@@ -223,7 +222,7 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
         // Update spokeAt timestamps for tab completion
         handleNickMessageForSpeak(line);
 
-        console.debug('[handler] line displayed=', line.displayed, 'text=', line.text?.substring(0, 30));
+         console.debug('[handler] line displayed=', line.displayed, 'text=', line.text?.substring(0, 30), 'tags=', JSON.stringify(lineMsg.tags_array), 'notify=', buffer.notify);
         if (line.displayed) {
             // Check for date change and inject date change message
             if (buffer.lines.length > 0) {
@@ -235,15 +234,23 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
 
             buffer.lines = [...buffer.lines, line];
 
-            // Update unread counts
-            if (!lineMsg.displayed || !(buffer.id === activeId && isWindowFocused)) {
-                if (buffer.notify > 1 && lineMsg.tags_array.includes('notify_message') && !lineMsg.tags_array.includes('notify_none')) {
-                    buffer.unread++;
-                    const serverKey = `${buffer.plugin}.${buffer.server}`;
-                    const server = get(servers)[serverKey];
-                    if (server) server.unread++;
-                }
+            // Keep read marker position relative to buffer content
+            // When new lines arrive, increment lastSeen so marker stays in same visual position
+            if (buffer.lastSeen >= 0) {
+                buffer.lastSeen++;
+            }
 
+            // Increment unread if message wasn't displayed by us OR we're not on this buffer
+            // This handles both relay-only messages and locally-displayed messages from other clients
+            if (buffer.notify > 1 && !lineMsg.tags_array.includes('notify_none') && (!lineMsg.displayed || !(buffer.id === activeId && isWindowFocused))) {
+                buffer.unread++;
+                const serverKey = `${buffer.plugin}.${buffer.server}`;
+                const server = get(servers)[serverKey];
+                if (server) server.unread++;
+            }
+
+            // Only skip unread tracking for messages we've already seen (displayed by WeeChat while on this buffer with focus)
+            if (!lineMsg.displayed || !(buffer.id === activeId && isWindowFocused)) {
                 const isPrivate = buffer.type === 'private' && buffer.id !== activeId;
                 if (buffer.notify !== 0 && (lineMsg.highlight || lineMsg.tags_array.includes('notify_private') || isPrivate)) {
                     buffer.notification++;
@@ -504,9 +511,17 @@ export function handleHotlistChanged(message: ProtocolMessage) {
                 const counts = (entry.content as any[])[0]?.count || [0, 0, 0, 0];
                 buffer.unread = counts[1] || 0;
                 buffer.notification = (counts[2] || 0) + (counts[3] || 0);
-                // Calculate last read line position based on total unread count
+                // Calculate last read line position using saved line count from when we left the buffer.
+                // This is more accurate than buffer.lines.length which may have grown since WeeChat computed the hotlist.
                 const unreadSum = counts.reduce((sum: number, n: number) => sum + n, 0);
-                buffer.lastSeen = buffer.lines.length - 1 - unreadSum;
+                const savedLines = getLastLineCount(bufferId);
+                if (savedLines !== undefined && savedLines > unreadSum) {
+                    buffer.lastSeen = Math.max(0, savedLines - 1 - unreadSum);
+                }
+            } else {
+                // Buffer in hotlist pointers but no entry — clear unread/lastSeen
+                buffer.unread = 0;
+                buffer.notification = 0;
             }
         }
     }
@@ -549,7 +564,12 @@ export function handleHotlistInfo(message: ProtocolMessage) {
         buffer.unread = entry.count[1] || 0;
         buffer.notification = (entry.count[2] || 0) + (entry.count[3] || 0);
         const unreadSum = entry.count.reduce((sum: number, n: number) => sum + n, 0);
-        buffer.lastSeen = buffer.lines.length - 1 - unreadSum;
+        const savedLines = getLastLineCount(entry.buffer);
+        if (savedLines !== undefined && savedLines > unreadSum) {
+            buffer.lastSeen = Math.max(0, savedLines - 1 - unreadSum);
+        } else {
+            buffer.lastSeen = buffer.lines.length - 1 - unreadSum;
+        }
 
         const serverKey = `${buffer.plugin}.${buffer.server}`;
         const server = currentServers[serverKey];

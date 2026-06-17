@@ -254,6 +254,34 @@ export const hotlist = writable<HotlistEntry[]>([]);
 
 export const previousBufferId = writable<string>('');
 
+// Tracks scroll Y position per buffer for read marker restoration
+export const bufferScrollPositions = writable<Record<string, number>>({});
+
+// Tracks buffer line count at last visit (for accurate lastSeen calculation)
+export const bufferLineCounts = writable<Record<string, number>>({});
+
+export function saveScrollPosition(bufferId: string, scrollTop: number) {
+    bufferScrollPositions.update(pos => ({ ...pos, [bufferId]: scrollTop }));
+}
+
+// Save scroll position and line count when leaving a buffer (called before switching).
+// Line count is captured at this moment to know how far the user had read.
+export function saveBufferState(bufferId: string, scrollTop: number) {
+    bufferScrollPositions.update(pos => ({ ...pos, [bufferId]: scrollTop }));
+    const buf = get(buffers)[bufferId];
+    if (buf) {
+        bufferLineCounts.update(counts => ({ ...counts, [bufferId]: buf.lines.length }));
+    }
+}
+
+export function getScrollPosition(bufferId: string): number | undefined {
+    return get(bufferScrollPositions)[bufferId];
+}
+
+export function getLastLineCount(bufferId: string): number | undefined {
+    return get(bufferLineCounts)[bufferId];
+}
+
 export const currentBuffer = derived(
     [buffers, activeBufferId],
     ([$buffers, $activeBufferId]) => $buffers[$activeBufferId] || null
@@ -278,12 +306,23 @@ export function setActiveBuffer(bufferId: string): boolean {
     const buffer = currentBuffers[bufferId];
     if (!buffer) return false;
 
-    const prevId = get(activeBufferId);
+  const prevId = get(activeBufferId);
     if (prevId && currentBuffers[prevId]) {
         const prev = currentBuffers[prevId];
         prev.active = false;
-        prev.lastSeen = prev.lines.length - 1;
+        // Save line count when leaving this buffer (for lastSeen fallback on return).
+        // Do NOT modify prev.lastSeen — let handleHotlistInfo / handleLineInfo manage it.
+        const bufCopy = { ...prev };
+        bufCopy.lines = [...prev.lines];
+        bufferLineCounts.update(counts => ({ ...counts, [prevId]: bufCopy.lines.length }));
         previousBufferId.set(prevId);
+    }
+
+    // Calculate lastSeen for the incoming buffer.
+    // Only set when uninitialized (-1) and we have unread data from relay
+    // (handles cases where hotlist_changed event doesn't arrive).
+    if (buffer.lastSeen < 0 && buffer.unread > 0 && buffer.lines.length > 0) {
+        buffer.lastSeen = Math.max(0, buffer.lines.length - buffer.unread - 1);
     }
 
     buffer.active = true;

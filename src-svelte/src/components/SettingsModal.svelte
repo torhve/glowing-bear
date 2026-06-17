@@ -46,8 +46,7 @@
       iAlb: '',
       onlyUnread: false,
       noembed: true,
-      hotlistsync: true,
-      orderbyserver: true,
+    orderbyserver: true,
       useFavico: true,
       soundnotification: true,
       enableMathjax: false,
@@ -180,17 +179,7 @@
             />
           </label>
 
-          <label class="flex items-center justify-between py-2">
-            <span class="text-sm text-text">Mark messages as read in WeeChat</span>
-            <input
-              type="checkbox"
-              checked={$settings.hotlistsync}
-              onchange={() => updateSettings({ hotlistsync: !$settings.hotlistsync })}
-              class="w-4 h-4"
-            />
-          </label>
-
-          <label class="flex items-center justify-between py-2">
+        <label class="flex items-center justify-between py-2">
             <span class="text-sm text-text">Enable readline keybindings (Ctrl+A/E/U/W/B/F)</span>
             <input
               type="checkbox"

@@ -32,16 +32,7 @@
         .filter(buf => !buf.hidden)
         .filter(buf => !$settings.onlyUnread || buf.unread > 0 || buf.notification > 0 || buf.active || buf.pinned),
       $settings.orderbyserver
-    ).sort((a: BufferData, b: BufferData) => {
-      const aHasHighlight = getHighlightCount(a) > 0 ? 1 : 0;
-      const bHasHighlight = getHighlightCount(b) > 0 ? 1 : 0;
-      if (aHasHighlight !== bHasHighlight) return bHasHighlight - aHasHighlight;
-      const aActivity = a.unread + a.notification;
-      const bActivity = b.unread + b.notification;
-      if (aActivity > 0 && bActivity === 0) return -1;
-      if (aActivity === 0 && bActivity > 0) return 1;
-      return 0;
-    })
+    )
   );
 
   let groupedBuffers = $derived(
@@ -93,11 +84,12 @@
     updateSettings({ orderbyserver: !$settings.orderbyserver });
   }
 
-  function getNotifyClass(buffer: BufferData): string {
-     if (buffer.notification >= 3) return 'text-white font-bold';
-     if (buffer.unread > 0) return 'text-accent';
-     return 'text-text-secondary';
-   }
+ function getNotifyClass(buffer: BufferData): string {
+      if (buffer.id === $activeBufferId) return 'text-[var(--gb-ribbon)]';
+      if (buffer.notification >= 3) return 'text-white font-bold';
+      if (buffer.unread > 0) return 'text-accent';
+      return 'text-text-secondary';
+    }
 
    function getQuickKeyIndex(buffer: BufferData): number | null {
       if (!altKeyPressed && (!$settings.showQuickKeys || !$settings.enableQuickKeys)) return null;

@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { BufferData } from '$lib/types';
-  import { connected, buffers, weechatVersion, setActiveBuffer } from '$lib/stores/models';
+  import { connected, buffers, weechatVersion } from '$lib/stores/models';
   import { connectionState } from '$lib/stores/connectionStore';
   import { settings, updateSettings } from '$lib/stores/settings';
   import { disconnect } from '$lib/stores/connectionManager';

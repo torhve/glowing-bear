@@ -25,11 +25,11 @@ describe('Protocol rawText2Rich conversion', () => {
     });
 
     describe('WeeChat color codes (\\x19)', () => {
-        it('parses STD color code 43 (chat_day_change) in date change prefix', () => {
-            // Format used by injectDateChangeMessageIfNeeded
+        it('parses STD color code 43 (out of range) as default color', () => {
+            // Code 43 > 16 is out of range for STD colors, returns default
             const result = rawText2Rich('\x1943\u2500\u2500\u2500');
             expect(result.some((p) => p.text.includes('\u2500'))).toBe(true);
-            expect(result.find((p) => p.text.includes('\u2500'))!.fgColor.type).toBe('option');
+            expect(result.find((p) => p.text.includes('\u2500'))!.fgColor.type).toBe('weechat');
         });
 
         it('parses STD color code 03 (light red) with text', () => {

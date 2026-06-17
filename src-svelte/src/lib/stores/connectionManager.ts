@@ -4,7 +4,7 @@ import { buffers, servers, activeBufferId, previousBufferId, wconfig, getBuffer,
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist } from '$lib/stores/handlers';
 import { IDEAL_NICK_COLORS, IDEAL_COLOR_NICKS_IN_NICKLIST, shouldAutoApply } from '$lib/stores/nickColors';
 import { Protocol } from '$lib/weechat';
-import { DEBUG_NICKLIST, DEBUG_WEETCHAT_COMMANDS } from '$lib/debug';
+import { DEBUG_NICKLIST, DEBUG_WEECHAT_COMMANDS } from '$lib/debug';
 
 // Protocol instance for instance methods (setId, parse)
 // Static methods (formatHandshake, formatInit, etc.) are called on the constructor directly
@@ -115,17 +115,15 @@ export async function connect(host: string, port: number, path: string, password
                 console.log('[connect] connected=true, resolving promise');
                 connectionState.update(current => ({ ...current, wasEverConnected: true }));
 
-                // Start hotlist sync
-                if (get(wconfig).hotlistsync) {
-                    hotlistInterval = setInterval(async () => {
-                        const hlMsg = Protocol.formatHdata({
-                            path: 'hotlist:gui_hotlist(*)',
-                            keys: []
-                        });
-                        const hlResp = await sendAsync(hlMsg);
-                        handleHotlistInfo(hlResp);
-                    }, 60000);
-                }
+                // Start hotlist sync interval
+                hotlistInterval = setInterval(async () => {
+                    const hlMsg = Protocol.formatHdata({
+                        path: 'hotlist:gui_hotlist(*)',
+                        keys: []
+                    });
+                    const hlResp = await sendAsync(hlMsg);
+                    handleHotlistInfo(hlResp);
+                }, 60000);
 
                 resolve();
             } catch (e) {
@@ -290,10 +288,10 @@ function sendWs(data: string | ArrayBufferLike, label = '') {
         console.warn('[WS] send skipped — not open');
         return;
     }
-    if (DEBUG_WEETCHAT_COMMANDS && data instanceof ArrayBuffer) {
+    if (DEBUG_WEECHAT_COMMANDS && data instanceof ArrayBuffer) {
         const text = new TextDecoder().decode(data);
         console.log('[WeeChatCmd] SEND', label || '(raw):', text.substring(0, 200));
-    } else if (DEBUG_WEETCHAT_COMMANDS && typeof data === 'string') {
+    } else if (DEBUG_WEECHAT_COMMANDS && typeof data === 'string') {
         console.log('[WeeChatCmd] SEND', label || '(raw):', data.substring(0, 200));
     }
     ws.send(data);
@@ -445,14 +443,14 @@ function autoApplyNickColors() {
     console.log('[nick-colors] auto-applied ideal nick color palette (175 colors) + saved');
 }
 
-export function sendWeeChatCommand(command: string) {
+export function sendWeeChatCommand(command: string, bufferId?: string) {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         console.warn('[sendWeeChatCommand] WebSocket not open');
         return;
     }
-    // Send command to core WeeChat buffer (0x0), which accepts all /input commands
+    // Send command to core WeeChat buffer (0x0), or to a specific buffer if bufferId is provided
     const msg = Protocol.formatInput({
-        buffer: '0x0',
+        buffer: bufferId ? '0x' + bufferId : '0x0',
         data: command
     });
     sendWs(msg, 'cmd:' + command.substring(0, 50));
@@ -464,18 +462,9 @@ export function switchBuffer(bufferId: string) {
     if (!success || !ws || ws.readyState !== WebSocket.OPEN) {
         return success;
     }
-    // Sync read marker with WeeChat (matching Angular behavior)
-    if (get(wconfig).hotlistsync) {
-        // Clear hotlist for the buffer we're leaving, not the one we're switching to
-        const prevBuffer = prevBufferId ? getBuffer(prevBufferId) : null;
-        if (prevBuffer) {
-            sendWeeChatCommand('/buffer ' + prevBuffer.fullName + ' set hotlist -1');
-        }
-        sendWeeChatCommand('/input set_unread_current_buffer');
-    } else {
-        sendWeeChatCommand('/buffer set hotlist -1');
-        sendWeeChatCommand('/input hotlist_clear');
-    }
+    // Sync read marker with WeeChat — clear hotlist and unread for the new buffer
+    sendWeeChatCommand('/buffer set hotlist -1', bufferId);
+    sendWeeChatCommand('/input set_unread_current_buffer', bufferId);
     return success;
 }
 

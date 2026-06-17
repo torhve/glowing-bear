@@ -20,7 +20,6 @@ vi.mock('$lib/stores/settings', () => ({
                 iAlb: '',
                 onlyUnread: false,
                 noembed: false,
-                hotlistsync: true,
                 alwaysnicklist: false,
                 orderbyserver: false,
                 readlineBindings: false,
