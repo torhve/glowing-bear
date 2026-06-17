@@ -158,6 +158,20 @@ describe('PM/Highlight Notification Handling', () => {
         expect(buf!.notification).toBe(0);
     });
 
+    it('does NOT increment unread without notify_message tag', () => {
+        handleBufferLineAdded(createLineMessage('0x100', []));
+
+        const buf = get(buffers)['0x100'];
+        expect(buf!.unread).toBe(0);
+    });
+
+    it('does NOT increment unread with notify_none tag even if notify_message present', () => {
+        handleBufferLineAdded(createLineMessage('0x100', ['notify_message', 'notify_none']));
+
+        const buf = get(buffers)['0x100'];
+        expect(buf!.unread).toBe(0);
+    });
+
     it('increments both unread AND notification for message with both tags', () => {
         handleBufferLineAdded(createLineMessage('0x100', ['notify_message', 'notify_private'], 1));
 

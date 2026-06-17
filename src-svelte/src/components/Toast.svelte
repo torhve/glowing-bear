@@ -1,6 +1,6 @@
 <script lang="ts">
     import { toastStore, removeToast } from '$lib/toast';
-    import { onMount, onDestroy } from 'svelte';
+    
     import X from '@lucide/svelte/icons/x';
     import CheckCircle from '@lucide/svelte/icons/check-circle';
     import AlertCircle from '@lucide/svelte/icons/alert-circle';

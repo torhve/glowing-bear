@@ -16,9 +16,9 @@
   {#if token.type === 'link'}
     <a href={token.value} target="_blank" rel="noopener noreferrer" class={linkClass}>{token.value}</a>
   {:else if token.type === 'code'}
-    <!-- svelte-ignore htmlBindingContentTypeMismatch --><span class="hidden-bracket">{token.delimiter}</span>
+    <span class="hidden-bracket">{token.delimiter}</span>
     <code>{token.value}</code>
-    <!-- svelte-ignore htmlBindingContentTypeMismatch --><span class="hidden-bracket">{token.delimiter}</span>
+    <span class="hidden-bracket">{token.delimiter}</span>
   {:else}
     {token.value}
   {/if}

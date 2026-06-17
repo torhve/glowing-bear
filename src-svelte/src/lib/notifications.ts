@@ -1,14 +1,14 @@
 // Notification service for Glowing Bear
 // Ported from notifications.js
 
-import { settings } from './stores/settings';
+import { settings, updateSettings } from './stores/settings';
 import { buffers, activeBufferId, currentBuffer } from './stores/models';
 import { get } from 'svelte/store';
 import type { BufferData } from './types';
 import { initFavicon, drawBadge, resetBadge } from './faviconBadge';
 
 // Notification permission state
-let notificationPermission = 'default';
+let notificationPermission: 'granted' | 'denied' | 'default' = 'default';
 
 // Track active notifications
 const activeNotifications: Map<string, Notification> = new Map();
@@ -23,7 +23,8 @@ export async function requestNotificationPermission(): Promise<boolean> {
     }
 
     try {
-        notificationPermission = await Notification.requestPermission();
+        notificationPermission = await Notification.requestPermission() as 'granted' | 'denied' | 'default';
+        updateSettings({ notificationPermission });
         return notificationPermission === 'granted';
     } catch (e) {
         console.error('Error requesting notification permission:', e);
@@ -58,7 +59,7 @@ export function createHighlight(buffer: BufferData, message: string): void {
     try {
         const notification = new Notification(title, options);
         const tag = buffer.id;
-        
+
         // Store reference for later cancellation
         activeNotifications.set(tag, notification);
 
@@ -133,14 +134,14 @@ export function updateFavico(): void {
         totalNotifications += buf.notification;
     }
 
-    if (totalNotifications > 0) {
+  if (totalNotifications > 0) {
         drawBadge(totalNotifications, 'notification');
-        try { navigator.setAppBadge(totalNotifications); } catch {}
+        try { navigator.setAppBadge(totalNotifications); } catch { /* not supported */ }
     } else if (totalUnread > 0) {
         drawBadge(totalUnread, 'unread');
-        try { navigator.setAppBadge(totalUnread); } catch {}
+        try { navigator.setAppBadge(totalUnread); } catch { /* not supported */ }
     } else {
-        try { navigator.clearAppBadge(); } catch {}
+        try { navigator.clearAppBadge(); } catch { /* not supported */ }
     }
 }
 
@@ -168,9 +169,10 @@ export function playNotificationSound(): void {
  * Initialize the notification system
  */
 export function initNotifications(): void {
-    // Request permission if not already granted
-    if ('Notification' in window && notificationPermission === 'default') {
-        requestNotificationPermission().catch(() => {});
+    // Load persisted permission state from settings
+    const s = get(settings);
+    if (s.notificationPermission && s.notificationPermission !== 'default') {
+        notificationPermission = s.notificationPermission;
     }
 
     initFavicon();

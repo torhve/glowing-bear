@@ -17,12 +17,12 @@
   let _iterCandidate: string | null = $state(null);
   let isDraggingFile = $state(false);
 
-  let canSend = $derived($currentBuffer && message.trim().length > 0);
+  let canSend = $derived($currentBuffer && message.length > 0);
 
   function handleSend() {
     if (!canSend) return;
 
-    const text = message.trim();
+    const text = message;
 
     // Handle /buffer clear command
     if (/^\/buffer\s+clear\s*$/i.test(text)) {
@@ -185,16 +185,28 @@
         setTimeout(() => setCaretPos(lastSpace));
         return true;
       }
-      // Ctrl-h: backspace
-      if (code === 72) {
-        e.preventDefault();
-        if (caretPos > 0) {
-          message = message.substring(0, caretPos - 1) + message.substring(caretPos - 1);
-          setTimeout(() => setCaretPos(caretPos - 1));
+     // Ctrl-h: backspace
+        if (code === 72) {
+          e.preventDefault();
+          if (caretPos > 0) {
+            message = message.substring(0, caretPos - 1) + message.substring(caretPos - 1);
+            setTimeout(() => setCaretPos(caretPos - 1));
+          }
+          return true;
         }
-        return true;
-      }
-      return false;
+        // Ctrl-b: move back one character
+        if (code === 66) {
+          e.preventDefault();
+          setCaretPos(Math.max(0, caretPos - 1));
+          return true;
+        }
+        // Ctrl-f: move forward one character
+        if (code === 70) {
+          e.preventDefault();
+          setCaretPos(Math.min(message.length, caretPos + 1));
+          return true;
+        }
+        return false;
     }
 
     // Page up -> scroll up

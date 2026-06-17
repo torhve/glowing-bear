@@ -22,6 +22,7 @@ export const settings = writable<Settings>({
     readlineBindings: false,
     useFavico: true,
     soundnotification: true,
+    notificationPermission: 'default',
     enableMathjax: false,
     enableQuickKeys: true,
     showNicklist: true,

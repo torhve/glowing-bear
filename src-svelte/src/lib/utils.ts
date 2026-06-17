@@ -11,7 +11,7 @@ export interface NickCompletionResult {
 /* Utilities for nick completion — mirrors AngularJS IrcUtils */
 
 function escapeRegExp(str: string): string {
-    return str.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, '\\$&');
+    return str.replace(/[[\]{}()*+?.,\\^$|#\s-]/g, '\\$&');
 }
 
 function _completeSingleNick(candidate: string, nickList: string[]): string | null {
@@ -341,4 +341,20 @@ export function getBufferIconName(buffer: BufferData): 'hash' | 'user' | 'server
     return 'square';
 }
 
+/**
+ * Extract the channel prefix (#, ##, &, +, :, !) from a short name.
+ * Mirrors WeeChat IRC channel prefix conventions.
+ */
+export function getChannelPrefix(shortName: string): string {
+    const match = shortName.match(/^#+|^[&+:!]+/);
+    return match ? match[0] : '';
+}
+
+/**
+ * Get the display name for a buffer (short name without prefix).
+ * Mirrors AngularJS trimmedName logic, used for display in buffer list.
+ */
+export function getDisplayName(buffer: BufferData): string {
+    return buffer.trimmedName || buffer.fullName || buffer.shortName;
+}
 

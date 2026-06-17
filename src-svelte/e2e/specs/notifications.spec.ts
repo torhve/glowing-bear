@@ -173,7 +173,7 @@ test('sound does NOT play when soundnotification is disabled', async () => {
     expect(audioCalls).not.toContain('/assets/audio/sonar.mp3');
 });
 
-test('notification permission button exists and is clickable', async () => {
+test('notification permission button exists and is clickable when default', async () => {
     await openSettings();
     const button = page.getByTestId('request-notification-permission-button');
     await expect(button).toBeVisible();
@@ -184,4 +184,40 @@ test('notification permission button exists and is clickable', async () => {
     // Just verify the click doesn't throw an error
     await page.waitForTimeout(500);
     await closeSettings();
+});
+
+test('notification permission granted status displays correctly', async () => {
+    await setSettings(page, { notificationPermission: 'granted' });
+    await page.reload();
+    await connectToWeechat(page);
+
+    await openSettings();
+    await expect(page.locator('text=✓ Granted')).toBeVisible();
+    const button = page.getByTestId('request-notification-permission-button');
+    await expect(button).not.toBeVisible();
+    await closeSettings();
+});
+
+test('notification permission denied status displays helpful message', async () => {
+    await setSettings(page, { notificationPermission: 'denied' });
+    await page.reload();
+    await connectToWeechat(page);
+
+    await openSettings();
+    await expect(page.locator('text=✕ Denied')).toBeVisible();
+    await expect(page.locator('text=Please enable notifications in your browser settings')).toBeVisible();
+    const button = page.getByTestId('request-notification-permission-button');
+    await expect(button).not.toBeVisible();
+    await closeSettings();
+});
+
+test('no notification toast when permission already granted', async () => {
+    await setSettings(page, { notificationPermission: 'granted' });
+    await page.reload();
+    await connectToWeechat(page);
+    await page.waitForTimeout(1000);
+
+    const toasts = page.getByTestId('toast');
+    const notificationToastCount = await toasts.filter({ hasText: /notification/i }).count();
+    expect(notificationToastCount).toBe(0);
 });
