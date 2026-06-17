@@ -41,7 +41,7 @@ function objPreview(obj: { type: string; content: unknown }): string {
     return str.length > 100 ? str.slice(0, 100) + '...' : str;
 }
 
-function handleMessage(data: Buffer) {
+async function handleMessage(data: Buffer) {
     messageCount++;
     log(`[recv #${messageCount}] ${data.length} bytes`);
 
@@ -50,7 +50,7 @@ function handleMessage(data: Buffer) {
 
     let parsed: ParsedMessage;
     try {
-        parsed = protocol.parse(arrayBuf);
+        parsed = await protocol.parse(arrayBuf);
     } catch (e) {
         console.error(`[FAIL] parse error:`, e);
         process.exit(1);
@@ -77,7 +77,7 @@ ws.on('open', () => {
     ws.send(handshakeStr);
 });
 
-ws.on('message', (data: Buffer) => {
+ws.on('message', async (data: Buffer) => {
     // Convert to proper ArrayBuffer
     const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as unknown as Uint8Array);
     handleMessage(buf);
@@ -87,7 +87,7 @@ ws.on('message', (data: Buffer) => {
         const arrayBuf = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
         let parsed: ParsedMessage;
         try {
-            parsed = protocol.parse(arrayBuf);
+            parsed = await protocol.parse(arrayBuf);
         } catch {
             return;
         }

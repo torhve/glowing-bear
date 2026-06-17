@@ -27,7 +27,6 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ['fflate'],
     exclude: ['@lucide/svelte'],
   },
   ssr: {
@@ -36,7 +35,7 @@ export default defineConfig({
   build: {
     target: 'es2022',
     commonjsOptions: {
-      include: [/fflate/, /node_modules/],
+      include: [/node_modules/],
     },
   },
   server: {

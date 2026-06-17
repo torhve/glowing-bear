@@ -1,4 +1,3 @@
-import * as fflate from 'fflate';
 import type { ColorInfo, TextAttrs, RichTextPart } from '$lib/types';
 
 // --- Type definitions ---
@@ -59,13 +58,31 @@ export interface ParsedMessage {
 
 // --- Decompression ---
 
-const unzlibSync = fflate.unzlibSync;
 const utf8Decoder = new TextDecoder('utf-8');
 
-function decompressZlib(raw: Uint8Array): ArrayBuffer {
+async function decompressZlib(raw: Uint8Array): Promise<Uint8Array> {
     try {
-        const result = unzlibSync(raw);
-        return result.buffer as ArrayBuffer;
+        const ds = new DecompressionStream('deflate');
+        const writer = ds.writable.getWriter();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- BufferSource type varies between Node and browser Uint8Array types
+        await (writer.write as (data: Uint8Array) => Promise<void>)(raw);
+        await writer.close();
+        const reader = ds.readable.getReader();
+        const chunks: Uint8Array[] = [];
+        let totalLength = 0;
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            totalLength += value.length;
+        }
+        const result = new Uint8Array(totalLength);
+        let offset = 0;
+        for (const chunk of chunks) {
+            result.set(chunk, offset);
+            offset += chunk.length;
+        }
+        return result;
     } catch (e) {
         console.error('zlib decompression failed:', e);
         throw e;
@@ -722,8 +739,8 @@ export class Protocol {
         return slice;
     }
 
-    private setData(data: ArrayBuffer): void {
-        this.view = new DataView(data);
+    private setData(data: Uint8Array): void {
+        this.view = new DataView(data.buffer, data.byteOffset, data.byteLength);
         this.offset = 0;
     }
 
@@ -903,15 +920,16 @@ export class Protocol {
         return '(' + id + ') ' + command;
     }
 
-    parse(data: ArrayBuffer): ParsedMessage {
-        this.setData(data);
+    async parse(data: ArrayBuffer): Promise<ParsedMessage> {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- ArrayBuffer wraps to Uint8Array for internal use
+        this.setData(new Uint8Array(data) as any);
 
         const header = this.getHeader();
 
         if (header.compression) {
-            const raw = new Uint8Array(data, 5);
-            const plain = decompressZlib(raw);
-            this.setData(plain);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw bytes from offset 5 for decompression
+            const raw = new Uint8Array(data, 5) as any;
+            this.setData(await decompressZlib(raw));
         }
 
         const id = this.getId();

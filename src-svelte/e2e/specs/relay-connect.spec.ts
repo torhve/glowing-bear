@@ -47,10 +47,10 @@ test.describe('WeeChat relay protocol (via browser WebSocket)', () => {
 
                 const handshakeResponse = await new Promise<any>((resolve, reject) => {
                     const timeout = setTimeout(() => reject(new Error('Handshake timeout')), 10000);
-                    ws.onmessage = (event) => {
+                    ws.onmessage = async (event) => {
                         clearTimeout(timeout);
                         try {
-                            const parsed = protocol.parse(event.data as ArrayBuffer);
+                            const parsed = await protocol.parse(event.data as ArrayBuffer);
                             step('4. Handshake response parsed, objects: ' + parsed.objects.length);
                             resolve(parsed);
                         } catch (e: any) {
@@ -85,10 +85,10 @@ test.describe('WeeChat relay protocol (via browser WebSocket)', () => {
 
                 const versionResponse = await new Promise<any>((resolve, reject) => {
                     const timeout = setTimeout(() => reject(new Error('Version timeout')), 10000);
-                    ws.onmessage = (event) => {
+                    ws.onmessage = async (event) => {
                         clearTimeout(timeout);
                         try {
-                            const parsed = protocol.parse(event.data as ArrayBuffer);
+                            const parsed = await protocol.parse(event.data as ArrayBuffer);
                             step('8. Version response parsed, objects: ' + parsed.objects.length);
                             resolve(parsed);
                         } catch (e: any) {

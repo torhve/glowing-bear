@@ -89,10 +89,10 @@ describe('weechat parity: new vs old parser', () => {
         ]);
 
         const newProtocol = new NewProtocol();
-        const newMsg = newProtocol.parse(msg);
+        const newMsg = await newProtocol.parse(msg);
 
         const oldProtocol = new OldProtocol!();
-        const oldMsg = oldProtocol.parse(msg);
+        const oldMsg = await oldProtocol.parse(msg);
 
         expect(compareMessages(newMsg, oldMsg)).toBe(true);
     });
@@ -102,10 +102,10 @@ describe('weechat parity: new vs old parser', () => {
         const msg = buildMessage('2', [{ type: 'buf', content: '#general' }]);
 
         const newProtocol = new NewProtocol();
-        const newMsg = newProtocol.parse(msg);
+        const newMsg = await newProtocol.parse(msg);
 
         const oldProtocol = new OldProtocol!();
-        const oldMsg = oldProtocol.parse(msg);
+        const oldMsg = await oldProtocol.parse(msg);
 
         expect(compareMessages(newMsg, oldMsg)).toBe(true);
         expect((newMsg.objects[0]!.content as string)).toBe((oldMsg.objects![0]!.content as string));
@@ -119,10 +119,10 @@ describe('weechat parity: new vs old parser', () => {
         ]);
 
         const newProtocol = new NewProtocol();
-        const newMsg = newProtocol.parse(msg);
+        const newMsg = await newProtocol.parse(msg);
 
         const oldProtocol = new OldProtocol!();
-        const oldMsg = oldProtocol.parse(msg);
+        const oldMsg = await oldProtocol.parse(msg);
 
         expect(compareMessages(newMsg, oldMsg)).toBe(true);
     });
@@ -138,10 +138,10 @@ describe('weechat parity: new vs old parser', () => {
         ]);
 
         const newProtocol = new NewProtocol();
-        const newMsg = newProtocol.parse(msg);
+        const newMsg = await newProtocol.parse(msg);
 
         const oldProtocol = new OldProtocol!();
-        const oldMsg = oldProtocol.parse(msg);
+        const oldMsg = await oldProtocol.parse(msg);
 
         expect(compareMessages(newMsg, oldMsg)).toBe(true);
     });
@@ -155,10 +155,10 @@ describe('weechat parity: new vs old parser', () => {
         ]);
 
         const newProtocol = new NewProtocol();
-        const newMsg = newProtocol.parse(msg);
+        const newMsg = await newProtocol.parse(msg);
 
         const oldProtocol = new OldProtocol!();
-        const oldMsg = oldProtocol.parse(msg);
+        const oldMsg = await oldProtocol.parse(msg);
 
         expect(compareMessages(newMsg, oldMsg)).toBe(true);
     });
@@ -173,10 +173,10 @@ describe('weechat parity: new vs old parser', () => {
         ]);
 
         const newProtocol = new NewProtocol();
-        const newMsg = newProtocol.parse(msg);
+        const newMsg = await newProtocol.parse(msg);
 
         const oldProtocol = new OldProtocol!();
-        const oldMsg = oldProtocol.parse(msg);
+        const oldMsg = await oldProtocol.parse(msg);
 
         expect(compareMessages(newMsg, oldMsg)).toBe(true);
         expect((newMsg.objects[0]!.content as string)).toBe(utf8Text);
@@ -192,10 +192,10 @@ describe('weechat parity: new vs old parser', () => {
         ]);
 
         const newProtocol = new NewProtocol();
-        const newMsg = newProtocol.parse(msg);
+        const newMsg = await newProtocol.parse(msg);
 
         const oldProtocol = new OldProtocol!();
-        const oldMsg = oldProtocol.parse(msg);
+        const oldMsg = await oldProtocol.parse(msg);
 
         expect(compareMessages(newMsg, oldMsg)).toBe(true);
     });
@@ -210,10 +210,10 @@ describe('weechat parity: new vs old parser', () => {
             ]);
 
             const newProtocol = new NewProtocol();
-            const newMsg = newProtocol.parse(msg);
+            const newMsg = await newProtocol.parse(msg);
 
             const oldProtocol = new OldProtocol!();
-            const oldMsg = oldProtocol.parse(msg);
+            const oldMsg = await oldProtocol.parse(msg);
 
             expect(compareMessages(newMsg, oldMsg)).toBe(true);
             expect((newMsg.objects[0]!.content as Date).getTime()).toBe(ts * 1000);
@@ -229,10 +229,10 @@ describe('weechat parity: new vs old parser', () => {
             const msg = buildMessage(`ptr-${ptr || 'empty'}`, [{ type: 'ptr', content: ptr }]);
 
             const newProtocol = new NewProtocol();
-            const newMsg = newProtocol.parse(msg);
+            const newMsg = await newProtocol.parse(msg);
 
             const oldProtocol = new OldProtocol!();
-            const oldMsg = oldProtocol.parse(msg);
+            const oldMsg = await oldProtocol.parse(msg);
 
             expect(compareMessages(newMsg, oldMsg)).toBe(true);
             expect((newMsg.objects[0]!.content as string)).toBe(ptr);
@@ -248,10 +248,10 @@ describe('weechat parity: new vs old parser', () => {
             const msg = buildMessage(`chr-${ch}`, [{ type: 'chr', content: ch }]);
 
             const newProtocol = new NewProtocol();
-            const newMsg = newProtocol.parse(msg);
+            const newMsg = await newProtocol.parse(msg);
 
             const oldProtocol = new OldProtocol!();
-            const oldMsg = oldProtocol.parse(msg);
+            const oldMsg = await oldProtocol.parse(msg);
 
             expect(compareMessages(newMsg, oldMsg)).toBe(true);
             expect((newMsg.objects[0]!.content as number)).toBe(ch);
@@ -267,10 +267,10 @@ describe('weechat parity: new vs old parser', () => {
             const msg = buildMessage(`int-${n}`, [{ type: 'int', content: n }]);
 
             const newProtocol = new NewProtocol();
-            const newMsg = newProtocol.parse(msg);
+            const newMsg = await newProtocol.parse(msg);
 
             const oldProtocol = new OldProtocol!();
-            const oldMsg = oldProtocol.parse(msg);
+            const oldMsg = await oldProtocol.parse(msg);
 
             expect(compareMessages(newMsg, oldMsg)).toBe(true);
             expect((newMsg.objects[0]!.content as number)).toBe(n);
@@ -283,10 +283,10 @@ describe('weechat parity: new vs old parser', () => {
         const msg = buildMessage('6', [{ type: 'arr', content: ['item1', 'item2', 'item3'] }]);
 
         const newProtocol = new NewProtocol();
-        const newMsg = newProtocol.parse(msg);
+        const newMsg = await newProtocol.parse(msg);
 
         const oldProtocol = new OldProtocol!();
-        const oldMsg = oldProtocol.parse(msg);
+        const oldMsg = await oldProtocol.parse(msg);
 
         expect(compareMessages(newMsg, oldMsg)).toBe(true);
     });
@@ -307,10 +307,10 @@ describe('weechat parity: new vs old parser', () => {
         }]);
 
         const newProtocol = new NewProtocol();
-        const newMsg = newProtocol.parse(msg);
+        const newMsg = await newProtocol.parse(msg);
 
         const oldProtocol = new OldProtocol!();
-        const oldMsg = oldProtocol.parse(msg);
+        const oldMsg = await oldProtocol.parse(msg);
 
         expect(compareMessages(newMsg, oldMsg)).toBe(true);
     });
@@ -331,10 +331,10 @@ describe('weechat parity: new vs old parser', () => {
         }]);
 
         const newProtocol = new NewProtocol();
-        const newMsg = newProtocol.parse(msg);
+        const newMsg = await newProtocol.parse(msg);
 
         const oldProtocol = new OldProtocol!();
-        const oldMsg = oldProtocol.parse(msg);
+        const oldMsg = await oldProtocol.parse(msg);
 
         expect(compareMessages(newMsg, oldMsg)).toBe(true);
     });
@@ -347,10 +347,10 @@ describe('weechat parity: new vs old parser', () => {
             const msg = buildMessage(id, [{ type: 'buf', content: '#test' }]);
 
             const newProtocol = new NewProtocol();
-            const newMsg = newProtocol.parse(msg);
+            const newMsg = await newProtocol.parse(msg);
 
             const oldProtocol = new OldProtocol!();
-            const oldMsg = oldProtocol.parse(msg);
+            const oldMsg = await oldProtocol.parse(msg);
 
             expect(newMsg.id).toBe(oldMsg.id as string);
             expect(newMsg.id).toBe(id);
@@ -365,10 +365,10 @@ describe('weechat parity: new vs old parser', () => {
         ]);
 
         const newProtocol = new NewProtocol();
-        const newMsg = newProtocol.parse(msg);
+        const newMsg = await newProtocol.parse(msg);
 
         const oldProtocol = new OldProtocol!();
-        const oldMsg = oldProtocol.parse(msg);
+        const oldMsg = await oldProtocol.parse(msg);
 
         const newHeader = newMsg.header as { length: number; compression: number };
         const oldHeader = oldMsg.header as { length: number; compression: number };
