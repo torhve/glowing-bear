@@ -166,14 +166,6 @@ function getDefaultAttributes(): TextAttrs {
     return { name: null, override: { bold: false, reverse: false, italic: false, underline: false } };
 }
 
-function cloneColor(color: ColorInfo): ColorInfo {
-    return { ...color };
-}
-
-function cloneAttrs(attrs: TextAttrs): TextAttrs {
-    return { name: attrs.name, override: { ...attrs.override } };
-}
-
 function getColorObj(str: string): ColorInfo {
     if (str.length === 2) {
         const code = parseInt(str, 10);
@@ -193,111 +185,99 @@ interface StyleResult {
     text: string;
 }
 
-function getStyle(txt: string): StyleResult {
-    const matchers: { regex: RegExp; fn: (m: RegExpMatchArray) => StyleResult }[] = [
-        // STD color codes: 2 digits (00-43) → option colors (foreground only)
-        {
-            regex: /^(\d{2})/,
-            fn: (m) => {
-                const code = parseInt(m[1]!, 10);
-                if (code >= colorsOptionsNames.length) {
-                    // Out-of-range: preserve current colors (matches old JS behavior)
-                    return { fgColor: null, bgColor: null, attrs: null, text: txt.substring(2) };
-                }
-                const optionName = colorsOptionsNames[code] || 'default';
-                const color = { type: 'option' as const, name: optionName };
-                // STD color codes only change foreground (old JS bug: cloned fg to bg)
-                return {
-                    fgColor: color,
-                    bgColor: null,
-                    attrs: { name: optionName, override: {} },
-                    text: txt.substring(m[0].length)
-                };
-            }
-        },
-        // Extended color codes: @ followed by 5 digits (unimplemented in original — colors ignored but text still stripped)
-        {
-            regex: /^@(\d{5})/,
-            fn: (m) => ({
-                fgColor: null,
-                bgColor: null,
-                attrs: null,
-                text: txt.substring(m[0].length)
-            })
-        },
-        // Foreground color: F + optional attributes + STD or EXT
-        {
-            // eslint-disable-next-line no-control-regex -- WeeChat color format control chars
-            regex: /^F(?:([*!_|]*)(\d{2})|@([\x01\x02\x03\x04*!_|]*)(\d{5}))/,
-            fn: (m) => {
-                let ret: StyleResult;
-                if (m[2]) {
-                    ret = { fgColor: getColorObj(m[2]), bgColor: null, attrs: attrsFromStr(m[1] ?? ''), text: txt.substring(m[0].length) };
-                } else {
-                    ret = { fgColor: getColorObj(m[4]!), bgColor: null, attrs: attrsFromStr(m[3] ?? ''), text: txt.substring(m[0].length) };
-                }
-                return ret;
-            }
-        },
-        // Background color: B + STD or EXT
-        {
-            regex: /^B(\d{2}|@\d{5})/,
-            fn: (m) => ({
-                fgColor: null,
-                bgColor: getColorObj(m[1]!),
-                attrs: null,
-                text: txt.substring(m[0].length)
-            })
-        },
-        // Foreground + background with optional attributes (WeeChat 2.6+ uses ~ or ,)
-        {
-            // eslint-disable-next-line no-control-regex -- WeeChat color format control chars
-            regex: /^\*(?:([\x01\x02\x03\x04*!_|]*)(\d{2})|@([\x01\x02\x03\x04*!_|]*)(\d{5}))[,~](\d{2}|@\d{5})/,
-            fn: (m) => {
-                let fgColor: ColorInfo;
-                let attrs: TextAttrs | null;
-                if (m[2]) {
-                    attrs = attrsFromStr(m[1] ?? '');
-                    fgColor = getColorObj(m[2]);
-                } else {
-                    attrs = attrsFromStr(m[3] ?? '');
-                    fgColor = getColorObj(m[4]!);
-                }
-                return { fgColor, bgColor: getColorObj(m[5]!), attrs, text: txt.substring(m[0].length) };
-            }
-        },
-        // Foreground color with * (+ attributes) - fallback, checked after previous case
-        {
-            // eslint-disable-next-line no-control-regex -- WeeChat color format control chars
-            regex: /^\*([\x01\x02\x03\x04*!_|]*)(\d{2}|@\d{5})/,
-            fn: (m) => ({
-                fgColor: getColorObj(m[2]!),
-                bgColor: null,
-                attrs: attrsFromStr(m[1] ?? ''),
-                text: txt.substring(m[0].length)
-            })
-        },
-        // Emphasis
-        {
-            regex: /^E/,
-            fn: () => ({
-                fgColor: { type: 'option', name: 'emphasis' },
-                bgColor: null,
-                attrs: { name: 'emphasis', override: {} },
-                text: txt.substring(1)
-            })
-        }
-    ];
+type StyleMatcherFn = (txt: string, m: RegExpMatchArray) => StyleResult;
 
-    const ret: StyleResult = { fgColor: null, bgColor: null, attrs: null, text: txt };
-    for (const matcher of matchers) {
+// Pre-built style matchers to avoid per-call array allocation in getStyle().
+const styleMatchers: Array<{ regex: RegExp; fn: StyleMatcherFn }> = [
+    // STD color codes: 2 digits (00-43) → option colors (foreground only)
+    {
+        regex: /^(\d{2})/,
+        fn: (txt, m) => {
+            const code = parseInt(m[1]!, 10);
+            if (code >= colorsOptionsNames.length) {
+                return { fgColor: null, bgColor: null, attrs: null, text: txt.substring(2) };
+            }
+            const optionName = colorsOptionsNames[code] || 'default';
+            return {
+                fgColor: { type: 'option' as const, name: optionName },
+                bgColor: null,
+                attrs: { name: optionName, override: {} },
+                text: txt.substring(m[0].length)
+            };
+        }
+    },
+    // Extended color codes: @ followed by 5 digits (unimplemented — colors ignored but text stripped)
+    {
+        regex: /^@(\d{5})/,
+        fn: (txt, m) => ({
+            fgColor: null, bgColor: null, attrs: null,
+            text: txt.substring(m[0].length)
+        })
+    },
+    // Foreground color: F + optional attributes + STD or EXT
+    {
+        regex: /^F(?:([*!_|]*)(\d{2})|@([\x01\x02\x03\x04*!_|]*)(\d{5}))/,
+        fn: (txt, m) => {
+            if (m[2]) {
+                return { fgColor: getColorObj(m[2]), bgColor: null, attrs: attrsFromStr(m[1] ?? ''), text: txt.substring(m[0].length) };
+            }
+            return { fgColor: getColorObj(m[4]!), bgColor: null, attrs: attrsFromStr(m[3] ?? ''), text: txt.substring(m[0].length) };
+        }
+    },
+    // Background color: B + STD or EXT
+    {
+        regex: /^B(\d{2}|@\d{5})/,
+        fn: (txt, m) => ({
+            fgColor: null, bgColor: getColorObj(m[1]!), attrs: null,
+            text: txt.substring(m[0].length)
+        })
+    },
+    // Foreground + background with optional attributes (WeeChat 2.6+ uses ~ or ,)
+    {
+        regex: /^\*(?:([\x01\x02\x03\x04*!_|]*)(\d{2})|@([\x01\x02\x03\x04*!_|]*)(\d{5}))[,~](\d{2}|@\d{5})/,
+        fn: (txt, m) => {
+            let fgColor: ColorInfo;
+            let attrs: TextAttrs | null;
+            if (m[2]) {
+                attrs = attrsFromStr(m[1] ?? '');
+                fgColor = getColorObj(m[2]);
+            } else {
+                attrs = attrsFromStr(m[3] ?? '');
+                fgColor = getColorObj(m[4]!);
+            }
+            return { fgColor, bgColor: getColorObj(m[5]!), attrs, text: txt.substring(m[0].length) };
+        }
+    },
+    // Foreground color with * (+ attributes) - fallback
+    {
+        regex: /^\*([\x01\x02\x03\x04*!_|]*)(\d{2}|@\d{5})/,
+        fn: (txt, m) => ({
+            fgColor: getColorObj(m[2]!), bgColor: null,
+            attrs: attrsFromStr(m[1] ?? ''),
+            text: txt.substring(m[0].length)
+        })
+    },
+    // Emphasis
+    {
+        regex: /^E/,
+        fn: (txt) => ({
+            fgColor: { type: 'option', name: 'emphasis' },
+            bgColor: null,
+            attrs: { name: 'emphasis', override: {} },
+            text: txt.substring(1)
+        })
+    }
+];
+
+function getStyle(txt: string): StyleResult {
+    for (let i = 0; i < styleMatchers.length; i++) {
+        const matcher = styleMatchers[i]!;
         const m = txt.match(matcher.regex);
         if (m) {
-            const result = matcher.fn(m);
-            return result;
+            return matcher.fn(txt, m);
         }
     }
-    return ret;
+    return { fgColor: null, bgColor: null, attrs: null, text: txt };
 }
 
 function attrsFromStr(str: string): TextAttrs | null {
@@ -316,31 +296,49 @@ function attrsFromStr(str: string): TextAttrs | null {
 }
 
 export function convertIrcCodes(text: string): string {
-    return text
-        // eslint-disable-next-line no-control-regex -- IRC format control chars
-        .replace(/\x02/g, '\x1a*')      // bold → WeeChat set-bold
-        // eslint-disable-next-line no-control-regex -- IRC format control chars
-        .replace(/\x1d/g, '\x1a/')      // italic → WeeChat set-italic
-        // eslint-disable-next-line no-control-regex -- IRC format control chars
-        .replace(/\x1f/g, '\x1a_')      // underline → WeeChat set-underline
-        // eslint-disable-next-line no-control-regex -- IRC format control chars
-        .replace(/\x16/g, '\x1a!')      // reverse → WeeChat set-reverse
-        // eslint-disable-next-line no-control-regex -- IRC format control chars
-        .replace(/\x0f/g, '\x1c')       // reset all → WeeChat reset
-        // eslint-disable-next-line no-control-regex -- IRC color format control char
-        .replace(/\x03(\d{1,2}(,\d{1,2})?)?/g, (match) => {
-            if (match.length === 1) {
-                // bare \x03 with no digits → reset colors
-                return '\x1c';
+    // Manual single-pass conversion avoids V8 .replace() bug where multi-char
+    // replacement strings ending with a digit matching the next source char
+    // cause that character to be duplicated.
+    let result = '';
+    for (let i = 0; i < text.length; i++) {
+        const ch = text[i]!;
+        switch (ch) {
+            case '\x02': result += '\x1a*'; break;   // bold
+            case '\x1d': result += '\x1a/'; break;   // italic
+            case '\x1f': result += '\x1a_'; break;   // underline
+            case '\x16': result += '\x1a!'; break;   // reverse
+            case '\x0f': result += '\x1c'; break;    // reset all
+            case '\x03': {
+                let j = i + 1;
+                let rest = '';
+                // Parse fg color digits
+                while (j < text.length && text[j]! >= '0' && text[j]! <= '9') {
+                    rest += text[j]!;
+                    j++;
+                }
+                if (rest.length === 0) {
+                    result += '\x1c';
+                } else {
+                    // Check for optional ,NN (bg color)
+                    if (j < text.length && text[j]! === ',') {
+                        rest += ',';
+                        j++;
+                        while (j < text.length && text[j]! >= '0' && text[j]! <= '9') {
+                            rest += text[j]!;
+                            j++;
+                        }
+                        result += '\x19*' + rest;
+                    } else {
+                        result += '\x19' + rest;
+                    }
+                }
+                i = j - 1;
+                break;
             }
-            const digits = match.substring(1);
-            if (digits.includes(',')) {
-                // fg+bg: \x03NN,MM → \x19*NN,MM
-                return '\x19*' + digits;
-            }
-            // fg only: \x03NN → \x19NN
-            return '\x19' + digits;
-        });
+            default: result += ch;
+        }
+    }
+    return result;
 }
 
 export function rawText2Rich(rawText: string): RichPart[] {
@@ -424,10 +422,9 @@ export function rawText2Rich(rawText: string): RichPart[] {
             continue;
         }
 
-        // Remove false overrides when name is null and all are false
+        // Remove false overrides when name is null and all are false (avoids Object.values() allocation)
         if (curAttrsOnlyFalseOverrides && curAttrs.name === null) {
-            const allReset = Object.values(curAttrs.override).every(v => !v);
-            if (allReset) {
+            if (!curAttrs.override.b && !curAttrs.override.r && !curAttrs.override.i && !curAttrs.override.u) {
                 curAttrs.override = {};
             } else {
                 curAttrsOnlyFalseOverrides = false;
@@ -435,9 +432,9 @@ export function rawText2Rich(rawText: string): RichPart[] {
         }
 
         result.push({
-            fgColor: cloneColor(curFgColor),
-            bgColor: cloneColor(curBgColor),
-            attrs: cloneAttrs(curAttrs),
+            fgColor: { ...curFgColor },
+            bgColor: { ...curBgColor },
+            attrs: { name: curAttrs.name, override: { ...curAttrs.override } },
             text
         });
     }
@@ -446,30 +443,32 @@ export function rawText2Rich(rawText: string): RichPart[] {
 }
 
 export function richText2Str(parts: RichPart[]): string {
-    return parts.map(part => {
+    // Pre-sized array avoids .map() intermediate allocation.
+    const segments = new Array<string>(parts.length);
+    for (let i = 0; i < parts.length; i++) {
+        const part = parts[i]!;
         let str = '';
 
-        // Colors
-        if (part.fgColor.type === 'weechat') {
-            const idx = colorNameToIndex.get(part.fgColor.name);
-            if (idx !== undefined) {
-                str += '%' + idx.toString().padStart(2, '0');
+        // Foreground color — switch is faster than if/else chain
+        switch (part.fgColor.type) {
+            case 'weechat': {
+                const idx = colorNameToIndex.get(part.fgColor.name);
+                if (idx !== undefined) str += '%' + idx.toString().padStart(2, '0');
+                break;
             }
-        } else if (part.fgColor.type === 'ext') {
-            str += '%' + part.fgColor.name;
-        } else if (part.fgColor.type === 'option') {
-            str += '^' + part.fgColor.name;
+            case 'ext': str += '%' + part.fgColor.name; break;
+            case 'option': str += '^' + part.fgColor.name; break;
         }
 
-        if (part.bgColor.type === 'weechat') {
-            const idx = colorNameToIndex.get(part.bgColor.name);
-            if (idx !== undefined) {
-                str += ',' + idx.toString().padStart(2, '0');
+        // Background color
+        switch (part.bgColor.type) {
+            case 'weechat': {
+                const idx = colorNameToIndex.get(part.bgColor.name);
+                if (idx !== undefined) str += ',' + idx.toString().padStart(2, '0');
+                break;
             }
-        } else if (part.bgColor.type === 'ext') {
-            str += ',' + part.bgColor.name;
-        } else if (part.bgColor.type === 'option') {
-            str += ',' + part.bgColor.name;
+            case 'ext': str += ',' + part.bgColor.name; break;
+            case 'option': str += ',' + part.bgColor.name; break;
         }
 
         // Attributes
@@ -479,15 +478,13 @@ export function richText2Str(parts: RichPart[]): string {
         for (const attr in part.attrs.override) {
             if (part.attrs.override[attr]) {
                 const char = attrValueToChar[attr];
-                if (char) {
-                    str += '/' + char;
-                }
+                if (char) str += '/' + char;
             }
         }
 
-        str += ':' + part.text;
-        return str;
-    }).join('');
+        segments[i] = str + ':' + part.text;
+    }
+    return segments.join('');
 }
 
 // --- String utilities ---
@@ -777,11 +774,23 @@ export class Protocol {
     }
 
     private getType(): string {
-        const data = this.getSlice(3);
-        if (data.length === 0) {
+        // Type codes are always 3 ASCII bytes ("chr", "int", "str", etc.).
+        // Using String.fromCharCode avoids TextDecoder overhead for each call.
+        if (this.offset >= this.view.byteLength) {
             return '';
         }
-        return utf8Decoder.decode(data);
+        if (this.offset + 3 > this.view.byteLength) {
+            throw new RangeError(
+                `Short read during protocol parsing: offset=${this.offset} length=3 ` +
+                `available=${this.view.byteLength - this.offset}`
+            );
+        }
+        const b1 = this.view.getUint8(this.offset);
+        const b2 = this.view.getUint8(this.offset + 1);
+        const b3 = this.view.getUint8(this.offset + 2);
+        this.offset += 3;
+        if (b1 === 0 && b2 === 0 && b3 === 0) return '';
+        return String.fromCharCode(b1, b2, b3);
     }
 
     private runType(type: string): unknown {
