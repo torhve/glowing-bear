@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { BufferLine } from '$lib/types';
+  import { get } from 'svelte/store';
   import { currentBuffer, saveScrollPosition, activeBufferId } from '$lib/stores/models';
   import { settings } from '$lib/stores/settings';
   import { fetchMoreLines } from '$lib/stores/connectionManager';
@@ -88,7 +89,8 @@
     const currentBufferId = get(activeBufferId);
     const bufferChanged = prevActiveBufferId !== currentBufferId;
     const linesAdded = messages.length > prevLinesLength;
-    const hasReadmarkerEl = document.getElementById('readmarker') !== null;
+    // Determine if there are unread messages with a readmarker (lastSeen >= 0 and not at end)
+    const hasUnreadMessages = $currentBuffer.lastSeen >= 0 && $currentBuffer.lastSeen < messages.length - 1;
 
     console.log(
       '[ChatView] scroll effect — buffer:', $currentBuffer.shortName,
@@ -100,7 +102,8 @@
       '| scrollHeight:', containerRef.scrollHeight,
       '| clientHeight:', containerRef.clientHeight,
       '| isAtBottom:', isAtBottom,
-      '| hasReadmarker:', hasReadmarkerEl
+      '| hasUnreadMessages:', hasUnreadMessages,
+      '| lastSeen:', $currentBuffer.lastSeen
     );
 
     // Increment frame counter — only the callback matching this ID will execute.
@@ -108,7 +111,8 @@
     // the older callback's frameId won't match and will be discarded.
     const currentFrameId = ++scrollFrameId;
 
-    if ((bufferChanged || linesAdded) && !hasReadmarkerEl) {
+    if ((bufferChanged || linesAdded) && !hasUnreadMessages) {
+      // No unread messages — always scroll to bottom
       requestAnimationFrame(() => {
         if (currentFrameId !== scrollFrameId) return; // Stale callback discarded
         if (!containerRef || !containerRef.isConnected) return;
@@ -120,17 +124,28 @@
           '| verified actual:', containerRef.scrollTop
         );
       });
-    } else if (hasReadmarkerEl) {
+    } else if (hasUnreadMessages) {
       // Buffer has unread messages — scroll to readmarker (AngularJS pattern)
       const rm = document.getElementById('readmarker');
       if (rm && rm.parentElement) {
         const targetScrollTop = rm.offsetTop - rm.parentElement.scrollHeight + rm.scrollHeight;
-        requestAnimationFrame(() => {
-          if (currentFrameId !== scrollFrameId) return; // Stale callback discarded
-          if (!containerRef || !containerRef.isConnected) return;
-          containerRef.scrollTop = targetScrollTop;
-          console.log('[ChatView] scroll → readmarker — set scrollTop to', targetScrollTop);
-        });
+        // Guard against invalid negative scroll positions (e.g., when readmarker is near top)
+        if (targetScrollTop > 0) {
+          requestAnimationFrame(() => {
+            if (currentFrameId !== scrollFrameId) return; // Stale callback discarded
+            if (!containerRef || !containerRef.isConnected) return;
+            containerRef.scrollTop = targetScrollTop;
+            console.log('[ChatView] scroll → readmarker — set scrollTop to', targetScrollTop);
+          });
+        } else {
+          // Invalid readmarker position — fall back to bottom
+          requestAnimationFrame(() => {
+            if (currentFrameId !== scrollFrameId) return;
+            if (!containerRef || !containerRef.isConnected) return;
+            containerRef.scrollTop = containerRef.scrollHeight;
+            isAtBottom = containerRef.scrollTop >= containerRef.scrollHeight - 3;
+          });
+        }
       }
     }
 
