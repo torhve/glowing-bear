@@ -141,6 +141,7 @@ export function updateFavico(): void {
         drawBadge(totalUnread, 'unread');
         try { navigator.setAppBadge(totalUnread); } catch { /* not supported */ }
     } else {
+        resetBadge();
         try { navigator.clearAppBadge(); } catch { /* not supported */ }
     }
 }
