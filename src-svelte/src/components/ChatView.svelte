@@ -1,10 +1,11 @@
 <script lang="ts">
   import type { BufferLine } from '$lib/types';
+  import { tick } from 'svelte';
   import { get } from 'svelte/store';
   import { currentBuffer, saveScrollPosition, activeBufferId } from '$lib/stores/models';
   import { settings } from '$lib/stores/settings';
   import { fetchMoreLines } from '$lib/stores/connectionManager';
-  import { buildMentionText, insertNickIntoInput, isFreeBuffer } from '$lib/utils';
+  import { buildMentionText, isFreeBuffer } from '$lib/utils';
   import BufferLineRow from '$components/BufferLineRow.svelte';
   import TopicModal from '$components/TopicModal.svelte';
   import LinkifiedText from '$components/LinkifiedText.svelte';
@@ -19,16 +20,10 @@
   let topicText = $derived($currentBuffer?.title?.map(t => t.text).join('') || '');
 
   let isLoadingMore = $state(false);
-  let wasScrolledUpDuringFetch = $state(false);
   let maxScrollValBeforeFetch = $state(0);
-  let scrollHeightBeforeFetch = $state(0);
-  let scrollTopBeforeFetch = $state(0);
   // Tracks whether the chat is scrolled to the bottom (AngularJS bufferBottom equivalent).
   // Used to avoid unnecessary scroll operations when already at bottom.
   let isAtBottom = $state(true);
-  // Frame counter for debouncing rAF callbacks: only the latest callback per frame executes.
-  // Prevents race conditions when new messages arrive mid-rAF and trigger re-renders.
-  let scrollFrameId = 0;
   let prevActiveBufferId = $state<string>('');
   let prevLinesLength = $state(0);
 
@@ -41,10 +36,7 @@
 
     if (scrollTop < 50 && !isLoadingMore && $currentBuffer && !$currentBuffer.allLinesFetched) {
       isLoadingMore = true;
-      wasScrolledUpDuringFetch = scrollTop > clientHeight * 0.5 || scrollTop > 200;
       maxScrollValBeforeFetch = scrollHeight - clientHeight;
-      scrollHeightBeforeFetch = scrollHeight;
-      scrollTopBeforeFetch = scrollTop;
 
       fetchMoreLines().then(() => {
         // Defer scroll adjustment to rAF so DOM has updated and we avoid
@@ -61,7 +53,6 @@
             isAtBottom = false;
           }
           isLoadingMore = false;
-          wasScrolledUpDuringFetch = false;
         });
       }).catch(err => {
         console.error('Failed to fetch more lines:', err);
@@ -77,7 +68,7 @@
     }
   });
 
-  $effect(() => {
+ $effect.pre(() => {
     // Auto-scroll when buffer changes or new lines arrive
     // Skip if loading more lines or was scrolled up during fetch
     if (!$currentBuffer || isLoadingMore || messages.length === 0 || !containerRef) {
@@ -86,71 +77,62 @@
       return;
     }
 
-    const currentBufferId = get(activeBufferId);
-    const bufferChanged = prevActiveBufferId !== currentBufferId;
-    const linesAdded = messages.length > prevLinesLength;
-    // Determine if there are unread messages with a readmarker (lastSeen >= 0 and not at end)
-    const hasUnreadMessages = $currentBuffer.lastSeen >= 0 && $currentBuffer.lastSeen < messages.length - 1;
+    (async () => {
+      await tick();
 
-    console.log(
-      '[ChatView] scroll effect — buffer:', $currentBuffer.shortName,
-      '| totalLines:', messages.length,
-      '| prevLinesLength:', prevLinesLength,
-      '| bufferChanged:', bufferChanged,
-      '| linesAdded:', linesAdded,
-      '| currentScrollTop:', containerRef.scrollTop,
-      '| scrollHeight:', containerRef.scrollHeight,
-      '| clientHeight:', containerRef.clientHeight,
-      '| isAtBottom:', isAtBottom,
-      '| hasUnreadMessages:', hasUnreadMessages,
-      '| lastSeen:', $currentBuffer.lastSeen
-    );
+      const currentBufferId = get(activeBufferId);
+      const bufferChanged = prevActiveBufferId !== currentBufferId;
+      const linesAdded = messages.length > prevLinesLength;
+      // Determine if there are unread messages with a readmarker (lastSeen >= 0 and not at end)
+      const hasUnreadMessages = $currentBuffer.lastSeen >= 0 && $currentBuffer.lastSeen < messages.length - 1;
 
-    // Increment frame counter — only the callback matching this ID will execute.
-    // If a new message arrives and triggers another effect before rAF fires,
-    // the older callback's frameId won't match and will be discarded.
-    const currentFrameId = ++scrollFrameId;
+      console.log(
+        '[ChatView] scroll effect — buffer:', $currentBuffer.shortName,
+        '| totalLines:', messages.length,
+        '| prevLinesLength:', prevLinesLength,
+        '| bufferChanged:', bufferChanged,
+        '| linesAdded:', linesAdded,
+        '| currentScrollTop:', containerRef.scrollTop,
+        '| scrollHeight:', containerRef.scrollHeight,
+        '| clientHeight:', containerRef.clientHeight,
+        '| isAtBottom:', isAtBottom,
+        '| hasUnreadMessages:', hasUnreadMessages,
+        '| lastSeen:', $currentBuffer.lastSeen
+      );
 
-    if ((bufferChanged || linesAdded) && !hasUnreadMessages) {
-      // No unread messages — always scroll to bottom
-      requestAnimationFrame(() => {
-        if (currentFrameId !== scrollFrameId) return; // Stale callback discarded
-        if (!containerRef || !containerRef.isConnected) return;
+      if ((bufferChanged || linesAdded) && !hasUnreadMessages) {
+        // No unread messages — always scroll to bottom
         containerRef.scrollTop = containerRef.scrollHeight;
-        isAtBottom = containerRef.scrollTop >= containerRef.scrollHeight - 3;
+        isAtBottom = true;
         console.log(
-          '[ChatView] scroll → bottom — set scrollTop to',
-          containerRef.scrollHeight,
-          '| verified actual:', containerRef.scrollTop
+          '[ChatView] scroll → bottom — scrollTop:', containerRef.scrollTop,
+          '| scrollHeight:', containerRef.scrollHeight,
+          '| bufferLines:', messages.length
         );
-      });
-    } else if (hasUnreadMessages) {
-      // Buffer has unread messages — scroll to readmarker (AngularJS pattern)
-      const rm = document.getElementById('readmarker');
-      if (rm && rm.parentElement) {
-        const targetScrollTop = rm.offsetTop - rm.parentElement.scrollHeight + rm.scrollHeight;
-        // Guard against invalid negative scroll positions (e.g., when readmarker is near top)
-        if (targetScrollTop > 0) {
-          requestAnimationFrame(() => {
-            if (currentFrameId !== scrollFrameId) return; // Stale callback discarded
-            if (!containerRef || !containerRef.isConnected) return;
+      } else if (hasUnreadMessages) {
+        // Buffer has unread messages — scroll to readmarker
+        const rm = document.getElementById('readmarker');
+        if (rm && rm.parentElement) {
+          const targetScrollTop = rm.offsetTop - rm.parentElement.scrollHeight + rm.scrollHeight;
+          if (targetScrollTop > 0) {
             containerRef.scrollTop = targetScrollTop;
-            console.log('[ChatView] scroll → readmarker — set scrollTop to', targetScrollTop);
-          });
-        } else {
-          // Invalid readmarker position — fall back to bottom
-          requestAnimationFrame(() => {
-            if (currentFrameId !== scrollFrameId) return;
-            if (!containerRef || !containerRef.isConnected) return;
+            console.log(
+              '[ChatView] scroll → readmarker — scrollTop:', containerRef.scrollTop,
+              '| bufferLines:', messages.length
+            );
+          } else {
             containerRef.scrollTop = containerRef.scrollHeight;
-            isAtBottom = containerRef.scrollTop >= containerRef.scrollHeight - 3;
-          });
+            console.log(
+              '[ChatView] scroll → bottom (readmarker fallback) — scrollTop:', containerRef.scrollTop,
+              '| bufferLines:', messages.length
+            );
+          }
         }
       }
-    }
 
-    prevActiveBufferId = currentBufferId;
-    prevLinesLength = messages.length;
+      prevActiveBufferId = currentBufferId;
+      prevLinesLength = messages.length;
+    })();
   });
 
   function handleMention(message: BufferLine) {
@@ -319,12 +301,13 @@
   }
 
   .readmarker {
-    background-color: var(--gb-surface-raised, #2a2a2a);
+    padding: 0 !important;
+    height: 1px !important;
   }
 
   #readmarker {
     border: none;
-    border-top: 2px solid var(--gb-highlight, #e74c3c);
-    margin: 2px 0;
+    border-top: 1px solid var(--gb-ribbon, #f0ad4e) !important;
+    margin: 0;
   }
 </style>

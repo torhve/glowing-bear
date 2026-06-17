@@ -162,15 +162,16 @@ body {
 
 /* Bufferline — compact TUI-style single-row layout (styles in BufferLineRow.svelte) */
 
-/* Readmarker */
+/* Readmarker — bright thin line */
 .readmarker {
-  background-color: var(--gb-surface-raised, #2a2a2a);
+  padding: 0 !important;
+  height: 1px !important;
 }
 
 #readmarker {
   border: none;
-  border-top: 2px solid var(--gb-highlight, #e74c3c);
-  margin: 2px 0;
+  border-top: 1px solid var(--gb-ribbon, #f0ad4e) !important;
+  margin: 0;
 }
 
 /* Fetch more lines */

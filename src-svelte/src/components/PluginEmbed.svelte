@@ -7,7 +7,7 @@
   let { plugin }: { plugin: PluginMetadata } = $props();
 
   let embedRef = $state<HTMLDivElement | null>(null);
-  let visible = $state(plugin.visible);
+  let visible = $state(false);
   let contentInjected = $state(false);
 
   $effect(() => { visible = plugin.visible; });
@@ -340,11 +340,4 @@
     box-sizing: border-box;
   }
 
-  .embed img {
-    display: block;
-    max-width: 100%;
-    max-height: calc(500px - 20px);
-    object-fit: contain;
-    background-color: var(--gb-bg, #000);
-  }
 </style>

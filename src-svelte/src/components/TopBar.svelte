@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { BufferData } from '$lib/types';
+  
   import { connected, weechatVersion } from '$lib/stores/models';
   import { connectionState } from '$lib/stores/connectionStore';
   import { settings, updateSettings } from '$lib/stores/settings';

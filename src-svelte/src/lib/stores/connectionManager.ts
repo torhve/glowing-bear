@@ -1,8 +1,10 @@
 import { get } from 'svelte/store';
 import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore, connectionState } from '$lib/stores/connectionStore';
-import { buffers, servers, activeBufferId, previousBufferId, wconfig, getBuffer, connected, setActiveBuffer } from '$lib/stores/models';
+import { buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer } from '$lib/stores/models';
+import { settings } from '$lib/stores/settings';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist } from '$lib/stores/handlers';
-import { IDEAL_NICK_COLORS, IDEAL_COLOR_NICKS_IN_NICKLIST, shouldAutoApply } from '$lib/stores/nickColors';
+// TODO: Re-enable nick color customization when desired
+// import { IDEAL_NICK_COLORS, IDEAL_COLOR_NICKS_IN_NICKLIST, shouldAutoApply } from '$lib/stores/nickColors';
 import { Protocol } from '$lib/weechat';
 import { DEBUG_NICKLIST, DEBUG_WEECHAT_COMMANDS } from '$lib/debug';
 
@@ -100,8 +102,8 @@ export async function connect(host: string, port: number, path: string, password
                 await fetchConfValue('weechat.completion.nick_completer');
                 await fetchConfValue('weechat.completion.nick_add_space');
 
-                // Auto-apply ideal nick colors if using WeeChat defaults
-                autoApplyNickColors();
+                // TODO: Re-enable auto-apply nick colors when desired
+                // autoApplyNickColors();
 
                 // Request sync (fire-and-forget, like AngularJS code)
                 const syncMsg = Protocol.formatSync({});
@@ -145,6 +147,10 @@ export async function connect(host: string, port: number, path: string, password
 
             if (get(connectionState).userDisconnect) {
                 // User initiated disconnect, don't auto-reconnect
+                connectionData = null;
+            } else if (!get(settings).autoconnect) {
+                // Autoconnect is OFF — stay disconnected, require manual login
+                connectionData = null;
             } else if (typeof document !== 'undefined' && !document.hasFocus()) {
                 // First connection failed or user was not focused
             } else if (!get(connectionState).wasEverConnected) {
@@ -337,6 +343,7 @@ export function sendMessage(message: string) {
 export function disconnect() {
     disconnectStore();
     if (hotlistInterval) clearInterval(hotlistInterval);
+    connectionData = null;
     if (ws) {
         const quitMsg = Protocol.formatQuit();
         sendWs(quitMsg, 'quit');
@@ -393,7 +400,18 @@ export function fetchMoreLines(numLines: number = 0): Promise<any> {
     const cbId = currentCallbackId;
 
     return new Promise((resolve, reject) => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            delete callbacks[cbId];
+            return Promise.reject('WebSocket not open');
+        }
+
         callbacks[cbId] = { resolve, reject };
+
+        // Double-check WS is still open right before sending (TOCTOU guard)
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            delete callbacks[cbId];
+            return Promise.reject('WebSocket not open');
+        }
 
         const formattedMsg = protocolInstance.setId(cbId, msg);
         sendWs(formattedMsg, 'fetch#' + cbId);
@@ -430,18 +448,19 @@ export function fetchMoreLines(numLines: number = 0): Promise<any> {
     });
 }
 
-function autoApplyNickColors() {
-    const cfg = get(wconfig);
-    if (!shouldAutoApply(cfg['weechat.color.chat_nick_colors'] ?? '')) {
-        return; // User has customized, leave it alone
-    }
-
-    sendWeeChatCommand(`/set weechat.color.chat_nick_colors "${IDEAL_NICK_COLORS}"`);
-    sendWeeChatCommand(`/set irc.look.color_nicks_in_nicklist ${IDEAL_COLOR_NICKS_IN_NICKLIST}`);
-    sendWeeChatCommand('/save');
-
-    console.log('[nick-colors] auto-applied ideal nick color palette (175 colors) + saved');
-}
+// TODO: Re-enable when desired
+// function autoApplyNickColors() {
+//     const cfg = get(wconfig);
+//     if (!shouldAutoApply(cfg['weechat.color.chat_nick_colors'] ?? '')) {
+//         return; // User has customized, leave it alone
+//     }
+//
+//     sendWeeChatCommand(`/set weechat.color.chat_nick_colors "${IDEAL_NICK_COLORS}"`);
+//     sendWeeChatCommand(`/set irc.look.color_nicks_in_nicklist ${IDEAL_COLOR_NICKS_IN_NICKLIST}`);
+//     sendWeeChatCommand('/save');
+//
+//     console.log('[nick-colors] auto-applied ideal nick color palette (175 colors) + saved');
+// }
 
 export function sendWeeChatCommand(command: string, bufferId?: string) {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -457,7 +476,6 @@ export function sendWeeChatCommand(command: string, bufferId?: string) {
 }
 
 export function switchBuffer(bufferId: string) {
-    const prevBufferId = get(activeBufferId);
     const success = setActiveBuffer(bufferId);
     if (!success || !ws || ws.readyState !== WebSocket.OPEN) {
         return success;

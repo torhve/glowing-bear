@@ -1,5 +1,6 @@
 <script lang="ts">
   import '../app.css';
+  import type { BufferData } from '$lib/types';
   import ConnectionForm from '$components/ConnectionForm.svelte';
   import TopBar from '$components/TopBar.svelte';
   import ChatView from '$components/ChatView.svelte';
@@ -15,7 +16,7 @@ import Toast from '$components/Toast.svelte';
   import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer } from '$lib/stores/connectionManager';
   import { Protocol } from '$lib/weechat';
   import { initNotifications, updateTitle, updateFavico, onDisconnect } from '$lib/notifications';
-  import { sortBuffers, parseRelayUrl, computeJumpKeys } from '$lib/utils';
+  import { sortBuffers, parseRelayUrl } from '$lib/utils';
 
   /* eslint-disable @typescript-eslint/no-explicit-any -- dev-time debug globals on window */
   if (typeof window !== 'undefined' && import.meta.env.DEV) {
@@ -81,7 +82,7 @@ import Toast from '$components/Toast.svelte';
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if ($connected) {
         e.preventDefault();
-        (e as any).returnValue = '';
+        (e as BeforeUnloadEvent).returnValue = '';
       }
     };
     
@@ -183,7 +184,7 @@ import Toast from '$components/Toast.svelte';
         const digit = parseInt(digitStr, 10);
         const index = digit === 0 ? 9 : digit - 1;
         e.preventDefault();
-        const sorted = sortBuffers(Object.values(b).filter((bu: any) => !bu.hidden), s.orderbyserver);
+        const sorted = sortBuffers(Object.values(b).filter((bu: BufferData) => !bu.hidden), s.orderbyserver);
         if (index < sorted.length) {
           const buf = sorted[index];
           if (buf) switchBuffer(buf.id);
@@ -215,8 +216,8 @@ import Toast from '$components/Toast.svelte';
         const targetNum = _jumpDecimal * 10 + digit;
         const allBuffs = get(buffers);
         const sorted = Object.values(allBuffs)
-          .filter((b: any) => !b.hidden)
-          .sort((a: any, b: any) => a.number - b.number);
+          .filter((b: BufferData) => !b.hidden)
+          .sort((a: BufferData, b: BufferData) => a.number - b.number);
         const targetIdx = targetNum - 1;
         if (targetIdx >= 0 && targetIdx < sorted.length) {
           const targetBuf = sorted[targetIdx];

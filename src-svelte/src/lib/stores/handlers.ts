@@ -19,7 +19,6 @@ import {
 } from '$lib/stores/models';
 import { shouldResume } from '$lib/stores/bufferResume';
 import { createHighlight, playNotificationSound, updateTitle, updateFavico } from '$lib/notifications';
-import { settings } from '$lib/stores/settings';
 import { DEBUG_NICKLIST } from '$lib/debug';
 import type { ProtocolMessage, BufferMessage, BufferLine, BufferLineMessage, NickMessage, NickGroupMessage, HotlistEntry, BufferData } from '$lib/types';
 
@@ -114,6 +113,7 @@ function handleBufferUpdate(buffer: any, message: BufferMessage) {
 
     buffer.shortName = message.short_name;
     buffer.trimmedName = buffer.shortName.replace(/^[#&+]/, '') || (buffer.shortName ? ' ' : null);
+    buffer.prefix = ['#', '&', '+'].includes(buffer.shortName.charAt(0)) ? buffer.shortName.charAt(0) : '';
     buffer.title = message.title && typeof message.title === 'string' ? parseRichText(message.title) : buffer.title;
     buffer.number = message.number;
     buffer.hidden = !!message.hidden;
@@ -242,7 +242,7 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
 
             // Increment unread if message wasn't displayed by us OR we're not on this buffer
             // This handles both relay-only messages and locally-displayed messages from other clients
-            if (buffer.notify > 1 && !lineMsg.tags_array.includes('notify_none') && (!lineMsg.displayed || !(buffer.id === activeId && isWindowFocused))) {
+            if (buffer.notify > 1 && lineMsg.tags_array.includes('notify_message') && !lineMsg.tags_array.includes('notify_none') && (!lineMsg.displayed || !(buffer.id === activeId && isWindowFocused))) {
                 buffer.unread++;
                 const serverKey = `${buffer.plugin}.${buffer.server}`;
                 const server = get(servers)[serverKey];
@@ -508,6 +508,7 @@ export function handleHotlistChanged(message: ProtocolMessage) {
             if (!buffer || buffer.active) continue;
             const entry = message.objects.find(o => o.pointer === bufferId);
             if (entry?.content) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic WeeChat relay object shape
                 const counts = (entry.content as any[])[0]?.count || [0, 0, 0, 0];
                 buffer.unread = counts[1] || 0;
                 buffer.notification = (counts[2] || 0) + (counts[3] || 0);
@@ -533,26 +534,7 @@ export function handleHotlistChanged(message: ProtocolMessage) {
 export function handleHotlistInfo(message: ProtocolMessage) {
     const currentBuffers = get(buffers);
     const currentServers = get(servers);
-    const hotlistsync = get(settings).hotlistsync;
 
-    // When hotlistsync is enabled, WeeChat manages unread counts natively.
-    // Don't reset non-active buffers — they may have been modified by
-    // /buffer <fullName> commands during buffer switches.
-    if (!hotlistsync) {
-        for (const id in currentBuffers) {
-            const buf = currentBuffers[id];
-            if (buf) {
-                buf.unread = 0;
-                buf.notification = 0;
-            }
-        }
-        for (const key in currentServers) {
-            const srv = currentServers[key];
-            if (srv) {
-                srv.unread = 0;
-            }
-        }
-    }
 
     const hotlist = message.objects[0]?.content as HotlistEntry[];
     if (!hotlist) return;

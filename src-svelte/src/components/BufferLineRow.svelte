@@ -32,9 +32,7 @@
   let isRepeatedPrefix = $derived(
     !isDateChange && previousMessage && message.prefixtext === previousMessage.prefixtext
   );
-  let isPrivate = $derived(message.tags?.includes('private') ?? false);
   let isHighlight = $derived(message.highlight);
-  let isSelf = $derived(message.tags?.includes('self') ?? false);
   let metadata = $derived(buildMetadata());
 
   const urlRegex = /(?:(?:https?|ftp):\/\/|www\.|ftp\.)\S*[^\s.;,(){}<>[\]]/gi;
@@ -120,9 +118,9 @@
             {#if token.type === 'link'}
               <a href={token.value} target="_blank" rel="noopener noreferrer" class="irc-link">{token.value}</a>
             {:else if token.type === 'code'}
-              <!-- svelte-ignore htmlBindingContentTypeMismatch --><span class="hidden-bracket">{token.delimiter}</span>
+              <span class="hidden-bracket">{token.delimiter}</span>
               <code>{token.value}</code>
-              <!-- svelte-ignore htmlBindingContentTypeMismatch --><span class="hidden-bracket">{token.delimiter}</span>
+              <span class="hidden-bracket">{token.delimiter}</span>
             {:else}
               {token.value}
             {/if}
@@ -185,9 +183,9 @@
               {#if token.type === 'link'}
                 <a href={token.value} target="_blank" rel="noopener noreferrer" class="irc-link">{token.value}</a>
               {:else if token.type === 'code'}
-                <!-- svelte-ignore htmlBindingContentTypeMismatch --><span class="hidden-bracket">{token.delimiter}</span>
+                <span class="hidden-bracket">{token.delimiter}</span>
                 <code>{token.value}</code>
-                <!-- svelte-ignore htmlBindingContentTypeMismatch --><span class="hidden-bracket">{token.delimiter}</span>
+                <span class="hidden-bracket">{token.delimiter}</span>
               {:else}
                 {token.value}
               {/if}

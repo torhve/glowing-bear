@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { BufferData } from '$lib/types';
-  import { connected, buffers, hotlist } from '$lib/stores/models';
+  import { buffers, hotlist } from '$lib/stores/models';
   import { switchBuffer } from '$lib/stores/connectionManager';
-  import { computeJumpKeys } from '$lib/utils';
+  
   import BaseDialog from '$components/BaseDialog.svelte';
   import Search from '@lucide/svelte/icons/search';
   import X from '@lucide/svelte/icons/x';
@@ -11,10 +11,6 @@
   let bufferSearchQuery = $state('');
   let selectedIndex = $state(0);
   let searchInputRef = $state<HTMLInputElement>();
-
-  let _jumpKeys = $derived(
-    computeJumpKeys(Object.values($buffers) as BufferData[])
-  );
 
   let filteredBuffers = $derived(
     Object.values($buffers)
@@ -68,6 +64,13 @@
     }
   }
 
+  function handleToggle(event: ToggleEvent) {
+    if (event.newState === 'open' && searchInputRef) {
+      searchInputRef.focus();
+      searchInputRef.select();
+    }
+  }
+
   $effect(() => {
     const idx = selectedIndex;
     if (idx >= 0) {
@@ -77,7 +80,7 @@
   });
 </script>
 
-<BaseDialog id="buffer-search-modal" labelledby="buffer-search-title">
+<BaseDialog id="buffer-search-modal" labelledby="buffer-search-title" noAnimation ontoggle={handleToggle}>
   <div class="flex flex-col max-h-[85vh]">
     <div class="px-4 py-3 border-b border-border flex items-center justify-between">
       <h2 id="buffer-search-title" class="text-sm font-bold text-text">Search Buffers</h2>
@@ -103,7 +106,6 @@
           onkeydown={handleKeyDown}
           placeholder="Search buffers..."
           class="w-full pl-8 pr-2 py-1.5 text-sm bg-input-bg border border-border rounded text-text placeholder-text-muted focus:outline-none focus:border-accent"
-          autofocus
         />
       </div>
     </div>
@@ -112,7 +114,7 @@
       {#each filteredBuffers as buffer, idx (buffer.id)}
         <button
           onclick={() => handleBufferClick(buffer)}
-          class="w-full px-3 py-3 text-left flex items-center justify-between rounded hover:bg-surface-raised transition-colors"
+          class="w-full px-3 py-3 text-left flex items-center relative rounded hover:bg-surface-raised transition-colors"
           class:bg-accent={idx === selectedIndex}
           data-search-index={idx}
         >
@@ -121,17 +123,17 @@
             <div class="text-sm text-text-muted truncate">{buffer.fullName}</div>
           </div>
           {#if buffer.$jumpKey}
-            <span class="mr-2 px-1.5 py-0.5 text-xs font-bold rounded bg-accent text-bg">
+            <span class="mr-2 px-1.5 py-0.5 text-xs font-bold rounded bg-surface-raised border border-border">
               {buffer.$jumpKey}
             </span>
           {/if}
           {#if buffer.notification >= 3}
-            <span class="px-1.5 py-0.5 text-xs font-bold text-text bg-danger rounded">
-              {buffer.unread + buffer.notification}
+            <span class="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-xs font-bold text-text bg-danger rounded">
+              {buffer.notification}
             </span>
-          {:else if (buffer.unread + buffer.notification) > 0}
-            <span class="px-1.5 py-0.5 text-xs font-bold text-text bg-accent rounded">
-              {buffer.unread + buffer.notification}
+          {:else if buffer.notification > 0 || buffer.unread > 0}
+            <span class="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-xs font-bold text-text bg-warning rounded">
+              {buffer.notification > 0 ? buffer.notification : buffer.unread}
             </span>
           {/if}
         </button>

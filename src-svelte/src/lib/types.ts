@@ -214,6 +214,7 @@ export interface Settings {
     readlineBindings: boolean;
     useFavico: boolean;
     soundnotification: boolean;
+    notificationPermission: 'granted' | 'denied' | 'default';
     enableMathjax: boolean;
     enableQuickKeys: boolean;
     showNicklist: boolean;

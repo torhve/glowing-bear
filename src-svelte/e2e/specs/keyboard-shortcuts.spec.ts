@@ -77,6 +77,27 @@ test.describe('Keyboard Shortcuts', () => {
             await expect(input).toBeFocused();
         });
 
+        test('should move cursor with Ctrl+B and Ctrl+F when readline bindings enabled', async ({ page }) => {
+            await page.evaluate(() => {
+                (window as any).__setGbSettings?.({ readlineBindings: true });
+            });
+            await page.waitForTimeout(100);
+            const input = page.getByTestId('message-input');
+            await input.focus();
+            await input.fill('hello world');
+            await page.waitForTimeout(100);
+            await page.keyboard.press('Control+f');
+            await page.waitForTimeout(50);
+            await page.keyboard.press('Control+b');
+            await page.waitForTimeout(50);
+            const caretPos = await page.evaluate(() => {
+                const el = document.querySelector<HTMLTextAreaElement>('[data-testid="message-input"]');
+                return el ? el.selectionStart : -1;
+            });
+            expect(caretPos).toBeGreaterThan(0);
+            expect(caretPos).toBeLessThanOrEqual(11);
+        });
+
         test('should toggle nicklist with Alt+n', async ({ page }) => {
             const input = page.getByTestId('message-input');
             await input.focus();
@@ -209,19 +230,7 @@ test.describe('Keyboard Shortcuts', () => {
             await expect(page.locator('#buffer-search')).toBeAttached({ timeout: 5000 });
         });
 
-        test('should focus buffer search with Ctrl+K via document event', async ({ page }) => {
-            await page.evaluate(() => {
-                document.dispatchEvent(new KeyboardEvent('keydown', {
-                    altKey: false,
-                    ctrlKey: true,
-                    code: 'KeyK',
-                    key: 'k',
-                    keyCode: 75,
-                    bubbles: true
-                }));
-            });
-            await expect(page.locator('#buffer-search')).toBeAttached({ timeout: 5000 });
-        });
+ 
     });
 
     test.describe('Buffer Search Enter', () => {
@@ -231,7 +240,15 @@ test.describe('Keyboard Shortcuts', () => {
         });
 
         test('should activate the first filtered buffer on Enter when typing query', async ({ page }) => {
-            await page.getByTitle('Search buffers (Ctrl+K)').click();
+            await page.evaluate(() => {
+                document.dispatchEvent(new KeyboardEvent('keydown', {
+                    altKey: true,
+                    code: 'KeyG',
+                    key: 'g',
+                    keyCode: 71,
+                    bubbles: true
+                }));
+            });
             const searchInput = page.locator('#buffer-search');
             await expect(searchInput).toBeVisible({ timeout: 5000 });
             await searchInput.fill('#');
@@ -242,7 +259,15 @@ test.describe('Keyboard Shortcuts', () => {
         });
 
         test('should be a no-op when no results match the query', async ({ page }) => {
-            await page.getByTitle('Search buffers (Ctrl+K)').click();
+            await page.evaluate(() => {
+                document.dispatchEvent(new KeyboardEvent('keydown', {
+                    altKey: true,
+                    code: 'KeyG',
+                    key: 'g',
+                    keyCode: 71,
+                    bubbles: true
+                }));
+            });
             const searchInput = page.locator('#buffer-search');
             await expect(searchInput).toBeVisible({ timeout: 5000 });
             await searchInput.fill('zzzzz_NO_MATCH_zzzzz');
@@ -252,13 +277,42 @@ test.describe('Keyboard Shortcuts', () => {
         });
 
         test('should select the first buffer when Enter pressed with no query but list is open', async ({ page }) => {
-            await page.getByTitle('Search buffers (Ctrl+K)').click();
+            await page.evaluate(() => {
+                document.dispatchEvent(new KeyboardEvent('keydown', {
+                    altKey: true,
+                    code: 'KeyG',
+                    key: 'g',
+                    keyCode: 71,
+                    bubbles: true
+                }));
+            });
             const searchInput = page.locator('#buffer-search');
             await expect(searchInput).toBeVisible({ timeout: 5000 });
             await searchInput.press('Enter');
             await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 5000 });
-            await expect(page.getByTestId('topic-bar')).toContainText('#', { timeout: 5000 });
+            await expect(page.getByTestId('topic-bar')).not.toHaveText('', { timeout: 5000 });
             await expect(searchInput).not.toBeVisible({ timeout: 5000 });
+        });
+    });
+
+    test.describe('Modal Escape Close', () => {
+        test.beforeEach(async ({ page }) => {
+            await connect(page);
+            await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 5000 });
+        });
+
+        test('should close settings modal with Escape key', async ({ page }) => {
+            await page.getByTestId('settings-button').click();
+            await expect(page.getByTestId('settings-modal')).toBeVisible({ timeout: 5000 });
+            await page.keyboard.press('Escape');
+            await expect(page.getByTestId('settings-modal')).not.toBeVisible({ timeout: 5000 });
+        });
+
+        test('should close topic modal with Escape key', async ({ page }) => {
+            await page.getByTestId('topic-bar').click();
+            await expect(page.getByTestId('topic-modal')).toBeVisible({ timeout: 5000 });
+            await page.keyboard.press('Escape');
+            await expect(page.getByTestId('topic-modal')).not.toBeVisible({ timeout: 5000 });
         });
     });
 

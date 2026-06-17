@@ -223,7 +223,8 @@ function getStyle(txt: string): StyleResult {
         },
         // Foreground color: F + optional attributes + STD or EXT
         {
-            regex: /^F(?:([*!\/_|]*)(\d{2})|@([\x01\x02\x03\x04*!\/_|]*)(\d{5}))/,
+            // eslint-disable-next-line no-control-regex -- WeeChat color format control chars
+            regex: /^F(?:([*!_|]*)(\d{2})|@([\x01\x02\x03\x04*!_|]*)(\d{5}))/,
             fn: (m) => {
                 let ret: StyleResult;
                 if (m[2]) {
@@ -246,7 +247,8 @@ function getStyle(txt: string): StyleResult {
         },
         // Foreground + background with optional attributes (WeeChat 2.6+ uses ~ or ,)
         {
-            regex: /^\*(?:([\x01\x02\x03\x04*!\/_|]*)(\d{2})|@([\x01\x02\x03\x04*!\/_|]*)(\d{5}))[,~](\d{2}|@\d{5})/,
+            // eslint-disable-next-line no-control-regex -- WeeChat color format control chars
+            regex: /^\*(?:([\x01\x02\x03\x04*!_|]*)(\d{2})|@([\x01\x02\x03\x04*!_|]*)(\d{5}))[,~](\d{2}|@\d{5})/,
             fn: (m) => {
                 let fgColor: ColorInfo;
                 let attrs: TextAttrs | null;
@@ -262,7 +264,8 @@ function getStyle(txt: string): StyleResult {
         },
         // Foreground color with * (+ attributes) - fallback, checked after previous case
         {
-            regex: /^\*([\x01\x02\x03\x04*!\/_|]*)(\d{2}|@\d{5})/,
+            // eslint-disable-next-line no-control-regex -- WeeChat color format control chars
+            regex: /^\*([\x01\x02\x03\x04*!_|]*)(\d{2}|@\d{5})/,
             fn: (m) => ({
                 fgColor: getColorObj(m[2]!),
                 bgColor: null,
@@ -310,11 +313,17 @@ function attrsFromStr(str: string): TextAttrs | null {
 
 export function convertIrcCodes(text: string): string {
     return text
+        // eslint-disable-next-line no-control-regex -- IRC format control chars
         .replace(/\x02/g, '\x1a*')      // bold → WeeChat set-bold
+        // eslint-disable-next-line no-control-regex -- IRC format control chars
         .replace(/\x1d/g, '\x1a/')      // italic → WeeChat set-italic
+        // eslint-disable-next-line no-control-regex -- IRC format control chars
         .replace(/\x1f/g, '\x1a_')      // underline → WeeChat set-underline
+        // eslint-disable-next-line no-control-regex -- IRC format control chars
         .replace(/\x16/g, '\x1a!')      // reverse → WeeChat set-reverse
+        // eslint-disable-next-line no-control-regex -- IRC format control chars
         .replace(/\x0f/g, '\x1c')       // reset all → WeeChat reset
+        // eslint-disable-next-line no-control-regex -- IRC color format control char
         .replace(/\x03(\d{1,2}(,\d{1,2})?)?/g, (match) => {
             if (match.length === 1) {
                 // bare \x03 with no digits → reset colors
@@ -336,6 +345,7 @@ export function rawText2Rich(rawText: string): RichPart[] {
     }
 
     const cleaned = convertIrcCodes(rawText);
+    // eslint-disable-next-line no-control-regex -- WeeChat rich format delimiters
     const parts = cleaned.split(/(\x19|\x1a|\x1b|\x1c)/);
 
     if (parts.length === 1) {
@@ -858,7 +868,7 @@ export class Protocol {
     }
 
     private _getInfolist(): Array<Array<Record<string, unknown>>> {
-        const name = this._getString();
+        this._getString(); // discard infolist name
         const count = this._getInt();
         const values: Array<Array<Record<string, unknown>>> = [];
 

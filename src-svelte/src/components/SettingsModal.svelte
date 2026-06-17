@@ -11,6 +11,8 @@
 
   let notifSupported = $derived(isNotificationSupported());
 
+  let notifPermissionStatus = $derived($settings.notificationPermission);
+
   function handleThemeChange(theme: string) {
     setTheme(theme as typeof $themeStore);
     updateSettings({ theme });
@@ -227,15 +229,28 @@
           </label>
 
           {#if notifSupported}
-            <button
-              type="button"
-              onclick={handleNotificationPermission}
-              data-testid="request-notification-permission-button"
-              class="px-3 py-1.5 bg-accent hover:bg-accent-hover text-white text-sm rounded transition-colors"
-            >
-              Request Notification Permission
-            </button>
-          {/if}
+             {#if notifPermissionStatus === 'granted'}
+               <div class="flex items-center gap-2 py-1">
+                 <span class="text-xs text-green-400 font-medium">✓ Granted</span>
+               </div>
+             {:else if notifPermissionStatus === 'denied'}
+               <div class="space-y-1">
+                 <div class="flex items-center gap-2 py-1">
+                   <span class="text-xs text-red-400 font-medium">✕ Denied</span>
+                 </div>
+                 <p class="text-xs text-text-secondary">Permission was denied. Please enable notifications in your browser settings.</p>
+               </div>
+             {:else}
+               <button
+                 type="button"
+                 onclick={handleNotificationPermission}
+                 data-testid="request-notification-permission-button"
+                 class="px-3 py-1.5 bg-accent hover:bg-accent-hover text-white text-sm rounded transition-colors"
+               >
+                 Request Notification Permission
+               </button>
+             {/if}
+           {/if}
         </div>
       </section>
 

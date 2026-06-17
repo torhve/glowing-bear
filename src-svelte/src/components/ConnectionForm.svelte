@@ -3,6 +3,7 @@
   import { connect } from '$lib/stores/connectionManager';
   import { connectionState, setConnectionStatus, setErrors, clearErrors } from '$lib/stores/connectionStore';
   import { settings, updateSettings } from '$lib/stores/settings';
+  import { addToast } from '$lib/toast';
 
   import { onMount } from 'svelte';
   import { parseRelayUrl } from '$lib/utils';
@@ -14,6 +15,11 @@
   import MessageCircle from '@lucide/svelte/icons/message-circle';
 import Eye from '@lucide/svelte/icons/eye';
 import EyeOff from '@lucide/svelte/icons/eye-off';
+import Lock from '@lucide/svelte/icons/lock';
+import Key from '@lucide/svelte/icons/key';
+ import Monitor from '@lucide/svelte/icons/monitor';
+  import List from '@lucide/svelte/icons/list';
+  import Save from '@lucide/svelte/icons/save';
 
   let hostField = $state('');
   let port = $state('9001');
@@ -45,6 +51,21 @@ import EyeOff from '@lucide/svelte/icons/eye-off';
     if ($connectionState.errors.passwordError) {
       shakePassword = true;
       setTimeout(() => { shakePassword = false; }, 500);
+    }
+  });
+
+  let notificationToastShown = $state(false);
+
+  $effect(() => {
+    if ($connectionState.status === 'connected' && !notificationToastShown && $settings.notificationPermission === 'default') {
+      notificationToastShown = true;
+      const s = get(settings);
+      if (s.notificationPermission === 'default') {
+        addToast('Open Settings > Notifications to enable desktop notifications', {
+          type: 'info',
+          duration: 8000,
+        });
+      }
     }
   });
 
@@ -137,43 +158,50 @@ import EyeOff from '@lucide/svelte/icons/eye-off';
       <div class="grid grid-cols-4 gap-2">
         <div class="col-span-3">
           <label for="host" class="block text-xs text-text-secondary mb-1">WeeChat relay hostname</label>
-           <input
-              id="host"
-              data-testid="host-input"
-              type="text"
-              bind:value={hostField}
-              oninput={() => { validateHost(); handleHostChange(); }}
-              onblur={validateHost}
-              placeholder="Address"
-              class="w-full px-3 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent"
-              class:border-danger={hostInvalid}
-              autocapitalize="off"
-            />
+           <div class="relative">
+             <Monitor size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
+             <input
+                id="host"
+                data-testid="host-input"
+                type="text"
+                bind:value={hostField}
+                oninput={() => { validateHost(); handleHostChange(); }}
+                onblur={validateHost}
+                placeholder="Address"
+                class="w-full pl-9 pr-3 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent"
+                class:border-danger={hostInvalid}
+                autocapitalize="off"
+              />
+            </div>
         </div>
         <div>
           <label for="port" class="block text-xs text-text-secondary mb-1">Port</label>
-            <input
-              id="port"
-              data-testid="port-input"
-              type="text"
-              bind:value={port}
-              oninput={handlePortChange}
-              placeholder="Port"
-            class="w-full px-3 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent"
-          />
+            <div class="relative">
+              <List size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
+              <input
+                id="port"
+                data-testid="port-input"
+                type="text"
+                bind:value={port}
+                oninput={handlePortChange}
+                placeholder="Port"
+              class="w-full pl-9 pr-3 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent"
+              />
+            </div>
         </div>
       </div>
 
       <div>
         <label for="password" class="block text-xs text-text-secondary mb-1">WeeChat relay password</label>
         <div class="relative">
+          <Key size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
           <input
             id="password"
             data-testid="password-input"
             type={showPassword ? 'text' : 'password'}
             bind:value={password}
             placeholder="Password"
-            class="w-full px-3 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent pr-10"
+            class="w-full pl-9 pr-10 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent"
             class:shake={shakePassword}
           />
           <button
@@ -191,44 +219,47 @@ import EyeOff from '@lucide/svelte/icons/eye-off';
         </div>
       </div>
 
-      <div class="flex items-center">
+      <div class="flex items-center gap-2">
         <input
           id="tls"
           data-testid="tls-checkbox"
           type="checkbox"
           bind:checked={tls}
           onchange={() => { toggleTLS(); }}
-          class="mr-2"
+          class="mr-1"
         />
+        <Lock size={16} class="text-text-secondary flex-shrink-0" />
         <label for="tls" class="text-sm text-text">
           Encryption. <strong class="text-white">Strongly recommended!</strong>
         </label>
       </div>
 
-      <div class="flex items-center">
+      <div class="flex items-center gap-2">
         <input
           id="savepassword"
           data-testid="savepassword-checkbox"
           type="checkbox"
           bind:checked={savepassword}
           onchange={() => updateSettings({ savepassword })}
-           class="mr-2"
+           class="mr-1"
          />
+        <Save size={16} class="text-text-secondary flex-shrink-0" />
         <label for="savepassword" class="text-sm text-text">
           Save password in your browser
         </label>
       </div>
 
       {#if savepassword}
-        <div class="flex items-center">
+        <div class="flex items-center gap-2">
           <input
             id="autoconnect"
             data-testid="autoconnect-checkbox"
             type="checkbox"
             bind:checked={autoconnect}
             onchange={() => updateSettings({ autoconnect })}
-            class="mr-2"
+            class="mr-1"
           />
+          <Zap size={16} class="text-text-secondary flex-shrink-0" />
           <label for="autoconnect" class="text-sm text-text">
             Automatically connect
           </label>
