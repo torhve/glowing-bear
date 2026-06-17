@@ -23,6 +23,7 @@ import EyeOff from '@lucide/svelte/icons/eye-off';
   let showPassword = $state(false);
   let savepassword = $state(false);
   let autoconnect = $state(false);
+  let shakePassword = $state(false);
 
   onMount(() => {
     const s = get(settings);
@@ -37,6 +38,13 @@ import EyeOff from '@lucide/svelte/icons/eye-off';
   $effect(() => {
     if (!hostField || hostField.trim() === '') {
       hostInvalid = false;
+    }
+  });
+
+  $effect(() => {
+    if ($connectionState.errors.passwordError) {
+      shakePassword = true;
+      setTimeout(() => { shakePassword = false; }, 500);
     }
   });
 
@@ -166,6 +174,7 @@ import EyeOff from '@lucide/svelte/icons/eye-off';
             bind:value={password}
             placeholder="Password"
             class="w-full px-3 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent pr-10"
+            class:shake={shakePassword}
           />
           <button
             type="button"
@@ -237,17 +246,17 @@ import EyeOff from '@lucide/svelte/icons/eye-off';
         </div>
       {/if}
       {#if $connectionState.errors.tlsError}
-        <div class="bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
+        <div data-testid="error-message" class="bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
           Secure connection error: Could not establish TLS connection
         </div>
       {/if}
       {#if $connectionState.errors.oldWeechatError}
-        <div class="bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
+        <div data-testid="error-message" class="bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
           WeeChat version error: WeeChat version must be 2.9 or later
         </div>
       {/if}
       {#if $connectionState.errors.hashAlgorithmDisagree}
-        <div class="bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
+        <div data-testid="error-message" class="bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
           Hash algorithm error: Please set relay.network.password_hash_algo to "pbkdf2+sha512" or "plain" in WeeChat
         </div>
       {/if}

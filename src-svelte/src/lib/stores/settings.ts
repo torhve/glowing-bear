@@ -17,7 +17,6 @@ export const settings = writable<Settings>({
     iAlb: '',
     onlyUnread: false,
     noembed: true,
-    hotlistsync: true,
     alwaysnicklist: false,
     orderbyserver: true,
     readlineBindings: false,

@@ -112,25 +112,25 @@
       {#each filteredBuffers as buffer, idx (buffer.id)}
         <button
           onclick={() => handleBufferClick(buffer)}
-          class="w-full px-3 py-2 text-left flex items-center justify-between rounded hover:bg-surface-raised transition-colors"
+          class="w-full px-3 py-3 text-left flex items-center justify-between rounded hover:bg-surface-raised transition-colors"
           class:bg-accent={idx === selectedIndex}
           data-search-index={idx}
         >
           <div class="flex-1 min-w-0">
-            <div class="text-sm text-text truncate">{buffer.shortName}</div>
-            <div class="text-xs text-text-muted truncate">{buffer.fullName}</div>
+            <div class="text-lg text-text truncate">{buffer.shortName}</div>
+            <div class="text-sm text-text-muted truncate">{buffer.fullName}</div>
           </div>
           {#if buffer.$jumpKey}
-            <span class="mr-2 px-1 py-0.5 text-[10px] font-bold rounded bg-purple-600 text-white">
+            <span class="mr-2 px-1.5 py-0.5 text-xs font-bold rounded bg-accent text-bg">
               {buffer.$jumpKey}
             </span>
           {/if}
           {#if buffer.notification >= 3}
-            <span class="px-1.5 py-0.5 text-xs font-bold text-white bg-danger rounded">
+            <span class="px-1.5 py-0.5 text-xs font-bold text-text bg-danger rounded">
               {buffer.unread + buffer.notification}
             </span>
           {:else if (buffer.unread + buffer.notification) > 0}
-            <span class="px-1.5 py-0.5 text-xs font-bold text-white bg-accent rounded">
+            <span class="px-1.5 py-0.5 text-xs font-bold text-text bg-accent rounded">
               {buffer.unread + buffer.notification}
             </span>
           {/if}

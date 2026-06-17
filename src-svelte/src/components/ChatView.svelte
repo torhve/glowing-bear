@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { BufferLine } from '$lib/types';
-  import { currentBuffer } from '$lib/stores/models';
+  import { currentBuffer, saveScrollPosition, getBuffer } from '$lib/stores/models';
   import { settings } from '$lib/stores/settings';
   import { fetchMoreLines } from '$lib/stores/connectionManager';
   import { buildMentionText, insertNickIntoInput, isFreeBuffer } from '$lib/utils';
@@ -57,13 +57,33 @@
     }
   }
 
+let prevBufferId = $state<string | null>(null);
   $effect(() => {
-    // Auto-scroll when new lines arrive on active buffer
-    // Skip if loading more lines or was scrolled up during fetch
-    if ($currentBuffer && !isLoadingMore && !wasScrolledUpDuringFetch && messages.length > 0 && containerRef) {
-      containerRef.scrollTop = containerRef.scrollHeight;
-      wasScrolledUpDuringFetch = false;
+    // Save scroll position when leaving a buffer
+    if (prevBufferId && containerRef) {
+      saveScrollPosition(prevBufferId, containerRef.scrollTop);
     }
+    // Auto-scroll when buffer changes or new lines arrive
+    // Skip if loading more lines or was scrolled up during fetch
+    if ($currentBuffer && !isLoadingMore && messages.length > 0 && containerRef) {
+      const readmarker = document.getElementById('readmarker');
+      requestAnimationFrame(() => {
+        if (!containerRef) return;
+        if (readmarker) {
+          // Buffer has unread messages — scroll to readmarker (AngularJS pattern)
+          const rm = document.getElementById('readmarker');
+          if (rm && rm.parentElement) {
+            containerRef.scrollTop = rm.offsetTop - rm.parentElement.scrollHeight + rm.scrollHeight;
+          }
+        } else {
+          // No readmarker — scroll to bottom (new messages on active buffer)
+          containerRef.scrollTop = containerRef.scrollHeight;
+        }
+        wasScrolledUpDuringFetch = false;
+      });
+    }
+    // Track which buffer we're on for next switch
+    prevBufferId = $currentBuffer?.id ?? null;
   });
 
   function handleMention(message: BufferLine) {
@@ -143,24 +163,45 @@
             </tr>
           {/if}
 
-          <!-- Message rows -->
-          {#each messages as message, i (i)}
-            <BufferLineRow
-              {message}
-              index={i}
-              {messages}
-              {noembed}
-              onMention={handleMention}
-            />
-          {/each}
-
-          <!-- Readmarker -->
-          {#if $currentBuffer.lastSeen >= 0 && $currentBuffer.lastSeen < messages.length}
+          <!-- Readmarker splits read/unread lines -->
+          {#if $currentBuffer.lastSeen >= 0 && $currentBuffer.lastSeen < messages.length - 1}
+            <!-- Read lines (up to and including lastSeen) -->
+            {#each messages.slice(0, $currentBuffer.lastSeen + 1) as message, i (i)}
+              <BufferLineRow
+                {message}
+                index={i}
+                {messages}
+                {noembed}
+                onMention={handleMention}
+              />
+            {/each}
+            <!-- Readmarker row between read and unread -->
             <tr class="readmarker" data-testid="readmarker">
               <td colspan="3">
                 <hr id="readmarker">
               </td>
             </tr>
+            <!-- Unread lines (after lastSeen) -->
+            {#each messages.slice($currentBuffer.lastSeen + 1) as message, i ($currentBuffer.lastSeen + 1 + i)}
+              <BufferLineRow
+                {message}
+                index={$currentBuffer.lastSeen + 1 + i}
+                {messages}
+                {noembed}
+                onMention={handleMention}
+              />
+            {/each}
+          {:else}
+            <!-- All lines visible (no readmarker needed) -->
+            {#each messages as message, i (i)}
+              <BufferLineRow
+                {message}
+                index={i}
+                {messages}
+                {noembed}
+                onMention={handleMention}
+              />
+            {/each}
           {/if}
         </tbody>
       </table>

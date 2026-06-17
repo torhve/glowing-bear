@@ -262,7 +262,7 @@ import Toast from '$components/Toast.svelte';
       return;
     }
 
-    // Alt+A -> switch to buffer with activity
+    // Alt+A -> switch to buffer with activity (prioritize notification, then unread)
     if (e.altKey && (code === 97 || code === 65) && !e.ctrlKey) {
       e.preventDefault();
       const allBuffs = get(buffers);
@@ -274,15 +274,25 @@ import Toast from '$components/Toast.svelte';
       let startIndex = sortedBuffs.findIndex((b: any) => b.id === currentId);
       /* eslint-enable @typescript-eslint/no-explicit-any */
       if (startIndex === -1) startIndex = 0;
+
+      // First pass: find first buffer with notification > 0 (highest priority / highlight)
       for (let i = 1; i < sortedBuffs.length; i++) {
         const idx = (startIndex + i) % sortedBuffs.length;
         const b = sortedBuffs[idx];
-        if (b && (b.unread > 0 || b.notification > 0)) {
+        if (b && b.notification > 0) {
           switchBuffer(b.id);
           return;
         }
       }
-      return;
+      // Second pass: find first buffer with unread > 0
+      for (let i = 1; i < sortedBuffs.length; i++) {
+        const idx = (startIndex + i) % sortedBuffs.length;
+        const b = sortedBuffs[idx];
+        if (b && b.unread > 0) {
+          switchBuffer(b.id);
+          return;
+        }
+      }
     }
 
     // Alt+Arrow up/down -> switch to adjacent buffer

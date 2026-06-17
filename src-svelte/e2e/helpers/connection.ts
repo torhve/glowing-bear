@@ -1,7 +1,10 @@
 import { Page, expect } from '@playwright/test';
 
 export async function clearSettings(page: Page) {
-  await page.evaluate(() => localStorage.removeItem('gb-settings'));
+  await page.evaluate(() => {
+    localStorage.removeItem('gb-settings');
+    localStorage.removeItem('gb-last-buffer');
+  });
 }
 
 export async function setSettings(page: Page, settings: Record<string, unknown>) {

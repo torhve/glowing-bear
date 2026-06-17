@@ -209,7 +209,6 @@ export interface Settings {
     iAlb: string;
     onlyUnread: boolean;
     noembed: boolean;
-    hotlistsync: boolean;
     alwaysnicklist: boolean;
     orderbyserver: boolean;
     readlineBindings: boolean;
