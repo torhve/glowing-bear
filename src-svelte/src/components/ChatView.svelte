@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { BufferLine } from '$lib/types';
-  import { currentBuffer, saveScrollPosition } from '$lib/stores/models';
+  import { currentBuffer, saveScrollPosition, activeBufferId } from '$lib/stores/models';
   import { settings } from '$lib/stores/settings';
   import { fetchMoreLines } from '$lib/stores/connectionManager';
   import { buildMentionText, insertNickIntoInput, isFreeBuffer } from '$lib/utils';
@@ -22,10 +22,21 @@
   let maxScrollValBeforeFetch = $state(0);
   let scrollHeightBeforeFetch = $state(0);
   let scrollTopBeforeFetch = $state(0);
+  // Tracks whether the chat is scrolled to the bottom (AngularJS bufferBottom equivalent).
+  // Used to avoid unnecessary scroll operations when already at bottom.
+  let isAtBottom = $state(true);
+  // Frame counter for debouncing rAF callbacks: only the latest callback per frame executes.
+  // Prevents race conditions when new messages arrive mid-rAF and trigger re-renders.
+  let scrollFrameId = 0;
+  let prevActiveBufferId = $state<string>('');
+  let prevLinesLength = $state(0);
 
   function handleScroll() {
     if (!containerRef) return;
     const { scrollTop, scrollHeight, clientHeight } = containerRef;
+
+    // Update isAtBottom tracking (AngularJS bufferBottom equivalent)
+    isAtBottom = scrollTop >= scrollHeight - clientHeight - 3;
 
     if (scrollTop < 50 && !isLoadingMore && $currentBuffer && !$currentBuffer.allLinesFetched) {
       isLoadingMore = true;
@@ -46,6 +57,7 @@
             // Preserve user's visual position using same formula as AngularJS version
             // Keeps the user at the same point in the buffer (not scrolled to bottom)
             containerRef.scrollTop = newMaxScrollVal - maxScrollValBeforeFetch;
+            isAtBottom = false;
           }
           isLoadingMore = false;
           wasScrolledUpDuringFetch = false;
@@ -57,33 +69,73 @@
     }
   }
 
-let prevBufferId = $state<string | null>(null);
   $effect(() => {
     // Save scroll position when leaving a buffer
-    if (prevBufferId && containerRef) {
-      saveScrollPosition(prevBufferId, containerRef.scrollTop);
+    if (prevActiveBufferId && containerRef) {
+      saveScrollPosition(prevActiveBufferId, containerRef.scrollTop);
     }
+  });
+
+  $effect(() => {
     // Auto-scroll when buffer changes or new lines arrive
     // Skip if loading more lines or was scrolled up during fetch
-    if ($currentBuffer && !isLoadingMore && messages.length > 0 && containerRef) {
-      const readmarker = document.getElementById('readmarker');
-      requestAnimationFrame(() => {
-        if (!containerRef) return;
-        if (readmarker) {
-          // Buffer has unread messages — scroll to readmarker (AngularJS pattern)
-          const rm = document.getElementById('readmarker');
-          if (rm && rm.parentElement) {
-            containerRef.scrollTop = rm.offsetTop - rm.parentElement.scrollHeight + rm.scrollHeight;
-          }
-        } else {
-          // No readmarker — scroll to bottom (new messages on active buffer)
-          containerRef.scrollTop = containerRef.scrollHeight;
-        }
-        wasScrolledUpDuringFetch = false;
-      });
+    if (!$currentBuffer || isLoadingMore || messages.length === 0 || !containerRef) {
+      prevActiveBufferId = get(activeBufferId);
+      prevLinesLength = messages.length;
+      return;
     }
-    // Track which buffer we're on for next switch
-    prevBufferId = $currentBuffer?.id ?? null;
+
+    const currentBufferId = get(activeBufferId);
+    const bufferChanged = prevActiveBufferId !== currentBufferId;
+    const linesAdded = messages.length > prevLinesLength;
+    const hasReadmarkerEl = document.getElementById('readmarker') !== null;
+
+    console.log(
+      '[ChatView] scroll effect — buffer:', $currentBuffer.shortName,
+      '| totalLines:', messages.length,
+      '| prevLinesLength:', prevLinesLength,
+      '| bufferChanged:', bufferChanged,
+      '| linesAdded:', linesAdded,
+      '| currentScrollTop:', containerRef.scrollTop,
+      '| scrollHeight:', containerRef.scrollHeight,
+      '| clientHeight:', containerRef.clientHeight,
+      '| isAtBottom:', isAtBottom,
+      '| hasReadmarker:', hasReadmarkerEl
+    );
+
+    // Increment frame counter — only the callback matching this ID will execute.
+    // If a new message arrives and triggers another effect before rAF fires,
+    // the older callback's frameId won't match and will be discarded.
+    const currentFrameId = ++scrollFrameId;
+
+    if ((bufferChanged || linesAdded) && !hasReadmarkerEl) {
+      requestAnimationFrame(() => {
+        if (currentFrameId !== scrollFrameId) return; // Stale callback discarded
+        if (!containerRef || !containerRef.isConnected) return;
+        containerRef.scrollTop = containerRef.scrollHeight;
+        isAtBottom = containerRef.scrollTop >= containerRef.scrollHeight - 3;
+        console.log(
+          '[ChatView] scroll → bottom — set scrollTop to',
+          containerRef.scrollHeight,
+          '| verified actual:', containerRef.scrollTop
+        );
+      });
+    } else if (hasReadmarkerEl) {
+      // Buffer has unread messages — scroll to readmarker (AngularJS pattern)
+      const rm = document.getElementById('readmarker');
+      if (rm && rm.parentElement) {
+        const targetScrollTop = rm.offsetTop - rm.parentElement.scrollHeight + rm.scrollHeight;
+        requestAnimationFrame(() => {
+          if (currentFrameId !== scrollFrameId) return; // Stale callback discarded
+          if (!containerRef || !containerRef.isConnected) return;
+          containerRef.scrollTop = targetScrollTop;
+          console.log('[ChatView] scroll → readmarker — set scrollTop to', targetScrollTop);
+        });
+      }
+    }
+
+    prevActiveBufferId = currentBufferId;
+    prevLinesLength = messages.length;
   });
 
   function handleMention(message: BufferLine) {
