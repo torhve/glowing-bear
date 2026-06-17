@@ -304,8 +304,8 @@ function sendWs(data: string | ArrayBufferLike, label = '') {
 }
 
 // Handle incoming messages
-export function onMessage(data: ArrayBuffer) {
-    const message = protocolInstance.parse(data);
+export async function onMessage(data: ArrayBuffer) {
+    const message = await protocolInstance.parse(data);
 
     if (message.id && callbacks[message.id]) {
         callbacks[message.id].resolve(message);
