@@ -2,6 +2,7 @@
   import type { PluginMetadata } from '$lib/types';
   import { sanitizeHtml } from '$lib/filters';
   import { onMount } from 'svelte';
+  import { imageExts, videoExts, audioExts } from '$lib/utils/mediaExtensions';
 
   let { plugin }: { plugin: PluginMetadata } = $props();
 
@@ -103,19 +104,16 @@
   function processUrlContent(url: string) {
     if (!url || !embedRef) return;
 
-    const imageExts = /\.(bmp|gif|ico|jpe?g|png|svg|webp|avif)(\?[^#]*)?(#.*)?$/i;
     if (imageExts.test(url)) {
       injectImage(url);
       return;
     }
 
-    const videoExts = /\.(3gp|avi|flv|gifv|mkv|mp4|ogv|webm|wmv)(\?[^#]*)?(#.*)?$/i;
     if (videoExts.test(url)) {
       injectVideo(url);
       return;
     }
 
-    const audioExts = /\.(flac|m4a|mid|MID|midi|mp3|oga|ogg|opus|spx|wav|wma)(\?[^#]*)?(#.*)?$/i;
     if (audioExts.test(url)) {
       injectAudio(url);
       return;

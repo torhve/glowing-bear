@@ -8,6 +8,7 @@
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import Minus from '@lucide/svelte/icons/minus';
   import { detectPrefixIcon, type PrefixIconType } from '$lib/utils/prefixIcons';
+  import { imageExts, videoExts, audioExts, normalizeImageUrl } from '$lib/utils/mediaExtensions';
 
   let {
     message,
@@ -37,34 +38,6 @@
   let metadata = $derived(buildMetadata());
 
   const urlRegex = /(?:(?:https?|ftp):\/\/|www\.|ftp\.)\S*[^\s.;,(){}<>[\]]/gi;
-  const imageExts = /\.(bmp|gif|ico|jpe?g|png|svg|svgz|tif|tiff|webp|avif)(\?[^#]*)?(#.*)?$/i;
-  const videoExts = /\.(3gp|avi|flv|gifv|mkv|mp4|ogv|webm|wmv)(\?[^#]*)?(#.*)?$/i;
-  const audioExts = /\.(flac|m4a|mid|MID|midi|mp3|oga|ogg|opus|spx|wav|wma)(\?[^#]*)?(#.*)?$/i;
-
-  function normalizeImageUrl(url: string): string {
-    if (/^https:\/\/www\.dropbox\.com\/s\/[a-z0-9]+\//i.test(url)) {
-      const dbox_url = document.createElement("a");
-      dbox_url.href = url;
-      const base_url = dbox_url.protocol + '//' + dbox_url.host + dbox_url.pathname + '?';
-      const dbox_params = (dbox_url.search || '').substring(1).split('&');
-      let dl_added = false;
-      for (let i = 0; i < dbox_params.length; i++) {
-        const param = dbox_params[i];
-        if (param?.split('=')[0] === "dl") {
-          dbox_params[i] = "dl=1";
-          dl_added = true;
-        }
-      }
-      if (!dl_added) {
-        dbox_params.push("dl=1");
-      }
-      return base_url + dbox_params.join('&');
-    }
-    if (/^http:\/\/(i\.)?imgur\.com\//i.test(url)) {
-      return url.replace(/^http:/, "https:");
-    }
-    return url;
-  }
 
   function buildMetadata(): PluginMetadata[] {
     if (!message.text) {
