@@ -154,7 +154,10 @@ import Key from '@lucide/svelte/icons/key';
       <p class="text-sm text-text-secondary mt-1">WeeChat web frontend</p>
     </div>
 
-    <div class="bg-surface rounded-lg p-6 space-y-4 border border-border">
+    <form
+      onsubmit={(e) => { e.preventDefault(); handleConnect(); }}
+      class="bg-surface rounded-lg p-6 space-y-4 border border-border"
+    >
       <div class="grid grid-cols-4 gap-2">
         <div class="col-span-3">
           <label for="host" class="block text-xs text-text-secondary mb-1">WeeChat relay hostname</label>
@@ -298,7 +301,7 @@ import Key from '@lucide/svelte/icons/key';
 
       <button
         data-testid="connect-button"
-        onclick={() => { console.log('BUTTON CLICKED'); handleConnect(); }}
+        type="submit"
         disabled={$connectionState.status === 'connecting' || hostInvalid}
         class="w-full px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded transition-colors"
       >
@@ -310,7 +313,7 @@ import Key from '@lucide/svelte/icons/key';
           Connect
         {/if}
       </button>
-    </div>
+    </form>
 
 <div class="space-y-2">
       <details class="bg-surface rounded border border-border">

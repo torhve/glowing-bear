@@ -58,35 +58,27 @@ export interface ParsedMessage {
 
 // --- Decompression ---
 
+import { Unzlib } from 'fflate';
 const utf8Decoder = new TextDecoder('utf-8');
 
 async function decompressZlib(raw: Uint8Array): Promise<Uint8Array> {
-    try {
-        const ds = new DecompressionStream('deflate');
-        const writer = ds.writable.getWriter();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- BufferSource type varies between Node and browser Uint8Array types
-        await (writer.write as (data: Uint8Array) => Promise<void>)(raw);
-        await writer.close();
-        const reader = ds.readable.getReader();
-        const chunks: Uint8Array[] = [];
-        let totalLength = 0;
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            chunks.push(value);
-            totalLength += value.length;
-        }
-        const result = new Uint8Array(totalLength);
-        let offset = 0;
-        for (const chunk of chunks) {
-            result.set(chunk, offset);
-            offset += chunk.length;
-        }
-        return result;
-    } catch (e) {
-        console.error('zlib decompression failed:', e);
-        throw e;
-    }
+    return new Promise((resolve, _reject) => {
+        let result: Uint8Array | undefined;
+        const inflator = new Unzlib((data, final) => {
+            if (result) {
+                const combined = new Uint8Array(result.length + data.length);
+                combined.set(result);
+                combined.set(data, result.length);
+                result = combined;
+            } else {
+                result = data;
+            }
+            if (final) {
+                resolve(result!);
+            }
+        });
+        inflator.push(raw, true);
+    });
 }
 
 // --- Static color/attribute parsing ---
@@ -936,9 +928,8 @@ export class Protocol {
         const header = this.getHeader();
 
         if (header.compression) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw bytes from offset 5 for decompression
-            const raw = new Uint8Array(data, 5) as any;
-            this.setData(await decompressZlib(raw));
+            const decompressed = await decompressZlib(new Uint8Array(data, 5));
+            this.setData(decompressed);
         }
 
         const id = this.getId();
