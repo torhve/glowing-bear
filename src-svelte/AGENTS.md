@@ -11,7 +11,7 @@ Glowing Bear is a browser-based frontend for WeeChat IRC via WebSockets — **no
 | Styling | Tailwind CSS v4 (via `@tailwindcss/vite`) |
 | Build | Vite 6 |
 | Testing | Vitest 2.x (unit) + Playwright 1.60.x (E2E) |
-| Protocol | `weechat.js` + `websockets.js` (from AngularJS) |
+| Protocol | `src/lib/weechat.js` |
 | Desktop | Tauri 2.x (Rust) in `../../src-tauri/` |
 | Libraries | fflate, DOMPurify, linkifyjs, favico.js, linkify-string, zlibjs |
 
@@ -115,9 +115,6 @@ Control API CLI: `test/irc-server/ctrl.sh` to send IRC commands (gbtest must be 
 
 ## Code Style (CRITICAL)
 
-### Protocol Methods
-Static: `Protocol.formatHandshake()`, `Protocol.formatInit()`. Instance: `protocolInstance.setId()`, `protocolInstance.parse()` — use `new Protocol()` for instance methods. **Never call `Protocol.setId()`**.
-
 ### Svelte 5 Runes
 - **Never use `$:`** — compiles to `$effect.pre`, causes `$effect_orphan` errors during event handlers
 - Use `$state`, `$derived`, `$effect`, and `$props()` (NOT `export let`)
@@ -127,17 +124,7 @@ Static: `Protocol.formatHandshake()`, `Protocol.formatInit()`. Instance: `protoc
 Immutable updates only — never mutate store objects in-place. Spread copies: `buffers.set({ ...get(buffers) })`. Read via `get(store)`, mutate the copy, then `store.set(copy)`.
 
 ### Function Comments
-Every new function needs a brief comment above it explaining *why* (one line, directly above declaration). Skip trivial getters/setters where intent is self-evident.
+Every non-trivial function needs a brief comment above it explaining the intent of the code.
 
 ### Security — DOMPurify & XSS
 Always use `sanitizeHtml()` from `$lib/filters` for HTML injection. Default mode forbids script, iframe, object, embed, form, input, img. Use `allowEmbeds: true` only for trusted plugin embed content. For message content/topics, prefer `tokenizeLinks()` + Svelte native escaping over `{@html}` + sanitize.
-
-### TypeScript
-- `@typescript-eslint/no-explicit-any` eslint-disable comments used for protocol types — keep them with justification comment above each
-- `var` prohibited — use `let` or `const` exclusively
-
-### Other
-- `fflate` injected as global in `vite.config.ts` (required by `weechat.js`)
-- SPA routing: `adapter-static` with `fallback: '404.html'`
-- DRY: use `sortBuffers()`, `parseRelayUrl()`, `<LinkifiedText />` instead of duplicating logic
-- `recordBuffer` is from `bufferResume.ts`, NOT `models.ts`
