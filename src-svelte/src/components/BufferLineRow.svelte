@@ -301,7 +301,6 @@
   }
 
   .message {
-    width: 100%;
     padding: 1px 2px 0 2px;
     vertical-align: top;
     white-space: preserve-breaks;

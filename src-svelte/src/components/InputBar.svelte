@@ -482,7 +482,7 @@
   });
 </script>
 
-<div data-testid="input-bar" class="bg-surface-raised border-t border-border p-2">
+<div data-testid="input-bar" class="bg-surface-raised border-t border-border p-2" style="padding-bottom: env(safe-area-inset-bottom, 0px);">
   <div class="flex items-center space-x-2">
 
     <input

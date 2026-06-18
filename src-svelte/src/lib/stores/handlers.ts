@@ -15,7 +15,9 @@ import {
     parseRichText,
     removeBuffer,
     pendingBufferSwitch,
-    getLastLineCount
+    getLastLineCount,
+    setSyncing,
+    isSyncing
 } from '$lib/stores/models';
 import { shouldResume } from '$lib/stores/bufferResume';
 import { createHighlight, playNotificationSound, updateTitle, updateFavico } from '$lib/notifications';
@@ -63,6 +65,11 @@ export function handleBufferInfo(message: ProtocolMessage) {
     }
 
     const currentBuffers = get(buffers);
+
+     // Mark that we're in initial sync phase — hotlist has arrived with unread
+    // counts but lines haven't been synced yet. During sync, don't increment
+    // lastSeen per-line; instead calculate it once after sync completes.
+    setSyncing(true);
 
     for (const bufferMsg of bufferInfos) {
         const bufferId = bufferMsg.pointers[0];
@@ -232,21 +239,33 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                 injectDateChangeMessageIfNeeded(buffer, false, oldDate, newDate);
             }
 
-            buffer.lines = [...buffer.lines, line];
+              buffer.lines = [...buffer.lines, line];
 
-            // Keep read marker position relative to buffer content
-            // When new lines arrive, increment lastSeen so marker stays in same visual position
-            if (buffer.lastSeen >= 0) {
-                buffer.lastSeen++;
-            }
+            // During initial sync, don't increment lastSeen per-line.
+            // Instead, calculate it once after sync completes using the
+            // unread count from the hotlist that arrived before sync.
+            if (isSyncing()) {
+                // Check if we've received enough lines to cover all unread.
+                // unreadSum = message unread + private + highlights.
+                // unread is index 1, notification is indices 2+3 combined.
+                const unreadSum = buffer.unread + buffer.notification;
+                if (buffer.lines.length > unreadSum && buffer.lastSeen < 0) {
+                    buffer.lastSeen = buffer.lines.length - unreadSum - 1;
+                    setSyncing(false);
+                }
+            } else {
+                // After sync: increment lastSeen so readmarker stays in place.
+                if (buffer.lastSeen >= 0) {
+                    buffer.lastSeen++;
+                }
 
-            // Increment unread count for messages with notify_level=1 (message level only)
-            // Skip if we're actively viewing this buffer and window is focused
-            if (lineMsg.notify_level === 1 && !(buffer.id === activeId && isWindowFocused)) {
-                buffer.unread++;
-                const serverKey = `${buffer.plugin}.${buffer.server}`;
-                const server = get(servers)[serverKey];
-                if (server) server.unread++;
+                // Increment unread for real-time messages in non-active buffers
+                if (!(buffer.id === activeId && isWindowFocused)) {
+                    buffer.unread++;
+                    const serverKey = `${buffer.plugin}.${buffer.server}`;
+                    const server = get(servers)[serverKey];
+                    if (server) server.unread++;
+                }
             }
 
             // Trigger notification subsystem for highlights/privates with notify_level >= 2
@@ -500,7 +519,7 @@ export function handleHotlistChanged(message: ProtocolMessage) {
         const srv = currentServers[key];
         if (srv) srv.unread = 0;
     }
-    // Apply hotlist entries from WeeChat
+    // Apply hotlist entries from WeeChat — mirror original AngularJS behavior
     if (hotlistPointers) {
         const pointers = Array.isArray(hotlistPointers) ? hotlistPointers : [hotlistPointers];
         for (const bufferId of pointers) {
@@ -512,15 +531,9 @@ export function handleHotlistChanged(message: ProtocolMessage) {
                 const counts = (entry.content as any[])[0]?.count || [0, 0, 0, 0];
                 buffer.unread = counts[1] || 0;
                 buffer.notification = (counts[2] || 0) + (counts[3] || 0);
-                // Calculate last read line position using saved line count from when we left the buffer.
-                // This is more accurate than buffer.lines.length which may have grown since WeeChat computed the hotlist.
                 const unreadSum = counts.reduce((sum: number, n: number) => sum + n, 0);
-                const savedLines = getLastLineCount(bufferId);
-                if (savedLines !== undefined && savedLines > unreadSum) {
-                    buffer.lastSeen = Math.max(0, savedLines - 1 - unreadSum);
-                }
+                buffer.lastSeen = buffer.lines.length - 1 - unreadSum;
             } else {
-                // Buffer in hotlist pointers but no entry — clear unread/lastSeen
                 buffer.unread = 0;
                 buffer.notification = 0;
             }
@@ -543,13 +556,15 @@ export function handleHotlistInfo(message: ProtocolMessage) {
         const buffer = currentBuffers[entry.buffer];
         if (!buffer || buffer.active) continue;
 
+        // Store unread count from WeeChat hotlist.
+        // During initial sync (buffer has no lines), defer lastSeen calculation
+        // until after sync completes, when we know the total line count.
         buffer.unread = entry.count[1] || 0;
         buffer.notification = (entry.count[2] || 0) + (entry.count[3] || 0);
-        const unreadSum = entry.count.reduce((sum: number, n: number) => sum + n, 0);
-        const savedLines = getLastLineCount(entry.buffer);
-        if (savedLines !== undefined && savedLines > unreadSum) {
-            buffer.lastSeen = Math.max(0, savedLines - 1 - unreadSum);
-        } else {
+        // Only calculate lastSeen if buffer already has lines (post-sync).
+        // During initial sync, buffer.lines.length === 0 so this would be wrong.
+        if (buffer.lines.length > 0) {
+            const unreadSum = entry.count.reduce((sum: number, n: number) => sum + n, 0);
             buffer.lastSeen = buffer.lines.length - 1 - unreadSum;
         }
 

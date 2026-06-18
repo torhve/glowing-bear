@@ -259,6 +259,44 @@ export const bufferScrollPositions = writable<Record<string, number>>({});
 // Tracks buffer line count at last visit (for accurate lastSeen calculation)
 export const bufferLineCounts = writable<Record<string, number>>({});
 
+// Tracks which buffers have local-only unread messages (not reported by WeeChat).
+// Used by handleHotlistChanged to avoid overwriting correct lastSeen with stale WeeChat data.
+export const localUnreadBuffers = writable<Set<string>>(new Set());
+
+// Track whether we're in the initial post-connect sync phase.
+// During this phase, lastSeen is not updated per-line — it's calculated
+// after sync completes using: lastSeen = lines.length - unread - 1.
+let syncing = false;
+let syncEndTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function setSyncing(value: boolean) {
+    if (value) {
+        syncing = true;
+        if (syncEndTimer) clearTimeout(syncEndTimer);
+    } else {
+        // Schedule exit from sync mode after a quiet period.
+        // This allows rapid-fire sync lines to keep us in sync mode.
+        syncEndTimer = setTimeout(() => {
+            syncing = false;
+            const cb = onSyncExit;
+            onSyncExit = null;
+            syncEndTimer = null;
+            if (cb) cb();
+        }, 200);
+    }
+}
+
+export function isSyncing(): boolean {
+    return syncing;
+}
+
+// Called when sync mode exits — recalculates lastSeen for buffers
+// that have unread messages but haven't had lastSeen calculated yet.
+let onSyncExit: (() => void) | null = null;
+export function registerSyncExitCallback(cb: () => void) {
+    onSyncExit = cb;
+}
+
 export function saveScrollPosition(bufferId: string, scrollTop: number) {
     bufferScrollPositions.update(pos => ({ ...pos, [bufferId]: scrollTop }));
 }
@@ -317,11 +355,15 @@ export function setActiveBuffer(bufferId: string): boolean {
         previousBufferId.set(prevId);
     }
 
-    // Calculate lastSeen for the incoming buffer.
-    // Only set when uninitialized (-1) and we have unread data from relay
-    // (handles cases where hotlist_changed event doesn't arrive).
-    if (buffer.lastSeen < 0 && buffer.unread > 0 && buffer.lines.length > 0) {
-        buffer.lastSeen = Math.max(0, buffer.lines.length - buffer.unread - 1);
+    // Save local unread count before clearing (tracks ALL messages while non-active,
+    // not just notify_level=1 — needed when WeeChat already displayed the message).
+    const localUnread = buffer.unread;
+
+    // Calculate lastSeen for the incoming buffer using our local unread count.
+    // This is more accurate than WeeChat hotlist because WeeChat may have already
+    // displayed the message (e.g., gbbot sends via /msg in WeeChat itself).
+    if (localUnread > 0 && buffer.lines.length > 0) {
+        buffer.lastSeen = Math.max(0, buffer.lines.length - localUnread - 1);
     }
 
     buffer.active = true;

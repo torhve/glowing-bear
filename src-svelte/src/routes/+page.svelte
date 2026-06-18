@@ -532,7 +532,7 @@
 {#if !$connected}
   <ConnectionForm />
 {:else}
-  <div class="h-screen flex flex-col bg-bg" data-testid="chat-view">
+  <div class="h-dvh flex flex-col bg-bg" data-testid="chat-view">
     <TopBar onBufferSelect={hideBufferListOnMobile} onSearchOpen={showBufferListOnMobile} />
     <div class="flex-1 flex overflow-hidden">
       {#if showBufferList || !isMobile()}

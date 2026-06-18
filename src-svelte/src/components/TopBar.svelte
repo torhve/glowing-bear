@@ -27,7 +27,7 @@
   let showNicklist = $derived($settings.showNicklist);
 </script>
 
-<div data-testid="top-bar">
+<div data-testid="top-bar" style="padding-top: env(safe-area-inset-top, 0px);">
   <div class="h-10 bg-surface-raised border-b border-border flex items-center px-2 space-x-2">
     <div class="flex items-center space-x-2 flex-1">
       <div class="flex items-center space-x-2">

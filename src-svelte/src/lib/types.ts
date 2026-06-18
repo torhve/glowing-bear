@@ -190,6 +190,8 @@ export interface ConnectionError {
     hashAlgorithmDisagree: boolean;
     errorMessage: boolean;
     uploadError: boolean;
+    hmrReloadError: boolean;
+    serverUnreachable: boolean;
 }
 
 // ---- Settings ----
