@@ -92,7 +92,7 @@ test.describe('Features', () => {
     test('should have proper page structure', async ({ page }) => {
         await expect(page.locator('div.min-h-screen')).toBeVisible();
         await expect(page.locator('div.w-full.max-w-lg')).toBeVisible();
-        await expect(page.locator('div.bg-surface')).toBeVisible();
+        await expect(page.locator('form.bg-surface')).toBeVisible();
     });
 
     test('should persist inputs after reload', async ({ page }) => {

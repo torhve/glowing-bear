@@ -1,7 +1,9 @@
 import { execSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Resvg } from '@resvg/resvg-js';
+import sharp from 'sharp';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const svgInput = resolve(__dirname, 'glowing-bear.svg');
@@ -11,45 +13,61 @@ if (!existsSync(svgInput)) {
     process.exit(1);
 }
 
-// Icon sizes: [output filename, width, height]
+const svgBuffer = readFileSync(svgInput);
+
 const icons = [
-    ['favicon.png', 32, 32],
-    ['apple-touch-icon.png', 180, 180],
-    ['glowing-bear.png', 256, 256],
-    ['glowing_bear_60x60.png', 60, 60],
-    ['glowing_bear_90x90.png', 90, 90],
-    ['glowing_bear_128x128.png', 128, 128],
-    ['glowing_bear_192x192.png', 192, 192],
-    ['glowing_bear_512x512.png', 512, 512],
+    ['favicon.png', 32],
+    ['apple-touch-icon.png', 180],
+    ['glowing-bear.png', 256],
+    ['glowing_bear_60x60.png', 60],
+    ['glowing_bear_90x90.png', 90],
+    ['glowing_bear_128x128.png', 128],
+    ['glowing_bear_192x192.png', 192],
+    ['glowing_bear_512x512.png', 512],
+    ['glowing_bear_1024x1024.png', 1024],
 ];
 
-console.log(`Generating icons from ${svgInput}...`);
+console.log('Generating icons from ' + svgInput + '...');
 
-for (const [filename, w, h] of icons) {
+for (const [filename, size] of icons) {
     const output = resolve(__dirname, filename);
     try {
-        execSync(`magick convert -background none -resize ${w}x${h}! "${svgInput}" "${output}"`, {
-            stdio: ['inherit', 'inherit', 'ignore']
+        const resvg = new Resvg(svgBuffer, {
+            fitTo: { mode: 'width', value: size },
         });
-        console.log(`  ✓ ${filename} (${w}x${h})`);
+        const pngBuffer = resvg.render().asPng();
+
+        const squared = await sharp(pngBuffer)
+            .resize(size, size, {
+                fit: 'contain',
+                background: { r: 0, g: 0, b: 0, alpha: 0 },
+            })
+            .png()
+            .toBuffer();
+
+        writeFileSync(output, squared);
+        const fileSize = statSync(output).size;
+        console.log('  OK ' + filename + ' (' + size + 'x' + size + ') ' + (fileSize / 1024).toFixed(0) + ' KB');
     } catch (e) {
-        console.error(`  ✗ Failed to generate ${filename}`);
+        console.error('  FAIL ' + filename + ': ' + e.message);
         process.exit(1);
     }
 }
 
 // Generate .ico from 128x128 PNG
 try {
-    execSync(`magick convert "${resolve(__dirname, 'glowing_bear_128x128.png')}" "${resolve(__dirname, 'glowing_bear_128x128.ico')}"`, {
-        stdio: ['inherit', 'inherit', 'ignore']
-    });
-    console.log('  ✓ glowing_bear_128x128.ico');
+    execSync(
+        'magick convert "' + resolve(__dirname, 'glowing_bear_128x128.png') + '" -depth 8 "' + resolve(__dirname, 'glowing_bear_128x128.ico') + '"',
+        { stdio: ['inherit', 'inherit', 'ignore'] }
+    );
+    const icoSize = statSync(resolve(__dirname, 'glowing_bear_128x128.ico')).size;
+    console.log('  OK glowing_bear_128x128.ico ' + (icoSize / 1024).toFixed(0) + ' KB');
 } catch (e) {
-    console.error('  ✗ Failed to generate .ico file');
+    console.error('  FAIL .ico generation');
     process.exit(1);
 }
 
-// Regenerate webapp.manifest.json with corrected icon entries
+// Regenerate webapp.manifest.json
 const manifest = {
     lang: 'en-US',
     name: 'Glowing Bear',
@@ -62,9 +80,10 @@ const manifest = {
         { src: '/glowing_bear_128x128.png', sizes: '128x128', type: 'image/png' },
         { src: '/glowing_bear_192x192.png', sizes: '192x192', type: 'image/png' },
         { src: '/glowing_bear_512x512.png', sizes: '512x512', type: 'image/png' },
+        { src: '/glowing_bear_1024x1024.png', sizes: '1024x1024', type: 'image/png' },
     ],
     splash_screens: [
-        { src: '/glowing_bear_512x512.png', sizes: '512x512' }
+        { src: '/glowing_bear_512x512.png', sizes: '512x512' },
     ],
     scope: '/',
     start_url: '/',
@@ -77,11 +96,11 @@ const manifest = {
         { platform: 'web' },
         {
             platform: 'android',
-            location: 'https://play.google.com/store/apps/details?id=com.glowing_bear'
-        }
-    ]
+            location: 'https://play.google.com/store/apps/details?id=com.glowing_bear',
+        },
+    ],
 };
 
 writeFileSync(resolve(__dirname, 'webapp.manifest.json'), JSON.stringify(manifest, null, 4) + '\n');
-console.log('  ✓ webapp.manifest.json regenerated');
+console.log('  OK webapp.manifest.json regenerated');
 console.log('Done.');

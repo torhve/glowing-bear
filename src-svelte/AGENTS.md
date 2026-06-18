@@ -11,19 +11,19 @@ Glowing Bear is a browser-based frontend for WeeChat IRC via WebSockets — **no
 | Styling | Tailwind CSS v4 (via `@tailwindcss/vite`) |
 | Build | Vite 6 |
 | Testing | Vitest 2.x (unit) + Playwright 1.60.x (E2E) |
-| Protocol | `src/lib/weechat.js` |
+| Protocol | `weechat.ts` (migrated from AngularJS `weechat.js`), `weechat-rest.ts` (unused, planned for future) |
 | Desktop | Tauri 2.x (Rust) in `../../src-tauri/` |
-| Libraries | fflate, DOMPurify, linkifyjs, favico.js, linkify-string, zlibjs |
+| Libraries | fflate, DOMPurify, linkifyjs, linkify-string, zlibjs |
 
 ## Project Structure
 
 ```
 src-svelte/
 ├── src/
-│   ├── components/          # Svelte components (ChatView.svelte, PluginEmbed.svelte, InputBar.svelte, etc.)
+│   ├── components/          # Svelte components (15 total — ChatView, PluginEmbed, InputBar, BufferList, TopBar, Nicklist, SettingsModal, BaseDialog, ConnectionForm, LinkifiedText, FormInput, Toast, BufferSearchModal, TopicModal, BufferLineRow)
 │   ├── lib/                 # Shared code: types, utils, stores, notifications, filters
-│   │   └── stores/          # connectionManager, models, handlers, settings, theme, bufferResume
-│   └── routes/              # SvelteKit routes (+page.svelte, +layout.svelte, 404.html)
+│   │   └── stores/          # connectionManager, models, handlers, settings, theme, bufferResume, connectionStore, inputHistory, nickColors, themeColors
+│   └── routes/              # SvelteKit routes (+page.svelte, +layout.svelte, +layout.server.ts, 404.html, index.html)
 ├── public/css/themes/       # 12 theme CSS files
 ├── test/unit/               # Vitest unit tests
 ├── e2e/                     # Playwright E2E tests (specs/, helpers/, fixtures/)
@@ -32,7 +32,7 @@ src-svelte/
 └── package.json
 ```
 
-Key files: `weechat.js` (binary relay protocol parser/encoder), `websockets.js` (WS transport), `connectionManager.ts` (WS lifecycle, handshake, sync), `handlers.ts` (dispatches → models stores), `models.ts` (writable stores: buffers, currentBuffer, connected, hotlist, servers, wconfig), `settings.ts` (localStorage persistence), `theme.ts` (CSS variable injection), `notifications.ts` (desktop notifications, sound, favicon badge).
+Key files: `weechat.ts` (binary relay protocol parser/encoder, migrated from AngularJS), `weechat-rest.ts` (unused, planned for future), `connectionManager.ts` (WS lifecycle, handshake, sync), `handlers.ts` (dispatches → models stores), `models.ts` (writable stores: buffers, currentBuffer, connected, hotlist, servers, wconfig), `settings.ts` (localStorage persistence), `theme.ts` (CSS variable injection), `notifications.ts` (desktop notifications, sound, favicon badge), `faviconBadge.ts` (canvas-based favicon badge renderer), `linkTokens.ts` (link tokenization), `emojify.ts`, `imgur.ts`, `filters.ts`, `toast.ts`).
 
 ## Commands
 
@@ -128,3 +128,15 @@ Every non-trivial function needs a brief comment above it explaining the intent 
 
 ### Security — DOMPurify & XSS
 Always use `sanitizeHtml()` from `$lib/filters` for HTML injection. Default mode forbids script, iframe, object, embed, form, input, img. Use `allowEmbeds: true` only for trusted plugin embed content. For message content/topics, prefer `tokenizeLinks()` + Svelte native escaping over `{@html}` + sanitize.
+
+### TypeScript
+- `@typescript-eslint/no-explicit-any` eslint-disable comments used for protocol types — keep them with justification comment above each
+- `var` prohibited — use `let` or `const` exclusively
+
+### Other
+- `fflate` imported normally via ES module (`import { Unzlib } from 'fflate'`) — no global injection
+- `$lib` and `$components` aliases configured in both `vite.config.ts` and `svelte.config.js`
+- PWA support via `@vite-pwa/sveltekit` — service worker registered in `+layout.svelte`
+- SPA routing: `adapter-static` with `fallback: '404.html'`
+- DRY: use `sortBuffers()`, `parseRelayUrl()`, `<LinkifiedText />` instead of duplicating logic
+- `recordBuffer` is from `bufferResume.ts`, NOT `models.ts`

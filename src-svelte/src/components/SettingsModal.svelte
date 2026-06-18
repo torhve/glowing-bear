@@ -2,7 +2,8 @@
   import { settings, updateSettings } from '$lib/stores/settings';
   import { requestNotificationPermission, isNotificationSupported } from '$lib/notifications';
   import { themeStore, setTheme, themes } from '$lib/stores/theme';
-  import BaseDialog from '$components/BaseDialog.svelte';
+  import { weechatVersion } from '$lib/stores/models';
+import BaseDialog from '$components/BaseDialog.svelte';
   import Palette from '@lucide/svelte/icons/palette';
   import Monitor from '@lucide/svelte/icons/monitor';
   import Bell from '@lucide/svelte/icons/bell';
@@ -71,7 +72,7 @@
     <div class="px-6 py-4 border-b border-border flex items-center justify-between">
       <h2 id="settings-title" class="text-lg font-bold text-white">Settings</h2>
       <div class="flex items-center space-x-2">
-        <span class="text-xs text-text-muted">Glowing Bear version {appVersion}</span>
+        <span class="text-xs text-text-muted">Glowing Bear version {appVersion} · WeeChat {$weechatVersion.join('.')}</span>
         <button
           type="button"
           data-testid="settings-modal-close"

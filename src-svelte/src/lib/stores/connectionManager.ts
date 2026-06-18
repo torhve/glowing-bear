@@ -108,6 +108,7 @@ export async function connect(host: string, port: number, path: string, password
                 await fetchConfValue('weechat.look.buffer_time_format');
                 await fetchConfValue('weechat.completion.nick_completer');
                 await fetchConfValue('weechat.completion.nick_add_space');
+                await fetchConfValue('weechat.color.chat_nick_colors');
 
                 // TODO: Re-enable auto-apply nick colors when desired
                 // autoApplyNickColors();
@@ -264,15 +265,14 @@ function scheduleReconnect() {
     }, 3000);
 }
 
-function fetchConfValue(name: string) {
+async function fetchConfValue(name: string) {
     const msg = Protocol.formatInfolist({
         name: 'option',
         pointer: 0,
         args: name
     });
-    return sendAsync(msg).then(resp => {
-        handleConfValue(resp);
-    });
+    const resp = await sendAsync(msg);
+    handleConfValue(resp);
 }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- async callback pattern with complex WeeChat protocol response
@@ -401,38 +401,39 @@ export function disconnect() {
     }
 }
 
-export function requestNicklist(bufferId: string) {
+export async function requestNicklist(bufferId: string) {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         if (DEBUG_NICKLIST) console.log('[nicklist] requestNicklist skipped - WebSocket not open');
         return;
     }
     if (DEBUG_NICKLIST) console.log('[nicklist] requesting nicklist for buffer:', bufferId);
-    const msg = Protocol.formatNicklist({ buffer: '0x' + bufferId });
-    sendAsync(msg).then((response) => {
+    try {
+        const msg = Protocol.formatNicklist({ buffer: '0x' + bufferId });
+        const response = await sendAsync(msg);
         if (DEBUG_NICKLIST) console.log('[nicklist] received nicklist response, objects:', response?.objects?.length ?? 0);
         // Call handleNicklist directly since callback responses don't have event IDs
         const nicklist = response.objects[0]?.content;
         if (nicklist) {
             handleNicklist(response);
         }
-    }).catch((err) => {
+    } catch (err) {
         if (DEBUG_NICKLIST) console.error('[nicklist] request failed:', err);
-    });
+    }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- async fetch returns protocol response
-export function fetchMoreLines(numLines: number = 0): Promise<any> {
+export async function fetchMoreLines(numLines: number = 0): Promise<any> {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
-        return Promise.reject('WebSocket not open');
+        throw new Error('WebSocket not open');
     }
 
     const bufferId = get(activeBufferId);
     const buffer = getBuffer(bufferId);
-    if (!buffer) return Promise.reject('No active buffer');
+    if (!buffer) throw new Error('No active buffer');
 
     const bufferIdStr = '0x' + buffer.id;
     if (pendingFetchBuffers.has(bufferIdStr)) {
-        return Promise.resolve();
+        return;
     }
     pendingFetchBuffers.add(bufferIdStr);
 
@@ -448,32 +449,33 @@ export function fetchMoreLines(numLines: number = 0): Promise<any> {
     if (currentCallbackId > 1000) currentCallbackId = 0;
     const cbId = currentCallbackId;
 
-    return new Promise((resolve, reject) => {
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
-            delete callbacks[cbId];
-            return Promise.reject('WebSocket not open');
-        }
-
-        callbacks[cbId] = { resolve, reject };
-
-        // Double-check WS is still open right before sending (TOCTOU guard)
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
-            delete callbacks[cbId];
-            return Promise.reject('WebSocket not open');
-        }
-
-        const formattedMsg = protocolInstance.setId(cbId, msg);
-        sendWs(formattedMsg, 'fetch#' + cbId);
-
-        // Timeout after 30 seconds
-        setTimeout(() => {
-            if (callbacks[cbId]) {
+    let message: any;
+    try {
+        message = await new Promise((resolve, reject) => {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
                 delete callbacks[cbId];
-                reject(new Error('fetchMoreLines timeout'));
+                return reject(new Error('WebSocket not open'));
             }
-        }, 30000);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- protocol response type
-    }).then((message: any) => {
+
+            callbacks[cbId] = { resolve, reject };
+
+            // Double-check WS is still open right before sending (TOCTOU guard)
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                delete callbacks[cbId];
+                return reject(new Error('WebSocket not open'));
+            }
+
+            const formattedMsg = protocolInstance.setId(cbId, msg);
+            sendWs(formattedMsg, 'fetch#' + cbId);
+
+            // Timeout after 30 seconds
+            setTimeout(() => {
+                if (callbacks[cbId]) {
+                    delete callbacks[cbId];
+                    reject(new Error('fetchMoreLines timeout'));
+                }
+            }, 30000);
+        });
         // Process the fetched lines — clear old lines and refill (matching AngularJS flow)
         const oldLength = buffer.lines.length;
         buffer.lines = [];
@@ -486,15 +488,14 @@ export function fetchMoreLines(numLines: number = 0): Promise<any> {
         if (linesReceived < numLines && buffer) {
             buffer.allLinesFetched = true;
         }
-        return message;
-    }).catch((err) => {
+    } catch (err) {
         console.warn('[fetchMoreLines] fetch failed, marking allLinesFetched:', err);
         if (buffer) {
             buffer.allLinesFetched = true;
         }
-    }).finally(() => {
+    } finally {
         pendingFetchBuffers.delete(bufferIdStr);
-    });
+    }
 }
 
 // TODO: Re-enable when desired

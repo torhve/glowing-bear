@@ -1,12 +1,12 @@
 <script lang="ts">
-  type InputTypeValue = 'text' | 'password' | 'email' | 'number' | 'tel' | 'url' | 'search' | 'date' | 'time' | 'datetime-local' | 'month' | 'week' | 'color' | 'range' | 'file';
+  import type { HTMLInputTypeAttribute, KeyboardEventHandler, EventHandler } from 'svelte/elements';
 
-  let {
-    id,
-    value = '',
-    type = 'text',
-    placeholder = '',
-    extraClass = '',
+  let { 
+    id, 
+    value = '', 
+    type = 'text', 
+    placeholder = '', 
+    extraClass = '', 
     disabled = false,
     autocapitalize = 'off',
     onkeydown = undefined,
@@ -17,13 +17,13 @@
   } = $props<{
     id: string;
     value?: string | number | readonly string[];
-    type?: InputTypeValue;
+    type?: HTMLInputTypeAttribute;
     placeholder?: string;
     extraClass?: string;
     disabled?: boolean;
     autocapitalize?: string;
-    onkeydown?: (e: KeyboardEvent) => void;
-    oninput?: (e: Event) => void;
+    onkeydown?: KeyboardEventHandler<HTMLInputElement>;
+    oninput?: EventHandler<Event, HTMLInputElement>;
     size?: 'sm' | 'md' | 'lg';
     variant?: 'default' | 'search';
     'data-testid'?: string;

@@ -38,26 +38,29 @@
       isLoadingMore = true;
       maxScrollValBeforeFetch = scrollHeight - clientHeight;
 
-      fetchMoreLines().then(() => {
-        // Defer scroll adjustment to rAF so DOM has updated and we avoid
-        // race with $effect which runs synchronously on store changes.
-        // Set isLoadingMore=false AFTER scroll correction to prevent $effect
-        // from auto-scrolling before the position is restored (AngularJS pattern).
-        requestAnimationFrame(() => {
-          if (containerRef) {
-            const newScrollHeight = containerRef.scrollHeight;
-            const newMaxScrollVal = newScrollHeight - containerRef.clientHeight;
-            // Preserve user's visual position using same formula as AngularJS version
-            // Keeps the user at the same point in the buffer (not scrolled to bottom)
-            containerRef.scrollTop = newMaxScrollVal - maxScrollValBeforeFetch;
-            isAtBottom = false;
-          }
-          isLoadingMore = false;
-        });
-      }).catch(err => {
-        console.error('Failed to fetch more lines:', err);
-        isLoadingMore = false;
-      });
+      void (async () => {
+        try {
+          await fetchMoreLines();
+        } catch (err) {
+          console.error('Failed to fetch more lines:', err);
+        } finally {
+          // Defer scroll adjustment to rAF so DOM has updated and we avoid
+          // race with $effect which runs synchronously on store changes.
+          // Set isLoadingMore=false AFTER scroll correction to prevent $effect
+          // from auto-scrolling before the position is restored (AngularJS pattern).
+          requestAnimationFrame(() => {
+            if (containerRef) {
+              const newScrollHeight = containerRef.scrollHeight;
+              const newMaxScrollVal = newScrollHeight - containerRef.clientHeight;
+              // Preserve user's visual position using same formula as AngularJS version
+              // Keeps the user at the same point in the buffer (not scrolled to bottom)
+              containerRef.scrollTop = newMaxScrollVal - maxScrollValBeforeFetch;
+              isAtBottom = false;
+            }
+            isLoadingMore = false;
+          });
+        }
+      })();
     }
   }
 
@@ -150,12 +153,16 @@
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
-  function handleFetchMore() {
+  async function handleFetchMore() {
     if (isLoadingMore || $currentBuffer?.allLinesFetched) return;
     isLoadingMore = true;
-    fetchMoreLines().finally(() => {
+    try {
+      await fetchMoreLines();
+    } catch (err) {
+      console.warn('[fetchMoreLines] fetch failed:', err);
+    } finally {
       isLoadingMore = false;
-    });
+    }
   }
 </script>
 

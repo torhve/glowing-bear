@@ -54,57 +54,53 @@ function buildAuthHeader(algo: AuthAlgo, password: string, totp?: string): Recor
     };
 }
 
-function buildHashedAuthHeader(
+async function buildHashedAuthHeader(
     algo: Extract<AuthAlgo, 'sha256' | 'sha512'>,
     password: string,
     timestamp: number
 ): Promise<{ header: Record<string, string>; timestamp: number }> {
     const timestampStr = timestamp.toString();
     const data = timestampStr + password;
-    return crypto.subtle.digest(algo.toUpperCase(), new TextEncoder().encode(data))
-        .then((hashBuffer) => {
-            const hashHex = Array.from(new Uint8Array(hashBuffer))
-                .map(b => b.toString(16).padStart(2, '0'))
-                .join('');
-            const authValue = `hash:${algo}:${timestamp}:${hashHex}`;
-            return {
-                header: { Authorization: `Basic ${btoa(authValue)}` },
-                timestamp
-            };
-        });
+    const hashBuffer = await crypto.subtle.digest(algo.toUpperCase(), new TextEncoder().encode(data));
+    const hashHex = Array.from(new Uint8Array(hashBuffer))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+    const authValue = `hash:${algo}:${timestamp}:${hashHex}`;
+    return {
+        header: { Authorization: `Basic ${btoa(authValue)}` },
+        timestamp
+    };
 }
 
-function buildPbkdf2AuthHeader(
+async function buildPbkdf2AuthHeader(
     password: string,
     iterations: number,
     timestamp: number,
     hashName: 'SHA-256' | 'SHA-512' = 'SHA-256'
 ): Promise<{ header: Record<string, string>; timestamp: number }> {
-    return crypto.subtle.importKey(
+    const key = await crypto.subtle.importKey(
         'raw',
         new TextEncoder().encode(password),
         { name: 'PBKDF2' },
         false,
         ['deriveBits']
-    ).then((key) => {
-        const salt = new TextEncoder().encode(timestamp.toString());
-        const bits = hashName === 'SHA-512' ? 512 : 256;
-        return crypto.subtle.deriveBits(
-            { name: 'PBKDF2', salt, iterations, hash: hashName },
-            key,
-            bits
-        );
-    }).then((derivedBits) => {
-        const hashHex = Array.from(new Uint8Array(derivedBits))
-            .map(b => b.toString(16).padStart(2, '0'))
-            .join('');
-        const algoSuffix = hashName === 'SHA-512' ? 'pbkdf2+sha512' : 'pbkdf2+sha256';
-        const authValue = `hash:${algoSuffix}:${timestamp}:${iterations}:${hashHex}`;
-        return {
-            header: { Authorization: `Basic ${btoa(authValue)}` },
-            timestamp
-        };
-    });
+    );
+    const salt = new TextEncoder().encode(timestamp.toString());
+    const bits = hashName === 'SHA-512' ? 512 : 256;
+    const derivedBits = await crypto.subtle.deriveBits(
+        { name: 'PBKDF2', salt, iterations, hash: hashName },
+        key,
+        bits
+    );
+    const hashHex = Array.from(new Uint8Array(derivedBits))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+    const algoSuffix = hashName === 'SHA-512' ? 'pbkdf2+sha512' : 'pbkdf2+sha256';
+    const authValue = `hash:${algoSuffix}:${timestamp}:${iterations}:${hashHex}`;
+    return {
+        header: { Authorization: `Basic ${btoa(authValue)}` },
+        timestamp
+    };
 }
 
 export class WeeChatRest {
@@ -151,23 +147,24 @@ export class WeeChatRest {
         if (!response.ok) {
             throw new RestError(response, 'Failed to get version');
         }
-        return response.json() as Promise<VersionResponse>;
+        const data = await response.json();
+        return data as VersionResponse;
     }
 
-    private buildAuthHeaders(algo: AuthAlgo, password: string): Promise<Record<string, string>> {
+    private async buildAuthHeaders(algo: AuthAlgo, password: string): Promise<Record<string, string>> {
         if (algo === 'plain') {
-            return Promise.resolve(buildAuthHeader(algo, password, this._totp ?? undefined));
+            return buildAuthHeader(algo, password, this._totp ?? undefined);
         }
         if (algo === 'sha256' || algo === 'sha512') {
             const ts = Math.floor(Date.now() / 1000);
-            return buildHashedAuthHeader(algo, password, ts)
-                .then((result) => ({ ...result.header, ...(this._totp ? { 'X-WeeChat-TOTP': this._totp! } : {}) }));
+            const result = await buildHashedAuthHeader(algo, password, ts);
+            return { ...result.header, ...(this._totp ? { 'X-WeeChat-TOTP': this._totp! } : {}) };
         }
         const iterations = this._handshakeResult?.password_hash_iterations ?? 100000;
         const ts = Math.floor(Date.now() / 1000);
         const hashName = algo === 'pbkdf2+sha512' ? 'SHA-512' : 'SHA-256';
-        return buildPbkdf2AuthHeader(password, iterations, ts, hashName)
-            .then((result) => ({ ...result.header, ...(this._totp ? { 'X-WeeChat-TOTP': this._totp! } : {}) }));
+        const result = await buildPbkdf2AuthHeader(password, iterations, ts, hashName);
+        return { ...result.header, ...(this._totp ? { 'X-WeeChat-TOTP': this._totp! } : {}) };
     }
 
     async getBuffers(options?: BufferQueryOptions): Promise<RestBuffer[]> {
@@ -182,7 +179,8 @@ export class WeeChatRest {
         if (!response.ok) {
             throw new RestError(response, 'Failed to get buffers');
         }
-        return response.json() as Promise<RestBuffer[]>;
+        const data = await response.json();
+        return data as RestBuffer[];
     }
 
     async getBufferById(bufferId: number, options?: BufferQueryOptions): Promise<RestBuffer> {
@@ -197,7 +195,8 @@ export class WeeChatRest {
         if (!response.ok) {
             throw new RestError(response, `Failed to get buffer ${bufferId}`);
         }
-        return response.json() as Promise<RestBuffer>;
+        const data = await response.json();
+        return data as RestBuffer;
     }
 
     async getBufferByName(bufferName: string, options?: BufferQueryOptions): Promise<RestBuffer> {
@@ -212,7 +211,8 @@ export class WeeChatRest {
         if (!response.ok) {
             throw new RestError(response, `Failed to get buffer ${bufferName}`);
         }
-        return response.json() as Promise<RestBuffer>;
+        const data = await response.json();
+        return data as RestBuffer;
     }
 
     async getLines(bufferId: number, options?: LineQueryOptions): Promise<RestLine[]> {
@@ -225,7 +225,8 @@ export class WeeChatRest {
         if (!response.ok) {
             throw new RestError(response, `Failed to get lines for buffer ${bufferId}`);
         }
-        return response.json() as Promise<RestLine[]>;
+        const data = await response.json();
+        return data as RestLine[];
     }
 
     async getLinesByBufferName(bufferName: string, options?: LineQueryOptions): Promise<RestLine[]> {
@@ -238,7 +239,8 @@ export class WeeChatRest {
         if (!response.ok) {
             throw new RestError(response, `Failed to get lines for buffer ${bufferName}`);
         }
-        return response.json() as Promise<RestLine[]>;
+        const data = await response.json();
+        return data as RestLine[];
     }
 
     async getSingleLine(bufferId: number, lineId: number): Promise<RestLine> {
@@ -246,7 +248,8 @@ export class WeeChatRest {
         if (!response.ok) {
             throw new RestError(response, `Failed to get line ${lineId} from buffer ${bufferId}`);
         }
-        return response.json() as Promise<RestLine>;
+        const data = await response.json();
+        return data as RestLine;
     }
 
     async getNicks(bufferId: number): Promise<RestNickGroupRoot> {
@@ -254,7 +257,8 @@ export class WeeChatRest {
         if (!response.ok) {
             throw new RestError(response, `Failed to get nicks for buffer ${bufferId}`);
         }
-        return response.json() as Promise<RestNickGroupRoot>;
+        const data = await response.json();
+        return data as RestNickGroupRoot;
     }
 
     async getNicksByName(bufferName: string): Promise<RestNickGroupRoot> {
@@ -262,7 +266,8 @@ export class WeeChatRest {
         if (!response.ok) {
             throw new RestError(response, `Failed to get nicks for buffer ${bufferName}`);
         }
-        return response.json() as Promise<RestNickGroupRoot>;
+        const data = await response.json();
+        return data as RestNickGroupRoot;
     }
 
     async getHotlist(): Promise<RestHotlistEntry[]> {
@@ -270,7 +275,8 @@ export class WeeChatRest {
         if (!response.ok) {
             throw new RestError(response, 'Failed to get hotlist');
         }
-        return response.json() as Promise<RestHotlistEntry[]>;
+        const data = await response.json();
+        return data as RestHotlistEntry[];
     }
 
     async sendInput(request: InputRequest): Promise<void> {
@@ -302,7 +308,8 @@ export class WeeChatRest {
         if (!response.ok) {
             throw new RestError(response, 'Failed to get completions');
         }
-        return response.json() as Promise<CompletionResponse>;
+        const data = await response.json();
+        return data as CompletionResponse;
     }
 
     async ping(request?: PingRequest): Promise<PingResponse> {
@@ -322,7 +329,8 @@ export class WeeChatRest {
         if (response.status === 204) {
             return { data: '' };
         }
-        return response.json() as Promise<PingResponse>;
+        const data = await response.json();
+        return data as PingResponse;
     }
 
     async getScripts(): Promise<RestScript[]> {
@@ -330,7 +338,8 @@ export class WeeChatRest {
         if (!response.ok) {
             throw new RestError(response, 'Failed to get scripts');
         }
-        return response.json() as Promise<RestScript[]>;
+        const data = await response.json();
+        return data as RestScript[];
     }
 
     async authenticate(algo: AuthAlgo, password: string): Promise<void> {
@@ -363,7 +372,8 @@ export class RestError extends Error {
 
     async getErrorResponse(): Promise<RestErrorResponse | null> {
         try {
-            return await this.response.json() as Promise<RestErrorResponse>;
+            const data = await this.response.json();
+            return data as RestErrorResponse;
         } catch {
             return null;
         }
