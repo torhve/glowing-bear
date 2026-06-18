@@ -8,6 +8,7 @@
   import { settings } from '$lib/stores/settings';
   import { insertNickIntoInput } from '$lib/utils';
   import { DEBUG_NICKLIST } from '$lib/debug';
+  import FormInput from './FormInput.svelte';
 
   let { onClose }: { onClose?: () => void } = $props();
   let searchQuery = $state('');
@@ -64,12 +65,15 @@
   <div class="px-2 py-1 border-b border-border">
     <div class="relative">
       <Search size={14} class="absolute left-2 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
-      <input
-        type="text"
-        bind:value={searchQuery}
+      <FormInput
+        value={searchQuery}
+        oninput={(e: Event) => { searchQuery = (e.target as HTMLInputElement).value; }}
+        id="nicklist-search"
         data-testid="nicklist-search"
         placeholder="Search nicks..."
-        class="w-full pl-7 pr-2 py-1 text-xs bg-input-bg border border-border rounded text-text placeholder-text-muted focus:outline-none focus:border-accent"
+        variant="search"
+        size="sm"
+        extraClass="pr-2"
       />
     </div>
   </div>

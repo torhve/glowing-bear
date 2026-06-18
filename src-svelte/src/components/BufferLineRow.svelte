@@ -214,8 +214,40 @@
   }
 
   @media (max-width: 640px) {
+    .bufferline {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+    }
+
+    .time, .prefix, .message {
+      display: inline-flex;
+      width: auto;
+      max-width: none;
+      padding: 0;
+      vertical-align: baseline;
+      border: none;
+    }
+
     .time {
-      padding: 0 1px 0 1px;
+      margin-right: 2px;
+    }
+
+    .prefix {
+      border-right: none;
+      white-space: normal;
+      text-align: left;
+      overflow: visible;
+      text-overflow: clip;
+      font-family: inherit;
+    }
+
+    .prefix .compact-prefix {
+      justify-content: flex-start;
+    }
+
+    .message {
+      padding-left: 2px;
     }
   }
 

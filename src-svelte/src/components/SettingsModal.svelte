@@ -11,6 +11,7 @@
   import X from '@lucide/svelte/icons/x';
   import Check from '@lucide/svelte/icons/check';
   import Undo2 from '@lucide/svelte/icons/undo-2';
+  import FormInput from '$components/FormInput.svelte';
 
   let notifSupported = $derived(isNotificationSupported());
 
@@ -116,16 +117,15 @@
           </div>
 
           <div>
-            <label for="font-size" class="block text-sm text-text-secondary mb-1">Font Size</label>
-            <input
-              id="font-size"
-              type="text"
-              value={$settings.fontsize}
-              oninput={(e) => updateSettings({ fontsize: e.currentTarget.value })}
-              placeholder="14px"
-              class="w-full px-3 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent"
-            />
-          </div>
+             <label for="font-size" class="block text-sm text-text-secondary mb-1">Font Size</label>
+             <FormInput
+               id="font-size"
+               type="text"
+               value={$settings.fontsize}
+               oninput={(e: Event) => updateSettings({ fontsize: (e.target as HTMLInputElement).value })}
+               placeholder="14px"
+             />
+           </div>
 
           <div>
             <label for="custom-css" class="block text-sm text-text-secondary mb-1">Custom CSS</label>
@@ -272,29 +272,27 @@
             />
           </label>
 
-          <div>
-            <label for="imgur-token" class="block text-sm text-text-secondary mb-1">Imgur API Token</label>
-            <input
-              id="imgur-token"
-              type="text"
-              value={$settings.iToken}
-              oninput={(e) => updateSettings({ iToken: e.currentTarget.value })}
-              placeholder="Your Imgur API token"
-              class="w-full px-3 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent"
-            />
-          </div>
+         <div>
+             <label for="imgur-token" class="block text-sm text-text-secondary mb-1">Imgur API Token</label>
+             <FormInput
+               id="imgur-token"
+               type="text"
+               value={$settings.iToken}
+               oninput={(e: Event) => updateSettings({ iToken: (e.target as HTMLInputElement).value })}
+               placeholder="Your Imgur API token"
+             />
+           </div>
 
-          <div>
-            <label for="imgur-album" class="block text-sm text-text-secondary mb-1">Imgur Album Hash</label>
-            <input
-              id="imgur-album"
-              type="text"
-              value={$settings.iAlb}
-              oninput={(e) => updateSettings({ iAlb: e.currentTarget.value })}
-              placeholder="Imgur album hash"
-              class="w-full px-3 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent"
-            />
-          </div>
+           <div>
+             <label for="imgur-album" class="block text-sm text-text-secondary mb-1">Imgur Album Hash</label>
+             <FormInput
+               id="imgur-album"
+               type="text"
+               value={$settings.iAlb}
+               oninput={(e: Event) => updateSettings({ iAlb: (e.target as HTMLInputElement).value })}
+               placeholder="Imgur album hash"
+             />
+           </div>
         </div>
       </section>
 

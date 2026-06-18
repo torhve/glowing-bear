@@ -20,6 +20,7 @@ import Key from '@lucide/svelte/icons/key';
  import Monitor from '@lucide/svelte/icons/monitor';
   import List from '@lucide/svelte/icons/list';
   import Save from '@lucide/svelte/icons/save';
+  import FormInput from './FormInput.svelte';
 
   let hostField = $state('');
   let port = $state('9001');
@@ -158,37 +159,35 @@ import Key from '@lucide/svelte/icons/key';
       onsubmit={(e) => { e.preventDefault(); handleConnect(); }}
       class="bg-surface rounded-lg p-6 space-y-4 border border-border"
     >
-      <div class="grid grid-cols-4 gap-2">
+<div class="grid grid-cols-4 gap-2">
         <div class="col-span-3">
           <label for="host" class="block text-xs text-text-secondary mb-1">WeeChat relay hostname</label>
-           <div class="relative">
-             <Monitor size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
-             <input
-                id="host"
-                data-testid="host-input"
-                type="text"
-                bind:value={hostField}
-                oninput={() => { validateHost(); handleHostChange(); }}
-                onblur={validateHost}
-                placeholder="Address"
-                class="w-full pl-9 pr-3 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent"
-                class:border-danger={hostInvalid}
-                autocapitalize="off"
-              />
-            </div>
+            <div class="relative">
+              <Monitor size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
+              <FormInput
+                 id="host"
+                 data-testid="host-input"
+                 type="text"
+                 value={hostField}
+                 oninput={(e: Event) => { hostField = (e.target as HTMLInputElement).value; validateHost(); handleHostChange(); }}
+                 placeholder="Address"
+                 extraClass={`pl-9 pr-3 ${hostInvalid ? 'border-danger' : ''}`}
+                 autocapitalize="off"
+               />
+             </div>
         </div>
        <div class="min-w-[5rem]">
           <label for="port" class="block text-xs text-text-secondary mb-1">Port</label>
             <div class="relative">
               <List size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
-              <input
+              <FormInput
                 id="port"
                 data-testid="port-input"
                 type="text"
-                bind:value={port}
-                oninput={handlePortChange}
+                value={port}
+                oninput={(e: Event) => { port = (e.target as HTMLInputElement).value; handlePortChange(); }}
                 placeholder="Port"
-               class="w-full pl-9 pr-3 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent"
+                extraClass="pl-9 pr-3"
               />
             </div>
         </div>
@@ -198,14 +197,14 @@ import Key from '@lucide/svelte/icons/key';
         <label for="password" class="block text-xs text-text-secondary mb-1">WeeChat relay password</label>
         <div class="relative">
           <Key size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
-          <input
+          <FormInput
             id="password"
             data-testid="password-input"
             type={showPassword ? 'text' : 'password'}
-            bind:value={password}
+            value={password}
+            oninput={(e: Event) => { password = (e.target as HTMLInputElement).value; }}
             placeholder="Password"
-            class="w-full pl-9 pr-10 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent"
-            class:shake={shakePassword}
+            extraClass={`pl-9 pr-10 ${shakePassword ? 'shake' : ''}`}
           />
           <button
             type="button"

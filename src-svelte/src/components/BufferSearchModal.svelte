@@ -4,13 +4,13 @@
   import { switchBuffer } from '$lib/stores/connectionManager';
   
   import BaseDialog from '$components/BaseDialog.svelte';
+  import FormInput from '$components/FormInput.svelte';
   import Search from '@lucide/svelte/icons/search';
   import X from '@lucide/svelte/icons/x';
 
   let { onBufferSelect = () => {} } = $props();
   let bufferSearchQuery = $state('');
   let selectedIndex = $state(0);
-  let searchInputRef = $state<HTMLInputElement>();
 
   let filteredBuffers = $derived(
     Object.values($buffers)
@@ -65,9 +65,10 @@
   }
 
   function handleToggle(event: ToggleEvent) {
-    if (event.newState === 'open' && searchInputRef) {
-      searchInputRef.focus();
-      searchInputRef.select();
+    if (event.newState === 'open') {
+      const input = document.getElementById('buffer-search') as HTMLInputElement;
+      input?.focus();
+      input?.select();
     }
   }
 
@@ -98,14 +99,15 @@
     <div class="px-4 py-2 border-b border-border">
       <div class="relative">
         <Search size={14} class="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
-        <input
+        <FormInput
           id="buffer-search"
-          bind:this={searchInputRef}
           type="text"
-          bind:value={bufferSearchQuery}
+          value={bufferSearchQuery}
+          oninput={(e: Event) => { bufferSearchQuery = (e.target as HTMLInputElement).value; }}
           onkeydown={handleKeyDown}
           placeholder="Search buffers..."
-          class="w-full pl-8 pr-2 py-1.5 text-sm bg-input-bg border border-border rounded text-text placeholder-text-muted focus:outline-none focus:border-accent"
+          variant="search"
+          extraClass="pr-2"
         />
       </div>
     </div>
