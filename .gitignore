@@ -6,3 +6,12 @@ build/
 
 # IntelliJ / WebStorm
 .idea/
+
+# Local dev artifacts
+.local/
+
+# Opencode workspace config
+.opencode/
+
+# Nested repo copy
+/glowing-bear/
