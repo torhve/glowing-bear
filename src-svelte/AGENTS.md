@@ -124,19 +124,15 @@ Control API CLI: `test/irc-server/ctrl.sh` to send IRC commands (gbtest must be 
 Immutable updates only — never mutate store objects in-place. Spread copies: `buffers.set({ ...get(buffers) })`. Read via `get(store)`, mutate the copy, then `store.set(copy)`.
 
 ### Function Comments
-Every non-trivial function needs a brief comment above it explaining the intent of the code.
+Every non-trivial function needs a brief comment above it explaining intent.
 
 ### Security — DOMPurify & XSS
 Always use `sanitizeHtml()` from `$lib/filters` for HTML injection. Default mode forbids script, iframe, object, embed, form, input, img. Use `allowEmbeds: true` only for trusted plugin embed content. For message content/topics, prefer `tokenizeLinks()` + Svelte native escaping over `{@html}` + sanitize.
 
 ### TypeScript
 - `@typescript-eslint/no-explicit-any` eslint-disable comments used for protocol types — keep them with justification comment above each
-- `var` prohibited — use `let` or `const` exclusively
 
 ### Other
-- `fflate` imported normally via ES module (`import { Unzlib } from 'fflate'`) — no global injection
 - `$lib` and `$components` aliases configured in both `vite.config.ts` and `svelte.config.js`
 - PWA support via `@vite-pwa/sveltekit` — service worker registered in `+layout.svelte`
 - SPA routing: `adapter-static` with `fallback: '404.html'`
-- DRY: use `sortBuffers()`, `parseRelayUrl()`, `<LinkifiedText />` instead of duplicating logic
-- `recordBuffer` is from `bufferResume.ts`, NOT `models.ts`
