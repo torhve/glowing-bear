@@ -301,7 +301,7 @@
   <div class="relative">
     <button
       data-testid="show-embed"
-      class="{(!plugin.nsfw ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-yellow-600 hover:bg-yellow-700 text-white')} absolute top-1 right-1 z-10 btn btn-sm px-2 py-0.5 rounded cursor-pointer font-mono text-xs"
+      class="{(!plugin.nsfw ? 'bg-accent text-text hover:bg-accent-hover' : 'bg-warning text-text')}"
       onclick={showContent}
     >
       Show {plugin.name}
@@ -310,13 +310,13 @@
 {:else}
   <div class="relative">
     {#if isNsfw}
-      <div class="embed bg-yellow-900/30 border border-yellow-700 rounded p-2 text-sm text-yellow-200">
+       <div class="embed bg-warning/20 border border-warning/40 rounded p-2 text-sm text-warning">
         ⚠️ NSFW content hidden.
       </div>
     {:else}
       <button
         data-testid="hide-embed"
-        class="absolute top-1 right-1 z-10 btn btn-sm px-2 py-0.5 rounded cursor-pointer font-mono text-xs bg-gray-700 hover:bg-gray-600 text-gray-300"
+        class="absolute top-1 right-1 z-10 px-2 py-0.5 rounded text-xs font-mono bg-surface-raised text-text-secondary hover:text-text hover:bg-surface"
         onclick={hideContent}
       >
         Hide {plugin.name}
@@ -324,7 +324,7 @@
       <div
         data-testid="plugin-embed"
         bind:this={embedRef}
-        class="embed rounded overflow-hidden bg-[#1a1a1a] border border-[#333333] my-1"
+        class="embed rounded overflow-hidden bg-surface border-border my-1"
       ></div>
     {/if}
   </div>
@@ -335,7 +335,7 @@
     max-width: 728px;
     max-height: 500px;
     overflow: hidden;
-    border: 10px solid var(--gb-border, #444);
+    border: 10px solid var(--gb-border, var(--color-border));
     border-radius: 4px;
     box-sizing: border-box;
   }

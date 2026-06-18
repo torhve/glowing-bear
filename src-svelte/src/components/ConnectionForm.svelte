@@ -317,7 +317,7 @@ import Key from '@lucide/svelte/icons/key';
 
 <div class="space-y-2">
       <details class="bg-surface rounded border border-border">
-        <summary class="px-4 py-2 cursor-pointer text-sm font-medium text-text hover:text-white flex items-center gap-2">
+        <summary class="px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
           <Settings2 size={14} />Connection settings
         </summary>
         <div class="px-4 pb-3 text-sm text-text-secondary">
@@ -325,7 +325,7 @@ import Key from '@lucide/svelte/icons/key';
         </div>
       </details>
       <details class="bg-surface rounded border border-border">
-        <summary class="px-4 py-2 cursor-pointer text-sm font-medium text-text hover:text-white flex items-center gap-2">
+        <summary class="px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
           <Rocket size={14} />Getting Started
         </summary>
         <div class="px-4 pb-3 text-sm text-text-secondary">
@@ -333,7 +333,7 @@ import Key from '@lucide/svelte/icons/key';
         </div>
       </details>
       <details class="bg-surface rounded border border-border">
-        <summary class="px-4 py-2 cursor-pointer text-sm font-medium text-text hover:text-white flex items-center gap-2">
+        <summary class="px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
           <Keyboard size={14} />Usage instructions
         </summary>
         <div class="px-4 pb-3 text-sm text-text-secondary">
@@ -341,7 +341,7 @@ import Key from '@lucide/svelte/icons/key';
         </div>
       </details>
       <details class="bg-surface rounded border border-border">
-        <summary class="px-4 py-2 cursor-pointer text-sm font-medium text-text hover:text-white flex items-center gap-2">
+        <summary class="px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
           <Download size={14} />Install app
         </summary>
         <div class="px-4 pb-3 text-sm text-text-secondary">
@@ -349,7 +349,7 @@ import Key from '@lucide/svelte/icons/key';
         </div>
       </details>
       <details class="bg-surface rounded border border-border">
-        <summary class="px-4 py-2 cursor-pointer text-sm font-medium text-text hover:text-white flex items-center gap-2">
+        <summary class="px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
           <MessageCircle size={14} />Get involved
         </summary>
         <div class="px-4 pb-3 text-sm text-text-secondary">

@@ -35,7 +35,7 @@ import { DEBUG_NICKLIST } from '$lib/debug';
       case '@': return 'text-blue-400';
       case '%': return 'text-light-blue-400';
       case '+': return 'text-green-400';
-      default: return 'text-gray-400';
+      default: return 'text-text-muted';
     }
   }
 
@@ -70,7 +70,7 @@ import { DEBUG_NICKLIST } from '$lib/debug';
         {#each group.nicks as nick (nick.name)}
           <div
             data-testid="nick-item"
-            class="px-3 py-0.5 flex items-center hover:bg-surface-raised cursor-pointer"
+            class="px-3 py-0.5 flex items-center hover:bg-surface-raised"
             onclick={() => {
               if (DEBUG_NICKLIST) console.log('[nicklist] clicked', nick.name);
               pendingBufferSwitch.set(nick.name);

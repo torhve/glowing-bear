@@ -45,7 +45,6 @@
       <div class="relative group">
         <div
           id="connection-stats-popover"
-          popover="auto"
           class="absolute right-[50px] top-[calc(100%+6px)] z-50 min-w-[180px] bg-surface-raised border border-border rounded-lg shadow-xl p-3 text-xs opacity-0 transition-opacity duration-150 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto"
         >
           <div class="absolute -top-1.5 right-4 w-3 h-3 bg-surface-raised border-r border-t border-border rotate-45"></div>
@@ -78,7 +77,7 @@
         </div>
         <button
           popovertarget="connection-stats-popover"
-          class="flex items-center space-x-1 px-2 py-1 rounded text-xs cursor-pointer hover:bg-surface-raised"
+          class="flex items-center space-x-1 px-2 py-1 rounded text-xs hover:text-white hover:bg-surface-raised"
           type="button"
         >
           <div class="w-2 h-2 rounded-full {
