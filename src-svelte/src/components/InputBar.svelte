@@ -6,16 +6,36 @@
   import { completeNick } from '$lib/utils';
   import Send from '@lucide/svelte/icons/send';
   import { emojifyInput } from '$lib/emojify';
-  import { uploadImage } from '$lib/imgur';
   import Camera from '@lucide/svelte/icons/camera';
   import Megaphone from '@lucide/svelte/icons/megaphone';
   import { get } from 'svelte/store';
+  import ImageUploadPreview from './ImageUploadPreview.svelte';
+
+  interface PreviewItem {
+    id: number;
+    name: string;
+    size: number;
+    dataUrl: string;
+    progress: number;
+    status: 'preview' | 'uploading' | 'success' | 'error';
+    result?: { link: string; deletehash: string };
+    error?: string;
+  }
+
+  let {
+    onInsertUrls = () => {},
+  }: {
+    onInsertUrls?: (urls: string[]) => void;
+  } = $props();
 
   let inputRef = $state<HTMLTextAreaElement>();
   let fileInputRef = $state<HTMLInputElement>();
   let message = $state('');
   let _iterCandidate: string | null = $state(null);
   let isDraggingFile = $state(false);
+  let previewOpen = $state(false);
+  let previewImages = $state<PreviewItem[]>([]);
+  let nextImageId = $state(1);
 
   let canSend = $derived($currentBuffer && message.length > 0);
 
@@ -265,30 +285,74 @@
     }
   }
 
-  async function handleFileUpload(file: File): Promise<void> {
-    try {
-      const result = await uploadImage(file, (percent) => {
-        // Progress callback — could show progress bar
-        void percent;
+  // Convert files to preview items and open the preview modal
+  async function collectImagesForPreview(files: FileList | File[]): Promise<void> {
+    const imageFiles = Array.from(files).filter(f => f.type.match(/image.*/));
+    if (imageFiles.length === 0) return;
+
+    const newItems: PreviewItem[] = [];
+    for (const file of imageFiles) {
+      const dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
       });
-      // Insert URL at cursor position
-      const caret = getCaretPos();
-      message = message.slice(0, caret) + result.link + message.slice(caret);
-      setTimeout(() => setCaretPos(caret + result.link.length), 0);
-    } catch (err) {
-      console.error('Image upload failed:', err);
+      newItems.push({
+        id: nextImageId++,
+        name: file.name,
+        size: file.size,
+        dataUrl,
+        progress: 0,
+        status: 'preview',
+      });
+    }
+
+    previewImages = [...previewImages, ...newItems];
+    previewOpen = true;
+    inputRef?.focus();
+  }
+
+  // Insert uploaded URLs at cursor position, space-separated
+  function handleInsertUrls(urls: string[]) {
+    const caret = getCaretPos();
+    const urlsText = urls.join(' ');
+    message = message.slice(0, caret) + urlsText + message.slice(caret);
+    setTimeout(() => setCaretPos(caret + urlsText.length), 0);
+    onInsertUrls(urls);
+  }
+
+  function closePreview() {
+    previewOpen = false;
+    previewImages = [];
+    inputRef?.focus();
+  }
+
+  // Handle paste events — detect images from clipboard
+  function handlePaste(e: ClipboardEvent) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    const imageFiles: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item && item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          imageFiles.push(file);
+        }
+      }
+    }
+
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      void collectImagesForPreview(imageFiles);
     }
   }
 
   function handleFileInputChange() {
     const files = fileInputRef?.files;
     if (!files) return;
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      if (file) {
-        void handleFileUpload(file);
-      }
-    }
+    void collectImagesForPreview(files);
     if (fileInputRef) fileInputRef.value = '';
   }
 
@@ -299,12 +363,7 @@
 
     const files = e.dataTransfer?.files;
     if (!files) return;
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      if (file && file.type.match(/image.*/)) {
-        void handleFileUpload(file);
-      }
-    }
+    void collectImagesForPreview(files);
   }
 
   function handleDragOver(e: DragEvent) {
@@ -352,6 +411,7 @@
       bind:value={message}
       onkeydown={handleKeyDown}
       oninput={handleInput}
+      onpaste={handlePaste}
       ondrop={handleDrop}
       ondragover={handleDragOver}
       ondragleave={handleDragEnd}
@@ -391,3 +451,11 @@
     </button>
   </div>
 </div>
+
+{#if previewOpen}
+  <ImageUploadPreview
+    images={previewImages}
+    onInsert={handleInsertUrls}
+    onClose={closePreview}
+  />
+{/if}

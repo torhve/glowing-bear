@@ -33,7 +33,7 @@ if ! command -v nc &>/dev/null; then
 	echo "ERROR: nc not found"
 	cleanup
 fi
-if ! command -v /opt/homebrew/bin/weechat-headless &>/dev/null; then
+if ! command -v weechat-headless &>/dev/null; then
 	echo "ERROR: weechat-headless not found"
 	cleanup
 fi
@@ -103,7 +103,7 @@ fi
 
 if ! $RELAY_ALREADY_RUNNING; then
 	# Start WeeChat headless with fresh config
-	/opt/homebrew/bin/weechat-headless -d "$WEECHAT_HOME" \
+	weechat-headless -d "$WEECHAT_HOME" \
 		--daemon \
 		-r "/set relay.network.password testpassword123" \
 		-r "/set relay.network.max_connections 32" \
