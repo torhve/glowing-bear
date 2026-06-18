@@ -21,10 +21,10 @@
 
     function getTypeClass(type: string): string {
         switch (type) {
-            case 'success': return 'bg-green-600 text-white';
-            case 'error': return 'bg-red-600 text-white';
-            case 'warning': return 'bg-yellow-500 text-black';
-            default: return 'bg-gray-700 text-white';
+            case 'success': return 'bg-success text-text';
+            case 'error': return 'bg-danger text-text';
+            case 'warning': return 'bg-warning text-text';
+            default: return 'bg-surface-raised text-text';
         }
     }
 </script>
@@ -36,16 +36,16 @@
             data-testid="toast"
         >
             {#if toast.type === 'success'}
-                <CheckCircle size={16} class="text-white flex-shrink-0 mt-0.5" />
+                <CheckCircle size={16} class="text-text flex-shrink-0 mt-0.5" />
             {:else if toast.type === 'error'}
-                <AlertCircle size={16} class="text-white flex-shrink-0 mt-0.5" />
+                <AlertCircle size={16} class="text-text flex-shrink-0 mt-0.5" />
             {:else if toast.type === 'warning'}
-                <AlertTriangle size={16} class="text-black flex-shrink-0 mt-0.5" />
+                <AlertTriangle size={16} class="text-text flex-shrink-0 mt-0.5" />
             {/if}
             <span class="flex-1 text-sm">{toast.message}</span>
             <button
                 onclick={() => handleClose(toast.id)}
-                class="text-white/80 hover:text-white flex-shrink-0"
+                class="text-text-secondary/60 hover:text-text flex-shrink-0"
                 data-testid="toast-close"
             >
                 <X size={16} />

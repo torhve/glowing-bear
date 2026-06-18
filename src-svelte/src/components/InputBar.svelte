@@ -317,8 +317,9 @@
     isDraggingFile = false;
   }
 
+  // Only auto-focus on desktop — mobile users prioritize reading over typing
   $effect(() => {
-    if ($currentBuffer) {
+    if ($currentBuffer && typeof window !== 'undefined' && window.innerWidth >= 768) {
       inputRef?.focus();
     }
   });

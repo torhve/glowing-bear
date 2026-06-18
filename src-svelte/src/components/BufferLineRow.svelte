@@ -238,7 +238,7 @@
     vertical-align: top;
     white-space: nowrap;
     text-align: right;
-    border-right: 1px solid var(--gb-border, #666);
+    border-right: 1px solid var(--gb-border, var(--color-border));
     overflow: hidden;
     text-overflow: ellipsis;
     box-sizing: border-box;
@@ -261,7 +261,7 @@
 
   .message {
     width: 100%;
-    padding: 0 2px;
+    padding: 1px 2px 0 2px;
     vertical-align: top;
     white-space: preserve-breaks;
     word-break: break-word;

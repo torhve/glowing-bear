@@ -165,7 +165,7 @@
       type="button"
       data-testid="topic-bar"
       popovertarget="topic-modal"
-      class="h-8 bg-input-bg border-b border-border flex items-center px-3 text-sm cursor-pointer hover:bg-surface transition-colors w-full text-left"
+      class="h-8 bg-input-bg border-b border-border flex items-center px-3 text-sm hover:bg-surface transition-colors w-full text-left"
       title="Click to view topic"
     >
       <FileText size={14} class="text-text-muted mr-1 flex-shrink-0" />
@@ -181,11 +181,11 @@
     bind:this={containerRef}
     onscroll={handleScroll}
     data-testid="chat-messages"
-    class="flex-1 overflow-y-auto overflow-x-hidden"
+    class="flex-1 overflow-y-auto overflow-x-hidden bg-bg"
     class:favorite-font={!$currentBuffer || !isFreeBuffer($currentBuffer)}
     class:free-font={$currentBuffer && isFreeBuffer($currentBuffer)}
     class:hideTime={$currentBuffer?.hideBufferLineTimes}
-    style="background-color: var(--gb-bg, #181818); font-size: var(--font-size, 13px);"
+    style="font-size: var(--font-size, 13px);"
   >
     {#if !$currentBuffer}
       <div class="flex items-center justify-center h-full text-text-muted">
@@ -202,7 +202,7 @@
           {#if !$currentBuffer.allLinesFetched && messages.length > 0}
             <tr class="bufferline fetchmore-row">
               <td class="text-center py-1" colspan=3>
-                 <button type="button" class="fetchmorelines cursor-pointer flex items-center gap-1 px-3 py-1 rounded text-xs font-medium text-text-secondary hover:text-text hover:bg-surface-raised transition-colors" onclick={handleFetchMore}>
+                 <button type="button" class="fetchmorelines flex items-center gap-1 px-3 py-1 rounded text-xs font-medium text-text-secondary hover:text-text hover:bg-surface-raised transition-colors" onclick={handleFetchMore}>
                     <ChevronUp size={14} class="text-text-muted" />
                     Fetch more lines
                   </button>
