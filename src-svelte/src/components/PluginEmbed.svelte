@@ -303,7 +303,7 @@
   <div class="relative">
     <button
       data-testid="show-embed"
-      class="{(!plugin.nsfw ? 'bg-accent text-text hover:bg-accent-hover' : 'bg-warning text-text')}"
+      class="px-3 py-1.5 rounded text-sm font-medium transition-colors {(!plugin.nsfw ? 'bg-accent hover:bg-accent-hover text-white' : 'bg-warning hover:bg-warning/90 text-white')}"
       onclick={showContent}
     >
       <Play size={16} class="inline-block mr-1" />
@@ -319,7 +319,7 @@
     {:else}
       <button
         data-testid="hide-embed"
-        class="absolute top-1 right-1 z-10 px-2 py-0.5 rounded text-xs font-mono bg-surface-raised text-text-secondary hover:text-text hover:bg-surface"
+        class="absolute top-1 right-1 z-10 px-2 py-1 rounded text-sm font-medium transition-colors bg-surface-raised text-text-secondary hover:text-text hover:bg-surface"
         onclick={hideContent}
       >
         <X size={14} class="inline-block mr-1" />
