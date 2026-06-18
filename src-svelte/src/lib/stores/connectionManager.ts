@@ -513,7 +513,10 @@ export async function fetchMoreLines(numLines: number = 0): Promise<any> {
         const oldLength = buffer.lines.length;
         buffer.lines = [];
         buffer.requestedLines = 0;
-        handleLineInfo(message, true);
+        // Pass false so lastSeen isn't incremented per-line during fetch.
+        // lastSeen is calculated from hotlist data (accurate unread state),
+        // not assumed from fetched line count.
+        handleLineInfo(message, false);
         buffer.lastSeen -= oldLength;
 
         // Determine if all lines are fetched
