@@ -34,6 +34,19 @@
 
 
 
+  async function tryAutoConnect() {
+    if (!$settings.autoconnect || !$settings.savepassword || !$settings.hostField || !$settings.password) {
+      return;
+    }
+    try {
+      const { host: parsedHost, port: parsedPort, path: parsedPath } = parseRelayUrl($settings.hostField, $settings.port);
+      await connect(parsedHost, parsedPort, parsedPath, $settings.password, $settings.tls, false);
+      parseHashAndNavigate();
+    } catch (e) {
+      console.warn('Auto-connect failed:', e);
+    }
+  }
+
   function parseHashAndNavigate() {
     if (typeof window === 'undefined') return;
     const hash = window.location.hash.slice(1);

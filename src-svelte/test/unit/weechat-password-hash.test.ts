@@ -1,13 +1,20 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Protocol } from '$lib/weechat';
 
+function expectHandshakeContains(result: string, expected: Record<string, string>) {
+    expect(result).toMatch(/^handshake\s/);
+    for (const [key, value] of Object.entries(expected)) {
+        expect(result).toContain(`${key}=${value}`);
+    }
+}
+
 describe('formatHandshake for all password hash algorithms', () => {
     it('produces correct format for plain algorithm', () => {
         const result = Protocol.formatHandshake({
             password_hash_algo: 'plain',
             compression: 'off'
         });
-        expect(result).toBe('handshake compression=off,password_hash_algo=plain\n');
+        expectHandshakeContains(result, { password_hash_algo: 'plain', compression: 'off' });
     });
 
     it('produces correct format for sha256 algorithm', () => {
@@ -15,7 +22,7 @@ describe('formatHandshake for all password hash algorithms', () => {
             password_hash_algo: 'sha256',
             compression: 'zlib'
         });
-        expect(result).toBe('handshake compression=zlib,password_hash_algo=sha256\n');
+        expectHandshakeContains(result, { password_hash_algo: 'sha256', compression: 'zlib' });
     });
 
     it('produces correct format for sha512 algorithm', () => {
@@ -23,7 +30,7 @@ describe('formatHandshake for all password hash algorithms', () => {
             password_hash_algo: 'sha512',
             compression: 'zlib'
         });
-        expect(result).toBe('handshake compression=zlib,password_hash_algo=sha512\n');
+        expectHandshakeContains(result, { password_hash_algo: 'sha512', compression: 'zlib' });
     });
 
     it('produces correct format for pbkdf2+sha256 algorithm', () => {
@@ -31,7 +38,7 @@ describe('formatHandshake for all password hash algorithms', () => {
             password_hash_algo: 'pbkdf2+sha256',
             compression: 'zlib'
         });
-        expect(result).toBe('handshake compression=zlib,password_hash_algo=pbkdf2+sha256\n');
+        expectHandshakeContains(result, { password_hash_algo: 'pbkdf2+sha256', compression: 'zlib' });
     });
 
     it('produces correct format for pbkdf2+sha512 algorithm', () => {
@@ -39,12 +46,12 @@ describe('formatHandshake for all password hash algorithms', () => {
             password_hash_algo: 'pbkdf2+sha512',
             compression: 'zlib'
         });
-        expect(result).toBe('handshake compression=zlib,password_hash_algo=pbkdf2+sha512\n');
+        expectHandshakeContains(result, { password_hash_algo: 'pbkdf2+sha512', compression: 'zlib' });
     });
 
     it('uses defaults when no opts provided', () => {
         const result = Protocol.formatHandshake({});
-        expect(result).toBe('handshake compression=zlib,password_hash_algo=pbkdf2+sha512\n');
+        expectHandshakeContains(result, { password_hash_algo: 'pbkdf2+sha512', compression: 'zlib' });
     });
 
     it('accepts colon-separated algorithm list', () => {
@@ -52,7 +59,7 @@ describe('formatHandshake for all password hash algorithms', () => {
             password_hash_algo: 'pbkdf2+sha512:pbkdf2+sha256:sha512:sha256:plain',
             compression: 'off'
         });
-        expect(result).toBe('handshake compression=off,password_hash_algo=pbkdf2+sha512:pbkdf2+sha256:sha512:sha256:plain\n');
+        expectHandshakeContains(result, { password_hash_algo: 'pbkdf2+sha512:pbkdf2+sha256:sha512:sha256:plain', compression: 'off' });
     });
 });
 

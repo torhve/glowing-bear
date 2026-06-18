@@ -259,8 +259,9 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                     buffer.lastSeen++;
                 }
 
-                // Increment unread for real-time messages in non-active buffers
-                if (!(buffer.id === activeId && isWindowFocused)) {
+                // Increment unread for real-time messages with notify_level=1 (message) only.
+                // PMs/highlights (notify_level>=2) increment notification, not unread.
+                if (lineMsg.notify_level === 1 && !(buffer.id === activeId && isWindowFocused)) {
                     buffer.unread++;
                     const serverKey = `${buffer.plugin}.${buffer.server}`;
                     const server = get(servers)[serverKey];

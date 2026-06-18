@@ -16,6 +16,7 @@ let ws: WebSocket | null = null;
 let hotlistInterval: ReturnType<typeof setInterval> | null = null;
 let connectionData: [string, number, string, string, boolean, boolean] | null = null;
 let wasClosingDuringConnect = false;
+let connecting = false;
 
 export async function connect(host: string, port: number, path: string, password: string, tls: boolean, noCompression: boolean) {
     clearErrors();
@@ -46,12 +47,16 @@ export async function connect(host: string, port: number, path: string, password
     connectionData = [host, port, path, password, tls, noCompression];
     setConnectionStatus('connecting');
 
+    let rejectPromise: ((e: Error) => void) | null = null;
+
     return new Promise<void>((resolve, reject) => {
+        rejectPromise = reject;
         ws = new WebSocket(url);
         const connectStart = Date.now();
         ws.binaryType = 'arraybuffer';
 
         ws.onopen = async () => {
+            connecting = true;
             try {
                 // Reset callbacks for new connection
                 Object.keys(callbacks).forEach(k => delete callbacks[parseInt(k, 10)]);
@@ -137,12 +142,18 @@ export async function connect(host: string, port: number, path: string, password
 
                 resolve();
             } catch (e) {
+                // If onclose already set passwordError, don't overwrite with generic error
+                const errors = get(connectionState).errors;
+                if (errors.passwordError) {
+                    console.log('[connect] connection closed after auth failure');
+                    return;
+                }
                 console.error('Connection error:', e);
                 reject(e);
             }
         };
 
-       ws.onmessage = (event) => {
+        ws.onmessage = (event) => {
             if (event.data instanceof ArrayBuffer) {
                 onMessage(event.data);
             }
@@ -158,6 +169,7 @@ export async function connect(host: string, port: number, path: string, password
                 delete callbacks[id];
             });
 
+            connecting = false;
             console.log('Disconnected from relay', evt.code, evt.reason);
             if (hotlistInterval) {
                 clearInterval(hotlistInterval);
@@ -165,6 +177,8 @@ export async function connect(host: string, port: number, path: string, password
             }
             setConnectionStatus('disconnected');
             connected.set(false);
+
+            let shouldReject = false;
 
             if (get(connectionState).userDisconnect) {
                 // User initiated disconnect, don't auto-reconnect
@@ -178,12 +192,20 @@ export async function connect(host: string, port: number, path: string, password
                 // First connection failed — only show password error if we actually connected and auth failed
                 if (evt.code === 403 || evt.code === 401) {
                     setErrors({ passwordError: true });
+                    shouldReject = true;
                 } else if (wasClosingDuringConnect) {
                     // Page reloaded during initial connect
                     setErrors({ hmrReloadError: true });
                 } else if (evt.code === 1006) {
-                    // Abnormal closure — server unreachable
-                    setErrors({ serverUnreachable: true });
+                    // 1006 after handshake succeeded = auth rejected by server, not unreachable
+                    if (connecting === false && ws !== null) {
+                        // onclose already ran, connection was established then closed → bad password
+                        setErrors({ passwordError: true });
+                        shouldReject = true;
+                    } else {
+                        // Never connected at all → truly unreachable
+                        setErrors({ serverUnreachable: true });
+                    }
                 }
             } else if (evt.code === 1006 || evt.code === 1011) {
                 // Unexpected disconnect after being connected — retry
@@ -195,6 +217,10 @@ export async function connect(host: string, port: number, path: string, password
                 // Normal close or other codes
                 scheduleReconnect();
             }
+
+            if (shouldReject && rejectPromise) {
+                rejectPromise(new Error('Authentication failed'));
+            }
         };
 
         ws.onerror = (evt) => {
@@ -203,15 +229,17 @@ export async function connect(host: string, port: number, path: string, password
             // HMR/reload detection: WebSocket was already closing when we started
             if (wasClosingDuringConnect) {
                 setErrors({ hmrReloadError: true });
-            } else {
-                // Server unreachable: first connection never succeeded
+            } else if (!get(connectionState).wasEverConnected && !connecting) {
+                // onclose already ran, check if it was a pre-connect failure
                 const elapsed = Date.now() - connectStart;
-                if (!get(connectionState).wasEverConnected && elapsed < 10000) {
+                if (elapsed < 10000) {
                     setErrors({ serverUnreachable: true });
                 } else {
                     setErrors({ errorMessage: true });
                 }
             }
+            // Don't reject if onclose already handled the close — prevents timeout from overwriting onclose's error state
+            if (!connecting) return;
             reject(new Error('Connection failed'));
         };
     });
@@ -293,8 +321,13 @@ async function fetchConfValue(name: string) {
         // Store callback
         callbacks[cbId] = { resolve, reject };
 
-        // Timeout after 10 seconds
+        // Timeout after 10 seconds — if WS already closed, reject immediately so the promise settles
         setTimeout(() => {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                delete callbacks[cbId];  // Clean up dangling callback
+                reject(new Error('Connection closed before response received'));
+                return;
+            }
             if (callbacks[cbId]) {
                 delete callbacks[cbId];
                 console.error('[connect] timeout id=' + cbId);

@@ -187,14 +187,15 @@ type StyleMatcherFn = (txt: string, m: RegExpMatchArray) => StyleResult;
 // Pre-built style matchers to avoid per-call array allocation in getStyle().
 const styleMatchers: Array<{ regex: RegExp; fn: StyleMatcherFn }> = [
     // STD color codes: 2 digits (00-43) → option colors (foreground only)
+    // Codes > 16 are out of range per WeeChat spec, return default color.
     {
         regex: /^(\d{2})/,
         fn: (txt, m) => {
             const code = parseInt(m[1]!, 10);
-            if (code >= colorsOptionsNames.length) {
-                return { fgColor: null, bgColor: null, attrs: null, text: txt.substring(2) };
+            if (code > 16) {
+                return { fgColor: getDefaultColor(), bgColor: null, attrs: null, text: txt.substring(m[0].length) };
             }
-            const optionName = colorsOptionsNames[code] || 'default';
+            const optionName = colorsOptionsNames[code]!;
             return {
                 fgColor: { type: 'option' as const, name: optionName },
                 bgColor: null,
@@ -519,30 +520,39 @@ export function formatHandshake(opts: FormatHandshakeOpts): string {
         compression: 'zlib'
     };
     const merged = { ...defaults, ...opts };
-    const parts = [];
-    const dictStr = _formatDict({
-        password_hash_algo: merged.password_hash_algo ?? defaults.password_hash_algo,
-        compression: merged.compression ?? defaults.compression
-    });
-    if (dictStr) {
-        parts.push(dictStr);
+    // Build key=value pairs in the same order as the old JS parser:
+    // compression first, then password_hash_algo.
+    const keys: string[] = [];
+    const compression = merged.compression ?? defaults.compression;
+    if (compression !== null) {
+        keys.push('compression=' + compression);
     }
+    const algo = merged.password_hash_algo ?? defaults.password_hash_algo;
+    if (algo !== null) {
+        keys.push('password_hash_algo=' + algo);
+    }
+    const dictStr = keys.join(',');
+    const parts = dictStr ? [dictStr] : [];
     return _formatCmd(null, 'handshake', parts);
 }
 
-// Format init command: "init password_hash=...,totp=...\n"
+// Format init command: "init totp=...,password_hash=...\n"
 // Signature matches original JS: (password_hash, totp)
+// Parameter order matches old JS parser: totp first, then password_hash.
 export function formatInit(passwordHash: string | null, totp: string | null): string {
     const parts = [];
     const keys: string[] = [];
-    if (passwordHash !== null) {
-        keys.push('password_hash=' + passwordHash);
-    }
     if (totp !== null) {
         keys.push('totp=' + totp);
     }
+    if (passwordHash !== null) {
+        keys.push('password_hash=' + passwordHash);
+    }
     if (keys.length > 0) {
         parts.push(keys.join(','));
+    } else {
+        // Old JS: "init \n" with trailing space when no params
+        parts.push('');
     }
     return _formatCmd(null, 'init', parts);
 }
