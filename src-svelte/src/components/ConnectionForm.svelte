@@ -177,7 +177,7 @@ import Key from '@lucide/svelte/icons/key';
               />
             </div>
         </div>
-        <div>
+       <div class="min-w-[5rem]">
           <label for="port" class="block text-xs text-text-secondary mb-1">Port</label>
             <div class="relative">
               <List size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
@@ -188,7 +188,7 @@ import Key from '@lucide/svelte/icons/key';
                 bind:value={port}
                 oninput={handlePortChange}
                 placeholder="Port"
-              class="w-full pl-9 pr-3 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent"
+               class="w-full pl-9 pr-3 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent"
               />
             </div>
         </div>

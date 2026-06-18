@@ -209,8 +209,14 @@
 
   .time {
     text-align: right;
-    padding: 0 1px 0 8px;
+    padding: 0 2px 0 4px;
     vertical-align: top;
+  }
+
+  @media (max-width: 640px) {
+    .time {
+      padding: 0 1px 0 1px;
+    }
   }
 
   .time .compact-time.repeated-time {
@@ -236,6 +242,11 @@
     overflow: hidden;
     text-overflow: ellipsis;
     box-sizing: border-box;
+    font-family: monospace;
+  }
+
+  .bufferline.highlight .prefix {
+    font-weight: normal;
   }
 
   .prefix .compact-prefix {

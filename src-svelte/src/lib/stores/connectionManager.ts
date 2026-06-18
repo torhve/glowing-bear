@@ -1,5 +1,5 @@
 import { get } from 'svelte/store';
-import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore, connectionState } from '$lib/stores/connectionStore';
+import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore, connectionState, recordBytesReceived, recordBytesSent } from '$lib/stores/connectionStore';
 import { buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer } from '$lib/stores/models';
 import { settings } from '$lib/stores/settings';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist } from '$lib/stores/handlers';
@@ -300,11 +300,14 @@ function sendWs(data: string | ArrayBufferLike, label = '') {
     } else if (DEBUG_WEECHAT_COMMANDS && typeof data === 'string') {
         console.log('[WeeChatCmd] SEND', label || '(raw):', data.substring(0, 200));
     }
+    const byteLength = typeof data === 'string' ? new Blob([data]).size : (data as ArrayBuffer).byteLength;
     ws.send(data);
+    recordBytesSent(byteLength);
 }
 
 // Handle incoming messages
 export async function onMessage(data: ArrayBuffer) {
+    recordBytesReceived(data.byteLength);
     const message = await protocolInstance.parse(data);
 
     if (message.id && callbacks[message.id]) {

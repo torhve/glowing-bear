@@ -8,6 +8,16 @@ export interface ConnectionState {
     wasEverConnected: boolean;
 }
 
+interface ConnectionStats {
+    bytesSent: number;
+    bytesReceived: number;
+    messagesSent: number;
+    messagesReceived: number;
+    lastMessageAt: number;
+    lastSentAt: number;
+    connectedSince: number;
+}
+
 const initialState: ConnectionState = {
     status: 'disconnected',
     errors: {
@@ -23,10 +33,26 @@ const initialState: ConnectionState = {
     wasEverConnected: false
 };
 
+const initialStats: ConnectionStats = {
+    bytesSent: 0,
+    bytesReceived: 0,
+    messagesSent: 0,
+    messagesReceived: 0,
+    lastMessageAt: 0,
+    lastSentAt: 0,
+    connectedSince: 0
+};
+
 export const connectionState = writable<ConnectionState>(initialState);
+export const connectionStats = writable<ConnectionStats>(initialStats);
 
 export function setConnectionStatus(status: ConnectionState['status']) {
     connectionState.update(current => ({ ...current, status }));
+    if (status === 'connected') {
+        connectionStats.update(s => ({ ...s, connectedSince: Date.now() }));
+    } else if (status === 'disconnected') {
+        connectionStats.update(s => ({ ...s, connectedSince: 0 }));
+    }
 }
 
 export function setErrors(errors: Partial<ConnectionError>) {
@@ -44,5 +70,55 @@ export function disconnect() {
         wasEverConnected: false,
         errors: { ...initialState.errors }
     });
+    connectionStats.set(initialStats);
+}
+
+export function recordBytesReceived(bytes: number) {
+    connectionStats.update(s => ({
+        ...s,
+        bytesReceived: s.bytesReceived + bytes,
+        messagesReceived: s.messagesReceived + 1,
+        lastMessageAt: Date.now()
+    }));
+}
+
+export function recordBytesSent(bytes: number) {
+    connectionStats.update(s => ({
+        ...s,
+        bytesSent: s.bytesSent + bytes,
+        messagesSent: s.messagesSent + 1,
+        lastSentAt: Date.now()
+    }));
+}
+
+export function resetStats() {
+    connectionStats.set(initialStats);
+}
+
+export function formatBytes(bytes: number): string {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+}
+
+export function timeAgo(timestamp: number): string {
+    if (!timestamp) return '--';
+    const diff = Date.now() - timestamp;
+    if (diff < 1000) return '<1s ago';
+    if (diff < 60000) return Math.floor(diff / 1000) + 's ago';
+    if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+    return Math.floor(diff / 3600000) + 'h ago';
+}
+
+export function formatDuration(ms: number): string {
+    if (!ms || ms < 1000) return '--';
+    const seconds = Math.floor(ms / 1000);
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ${minutes % 60}m`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ${hours % 24}h`;
 }
 

@@ -80,7 +80,7 @@ describe('PM/Highlight Notification Handling', () => {
         activeBufferId.set('');
     });
 
-    function createLineMessage(bufferId: string, tags: string[], highlight: number = 0, displayed: number = 1) {
+    function createLineMessage(bufferId: string, tags: string[], highlight: number = 0, displayed: number = 1, notifyLevel: number = 0) {
         return {
             objects: [{
                 pointer: bufferId,
@@ -92,13 +92,14 @@ describe('PM/Highlight Notification Handling', () => {
                     message: 'Test message',
                     tags_array: tags,
                     displayed,
+                    notify_level: notifyLevel,
                     highlight
                 }]
             }]
         } as ProtocolMessage;
     }
 
-    it('increments notification count for PM with notify_private tag', () => {
+    it('increments notification count for PM (notify_level=2)', () => {
         const pmBuffer: BufferData = {
             id: '0x200',
             fullName: 'testuser',
@@ -128,65 +129,58 @@ describe('PM/Highlight Notification Handling', () => {
             pinned: false,
             active: false
         };
-        buffers.update(b => ({ ...b, '0x200': pmBuffer }));
+        buffers.update((b: Record<string, BufferData>) => ({ ...b, '0x200': pmBuffer }));
 
-        handleBufferLineAdded(createLineMessage('0x200', ['private', 'notify_private']));
+        handleBufferLineAdded(createLineMessage('0x200', ['private'], 0, 1, 2));
 
         const buf = get(buffers)['0x200'];
         expect(buf!.notification).toBe(1);
     });
 
-    it('increments notification count for highlight', () => {
-        handleBufferLineAdded(createLineMessage('0x100', [], 1));
+    it('increments notification count for highlight (notify_level=3)', () => {
+        handleBufferLineAdded(createLineMessage('0x100', [], 1, 1, 3));
 
         const buf = get(buffers)['0x100'];
         expect(buf!.notification).toBe(1);
     });
 
-    it('does NOT increment notification for regular channel message', () => {
-        handleBufferLineAdded(createLineMessage('0x100', []));
+    it('does NOT increment notification for regular channel message (notify_level=0)', () => {
+        handleBufferLineAdded(createLineMessage('0x100', [], 0, 1, 0));
 
         const buf = get(buffers)['0x100'];
         expect(buf!.notification).toBe(0);
     });
 
-    it('increments unread count for notify_message tag (non-PM)', () => {
-        handleBufferLineAdded(createLineMessage('0x100', ['notify_message'], 0, 1));
+    it('increments unread count for message (notify_level=1)', () => {
+        handleBufferLineAdded(createLineMessage('0x100', [], 0, 1, 1));
 
         const buf = get(buffers)['0x100'];
         expect(buf!.unread).toBe(1);
         expect(buf!.notification).toBe(0);
     });
 
-    it('does NOT increment unread without notify_message tag', () => {
-        handleBufferLineAdded(createLineMessage('0x100', []));
+    it('does NOT increment unread for backfill (notify_level=0)', () => {
+        handleBufferLineAdded(createLineMessage('0x100', [], 0, 1, 0));
 
         const buf = get(buffers)['0x100'];
         expect(buf!.unread).toBe(0);
     });
 
-    it('does NOT increment unread with notify_none tag even if notify_message present', () => {
-        handleBufferLineAdded(createLineMessage('0x100', ['notify_message', 'notify_none']));
+    it('increments only notification (not unread) for highlight (notify_level=3)', () => {
+        handleBufferLineAdded(createLineMessage('0x100', [], 1, 1, 3));
 
         const buf = get(buffers)['0x100'];
         expect(buf!.unread).toBe(0);
-    });
-
-    it('increments both unread AND notification for message with both tags', () => {
-        handleBufferLineAdded(createLineMessage('0x100', ['notify_message', 'notify_private'], 1));
-
-        const buf = get(buffers)['0x100'];
-        expect(buf!.unread).toBe(1);
         expect(buf!.notification).toBe(1);
     });
 
     it('does not increment notification when buffer notify level is 0 (none)', () => {
-        buffers.update(b => {
+        buffers.update((b: Record<string, BufferData>) => {
             b['0x100'].notify = 0;
             return b;
         });
 
-        handleBufferLineAdded(createLineMessage('0x100', ['private', 'notify_private']));
+        handleBufferLineAdded(createLineMessage('0x100', [], 0, 1, 2));
 
         const buf = get(buffers)['0x100'];
         expect(buf!.notification).toBe(0);
@@ -222,10 +216,10 @@ describe('PM/Highlight Notification Handling', () => {
             pinned: false,
             active: false
         };
-        buffers.update(b => ({ ...b, '0x200': pmBuffer }));
-        servers.update(s => ({ ...s, 'irc.server': { id: '0x100', unread: 0 } }));
+        buffers.update((b: Record<string, BufferData>) => ({ ...b, '0x200': pmBuffer }));
+        servers.update((s: Record<string, { id: string; unread: number }>) => ({ ...s, 'irc.server': { id: '0x100', unread: 0 } }));
 
-        handleBufferLineAdded(createLineMessage('0x200', ['private', 'notify_private']));
+        handleBufferLineAdded(createLineMessage('0x200', ['private'], 0, 1, 2));
 
         const srv = get(servers)['irc.server'];
         expect(srv!.unread).toBe(1);

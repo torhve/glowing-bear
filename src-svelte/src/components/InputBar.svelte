@@ -24,8 +24,11 @@
 
     const text = message;
 
-    // Handle /buffer clear command
-    if (/^\/buffer\s+clear\s*$/i.test(text)) {
+    // Split the command into multiple commands based on line breaks (matching AngularJS behavior)
+    const lines = text.split(/\r?\n/);
+
+    // Handle /buffer clear command on first line only
+    if (/^\/buffer\s+clear\s*$/i.test(lines[0]!)) {
       if ($currentBuffer) {
         const currentBuffers = get(buffers);
         const bufferId = $currentBuffer.id || '';
@@ -37,17 +40,34 @@
         }
         sendWeeChatCommand('/buffer clear');
       }
-      message = '';
-      if (inputRef) {
-        inputRef.style.height = 'auto';
-      }
-      return;
     }
 
-    sendMessage(text);
+    for (const line of lines) {
+      // Skip empty lines
+      if (line.length === 0) continue;
 
-    if ($currentBuffer) {
-      addToHistory($currentBuffer.id, text);
+      // Ask before a /quit
+      if (line === '/quit' || line.indexOf('/quit ') === 0) {
+        if (!window.confirm("Are you sure you want to quit WeeChat? This will prevent you from connecting with Glowing Bear until you restart WeeChat on the command line!")) {
+          continue;
+        }
+      }
+
+      sendMessage(line);
+      if ($currentBuffer) {
+        addToHistory($currentBuffer.id, line);
+      }
+    }
+
+    if (text === '/c' && $currentBuffer) {
+      const currentBuffers = get(buffers);
+      const bufferId = $currentBuffer.id || '';
+      const existing = currentBuffers[bufferId];
+      if (existing) {
+        const updated = { ...currentBuffers };
+        updated[bufferId] = { ...existing, lines: [], requestedLines: 0 };
+        buffers.set(updated);
+      }
     }
 
     message = '';

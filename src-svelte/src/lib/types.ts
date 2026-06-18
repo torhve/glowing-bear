@@ -50,6 +50,7 @@ export interface BufferLineMessage {
     message: string;
     tags_array: string[];
     displayed: number;
+    notify_level: number;
     highlight: number;
 }
 
