@@ -32,6 +32,7 @@ let actualXhr: {
     status: number;
     responseText: string;
     onload: ((this: XMLHttpRequest) => void) | null;
+    onerror: ((this: XMLHttpRequest) => void) | null;
     upload: { onprogress: ((e: unknown) => void) | null };
 };
 
@@ -43,6 +44,7 @@ const mockXhr = vi.fn(() => {
         status: 0,
         responseText: '',
         onload: null,
+        onerror: null,
         upload: {
             onprogress: null,
         },
@@ -61,6 +63,7 @@ describe('uploadImage', () => {
             status: 0,
             responseText: '',
             onload: null,
+            onerror: null,
             upload: {
                 onprogress: null,
             },
@@ -157,6 +160,81 @@ describe('uploadImage', () => {
 
     it('rejects undefined file', async () => {
         const { uploadImage } = await import('$lib/imgur');
-        await expect(uploadImage(null as unknown as File, () => {})).rejects.toThrow('not an image');
+        await expect(uploadImage(null as unknown as File, () => {})).rejects.toThrow('No image provided');
+    });
+
+    it('accepts base64 data URL string input', async () => {
+        const { uploadImage } = await import('$lib/imgur');
+        const result = uploadImage('data:image/png;base64,abc123', () => {});
+
+        // Should not use FileReader for string input
+        expect(mockFileReader).not.toHaveBeenCalled();
+        expect(actualXhr.open).toHaveBeenCalledWith('POST', 'https://api.imgur.com/3/image', true);
+
+        actualXhr.status = 200;
+        actualXhr.responseText = JSON.stringify({ data: { link: 'http://i.imgur.com/frombase64.png', deletehash: 'dh456' } });
+        actualXhr.onload!();
+
+        const res = await result;
+        expect(res.link).toBe('https://i.imgur.com/frombase64.png');
+        expect(res.deletehash).toBe('dh456');
+    });
+
+    it('accepts raw base64 string (no data: prefix)', async () => {
+        const { uploadImage } = await import('$lib/imgur');
+        const result = uploadImage('rawBase64Data', () => {});
+
+        expect(mockFileReader).not.toHaveBeenCalled();
+        expect(actualXhr.open).toHaveBeenCalledWith('POST', 'https://api.imgur.com/3/image', true);
+
+        actualXhr.status = 200;
+        actualXhr.responseText = JSON.stringify({ data: { link: 'http://i.imgur.com/rawbase64.png', deletehash: 'dh789' } });
+        actualXhr.onload!();
+
+        const res = await result;
+        expect(res.link).toBe('https://i.imgur.com/rawbase64.png');
+    });
+});
+
+describe('deleteImage', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        actualXhr = {
+            open: vi.fn(),
+            setRequestHeader: vi.fn(),
+            send: vi.fn(),
+            status: 0,
+            responseText: '',
+            onload: null,
+            onerror: null,
+            upload: {
+                onprogress: null,
+            },
+        };
+    });
+
+    it('deletes image successfully via DELETE request', async () => {
+        const { deleteImage } = await import('$lib/imgur');
+        const promise = deleteImage('testDeleteHash');
+
+        expect(actualXhr.open).toHaveBeenCalledWith('DELETE', 'https://api.imgur.com/3/image/testDeleteHash', true);
+        expect(actualXhr.setRequestHeader).toHaveBeenCalledWith('Authorization', 'Client-ID 164efef8979cd4b');
+
+        actualXhr.status = 200;
+        actualXhr.responseText = JSON.stringify({ data: true });
+        actualXhr.onload!();
+
+        await expect(promise).resolves.toBeUndefined();
+    });
+
+    it('rejects on API error during delete', async () => {
+        const { deleteImage } = await import('$lib/imgur');
+        const promise = deleteImage('badDeleteHash');
+
+        actualXhr.status = 404;
+        actualXhr.responseText = JSON.stringify({ status: 404, data: null });
+        actualXhr.onload!();
+
+        await expect(promise).rejects.toThrow('Delete failed');
     });
 });
