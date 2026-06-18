@@ -15,6 +15,7 @@ const protocolInstance = new Protocol();
 let ws: WebSocket | null = null;
 let hotlistInterval: ReturnType<typeof setInterval> | null = null;
 let connectionData: [string, number, string, string, boolean, boolean] | null = null;
+let wasClosingDuringConnect = false;
 
 export async function connect(host: string, port: number, path: string, password: string, tls: boolean, noCompression: boolean) {
     clearErrors();
@@ -31,17 +32,23 @@ export async function connect(host: string, port: number, path: string, password
     const url = `${proto}://${formattedHost}:${port}/${path}`;
     console.log('Connecting to:', url);
 
-    // Close previous WebSocket connection if it exists
+    // Detect if we're reconnecting after HMR killed an established connection
+    // (old module's event listeners were torn down, but ws object survived in memory)
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        // Connection was alive when HMR happened — this is the key signal
+        wasClosingDuringConnect = true;
+        console.log('[connect] HMR reload detected: previous connection was OPEN');
+    }
     if (ws) {
         ws.close();
         ws = null;
     }
-
     connectionData = [host, port, path, password, tls, noCompression];
     setConnectionStatus('connecting');
 
     return new Promise<void>((resolve, reject) => {
         ws = new WebSocket(url);
+        const connectStart = Date.now();
         ws.binaryType = 'arraybuffer';
 
         ws.onopen = async () => {
@@ -140,7 +147,7 @@ export async function connect(host: string, port: number, path: string, password
             }
         };
 
-        ws.onclose = () => {
+        ws.onclose = (evt) => {
             // Reject all pending callbacks to unblock awaiting sendAsync promises
             Object.keys(callbacks).forEach(k => {
                 const id = parseInt(k, 10);
@@ -150,7 +157,7 @@ export async function connect(host: string, port: number, path: string, password
                 delete callbacks[id];
             });
 
-            console.log('Disconnected from relay');
+            console.log('Disconnected from relay', evt.code, evt.reason);
             if (hotlistInterval) {
                 clearInterval(hotlistInterval);
                 hotlistInterval = null;
@@ -167,9 +174,24 @@ export async function connect(host: string, port: number, path: string, password
             } else if (typeof document !== 'undefined' && !document.hasFocus()) {
                 // First connection failed or user was not focused
             } else if (!get(connectionState).wasEverConnected) {
-                // First connection failed, don't auto-reconnect
+                // First connection failed — only show password error if we actually connected and auth failed
+                if (evt.code === 403 || evt.code === 401) {
+                    setErrors({ passwordError: true });
+                } else if (wasClosingDuringConnect) {
+                    // Page reloaded during initial connect
+                    setErrors({ hmrReloadError: true });
+                } else if (evt.code === 1006) {
+                    // Abnormal closure — server unreachable
+                    setErrors({ serverUnreachable: true });
+                }
+            } else if (evt.code === 1006 || evt.code === 1011) {
+                // Unexpected disconnect after being connected — retry
+                scheduleReconnect();
+            } else if (evt.code === 403 || evt.code === 401) {
+                // Auth failure after reconnect — show password error
                 setErrors({ passwordError: true });
             } else {
+                // Normal close or other codes
                 scheduleReconnect();
             }
         };
@@ -177,7 +199,18 @@ export async function connect(host: string, port: number, path: string, password
         ws.onerror = (evt) => {
             console.error('Relay error:', evt);
             setConnectionStatus('error');
-            setErrors({ errorMessage: true });
+            // HMR/reload detection: WebSocket was already closing when we started
+            if (wasClosingDuringConnect) {
+                setErrors({ hmrReloadError: true });
+            } else {
+                // Server unreachable: first connection never succeeded
+                const elapsed = Date.now() - connectStart;
+                if (!get(connectionState).wasEverConnected && elapsed < 10000) {
+                    setErrors({ serverUnreachable: true });
+                } else {
+                    setErrors({ errorMessage: true });
+                }
+            }
             reject(new Error('Connection failed'));
         };
     });

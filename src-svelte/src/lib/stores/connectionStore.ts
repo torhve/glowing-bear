@@ -27,7 +27,9 @@ const initialState: ConnectionState = {
         oldWeechatError: false,
         hashAlgorithmDisagree: false,
         errorMessage: false,
-        uploadError: false
+        uploadError: false,
+        hmrReloadError: false,
+        serverUnreachable: false
     },
     userDisconnect: false,
     wasEverConnected: false

@@ -147,7 +147,7 @@ import Key from '@lucide/svelte/icons/key';
   }
 </script>
 
-<div class="min-h-screen bg-bg flex flex-col items-center overflow-y-auto py-12 px-4">
+<div class="min-h-screen bg-bg flex flex-col items-center justify-center overflow-y-auto py-12 px-4">
   <div class="w-full max-w-lg space-y-6">
     <div class="text-center mb-6">
       <img src="/glowing-bear.svg" alt="logo" class="w-20 h-20 mx-auto mb-2" />
@@ -268,6 +268,16 @@ import Key from '@lucide/svelte/icons/key';
         </div>
       {/if}
 
+      {#if $connectionState.errors.hmrReloadError}
+        <div data-testid="error-message" class="bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
+          Connection lost during page reload — click Connect to retry
+        </div>
+      {/if}
+      {#if $connectionState.errors.serverUnreachable}
+        <div data-testid="error-message" class="bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
+          Unable to reach WeeChat relay at {hostField}:{port} — check that it is running and reachable
+        </div>
+      {/if}
       {#if $connectionState.errors.errorMessage}
         <div data-testid="error-message" class="bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
           Connection error: The client was unable to connect to the WeeChat relay
