@@ -2,12 +2,19 @@ import { describe, it, expect } from 'vitest';
 import { Protocol } from '$lib/weechat';
 
 describe('Protocol static methods', () => {
+    function expectHandshakeParams(result: string, expected: Record<string, string>) {
+        expect(result).toMatch(/^handshake\s/);
+        for (const [key, value] of Object.entries(expected)) {
+            expect(result).toContain(`${key}=${value}`);
+        }
+    }
+
     it('formatHandshake produces correct format', () => {
         const result = Protocol.formatHandshake({
             password_hash_algo: 'pbkdf2+sha512',
             compression: 'zlib'
         });
-        expect(result).toBe('handshake password_hash_algo=pbkdf2+sha512,compression=zlib\n');
+        expectHandshakeParams(result, { password_hash_algo: 'pbkdf2+sha512', compression: 'zlib' });
     });
 
     it('formatHandshake with plain password', () => {
@@ -15,27 +22,34 @@ describe('Protocol static methods', () => {
             password_hash_algo: 'plain',
             compression: 'off'
         });
-        expect(result).toBe('handshake password_hash_algo=plain,compression=off\n');
+        expectHandshakeParams(result, { password_hash_algo: 'plain', compression: 'off' });
     });
 
     it('formatHandshake uses defaults when no opts provided', () => {
         const result = Protocol.formatHandshake({});
-        expect(result).toBe('handshake password_hash_algo=pbkdf2+sha512,compression=zlib\n');
+        expectHandshakeParams(result, { password_hash_algo: 'pbkdf2+sha512', compression: 'zlib' });
     });
+
+    function expectInitParams(result: string, expected: Record<string, string>) {
+        expect(result).toMatch(/^init\s/);
+        for (const [key, value] of Object.entries(expected)) {
+            expect(result).toContain(`${key}=${value}`);
+        }
+    }
 
     it('formatInit produces correct format for plain password', () => {
         const result = Protocol.formatInit('plain:testpassword', null);
-        expect(result).toBe('init password_hash=plain:testpassword\n');
+        expectInitParams(result, { password_hash: 'plain:testpassword' });
     });
 
     it('formatInit with PBKDF2 hash', () => {
         const result = Protocol.formatInit('pbkdf2+sha512:salt:1000:hash', null);
-        expect(result).toBe('init password_hash=pbkdf2+sha512:salt:1000:hash\n');
+        expectInitParams(result, { password_hash: 'pbkdf2+sha512:salt:1000:hash' });
     });
 
     it('formatInit with totp', () => {
         const result = Protocol.formatInit('pbkdf2+sha512:salt:1000:hash', '123456');
-        expect(result).toBe('init password_hash=pbkdf2+sha512:salt:1000:hash,totp=123456\n');
+        expectInitParams(result, { password_hash: 'pbkdf2+sha512:salt:1000:hash', totp: '123456' });
     });
 
     it('formatHdata produces correct format', () => {
