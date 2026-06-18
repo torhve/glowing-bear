@@ -62,22 +62,27 @@ import { Unzlib } from 'fflate';
 const utf8Decoder = new TextDecoder('utf-8');
 
 async function decompressZlib(raw: Uint8Array): Promise<Uint8Array> {
-    return new Promise((resolve, _reject) => {
-        let result: Uint8Array | undefined;
-        const inflator = new Unzlib((data, final) => {
-            if (result) {
-                const combined = new Uint8Array(result.length + data.length);
-                combined.set(result);
-                combined.set(data, result.length);
-                result = combined;
-            } else {
-                result = data;
-            }
-            if (final) {
-                resolve(result!);
-            }
-        });
-        inflator.push(raw, true);
+    return new Promise((resolve, reject) => {
+        const chunks: Uint8Array[] = [];
+        let totalLength = 0;
+        try {
+            const inflator = new Unzlib((data, final) => {
+                chunks.push(data);
+                totalLength += data.length;
+                if (final) {
+                    const result = new Uint8Array(totalLength);
+                    let offset = 0;
+                    for (let i = 0; i < chunks.length; i++) {
+                        result.set(chunks[i]!, offset);
+                        offset += chunks[i]!.length;
+                    }
+                    resolve(result);
+                }
+            });
+            inflator.push(raw, true);
+        } catch (err) {
+            reject(err);
+        }
     });
 }
 
@@ -723,7 +728,7 @@ export class Protocol {
                 `available=${this.view.byteLength - this.offset}`
             );
         }
-        const slice = new Uint8Array(this.view.buffer, this.offset, length);
+        const slice = new Uint8Array(this.view.buffer, this.view.byteOffset + this.offset, length);
         this.offset += length;
         return slice;
     }
@@ -922,8 +927,7 @@ export class Protocol {
     }
 
     async parse(data: ArrayBuffer): Promise<ParsedMessage> {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- ArrayBuffer wraps to Uint8Array for internal use
-        this.setData(new Uint8Array(data) as any);
+        this.setData(new Uint8Array(data));
 
         const header = this.getHeader();
 

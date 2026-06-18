@@ -240,19 +240,19 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                 buffer.lastSeen++;
             }
 
-            // Increment unread if message wasn't displayed by us OR we're not on this buffer
-            // This handles both relay-only messages and locally-displayed messages from other clients
-            if (buffer.notify > 1 && lineMsg.tags_array.includes('notify_message') && !lineMsg.tags_array.includes('notify_none') && (!lineMsg.displayed || !(buffer.id === activeId && isWindowFocused))) {
+            // Increment unread count for messages with notify_level=1 (message level only)
+            // Skip if we're actively viewing this buffer and window is focused
+            if (lineMsg.notify_level === 1 && !(buffer.id === activeId && isWindowFocused)) {
                 buffer.unread++;
                 const serverKey = `${buffer.plugin}.${buffer.server}`;
                 const server = get(servers)[serverKey];
                 if (server) server.unread++;
             }
 
-            // Only skip unread tracking for messages we've already seen (displayed by WeeChat while on this buffer with focus)
-            if (!lineMsg.displayed || !(buffer.id === activeId && isWindowFocused)) {
+            // Trigger notification subsystem for highlights/privates with notify_level >= 2
+            if (lineMsg.notify_level >= 2) {
                 const isPrivate = buffer.type === 'private' && buffer.id !== activeId;
-                if (buffer.notify !== 0 && (lineMsg.highlight || lineMsg.tags_array.includes('notify_private') || isPrivate)) {
+                if (buffer.notify !== 0 && (lineMsg.highlight || isPrivate)) {
                     buffer.notification++;
                     const serverKey = `${buffer.plugin}.${buffer.server}`;
                     const server = get(servers)[serverKey];

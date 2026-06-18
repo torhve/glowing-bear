@@ -202,9 +202,10 @@
           {#if !$currentBuffer.allLinesFetched && messages.length > 0}
             <tr class="bufferline fetchmore-row">
               <td class="text-center py-1" colspan=3>
-                 <button type="button" class="fetchmorelines btn btn-xs btn-primary cursor-pointer flex items-center gap-1" onclick={handleFetchMore}>
-                   <ChevronUp size={14} />Fetch more lines
-                 </button>
+                 <button type="button" class="fetchmorelines cursor-pointer flex items-center gap-1 px-3 py-1 rounded text-xs font-medium text-text-secondary hover:text-text hover:bg-surface-raised transition-colors" onclick={handleFetchMore}>
+                    <ChevronUp size={14} class="text-text-muted" />
+                    Fetch more lines
+                  </button>
                 <span class={['loading-spinner', { hidden: !isLoadingMore }]}>
                   Fetching more lines...
                 </span>
@@ -281,17 +282,7 @@
     padding: 4px 0;
   }
 
-  .fetchmorelines {
-    color: var(--gb-accent, #4a90d9);
-    text-decoration: none;
-    font-size: 0.85em;
-  }
-
-  .fetchmorelines:hover {
-    text-decoration: underline;
-  }
-
-  .loading-spinner {
+   .loading-spinner {
     color: var(--gb-text-muted, #888);
     font-size: 0.85em;
   }
