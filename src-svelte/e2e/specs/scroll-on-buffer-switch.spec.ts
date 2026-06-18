@@ -70,6 +70,12 @@ test('should scroll to bottom when switching to a buffer with many lines', async
     // Wait for #glowing-bear to appear in buffer list
     await waitForBuffer(page, '#glowing-bear', 15000);
 
+    // Send initial messages to ensure we have enough lines for scroll testing
+    for (let i = 0; i < 10; i++) {
+        await irc.sendMessage('#glowing-bear', `scroll-init-${Date.now()}-${i}`);
+    }
+    await page.waitForTimeout(3000);
+
     // Switch to the buffer and wait for data to load
     await switchToBuffer(page, '#glowing-bear');
 

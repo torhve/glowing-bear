@@ -42,6 +42,32 @@ import Key from '@lucide/svelte/icons/key';
     password = s.password || '';
   });
 
+  // Attempt autoconnect using the form's current values (not saved settings directly)
+  $effect(() => {
+    if ($connectionState.status !== 'disconnected') return;
+    if (!autoconnect || !savepassword || !hostField) return;
+
+    console.log('[ConnectionForm] Autoconnecting with form values');
+    void (async () => {
+      try {
+        const { host: parsedHost, port: parsedPort, path: parsedPath } = parseRelayUrl(hostField, port);
+        await connect(parsedHost, parsedPort, parsedPath, password, tls, false);
+        updateSettings({
+          hostField: parsedHost,
+          port: parsedPort.toString(),
+          tls,
+          savepassword,
+          autoconnect,
+          ...(savepassword ? { password } : {})
+        });
+      } catch (e) {
+        console.warn('[ConnectionForm] Autoconnect failed:', e);
+        setErrors({ errorMessage: true });
+        setConnectionStatus('error');
+      }
+    })();
+  });
+
   $effect(() => {
     if (!hostField || hostField.trim() === '') {
       hostInvalid = false;

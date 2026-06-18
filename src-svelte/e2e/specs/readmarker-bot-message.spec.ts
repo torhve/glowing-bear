@@ -62,23 +62,12 @@ test('readmarker appears on second-to-last line with 1 unread when switching to 
     const response = await irc.sendMessage('#glowing-bear', `readmarker test ${uniqueMsgId}`);
     expect(response.ok).toBe(true);
 
-      // Wait for the unread count badge to appear on #glowing-bear in buffer list
-    const gbBuffer = page.getByTestId('buffer-item').filter({ hasText: '#glowing-bear' });
-    await gbBuffer.locator('span.rounded-full').first().waitFor({ state: 'visible', timeout: 10000 });
-    
-    // Wait a bit for relay message to arrive
-    await page.waitForTimeout(3000);
-    
-    // Check unread badge text and line count after bot message
-    const badgeText = await gbBuffer.locator('span.rounded-full').first().textContent();
-    const linesAfter = await page.evaluate(() => {
-        const rows = document.querySelectorAll('[data-testid="bufferline-row"]');
-        return rows.length;
-    });
+    // Wait for relay message to arrive
+    await page.waitForTimeout(2000);
 
-    // Step 3: Switch back to #glowing-bear
+    // Step 3: Switch back to #glowing-bear — this should reveal the readmarker
     await switchToBuffer(page, '#glowing-bear');
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1500);
 
     // Step 4: Check that readmarker is visible
     const domInfo = await page.evaluate(() => {

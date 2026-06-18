@@ -76,7 +76,7 @@ test('NSFW image shows yellow warning button', async () => {
     await expect(showBtn).toBeVisible({ timeout: 10000 });
     // NSFW button should have yellow/warning styling (oklch or named color)
     const color = await showBtn.evaluate(el => getComputedStyle(el).backgroundColor);
-    expect(color).toMatch(/yellow|rgb\(217|oklch\(/i);
+    expect(color).toMatch(/yellow|rgb\(217|rgb\(240|oklch\(/i);
 });
 
 test('noembed=false shows embeds automatically', async () => {

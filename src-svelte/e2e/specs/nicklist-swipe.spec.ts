@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, clearSettings, setSettings, waitForAppReady } from '../helpers/connection';
+import { connectToWeechat, clearSettings, disconnect, setSettings, waitForAppReady } from '../helpers/connection';
 
 // Helper to simulate a swipe gesture via touch events
 async function swipeGesture(page: import('@playwright/test').Page, startX: number, startY: number, endX: number, endY: number) {
@@ -88,6 +88,8 @@ test('nicklist is visible on desktop', async () => {
 });
 
 test('swipe from right edge opens nicklist on mobile', async () => {
+    await disconnect(browserPage);
+    await setSettings(browserPage, { showNicklist: false });
     await browserPage.setViewportSize({ width: 375, height: 667 });
     await connectToWeechat(browserPage);
 

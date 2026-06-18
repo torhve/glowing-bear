@@ -248,25 +248,27 @@
       return;
     }
 
-    const tiktokMatch = url.match(/tiktok\.com\/@([^/]+)\/video\/[^/]+|vm\.tiktok\.com\/([^/]+)/);
-    if (tiktokMatch) {
-      const tiktokUrl = url.includes('vm.tiktok.com')
-        ? `https://www.tiktok.com/@${url.split('/').pop()}`
-        : url;
-      const ref = embedRef;
-      fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(tiktokUrl)}`)
-        .then(r => r.json())
-        .then(data => {
-          if (!ref) return;
-          const content = data.html?.substring(0, data.html?.indexOf('<script') ?? 0);
-          ref.innerHTML = sanitizeHtml(content || '', { allowEmbeds: true });
-          const script = document.createElement('script');
-          script.src = 'https://www.tiktok.com/embed.js';
-          ref.appendChild(script);
-        })
-        .catch(e => console.error('TikTok embed error:', e));
-      return;
-    }
+      const tiktokMatch = url.match(/tiktok\.com\/@([^/]+)\/video\/[^/]+|vm\.tiktok\.com\/([^/]+)/);
+      if (tiktokMatch) {
+        const tiktokUrl = url.includes('vm.tiktok.com')
+          ? `https://www.tiktok.com/@${url.split('/').pop()}`
+          : url;
+        void (async () => {
+          try {
+            const r = await fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(tiktokUrl)}`);
+            const data = await r.json();
+            if (!embedRef) return;
+            const content = data.html?.substring(0, data.html?.indexOf('<script') ?? 0);
+            embedRef.innerHTML = sanitizeHtml(content || '', { allowEmbeds: true });
+            const script = document.createElement('script');
+            script.src = 'https://www.tiktok.com/embed.js';
+            embedRef.appendChild(script);
+          } catch (e) {
+            console.error('TikTok embed error:', e);
+          }
+        })();
+        return;
+      }
 
     const allocineMatch = url.match(/allocine\.fr\/videokast\/video-([a-zA-Z0-9]+)/);
     if (allocineMatch) {

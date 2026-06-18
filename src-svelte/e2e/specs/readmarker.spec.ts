@@ -31,10 +31,32 @@ test.beforeEach(async () => {
     await page.waitForTimeout(500);
 });
 
-test('readmarker should not appear when all messages are read', async () => {
-    // In the gbtest environment, WeeChat always has hotlist entries so lastSeen
-    // rarely stays negative. Instead, verify that readmarker position matches
-    // the unread count (lastSeen should be at lines.length - unread - 1).
+test('readmarker appears when there are unread messages', async () => {
+    // Create unread state by sending a message to #glowing-bear while on a different buffer
+    const pmItems = page.locator('[data-testid="buffer-item"]').filter({ hasNotText: '#glowing-bear' });
+    const pmCount = await pmItems.count();
+    
+    if (pmCount > 0) {
+        await pmItems.first().click();
+        await page.waitForTimeout(500);
+    } else {
+        await irc.sendPm('testuser', 'readmarker setup pm');
+        await page.waitForTimeout(1500);
+        
+        const pmItem = page.locator('[data-testid="buffer-item"]').filter({ hasNotText: '#glowing-bear' }).first();
+        await expect(pmItem).toBeVisible({ timeout: 10000 });
+        await pmItem.click();
+        await page.waitForTimeout(500);
+    }
+
+    // Send a message to #glowing-bear while we're NOT on it (creates unread)
+    await irc.sendMessage('#glowing-bear', 'readmarker test message ' + Date.now());
+    await page.waitForTimeout(2000);
+
+    // Switch back to #glowing-bear — readmarker should appear
+    await switchToBuffer(page, '#glowing-bear');
+    await page.waitForTimeout(1000);
+
     const state = await page.evaluate(() => {
         const el = document.querySelector('[data-testid="chat-messages"]');
         if (!el) return null;
@@ -50,7 +72,7 @@ test('readmarker should not appear when all messages are read', async () => {
         };
     });
 
-    // Readmarker should be visible since there are unread messages from WeeChat hotlist
+    // Readmarker should be visible since there are unread messages
     const readmarker = page.getByTestId('readmarker');
     await expect(readmarker).toBeVisible();
 

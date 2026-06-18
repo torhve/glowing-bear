@@ -32,18 +32,7 @@
   }
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
-  async function tryAutoConnect() {
-    if (!$settings.autoconnect || !$settings.savepassword || !$settings.hostField || !$settings.password) {
-      return;
-    }
-    try {
-      const { host: parsedHost, port: parsedPort, path: parsedPath } = parseRelayUrl($settings.hostField, $settings.port);
-      await connect(parsedHost, parsedPort, parsedPath, $settings.password, $settings.tls, false);
-      parseHashAndNavigate();
-    } catch (e) {
-      console.warn('Auto-connect failed:', e);
-    }
-  }
+
 
   function parseHashAndNavigate() {
     if (typeof window === 'undefined') return;
@@ -141,7 +130,13 @@
     const buf = $currentBuffer;
     if (!buf) return;
     if (buf.requestedLines < 100) {
-      fetchMoreLines(100).catch(() => {});
+      void (async () => {
+        try {
+          await fetchMoreLines(100);
+        } catch {
+          // Silently ignore fetch failures on buffer switch
+        }
+      })();
     }
     if (!('root' in (buf.nicklist || {}))) {
       requestNicklist(buf.id);

@@ -1,7 +1,9 @@
 import { execSync } from 'node:child_process';
-import { mkdirSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { mkdirSync, rmSync, existsSync, readFileSync, writeFileSync, statSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Resvg } from '@resvg/resvg-js';
+import sharp from 'sharp';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const svgInput = resolve(__dirname, 'glowing-bear.svg');
@@ -13,54 +15,74 @@ if (!existsSync(svgInput)) {
     process.exit(1);
 }
 
-// macOS iconutil requires an iconset directory with these specific sizes
+const svgBuffer = readFileSync(svgInput);
+
+// macOS iconutil requires square PNGs in an iconset directory
 const iconsetSizes = [
     [16, 16],
-    [16, 32],  // @2x
+    [16, 32],   // @2x
     [32, 32],
-    [32, 64],  // @2x
-    [64, 64],
-    [64, 128], // @2x
+    [32, 64],   // @2x
     [128, 128],
-    [128, 256],// @2x
+    [128, 256], // @2x
     [256, 256],
-    [256, 512],// @2x
+    [256, 512], // @2x
     [512, 512],
-    [512, 1024],// @2x (may be ignored by iconutil)
+    [512, 1024],// @2x
 ];
 
-// Clean up any previous temp directory
 if (existsSync(iconsetDir)) {
     rmSync(iconsetDir, { recursive: true, force: true });
 }
 mkdirSync(iconsetDir, { recursive: true });
 
-console.log('Generating .icns from glowing-bear.svg...');
+console.log('Generating .icns from ' + svgInput + '...');
 
 for (const [w, h] of iconsetSizes) {
-    const name = w === h ? `icon_${w}x${w}.png` : `icon_${w}x${w}@2x.png`;
+    const size = h;
+    const name = (w === h)
+        ? 'icon_' + w + 'x' + w + '.png'
+        : 'icon_' + w + 'x' + w + '@2x.png';
     const outputPath = resolve(iconsetDir, name);
     try {
-        execSync(`magick convert -background none -resize ${w}x${h}! "${svgInput}" "${outputPath}"`, {
-            stdio: ['inherit', 'inherit', 'ignore']
+        const resvg = new Resvg(svgBuffer, {
+            fitTo: { mode: 'width', value: size },
         });
+        let pngBuffer = resvg.render().asPng();
+
+        pngBuffer = await sharp(pngBuffer)
+            .resize(size, size, {
+                fit: 'contain',
+                background: { r: 0, g: 0, b: 0, alpha: 0 },
+            })
+            .png()
+            .toBuffer();
+
+        writeFileSync(outputPath, pngBuffer);
+        const fileSize = statSync(outputPath).size;
+        console.log('  OK ' + name + ' (' + size + 'x' + size + ') ' + (fileSize / 1024).toFixed(0) + ' KB');
     } catch (e) {
-        console.error(`  ✗ Failed to generate ${name}`);
+        console.error('  FAIL ' + name + ': ' + e.message);
         rmSync(iconsetDir, { recursive: true, force: true });
         process.exit(1);
     }
 }
 
 try {
-    execSync(`iconutil --convert icns --output "${icnsOutput}" "${iconsetDir}"`, {
-        stdio: 'inherit'
+    execSync('iconutil --convert icns --output "' + icnsOutput + '" "' + iconsetDir + '"', {
+        stdio: 'inherit',
     });
-    console.log('  ✓ glowing-bear.icns generated');
+    const icnsSize = statSync(icnsOutput).size;
+    console.log('  OK glowing-bear.icns ' + (icnsSize / 1024).toFixed(0) + ' KB');
+} catch (e) {
+    console.error('  FAIL iconutil');
+    process.exit(1);
 } finally {
-    rmSync(iconsetDir, { recursive: true, force: true });
+    if (existsSync(iconsetDir)) {
+        rmSync(iconsetDir, { recursive: true, force: true });
+    }
 }
 
-// Verify output
 if (existsSync(icnsOutput)) {
     console.log('Done.');
 } else {
