@@ -15,7 +15,7 @@
 </script>
 
 <BaseDialog id="topic-modal" labelledby="topic-title">
-  <div class="flex flex-col">
+  <div class="flex flex-col bg-bg">
     <div class="flex items-center justify-between px-6 py-4 border-b border-border">
       <h3 id="topic-title" class="text-lg font-bold text-text">
         Channel topic {bufferName}
@@ -33,7 +33,7 @@
     </div>
     <div class="px-6 py-4 max-h-96 overflow-y-auto">
       {#if topic.length > 0}
-        <div class="text-sm leading-relaxed">
+        <div class="text-sm leading-relaxed text-text">
           {#each topic as part (part.text)}
             {#if part.text}
               <span

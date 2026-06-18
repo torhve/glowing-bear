@@ -9,6 +9,7 @@
   import Minus from '@lucide/svelte/icons/minus';
   import { detectPrefixIcon, type PrefixIconType } from '$lib/utils/prefixIcons';
   import { imageExts, videoExts, audioExts, normalizeImageUrl } from '$lib/utils/mediaExtensions';
+  import { detectEmbedUrl } from '$lib/utils/urlEmbeds';
 
   let {
     message,
@@ -60,9 +61,16 @@
       } else if (audioExts.test(url)) {
         name = 'Audio';
         content = url;
+      } else {
+        const embedMatch = detectEmbedUrl(url);
+        if (embedMatch) {
+          name = embedMatch.name;
+          content = url;
+        }
       }
 
       if (name) {
+        console.log(`[buildMetadata] url="${url}" name="${name}" content="${content}" nsfw=${/nsfw/i.test(message.text)}`);
         result.push({
           content,
           nsfw: /nsfw/i.test(message.text),

@@ -5,7 +5,6 @@
   import { settings, updateSettings } from '$lib/stores/settings';
   import { addToast } from '$lib/toast';
 
-  import { onMount } from 'svelte';
   import { parseRelayUrl } from '$lib/utils';
   import Zap from '@lucide/svelte/icons/zap';
   import Settings2 from '@lucide/svelte/icons/settings-2';
@@ -23,7 +22,7 @@ import Key from '@lucide/svelte/icons/key';
   import FormInput from './FormInput.svelte';
 
   let hostField = $state('');
-  let port = $state('9001');
+  let port = $state('443');
   let password = $state('');
   let tls = $state(false);
   let hostInvalid = $state(false);
@@ -32,7 +31,8 @@ import Key from '@lucide/svelte/icons/key';
   let autoconnect = $state(false);
   let shakePassword = $state(false);
 
-  onMount(() => {
+  // Populate form fields from saved settings on mount
+  $effect(() => {
     const s = get(settings);
     if (s.hostField) hostField = s.hostField;
     if (s.port) port = s.port;
@@ -186,7 +186,7 @@ import Key from '@lucide/svelte/icons/key';
                 type="text"
                 value={port}
                 oninput={(e: Event) => { port = (e.target as HTMLInputElement).value; handlePortChange(); }}
-                placeholder="Port"
+                placeholder="443"
                 extraClass="pl-9 pr-3"
               />
             </div>

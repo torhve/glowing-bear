@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, disconnect, waitForAppReady } from '../helpers/connection';
+import { connectToWeechat, disconnect, fillPortInput, waitForAppReady } from '../helpers/connection';
 
 test.describe('Connection Form', () => {
     test.beforeEach(async ({ page }) => {
@@ -31,6 +31,7 @@ test.describe('Connection Form', () => {
     test('should show connecting state while connecting', async ({ page }) => {
         await page.getByTestId('host-input').clear();
         await page.getByTestId('host-input').fill('localhost');
+        await fillPortInput(page, '9001');
         await page.getByTestId('password-input').clear();
         await page.getByTestId('password-input').fill('testpassword123');
         await page.getByTestId('connect-button').click();
@@ -42,8 +43,7 @@ test.describe('Connection Form', () => {
     test('should show error message on connection failure', async ({ page }) => {
         await page.getByTestId('host-input').clear();
         await page.getByTestId('host-input').fill('localhost');
-        await page.getByTestId('port-input').clear();
-        await page.getByTestId('port-input').fill('9999');
+        await fillPortInput(page, '9999');
         await page.getByTestId('password-input').clear();
         await page.getByTestId('password-input').fill('wrongpassword');
         await page.getByTestId('connect-button').click();
@@ -54,8 +54,7 @@ test.describe('Connection Form', () => {
         // Use invalid port to force connection failure (test server doesn't validate passwords)
         await page.getByTestId('host-input').clear();
         await page.getByTestId('host-input').fill('localhost');
-        await page.getByTestId('port-input').clear();
-        await page.getByTestId('port-input').fill('19999');
+        await fillPortInput(page, '19999');
         await page.getByTestId('password-input').clear();
         await page.getByTestId('password-input').fill('wrongpassword');
         await page.getByTestId('connect-button').click();
@@ -98,6 +97,7 @@ test.describe('Connection Form', () => {
 
     test('should disable connect button while connecting', async ({ page }) => {
         await page.getByTestId('host-input').fill('localhost');
+        await fillPortInput(page, '9001');
         await page.getByTestId('password-input').fill('testpassword123');
         await page.getByTestId('connect-button').click();
         await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });

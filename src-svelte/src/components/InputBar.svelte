@@ -3,7 +3,7 @@
   import { sendMessage, sendWeeChatCommand } from '$lib/stores/connectionManager';
   import { settings } from '$lib/stores/settings';
   import { addToHistory, getHistoryUp, getHistoryDown } from '$lib/stores/inputHistory';
-  import { completeNick } from '$lib/utils';
+  import { completeNick, isPopoverOpen } from '$lib/utils';
   import Send from '@lucide/svelte/icons/send';
   import { emojifyInput } from '$lib/emojify';
   import Camera from '@lucide/svelte/icons/camera';
@@ -33,8 +33,8 @@
   let message = $state('');
   let _iterCandidate: string | null = $state(null);
   let isDraggingFile = $state(false);
-  let previewOpen = $state(false);
   let previewImages = $state<PreviewItem[]>([]);
+  let previewOpen = $derived(previewImages.length > 0);
   let nextImageId = $state(1);
 
   let canSend = $derived($currentBuffer && message.length > 0);
@@ -108,6 +108,9 @@
   }
 
   function handleKeyDown(e: KeyboardEvent) {
+    // Don't process keyboard shortcuts when a modal/dialog is open or focus is elsewhere
+    if (isPopoverOpen() && document.activeElement !== inputRef) return false;
+
     const code = e.keyCode || e.which;
 
     // AltGraph detection — skip all handling
@@ -285,16 +288,34 @@
     }
   }
 
-  // Convert files to preview items and open the preview modal
-  async function collectImagesForPreview(files: FileList | File[]): Promise<void> {
+  // Convert files to preview items and open the preview modal.
+  // base64Strings handles images from clipboard.getAsString() fallback (macOS Safari).
+  async function collectImagesForPreview(
+    files: FileList | File[],
+    base64Strings?: string[],
+  ): Promise<void> {
     const imageFiles = Array.from(files).filter(f => f.type.match(/image.*/));
-    if (imageFiles.length === 0) return;
+    console.log('[collectImagesForPreview] entered — files:', Array.from(files).map(f => ({ name: f.name, type: f.type })), 'base64Strings:', base64Strings?.length ?? 0);
+    console.log('[collectImagesForPreview] after filter — imageFiles:', imageFiles.length, imageFiles.map(f => ({ name: f.name, type: f.type })));
+    if (imageFiles.length === 0 && !(base64Strings?.length)) {
+      console.log('[collectImagesForPreview] no images found, returning early');
+      return;
+    }
 
     const newItems: PreviewItem[] = [];
+
     for (const file of imageFiles) {
+      console.log('[collectImagesForPreview] reading file:', file.name, file.type, file.size + ' bytes');
       const dataUrl = await new Promise<string>((resolve) => {
         const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
+        reader.onload = () => {
+          console.log('[collectImagesForPreview] FileReader done for', file.name, 'dataUrl length:', (reader.result as string).length);
+          resolve(reader.result as string);
+        };
+        reader.onerror = (e) => {
+          console.error('[collectImagesForPreview] FileReader error for', file.name, e);
+          resolve('');
+        };
         reader.readAsDataURL(file);
       });
       newItems.push({
@@ -307,6 +328,21 @@
       });
     }
 
+    // Add base64 data URLs directly (no FileReader needed)
+    if (base64Strings) {
+      for (const dataUrl of base64Strings) {
+        newItems.push({
+          id: nextImageId++,
+          name: 'pasted-image.png',
+          size: Math.round(dataUrl.length * 0.75),
+          dataUrl,
+          progress: 0,
+          status: 'preview',
+        });
+      }
+    }
+
+    console.log('[collectImagesForPreview] setting previewImages:', previewImages.length + newItems.length, 'total items');
     previewImages = [...previewImages, ...newItems];
     previewOpen = true;
     inputRef?.focus();
@@ -327,26 +363,76 @@
     inputRef?.focus();
   }
 
-  // Handle paste events — detect images from clipboard
-  function handlePaste(e: ClipboardEvent) {
-    const items = e.clipboardData?.items;
-    if (!items) return;
+  // Handle paste events — detect images from clipboard.
+  // Tries multiple browser strategies in order:
+  // 1. clipboardData.files (Firefox on macOS exposes pasted images this way)
+  // 2. clipboardData.items + getAsFile() (Chrome standard behavior)
+  // 3. clipboardData.items + getAsString() (Safari fallback when getAsFile returns null)
+  async function handlePaste(e: ClipboardEvent) {
+    const data = e.clipboardData;
+    if (!data) {
+      console.log('[handlePaste] no clipboardData');
+      return;
+    }
+
+    // Strategy 1: clipboardData.files (Firefox on macOS)
+    const allFiles = Array.from(data.files);
+    const files = allFiles.filter(f => f.type.match(/image.*/));
+    console.log('[handlePaste] clipboardData.files:', allFiles.length, 'total,', files.length, 'images', allFiles.map(f => ({ name: f.name, type: f.type })));
+    if (files.length > 0) {
+      e.preventDefault();
+      console.log('[handlePaste] using strategy 1 (files), calling collectImagesForPreview');
+      void collectImagesForPreview(files);
+      return;
+    }
+
+    // Strategy 2+3: clipboardData.items API (Chrome, Safari)
+    const items = data.items;
+    if (!items) {
+      console.log('[handlePaste] no clipboardData.items');
+      return;
+    }
 
     const imageFiles: File[] = [];
+    const imageStringsPromises: Promise<string | null>[] = [];
+
+    console.log('[handlePaste] clipboardData.items count:', items.length);
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
+      console.log('[handlePaste] item[' + i + ']:', item?.kind, item?.type);
       if (item && item.type.startsWith('image/')) {
         const file = item.getAsFile();
         if (file) {
+          console.log('[handlePaste] item[' + i + '] getAsFile() succeeded:', file.name, file.type, file.size + ' bytes');
           imageFiles.push(file);
+        } else {
+          console.log('[handlePaste] item[' + i + '] getAsFile() returned null, falling back to getAsString');
+          imageStringsPromises.push(
+            new Promise(resolve => {
+              item.getAsString(s => {
+                console.log('[handlePaste] getAsString callback:', s ? 'got ' + s.substring(0, 60) + '...' : 'null');
+                resolve(s || null);
+              });
+            }),
+          );
         }
       }
     }
 
-    if (imageFiles.length > 0) {
-      e.preventDefault();
-      void collectImagesForPreview(imageFiles);
+    console.log('[handlePaste] collected:', imageFiles.length, 'files,', imageStringsPromises.length, 'promises');
+    if (imageFiles.length === 0 && imageStringsPromises.length === 0) {
+      console.log('[handlePaste] no images found, aborting');
+      return;
     }
+
+    e.preventDefault();
+
+    // Wait for all getAsString callbacks to complete before processing
+    const resolvedStrings = await Promise.all(imageStringsPromises);
+    const strings = resolvedStrings.filter((s): s is string => s !== null && s.length > 0);
+    console.log('[handlePaste] resolved strings:', strings.length);
+
+    void collectImagesForPreview(imageFiles, strings.length ? strings : undefined);
   }
 
   function handleFileInputChange() {
@@ -379,7 +465,9 @@
   // Only auto-focus on desktop — mobile users prioritize reading over typing
   $effect(() => {
     if ($currentBuffer && typeof window !== 'undefined' && window.innerWidth >= 768) {
-      inputRef?.focus();
+      if (!isPopoverOpen()) {
+        inputRef?.focus();
+      }
     }
   });
 

@@ -141,7 +141,20 @@ export async function connect(host: string, port: number, path: string, password
         };
 
         ws.onclose = () => {
+            // Reject all pending callbacks to unblock awaiting sendAsync promises
+            Object.keys(callbacks).forEach(k => {
+                const id = parseInt(k, 10);
+                if (callbacks[id]) {
+                    callbacks[id].reject(new Error('WebSocket closed'));
+                }
+                delete callbacks[id];
+            });
+
             console.log('Disconnected from relay');
+            if (hotlistInterval) {
+                clearInterval(hotlistInterval);
+                hotlistInterval = null;
+            }
             setConnectionStatus('disconnected');
             connected.set(false);
 

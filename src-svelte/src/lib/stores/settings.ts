@@ -3,7 +3,7 @@ import type { Settings } from '$lib/types';
 
 export const settings = writable<Settings>({
     hostField: '',
-    port: '9001',
+    port: '443',
     tls: typeof window !== 'undefined' ? window.location.protocol === 'https:' : false,
     password: '',
     savepassword: false,
