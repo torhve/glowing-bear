@@ -7,7 +7,8 @@
   import InputBar from '$components/InputBar.svelte';
   import BufferList from '$components/BufferList.svelte';
   import Nicklist from '$components/Nicklist.svelte';
-import Toast from '$components/Toast.svelte';
+  import Toast from '$components/Toast.svelte';
+  import X from '@lucide/svelte/icons/x';
   import { settings, updateSettings } from '$lib/stores/settings';
   import { initTheme } from '$lib/stores/theme';
   import { get } from 'svelte/store';
@@ -380,6 +381,29 @@ import Toast from '$components/Toast.svelte';
     _altKeyPressed = false;
   }
 
+  function handleTypeToFocus(e: KeyboardEvent) {
+    if (typeof window === 'undefined') return;
+    if (window.innerWidth < 768) return;
+    if (!get(currentBuffer)) return;
+    if (e.key.length !== 1) return;
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    const activeEl = document.activeElement;
+    const tag = activeEl?.tagName || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if ((activeEl as HTMLElement)?.isContentEditable) return;
+    const input = document.querySelector<HTMLTextAreaElement>('[data-testid="message-input"]');
+    if (!input) return;
+    e.preventDefault();
+    input.focus();
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? start;
+    const newValue = input.value.substring(0, start) + e.key + input.value.substring(end);
+    input.value = newValue;
+    const newCursor = start + 1;
+    input.setSelectionRange(newCursor, newCursor);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
   // Register keyboard event listeners once on mount — no reactive dependencies to avoid listener tear-down/re-add cycles
   onMount(() => {
     if (typeof window !== 'undefined') {
@@ -389,6 +413,7 @@ import Toast from '$components/Toast.svelte';
       document.addEventListener('keyup', handleGlobalKeyUp);
       document.addEventListener('keydown', handleAltKeyDown);
       document.addEventListener('keyup', handleAltKeyUp);
+      document.addEventListener('keydown', handleTypeToFocus);
     }
   });
 
@@ -402,10 +427,12 @@ import Toast from '$components/Toast.svelte';
       document.removeEventListener('keyup', handleGlobalKeyUp);
       document.removeEventListener('keydown', handleAltKeyDown);
       document.removeEventListener('keyup', handleAltKeyUp);
+      document.removeEventListener('keydown', handleTypeToFocus);
     }
   });
 
   let showBufferList = $state(true);
+  let nicklistOpenOnMobile = $state(false);
   let touchStartX = 0;
   let touchStartY = 0;
   let touchStartTime = 0;
@@ -466,10 +493,21 @@ import Toast from '$components/Toast.svelte';
     const deltaTime = Date.now() - touchStartTime;
 
     if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50 && deltaTime < 500) {
+      // Swipe right -> show buffer list
       if (deltaX > 0) {
         showBufferList = true;
-      } else {
-        showBufferList = false;
+        nicklistOpenOnMobile = false;
+      }
+      // Swipe left -> check if from right edge (nicklist) or general (buffer list)
+      else {
+        const rightEdgeThreshold = 40;
+        if (touchStartX > window.innerWidth - rightEdgeThreshold && !nicklistOpenOnMobile) {
+          nicklistOpenOnMobile = true;
+        } else if (nicklistOpenOnMobile) {
+          nicklistOpenOnMobile = false;
+        } else {
+          showBufferList = false;
+        }
       }
     }
 
@@ -504,8 +542,23 @@ import Toast from '$components/Toast.svelte';
         <ChatView />
         <InputBar />
       </div>
-      {#if !isMobile()}
+      {#if $settings.showNicklist && !isMobile()}
         <Nicklist />
+      {/if}
+      {#if isMobile()}
+        <div class="fixed top-0 right-0 bottom-0 h-screen w-52 sm:w-28 lg:w-30 z-50 transition-transform duration-200 ease-out {nicklistOpenOnMobile ? 'translate-x-0' : 'translate-x-full'}">
+          <button
+            onclick={() => { nicklistOpenOnMobile = false; }}
+            data-testid="nicklist-close-button"
+            class="absolute top-1 left-2 z-10 px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-surface-raised rounded"
+            title="Close nicklist"
+          >
+            <X size={16} />
+          </button>
+          <div class="h-full bg-surface border-l border-border flex flex-col overflow-hidden">
+            <Nicklist onClose={() => { nicklistOpenOnMobile = false; }} />
+          </div>
+        </div>
       {/if}
     </div>
   </div>

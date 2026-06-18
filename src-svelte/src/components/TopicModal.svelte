@@ -2,6 +2,8 @@
   import type { RichTextPart } from '$lib/types';
   import BaseDialog from '$components/BaseDialog.svelte';
   import LinkifiedText from '$components/LinkifiedText.svelte';
+  import X from '@lucide/svelte/icons/x';
+  import Check from '@lucide/svelte/icons/check';
 
   let {
     topic = [] as RichTextPart[],
@@ -23,10 +25,10 @@
         data-testid="topic-modal-close"
         popovertarget="topic-modal"
         popovertargetaction="hide"
-        class="text-text-secondary hover:text-text text-2xl leading-none transition-colors"
+        class="text-text-secondary hover:text-text p-1 rounded transition-colors"
         aria-label="Close topic"
       >
-        &times;
+        <X size={18} />
       </button>
     </div>
     <div class="px-6 py-4 max-h-96 overflow-y-auto">
@@ -55,6 +57,7 @@
         popovertargetaction="hide"
         class="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded text-sm font-medium transition-colors"
       >
+        <Check size={16} class="inline-block mr-1" />
         Close
       </button>
     </div>

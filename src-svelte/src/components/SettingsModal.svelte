@@ -8,6 +8,9 @@
   import Bell from '@lucide/svelte/icons/bell';
   import Sliders from '@lucide/svelte/icons/sliders-horizontal';
   import Plug from '@lucide/svelte/icons/plug';
+  import X from '@lucide/svelte/icons/x';
+  import Check from '@lucide/svelte/icons/check';
+  import Undo2 from '@lucide/svelte/icons/undo-2';
 
   let notifSupported = $derived(isNotificationSupported());
 
@@ -73,9 +76,9 @@
           data-testid="settings-modal-close"
           popovertarget="settings-modal"
           popovertargetaction="hide"
-          class="text-text-secondary hover:text-white text-xl leading-none"
+          class="text-text-secondary hover:text-white p-1 rounded"
           aria-label="Close settings"
-        >✕</button>
+        ><X size={18} /></button>
       </div>
     </div>
 
@@ -128,6 +131,7 @@
             <label for="custom-css" class="block text-sm text-text-secondary mb-1">Custom CSS</label>
             <textarea
               id="custom-css"
+              data-testid="custom-css-textarea"
               value={$settings.customCSS}
               oninput={(e) => updateSettings({ customCSS: e.currentTarget.value })}
               rows={4}
@@ -242,13 +246,14 @@
                </div>
              {:else}
                <button
-                 type="button"
-                 onclick={handleNotificationPermission}
-                 data-testid="request-notification-permission-button"
-                 class="px-3 py-1.5 bg-accent hover:bg-accent-hover text-white text-sm rounded transition-colors"
-               >
-                 Request Notification Permission
-               </button>
+                  type="button"
+                  onclick={handleNotificationPermission}
+                  data-testid="request-notification-permission-button"
+                  class="px-3 py-1.5 bg-accent hover:bg-accent-hover text-white text-sm rounded transition-colors"
+                >
+                  <Bell size={16} class="inline-block mr-1" />
+                  Request Notification Permission
+                </button>
              {/if}
            {/if}
         </div>
@@ -327,6 +332,7 @@
         onclick={resetSettings}
         class="px-3 py-1.5 text-sm text-danger hover:text-danger hover:bg-surface-raised rounded transition-colors"
       >
+        <Undo2 size={16} class="inline-block mr-1" />
         Reset to Defaults
       </button>
       <button
@@ -335,6 +341,7 @@
         popovertargetaction="hide"
         class="px-4 py-1.5 bg-accent hover:bg-accent-hover text-white text-sm rounded transition-colors"
       >
+        <Check size={16} class="inline-block mr-1" />
         Done
       </button>
     </div>

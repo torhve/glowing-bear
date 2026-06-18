@@ -106,7 +106,7 @@ if ! $RELAY_ALREADY_RUNNING; then
 	/opt/homebrew/bin/weechat-headless -d "$WEECHAT_HOME" \
 		--daemon \
 		-r "/set relay.network.password testpassword123" \
-	-r "/set relay.network.max_connections 32" \
+		-r "/set relay.network.max_connections 32" \
 		-r "/relay add weechat $RELAY_PORT" \
 		-r "/server add gbtest localhost/$IRC_PORT -nicks=testuser -autoconnect -notls" \
 		-r "/set irc.server.gbtest.autojoin #glowing-bear" \
@@ -138,5 +138,5 @@ echo "  Auto channel:   #glowing-bear"
 echo "  Config dir:     $WEECHAT_HOME"
 echo ""
 echo "Run 'npm run dev' (from src-svelte/) to start the UI."
-echo "Run 'npm run test:e2e' to run Cypress tests."
+echo "Run 'npm run test:e2e' to run playwright tests."
 echo "Run '$SCRIPT_DIR/stop.sh' to shut down."

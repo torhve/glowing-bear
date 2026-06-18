@@ -243,6 +243,7 @@
     text-overflow: ellipsis;
     box-sizing: border-box;
     font-family: monospace;
+    font-size: 0.9em;
   }
 
   .bufferline.highlight .prefix {

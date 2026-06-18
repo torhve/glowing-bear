@@ -7,8 +7,9 @@
   import { sendBufferCommand } from '$lib/stores/connectionManager';
   import { settings } from '$lib/stores/settings';
   import { insertNickIntoInput } from '$lib/utils';
-import { DEBUG_NICKLIST } from '$lib/debug';
+  import { DEBUG_NICKLIST } from '$lib/debug';
 
+  let { onClose }: { onClose?: () => void } = $props();
   let searchQuery = $state('');
 
   let showNicklist = $derived($settings.showNicklist);
@@ -48,6 +49,16 @@ import { DEBUG_NICKLIST } from '$lib/debug';
 <div class="w-52 sm:w-28 lg:w-30 bg-surface border-l border-border flex flex-col overflow-hidden" data-testid="nicklist">
   <div class="h-10 bg-surface-raised border-b border-border flex items-center justify-between px-3">
     <span class="flex items-center gap-1.5"><Users size={14} />Nicklist</span>
+    {#if onClose}
+      <button
+        onclick={onClose}
+        data-testid="mobile-nicklist-close"
+        class="px-1 py-0.5 text-sm text-text-secondary hover:text-white hover:bg-surface-raised rounded"
+        title="Close nicklist"
+      >
+        ✕
+      </button>
+    {/if}
   </div>
 
   <div class="px-2 py-1 border-b border-border">
