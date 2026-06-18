@@ -134,10 +134,10 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
          {/if}
          {#each groupBufs as buffer (buffer.id)}
             <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                <div
+               <div
                    onclick={() => handleBufferClick(buffer.id)}
                    data-testid="buffer-item"
-                     class="group relative flex items-center px-2 py-1 cursor-pointer {buffer.id === $activeBufferId ? 'border-l-[3px] border-l-accent bg-accent/20 hover:bg-accent/30' : 'hover:bg-surface-raised'}"
+                     class="group relative flex items-center px-2 py-1 cursor-pointer hover:bg-accent/10 {buffer.id === $activeBufferId ? 'border-l-[3px] border-l-accent bg-accent/20' : ''}"
                  >
                  {#if getBufferIcon(buffer)}
                    {@const Icon = getBufferIcon(buffer)}

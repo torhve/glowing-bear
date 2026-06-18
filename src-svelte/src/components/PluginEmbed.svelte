@@ -3,6 +3,8 @@
   import { sanitizeHtml } from '$lib/filters';
   import { onMount } from 'svelte';
   import { imageExts, videoExts, audioExts } from '$lib/utils/mediaExtensions';
+  import Play from '@lucide/svelte/icons/play';
+  import X from '@lucide/svelte/icons/x';
 
   let { plugin }: { plugin: PluginMetadata } = $props();
 
@@ -304,6 +306,7 @@
       class="{(!plugin.nsfw ? 'bg-accent text-text hover:bg-accent-hover' : 'bg-warning text-text')}"
       onclick={showContent}
     >
+      <Play size={16} class="inline-block mr-1" />
       Show {plugin.name}
     </button>
   </div>
@@ -319,6 +322,7 @@
         class="absolute top-1 right-1 z-10 px-2 py-0.5 rounded text-xs font-mono bg-surface-raised text-text-secondary hover:text-text hover:bg-surface"
         onclick={hideContent}
       >
+        <X size={14} class="inline-block mr-1" />
         Hide {plugin.name}
       </button>
       <div

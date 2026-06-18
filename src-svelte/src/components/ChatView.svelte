@@ -277,6 +277,13 @@
     border-collapse: collapse;
   }
 
+  @media (max-width: 640px) {
+    table {
+      border-collapse: separate;
+      border-spacing: 2px 3px;
+    }
+  }
+
   .fetchmore-row td {
     text-align: center;
     padding: 4px 0;
