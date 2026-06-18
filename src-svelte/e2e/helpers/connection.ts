@@ -11,9 +11,21 @@ export async function setSettings(page: Page, settings: Record<string, unknown>)
   await page.evaluate((s) => (window as any).__setGbSettings?.(s), settings);
 }
 
+export async function fillPortInput(page: Page, port: string) {
+  // Controlled Svelte inputs don't reliably respond to Playwright's fill().
+  // Directly set DOM value and dispatch an input event to trigger the oninput handler.
+  await page.evaluate((p) => {
+    const input = document.querySelector('[data-testid="port-input"]');
+    if (input) {
+      (input as HTMLInputElement).value = p;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }, port);
+}
+
 export async function connectToWeechat(page: Page) {
   await page.getByTestId('host-input').fill('localhost');
-  await page.getByTestId('port-input').fill('9001');
+  await fillPortInput(page, '9001');
   await page.getByTestId('password-input').fill('testpassword123');
   await page.getByTestId('connect-button').click();
   await page.getByTestId('chat-view').waitFor({ state: 'visible', timeout: 45000 });

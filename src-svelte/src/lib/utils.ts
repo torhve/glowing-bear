@@ -240,10 +240,10 @@ export function computeJumpKeys(buffers: BufferData[]): BufferData[] {
 /**
  * Parse a relay URL string into host, port, and path.
  */
-export function parseRelayUrl(raw: string, defaultPort: string | number = 9001): { host: string; port: number; path: string } {
+export function parseRelayUrl(raw: string, defaultPort: string | number = 443): { host: string; port: number; path: string } {
     let host = raw;
-    let port = typeof defaultPort === 'string' ? (parseInt(defaultPort, 10) || 9001) : defaultPort;
-    if (port < 1 || port > 65535) port = 9001;
+    let port = typeof defaultPort === 'string' ? (parseInt(defaultPort, 10) || 443) : defaultPort;
+    if (port < 1 || port > 65535) port = 443;
     let path = 'weechat';
     const match = raw.match(/^(\[[0-9a-f:]+\]|[^\]]+):(\d+)(\/.*)?$/i);
     if (match) {
@@ -358,3 +358,9 @@ export function getDisplayName(buffer: BufferData): string {
     return buffer.trimmedName || buffer.fullName || buffer.shortName;
 }
 
+/**
+ * Check if any popover dialog is currently open.
+ */
+export function isPopoverOpen(): boolean {
+    return document.querySelector('dialog[popover]:popover-open') !== null;
+}

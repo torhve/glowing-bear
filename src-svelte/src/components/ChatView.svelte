@@ -259,11 +259,6 @@
     {/if}
   </div>
 
-  {#if $currentBuffer && $currentBuffer.unread > 0}
-    <div class="px-3 py-1 bg-surface-raised border-t border-border text-xs text-text-secondary">
-      {$currentBuffer.unread} unread message{$currentBuffer.unread !== 1 ? 's' : ''}
-    </div>
-  {/if}
 </div>
 
 <TopicModal

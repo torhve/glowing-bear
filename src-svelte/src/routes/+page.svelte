@@ -12,12 +12,11 @@
   import { settings, updateSettings } from '$lib/stores/settings';
   import { initTheme } from '$lib/stores/theme';
   import { get } from 'svelte/store';
-  import { onMount, onDestroy } from 'svelte';
   import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig } from '$lib/stores/models';
   import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer } from '$lib/stores/connectionManager';
   import { Protocol } from '$lib/weechat';
   import { initNotifications, updateTitle, updateFavico, onDisconnect } from '$lib/notifications';
-  import { sortBuffers, parseRelayUrl } from '$lib/utils';
+  import { sortBuffers, parseRelayUrl, isPopoverOpen } from '$lib/utils';
 
   /* eslint-disable @typescript-eslint/no-explicit-any -- dev-time debug globals on window */
   if (typeof window !== 'undefined' && import.meta.env.DEV) {
@@ -71,12 +70,18 @@
     }
   }
 
-  onMount(async () => {
+  $effect(() => {
+    // Initialize theme, notifications, touch gestures, and attempt auto-connect on mount
     initTheme();
     initNotifications();
     initTouchGestures();
-    await tryAutoConnect();
+    void tryAutoConnect();
     document.body.setAttribute('data-app-ready', 'true');
+
+    return () => {
+      cleanupTouchGestures();
+      onDisconnect();
+    };
   });
 
   $effect(() => {
@@ -92,11 +97,6 @@
     return () => {
       document.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  });
-
-  onDestroy(() => {
-    cleanupTouchGestures();
-    onDisconnect();
   });
 
   $effect(() => {
@@ -391,6 +391,8 @@
     const tag = activeEl?.tagName || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
     if ((activeEl as HTMLElement)?.isContentEditable) return;
+    // Don't type-to-focus when a modal/dialog is open
+    if (isPopoverOpen()) return;
     const input = document.querySelector<HTMLTextAreaElement>('[data-testid="message-input"]');
     if (!input) return;
     e.preventDefault();
@@ -405,7 +407,7 @@
   }
 
   // Register keyboard event listeners once on mount — no reactive dependencies to avoid listener tear-down/re-add cycles
-  onMount(() => {
+  $effect(() => {
     if (typeof window !== 'undefined') {
       document.addEventListener('keydown', handleQuickKeys);
       document.addEventListener('keydown', handleJumpToBuffer);
@@ -415,20 +417,18 @@
       document.addEventListener('keyup', handleAltKeyUp);
       document.addEventListener('keydown', handleTypeToFocus);
     }
-  });
 
-  onDestroy(() => {
-    cleanupTouchGestures();
-    onDisconnect();
-    if (typeof window !== 'undefined') {
-      document.removeEventListener('keydown', handleQuickKeys);
-      document.removeEventListener('keydown', handleJumpToBuffer);
-      document.removeEventListener('keydown', handleGlobalKeyDown);
-      document.removeEventListener('keyup', handleGlobalKeyUp);
-      document.removeEventListener('keydown', handleAltKeyDown);
-      document.removeEventListener('keyup', handleAltKeyUp);
-      document.removeEventListener('keydown', handleTypeToFocus);
-    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        document.removeEventListener('keydown', handleQuickKeys);
+        document.removeEventListener('keydown', handleJumpToBuffer);
+        document.removeEventListener('keydown', handleGlobalKeyDown);
+        document.removeEventListener('keyup', handleGlobalKeyUp);
+        document.removeEventListener('keydown', handleAltKeyDown);
+        document.removeEventListener('keyup', handleAltKeyUp);
+        document.removeEventListener('keydown', handleTypeToFocus);
+      }
+    };
   });
 
   let showBufferList = $state(true);

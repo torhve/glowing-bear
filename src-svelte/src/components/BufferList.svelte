@@ -5,6 +5,7 @@
   import { closeBufferOnWeeChat, pinBuffer, unpinBuffer } from '$lib/stores/connectionManager';
   import { settings, updateSettings } from '$lib/stores/settings';
   import { sortBuffers, getBufferIconName, getDisplayName } from '$lib/utils';
+  import { tooltipAttachment } from '$lib/utils/bufferTooltip';
   import Pin from '@lucide/svelte/icons/pin';
   import PinOff from '@lucide/svelte/icons/pin-off';
   import X from '@lucide/svelte/icons/x';
@@ -133,12 +134,15 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
            </div>
          {/if}
          {#each groupBufs as buffer (buffer.id)}
-            <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-               <div
-                   onclick={() => handleBufferClick(buffer.id)}
-                   data-testid="buffer-item"
+                 <div
+                     role="button"
+                     tabindex="0"
+                     onclick={() => handleBufferClick(buffer.id)}
+                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleBufferClick(buffer.id); }}
+                     data-testid="buffer-item"
+                     {@attach tooltipAttachment(buffer)}
                      class="group relative flex items-center px-2 py-1 cursor-pointer hover:bg-accent/10 {buffer.id === $activeBufferId ? 'border-l-[3px] border-l-accent bg-accent/20' : ''}"
-                 >
+                   >
                  {#if getBufferIcon(buffer)}
                    {@const Icon = getBufferIcon(buffer)}
                   <Icon size={12} class="text-text-muted flex-shrink-0" />
@@ -180,25 +184,15 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
                     <Pin size={14} />
                   {/if}
                 </button>
-               <button
-                  onclick={(e) => { e.stopPropagation(); handleCloseBuffer(buffer.id); }}
-                   class="text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100 focus:opacity-100"
-                  class:opacity-100={buffer.id === $activeBufferId}
-                  data-testid="close-buffer"
-                >
-                  <X size={14} />
-                </button>
-               <!-- Buffer info tooltip -->
-               <div class="absolute left-full top-0 ml-1 z-50 hidden group-hover:block">
-                 <div class="bg-surface-raised border border-border rounded shadow-lg px-3 py-2 text-xs text-text whitespace-nowrap">
-                   <div><span class="text-text-secondary">Server:</span> {buffer.server || '-'}</div>
-                   <div><span class="text-text-secondary">Short name:</span> {buffer.shortName || '-'}</div>
-                   <div><span class="text-text-secondary">Full name:</span> {buffer.fullName || '-'}</div>
-                   <div><span class="text-text-secondary">Number:</span> {buffer.number}</div>
-                   <div><span class="text-text-secondary">Type:</span> {buffer.type}</div>
-                 </div>
-               </div>
-           </div>
+                <button
+                   onclick={(e) => { e.stopPropagation(); handleCloseBuffer(buffer.id); }}
+                    class="text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100 focus:opacity-100"
+                   class:opacity-100={buffer.id === $activeBufferId}
+                   data-testid="close-buffer"
+                 >
+                   <X size={14} />
+                 </button>
+            </div>
         {/each}
       </div>
     {/each}

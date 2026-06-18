@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { PluginMetadata } from '$lib/types';
   import { sanitizeHtml } from '$lib/filters';
-  import { onMount } from 'svelte';
   import { imageExts, videoExts, audioExts } from '$lib/utils/mediaExtensions';
   import Play from '@lucide/svelte/icons/play';
   import X from '@lucide/svelte/icons/x';
@@ -9,21 +8,18 @@
   let { plugin }: { plugin: PluginMetadata } = $props();
 
   let embedRef = $state<HTMLDivElement | null>(null);
-  let visible = $state(false);
+  let visible = $state(plugin.visible);
   let contentInjected = $state(false);
 
-  $effect(() => { visible = plugin.visible; });
-
-  onMount(() => {
-    if (visible && !contentInjected) {
-      contentInjected = true;
-      setTimeout(() => {
-        if (isString && content) {
-          processUrlContent(content as string);
-        } else if (isFunction && content) {
-          loadAsyncEmbed();
-        }
-      }, 0);
+  // React only to changes in the plugin.visible prop (settings toggle).
+  // Does NOT read internal state (visible, contentInjected) — those are modified
+  // by showContent/hideContent on user clicks, which would cause the effect to
+  // re-run and undo user interactions.
+  $effect(() => {
+    if (plugin.visible) {
+      showContent();
+    } else {
+      hideContent();
     }
   });
 
@@ -33,13 +29,21 @@
   let isFunction = $derived(typeof content === 'function');
 
   function injectImage(url: string) {
-    if (!embedRef) return;
+    if (!embedRef) {
+      console.warn('[PluginEmbed] injectImage: embedRef is null, URL:', url);
+      return;
+    }
+    console.log('[PluginEmbed] injectImage: injecting image, url:', url);
     const img = document.createElement('img');
     img.className = 'embed';
     img.src = url;
     img.alt = 'Image preview';
     img.onload = () => {
+      console.log('[PluginEmbed] injectImage: image loaded successfully, url:', url);
       img.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    };
+    img.onerror = () => {
+      console.warn('[PluginEmbed] injectImage: image failed to load, url:', url);
     };
     const link = document.createElement('a');
     link.href = url;
@@ -104,7 +108,11 @@
   }
 
   function processUrlContent(url: string) {
-    if (!url || !embedRef) return;
+    if (!url || !embedRef) {
+      console.warn('[PluginEmbed] processUrlContent: url or embedRef missing', { url, embedRef: !!embedRef });
+      return;
+    }
+    console.log('[PluginEmbed] processUrlContent: processing URL:', url);
 
     if (imageExts.test(url)) {
       injectImage(url);
@@ -265,20 +273,23 @@
       injectIframe(`https://www.allocine.fr/_iframe/videokast/?video=${allocineMatch[1]}&result=media`, '100%', '100%');
       return;
     }
+    console.log('[PluginEmbed] processUrlContent: no handler matched for URL:', url);
   }
 
   function showContent() {
+    console.log('[PluginEmbed] showContent called', { isString, isFunction, content, contentInjected });
     visible = true;
     if (!contentInjected) {
       contentInjected = true;
-      // Defer to next microtask so bind:this resolves after Svelte renders
-      setTimeout(() => {
-        if (isString && content) {
-          processUrlContent(content as string);
-        } else if (isFunction && content) {
-          loadAsyncEmbed();
-        }
-      }, 0);
+      if (isString && content) {
+        processUrlContent(content as string);
+      } else if (isFunction && content) {
+        loadAsyncEmbed();
+      } else {
+        console.warn('[PluginEmbed] showContent: no valid content to process', { isString, isFunction, content });
+      }
+    } else {
+      console.log('[PluginEmbed] showContent: content already injected, skipping');
     }
   }
 
@@ -299,21 +310,19 @@
   }
 </script>
 
-{#if !visible}
-  <div class="relative">
-    <button
-      data-testid="show-embed"
-      class="px-3 py-1.5 rounded text-sm font-medium transition-colors {(!plugin.nsfw ? 'bg-accent hover:bg-accent-hover text-white' : 'bg-warning hover:bg-warning/90 text-white')}"
-      onclick={showContent}
-    >
-      <Play size={16} class="inline-block mr-1" />
-      Show {plugin.name}
-    </button>
-  </div>
-{:else}
-  <div class="relative">
+<div class="relative">
+  <button
+    data-testid="show-embed"
+    class="show-btn px-3 py-1.5 rounded text-sm font-medium transition-colors {(!plugin.nsfw ? 'bg-accent hover:bg-accent-hover text-white' : 'bg-warning hover:bg-warning/90 text-white')}"
+    class:hidden={visible}
+    onclick={showContent}
+  >
+    <Play size={16} class="inline-block mr-1" />
+    Show {plugin.name}
+  </button>
+  <div class="embed-area" class:visible>
     {#if isNsfw}
-       <div class="embed bg-warning/20 border border-warning/40 rounded p-2 text-sm text-warning">
+      <div class="embed bg-warning/20 border border-warning/40 rounded p-2 text-sm text-warning">
         ⚠️ NSFW content hidden.
       </div>
     {:else}
@@ -332,7 +341,7 @@
       ></div>
     {/if}
   </div>
-{/if}
+</div>
 
 <style>
   .embed {
@@ -344,4 +353,11 @@
     box-sizing: border-box;
   }
 
+  .show-btn.hidden {
+    display: none;
+  }
+
+  .embed-area:not(.visible) {
+    display: none;
+  }
 </style>
