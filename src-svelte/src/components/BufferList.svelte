@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { BufferData } from '$lib/types';
-  import { buffers, activeBufferId, setActiveBuffer } from '$lib/stores/models';
+  import { buffers, activeBufferId } from '$lib/stores/models';
+  import { switchBuffer } from '$lib/stores/connectionManager';
   import { closeBufferOnWeeChat, pinBuffer, unpinBuffer } from '$lib/stores/connectionManager';
   import { settings, updateSettings } from '$lib/stores/settings';
   import { sortBuffers, getBufferIconName, getDisplayName } from '$lib/utils';
@@ -45,7 +46,7 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
   }
 
   function handleBufferClick(bufferId: string) {
-    setActiveBuffer(bufferId);
+    switchBuffer(bufferId);
     onBufferSelect();
   }
 
