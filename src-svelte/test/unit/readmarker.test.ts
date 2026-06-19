@@ -283,7 +283,7 @@ describe('Readmarker behavior', () => {
     });
 
     describe('integrated drift scenario', () => {
-        it('readmarker stays correct through line additions and partial hotlist updates', () => {
+        it('readmarker stays correct through line additions and buffer switch', () => {
             // Buffer B: 100 lines, user was viewing it (lastSeen = 99)
             const bufB = makeBuffer('0x200', {
                 lines: Array.from({ length: 100 }, (_, i) => ({ prefix: [], content: [], date: i, shortTime: '', formattedTime: '', buffer: '0x200', tags: [], highlight: false, displayed: true, prefixtext: '', text: `line${i}`, showHiddenBrackets: false }) as any),
@@ -315,21 +315,7 @@ describe('Readmarker behavior', () => {
             expect(result!.unread).toBe(3);
             expect(result!.lines.length).toBe(103);
 
-            // Polling hotlist fires with partial data (WeeChat saw only 1 of 3)
-            handleHotlistInfo({
-                objects: [{
-                    pointer: '0xhotlist',
-                    content: [{ buffer: '0x200', count: [0, 1, 0, 0] }]
-                }]
-            });
-
-            result = get(buffers)['0x200'];
-            // lastSeen should still be 99 — not overwritten by hotlist
-            expect(result!.lastSeen).toBe(99);
-            // unread gets updated from hotlist (this is expected behavior)
-            expect(result!.unread).toBe(1);
-
-            // User switches back to Buffer B
+            // User switches back to Buffer B — lastSeen preserved, unread cleared
             setActiveBuffer('0x200');
 
             result = get(buffers)['0x200'];

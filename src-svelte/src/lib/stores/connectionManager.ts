@@ -132,7 +132,7 @@ export async function connect(host: string, port: number, path: string, password
                 connectionState.update(current => ({ ...current, wasEverConnected: true }));
 
                 // Start hotlist sync interval — only if user enabled it in settings.
-                // This keeps unread counts (mostly) in sync with other clients or terminal usage directly.
+                // Keeps unread counts in sync with other clients or terminal usage directly.
                 if (get(settings).hotlistsync) {
                     hotlistInterval = setInterval(async () => {
                         const hlMsg = Protocol.formatHdata({
@@ -141,7 +141,7 @@ export async function connect(host: string, port: number, path: string, password
                         });
                         const hlResp = await sendAsync(hlMsg);
                         handleHotlistInfo(hlResp);
-                    }, 60000);
+                    }, 15000);
                 }
 
                 resolve();
