@@ -261,7 +261,7 @@ export const bufferScrollPositions = writable<Record<string, number>>({});
 export const bufferLineCounts = writable<Record<string, number>>({});
 
 // Tracks which buffers have local-only unread messages (not reported by WeeChat).
-// Used by handleHotlistChanged to avoid overwriting correct lastSeen with stale WeeChat data.
+// Used by setActiveBuffer to preserve lastSeen when switching back to buffers with unreads.
 export const localUnreadBuffers = writable<Set<string>>(new Set());
 
 // Tracks whether the user is scrolled to the bottom of the chat buffer.
