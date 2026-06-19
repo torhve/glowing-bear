@@ -173,7 +173,7 @@ import Key from '@lucide/svelte/icons/key';
   }
 </script>
 
-<div class="min-h-screen bg-bg flex flex-col items-center justify-center overflow-y-auto py-12 px-4">
+<div class="h-dvh bg-bg flex flex-col items-center justify-center overflow-y-auto py-12 px-4">
   <div class="w-full max-w-lg space-y-6">
     <div class="text-center mb-6">
       <img src="/glowing-bear.svg" alt="logo" class="w-20 h-20 mx-auto mb-2" />

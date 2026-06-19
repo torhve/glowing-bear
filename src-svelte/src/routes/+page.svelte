@@ -133,9 +133,11 @@
   $effect(() => {
     void $connected;
     const svelteEl = document.getElementById('svelte');
+    const overflow = $connected ? 'hidden' : 'auto';
     if (svelteEl) {
-      svelteEl.style.overflow = $connected ? 'hidden' : 'auto';
+      svelteEl.style.overflow = overflow;
     }
+    document.body.style.overflow = overflow;
   });
 
   $effect(() => {
