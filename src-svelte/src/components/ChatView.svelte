@@ -327,14 +327,17 @@
     display: none;
   }
 
+  .readmarker td {
+    padding: 10px 0 !important;
+  }
+
   .readmarker {
-    padding: 2px 0 !important;
     height: auto !important;
   }
 
   #readmarker {
     border: none;
-    border-top: 1px solid var(--gb-ribbon, #f0ad4e) !important;
+    border-top: 2px solid var(--gb-ribbon, #f0ad4e) !important;
     margin: 0;
   }
 

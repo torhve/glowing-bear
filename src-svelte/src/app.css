@@ -1479,15 +1479,18 @@
 
   /* Bufferline — compact TUI-style single-row layout (styles in BufferLineRow.svelte) */
 
-  /* Readmarker — bright thin line */
+  /* Readmarker — bright thick line with spacing */
+  .readmarker td {
+    padding: 10px 0 !important;
+  }
+
   .readmarker {
-    padding: 0 !important;
-    height: 1px !important;
+    height: auto !important;
   }
 
   #readmarker {
     border: none;
-    border-top: 1px solid var(--gb-ribbon, #f0ad4e) !important;
+    border-top: 3px solid var(--gb-ribbon, #f0ad4e) !important;
     margin: 0;
   }
 
