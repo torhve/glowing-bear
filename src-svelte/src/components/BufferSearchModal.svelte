@@ -2,15 +2,36 @@
   import type { BufferData } from '$lib/types';
   import { buffers, hotlist } from '$lib/stores/models';
   import { switchBuffer } from '$lib/stores/connectionManager';
-  
+
   import BaseDialog from '$components/BaseDialog.svelte';
   import FormInput from '$components/FormInput.svelte';
   import Search from '@lucide/svelte/icons/search';
   import X from '@lucide/svelte/icons/x';
 
+  interface BufferGroup {
+    number: number;
+    buffers: BufferData[];
+  }
+
   let { onBufferSelect = () => {} } = $props();
   let bufferSearchQuery = $state('');
   let selectedIndex = $state(0);
+
+  // Sort individual buffers by hotlist/activity priority
+  function sortBuffers(bufs: BufferData[]): BufferData[] {
+    return [...bufs].sort((a: BufferData, b: BufferData) => {
+      const aHotlist = $hotlist.find(h => h.buffer === a.id);
+      const bHotlist = $hotlist.find(h => h.buffer === b.id);
+      const aHasHighlight = (aHotlist?.count?.[3] ?? 0) > 0 ? 1 : 0;
+      const bHasHighlight = (bHotlist?.count?.[3] ?? 0) > 0 ? 1 : 0;
+      if (aHasHighlight !== bHasHighlight) return bHasHighlight - aHasHighlight;
+      const aActivity = a.unread + a.notification;
+      const bActivity = b.unread + b.notification;
+      if (aActivity > 0 && bActivity === 0) return -1;
+      if (aActivity === 0 && bActivity > 0) return 1;
+      return 0;
+    });
+  }
 
   let filteredBuffers = $derived(
     Object.values($buffers)
@@ -22,18 +43,19 @@
                (buf.rtitle || '').toLowerCase().includes(query) ||
                String(buf.number).includes(query);
       })
-      .sort((a: BufferData, b: BufferData) => {
-        const aHotlist = $hotlist.find(h => h.buffer === a.id);
-        const bHotlist = $hotlist.find(h => h.buffer === b.id);
-        const aHasHighlight = (aHotlist?.count?.[3] ?? 0) > 0 ? 1 : 0;
-        const bHasHighlight = (bHotlist?.count?.[3] ?? 0) > 0 ? 1 : 0;
-        if (aHasHighlight !== bHasHighlight) return bHasHighlight - aHasHighlight;
-        const aActivity = a.unread + a.notification;
-        const bActivity = b.unread + b.notification;
-        if (aActivity > 0 && bActivity === 0) return -1;
-        if (aActivity === 0 && bActivity > 0) return 1;
-        return 0;
-      })
+  );
+
+  // Group merged buffers by their shared number, sorted by first buffer's priority
+  let groupedBuffers = $derived(
+    sortBuffers(filteredBuffers).reduce<BufferGroup[]>((groups, buf) => {
+      const existing = groups.find(g => g.number === buf.number);
+      if (existing) {
+        existing.buffers.push(buf);
+      } else {
+        groups.push({ number: buf.number, buffers: [buf] });
+      }
+      return groups;
+    }, [])
   );
 
   function handleBufferClick(buffer: BufferData) {
@@ -49,19 +71,19 @@
 
     if (key === 'ArrowDown' || key === 'ArrowUp') {
       e.preventDefault();
-      if (filteredBuffers.length === 0) return;
+      if (groupedBuffers.length === 0) return;
       if (key === 'ArrowDown') {
-        selectedIndex = (selectedIndex + 1) % filteredBuffers.length;
+        selectedIndex = (selectedIndex + 1) % groupedBuffers.length;
       } else {
-        selectedIndex = (selectedIndex - 1 + filteredBuffers.length) % filteredBuffers.length;
+        selectedIndex = (selectedIndex - 1 + groupedBuffers.length) % groupedBuffers.length;
       }
       return;
     }
 
-    if (key === 'Enter' && filteredBuffers.length > 0) {
+    if (key === 'Enter' && groupedBuffers.length > 0) {
       e.preventDefault();
-      const selected = filteredBuffers[selectedIndex]!;
-      handleBufferClick(selected);
+      const selectedGroup = groupedBuffers[selectedIndex]!;
+      handleBufferClick(selectedGroup.buffers[0]!);
     }
   }
 
@@ -114,36 +136,35 @@
     </div>
 
     <div class="flex-1 overflow-y-auto p-2">
-      {#each filteredBuffers as buffer, idx (buffer.id)}
+      {#each groupedBuffers as group, idx (group.number)}
         <button
-          onclick={() => handleBufferClick(buffer)}
-          class="w-full px-3 py-3 text-left flex items-center relative rounded hover:bg-surface-raised transition-colors"
-          class:bg-accent={idx === selectedIndex}
+          onclick={() => handleBufferClick(group.buffers[0]!)}
+          class="w-full px-3 py-3 text-left flex items-center relative rounded hover:bg-surface-raised transition-colors {idx === selectedIndex ? '!bg-accent' : ''}"
           data-search-index={idx}
         >
           <div class="flex items-center gap-2 min-w-0">
-            <span class="flex-shrink-0 px-1.5 py-0.5 text-[11px] font-bold rounded bg-surface-raised border border-border">
-              {buffer.number}
+            <span class="flex-shrink-0 px-1.5 py-0.5 text-xs font-bold rounded bg-surface-raised border border-border text-white">
+              {group.number}
             </span>
             <div class="min-w-0 flex-1">
-              <div class="text-sm font-semibold truncate">{buffer.shortName}</div>
-              <div class="text-xs text-text-secondary truncate">{buffer.fullName}</div>
+              <div class="text-base font-bold truncate text-white">{group.buffers.map(b => b.shortName).join(', ')}</div>
+              <div class="text-sm truncate text-white/70">{group.buffers.map(b => b.fullName).join(', ')}</div>
             </div>
           </div>
 
-          {#if buffer.notification >= 3}
-            <span class="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-xs font-bold text-text bg-danger rounded">
-              {buffer.notification}
+          {#if group.buffers.some(b => b.notification >= 3)}
+            <span class="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-xs font-bold rounded bg-danger/60 text-white">
+              {group.buffers.reduce((sum, b) => sum + b.notification, 0)}
             </span>
-          {:else if buffer.notification > 0 || buffer.unread > 0}
-            <span class="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-xs font-bold text-text bg-warning rounded">
-              {buffer.notification > 0 ? buffer.notification : buffer.unread}
+          {:else if group.buffers.some(b => b.notification > 0 || b.unread > 0)}
+            <span class="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-xs font-bold rounded bg-warning/60 text-white">
+              {group.buffers.reduce((sum, b) => sum + (b.notification > 0 ? b.notification : b.unread), 0)}
             </span>
           {/if}
         </button>
       {/each}
-      {#if filteredBuffers.length === 0 && bufferSearchQuery}
-        <div class="px-3 py-8 text-center text-text-muted text-sm">No buffers found</div>
+      {#if groupedBuffers.length === 0 && bufferSearchQuery}
+        <div class="px-3 py-8 text-center text-white/50 text-sm">No buffers found</div>
       {/if}
     </div>
   </div>
