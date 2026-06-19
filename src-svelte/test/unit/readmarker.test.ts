@@ -15,7 +15,7 @@ vi.mock('$lib/stores/settings', () => ({
                 alwaysnicklist: false, orderbyserver: false,
                 readlineBindings: false, useFavico: false, soundnotification: false,
                 enableMathjax: false, enableQuickKeys: false, showNicklist: true,
-                showQuickKeys: false, showJumpKeys: false, highlightWords: ''
+                showQuickKeys: false, showJumpKeys: false, highlightWords: '', hotlistsync: true
             });
             return () => {};
         }
@@ -139,12 +139,13 @@ describe('Readmarker behavior', () => {
 
     describe('handleBufferLineAdded', () => {
         it('increments lastSeen for active buffer', () => {
-            const buf = makeBuffer('0x100', { lines: [{ prefix: [], content: [], date: 0, shortTime: '', formattedTime: '', buffer: '0x100', tags: [], highlight: false, displayed: true, prefixtext: '', text: 'line1', showHiddenBrackets: false }] as any, lastSeen: 0, active: true });
+            const now = Date.now();
+            const buf = makeBuffer('0x100', { lines: [{ prefix: [], content: [], date: now, shortTime: '', formattedTime: '', buffer: '0x100', tags: [], highlight: false, displayed: true, prefixtext: '', text: 'line1', showHiddenBrackets: false }] as any, lastSeen: 0, active: true });
             buffers.set({ '0x100': buf });
             activeBufferId.set('0x100');
             servers.set({ 'irc.server': { id: '0x100', unread: 0 } });
 
-            handleBufferLineAdded(createLineMessage('0x100', [], 0, 1, 0));
+            handleBufferLineAdded(createLineMessage('0x100', [], 0, 1, 0, now));
 
             const result = get(buffers)['0x100'];
             expect(result!.lastSeen).toBe(1);
@@ -307,6 +308,31 @@ describe('Readmarker behavior', () => {
             // max(0, 3 - (10 + 5) - 1) = max(0, -13) = 0
             expect(result!.lastSeen).toBe(0);
         });
+
+        it('prunes lines above 2 screenfuls and adjusts lastSeen', () => {
+            const manyLines = Array.from({ length: 250 }, (_, i) => ({ prefix: [], content: [], date: i, shortTime: '', formattedTime: '', buffer: '0x300', tags: [], highlight: false, displayed: true, prefixtext: '', text: `line${i}`, showHiddenBrackets: false }) as any);
+            const buf = makeBuffer('0x300', {
+                lines: manyLines,
+                lastSeen: 200,
+                unread: 0,
+                notification: 0,
+                active: false
+            });
+            buffers.set({ '0x300': buf });
+            servers.set({ 'irc.server': { id: '0x300', unread: 0 } });
+
+            setActiveBuffer('0x300');
+
+            const result = get(buffers)['0x300'];
+            // 250 lines > max 210 (2*100+10), so 40 lines removed
+            expect(result!.lines.length).toBe(210);
+            // lastSeen adjusted: 200 - 40 = 160
+            expect(result!.lastSeen).toBe(160);
+            // requestedLines reduced by same amount
+            expect(result!.requestedLines).toBe(0);
+            // allLinesFetched reset to allow refetching pruned lines
+            expect(result!.allLinesFetched).toBe(false);
+        });
     });
 
     describe('integrated drift scenario', () => {
@@ -359,6 +385,100 @@ describe('Readmarker behavior', () => {
             // Lines after index 99 (indices 100, 101, 102) are shown as unread
             expect(result!.lastSeen).toBe(99);
             expect(result!.active).toBe(true);
+        });
+    });
+
+    describe('buffer.notify guard on unread increments', () => {
+        it('does NOT increment unread when buffer notify is 0 (never)', () => {
+            const buf = makeBuffer('0x400', { lines: [] as any, lastSeen: -1, active: false, notify: 0 });
+            buffers.set({ '0x400': buf });
+            servers.set({ 'irc.server': { id: '0x400', unread: 0 } });
+            activeBufferId.set('0x999');
+
+            handleBufferLineAdded(createLineMessage('0x400', [], 0, 1, 1));
+
+            const result = get(buffers)['0x400'];
+            expect(result!.unread).toBe(0);
+        });
+
+        it('does NOT increment unread when buffer notify is 1 (highlight only)', () => {
+            const buf = makeBuffer('0x500', { lines: [] as any, lastSeen: -1, active: false, notify: 1 });
+            buffers.set({ '0x500': buf });
+            servers.set({ 'irc.server': { id: '0x500', unread: 0 } });
+            activeBufferId.set('0x999');
+
+            handleBufferLineAdded(createLineMessage('0x500', [], 0, 1, 1));
+
+            const result = get(buffers)['0x500'];
+            expect(result!.unread).toBe(0);
+        });
+
+        it('increments unread when buffer notify is 2 (message)', () => {
+            const buf = makeBuffer('0x600', { lines: [] as any, lastSeen: -1, active: false, notify: 2 });
+            buffers.set({ '0x600': buf });
+            servers.set({ 'irc.server': { id: '0x600', unread: 0 } });
+            activeBufferId.set('0x999');
+
+            handleBufferLineAdded(createLineMessage('0x600', [], 0, 1, 1));
+
+            const result = get(buffers)['0x600'];
+            expect(result!.unread).toBe(1);
+        });
+
+        it('increments unread when buffer notify is 3 (all)', () => {
+            const buf = makeBuffer('0x700', { lines: [] as any, lastSeen: -1, active: false, notify: 3 });
+            buffers.set({ '0x700': buf });
+            servers.set({ 'irc.server': { id: '0x700', unread: 0 } });
+            activeBufferId.set('0x999');
+
+            handleBufferLineAdded(createLineMessage('0x700', [], 0, 1, 1));
+
+            const result = get(buffers)['0x700'];
+            expect(result!.unread).toBe(1);
+        });
+    });
+
+    describe('active+focused notification guard', () => {
+        it('does NOT increment notification for highlight on active+focused buffer', () => {
+            const buf = makeBuffer('0x800', { lines: [] as any, lastSeen: 0, active: true, notify: 3 });
+            buffers.set({ '0x800': buf });
+            servers.set({ 'irc.server': { id: '0x800', unread: 0 } });
+            activeBufferId.set('0x800');
+
+            document.hasFocus = () => true;
+
+            handleBufferLineAdded(createLineMessage('0x800', [], 1, 1, 3));
+
+            const result = get(buffers)['0x800'];
+            expect(result!.notification).toBe(0);
+        });
+
+        it('increments notification for highlight on active buffer when window unfocused', () => {
+            const buf = makeBuffer('0x900', { lines: [] as any, lastSeen: 0, active: true, notify: 3 });
+            buffers.set({ '0x900': buf });
+            servers.set({ 'irc.server': { id: '0x900', unread: 0 } });
+            activeBufferId.set('0x900');
+
+            document.hasFocus = () => false;
+
+            handleBufferLineAdded(createLineMessage('0x900', [], 1, 1, 3));
+
+            const result = get(buffers)['0x900'];
+            expect(result!.notification).toBe(1);
+        });
+
+        it('does NOT increment unread for message on active+focused buffer', () => {
+            const buf = makeBuffer('0xA00', { lines: [] as any, lastSeen: 0, active: true, notify: 3 });
+            buffers.set({ '0xA00': buf });
+            servers.set({ 'irc.server': { id: '0xA00', unread: 0 } });
+            activeBufferId.set('0xA00');
+
+            document.hasFocus = () => true;
+
+            handleBufferLineAdded(createLineMessage('0xA00', [], 0, 1, 1));
+
+            const result = get(buffers)['0xA00'];
+            expect(result!.unread).toBe(0);
         });
     });
 });

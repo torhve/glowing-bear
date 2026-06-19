@@ -41,19 +41,8 @@ test.beforeEach(async () => {
 });
 
 test('readmarker appears on second-to-last line with 1 unread when switching to buffer after bot message', async () => {
-    // Step 1: Switch to another buffer (PM buffer) so we're NOT on #glowing-bear when message arrives
-    const pmItems = page.locator('[data-testid="buffer-item"]').filter({ hasNotText: '#glowing-bear' });
-    const pmCount = await pmItems.count();
-    
-    if (pmCount === 0) {
-        // Create a PM buffer by sending a PM
-        await irc.sendPm('testuser', 'switch target pm');
-        await page.waitForTimeout(1500);
-    }
-    
-    const pmItem = page.locator('[data-testid="buffer-item"]').filter({ hasNotText: '#glowing-bear' }).first();
-    await expect(pmItem).toBeVisible({ timeout: 10000 });
-    await pmItem.click();
+    // Step 1: Switch to gbtest buffer so we're NOT on #glowing-bear when message arrives
+    await switchToBuffer(page, 'gbtest');
     await page.waitForTimeout(500);
 
     // Step 2: Check line count before sending bot message

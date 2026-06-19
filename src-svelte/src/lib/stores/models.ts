@@ -264,6 +264,11 @@ export const bufferLineCounts = writable<Record<string, number>>({});
 // Used by handleHotlistChanged to avoid overwriting correct lastSeen with stale WeeChat data.
 export const localUnreadBuffers = writable<Set<string>>(new Set());
 
+// Tracks whether the user is scrolled to the bottom of the chat buffer.
+// Used by handlers to avoid marking newly arrived lines as "unread" when
+// the user is at the bottom (similar to AngularJS bufferBottom behavior).
+export const bufferBottom = writable(true);
+
 // Track whether we're in the initial post-connect sync phase.
 // During this phase, lastSeen is not updated per-line — it's calculated
 // after sync completes using: lastSeen = lines.length - unread - 1.
@@ -348,54 +353,113 @@ export function setActiveBuffer(bufferId: string): boolean {
     if (prevId && currentBuffers[prevId]) {
         const prev = currentBuffers[prevId];
         console.log('[buffer switch]', prev.shortName || prev.fullName, '→', buffer.shortName || buffer.fullName);
-        prev.active = false;
         // Save line count when leaving this buffer (for lastSeen fallback on return).
-        // Do NOT modify prev.lastSeen — let handleHotlistInfo / handleLineInfo manage it.
-        const bufCopy = { ...prev };
-        bufCopy.lines = [...prev.lines];
-        bufferLineCounts.update(counts => ({ ...counts, [prevId]: bufCopy.lines.length }));
+        bufferLineCounts.update(counts => ({ ...counts, [prevId]: prev.lines.length }));
         previousBufferId.set(prevId);
     } else if (prevId) {
         console.log('[buffer switch]', '(none)', '→', buffer.shortName || buffer.fullName);
     }
 
-    // Save total unread count from WeeChat hotlist before clearing.
-    // This is used to calculate the correct lastSeen position (read marker).
-    const totalUnread = (buffer.unread || 0) + (buffer.notification || 0);
+    // Capture target buffer's current line count as baseline for next visit.
+    // Saved AFTER computing targetLastSeen so we don't overwrite the exit-time baseline.
+    const savedLineCount = buffer.lines.length;
 
-    // Calculate lastSeen only if not already set. Existing lastSeen represents the
-    // user's actual reading position and should be preserved on return.
-    if (buffer.lastSeen < 0 && totalUnread > 0 && buffer.lines.length > 0) {
-        buffer.lastSeen = Math.max(0, buffer.lines.length - totalUnread - 1);
+    // Save total unread count before clearing — includes both WeeChat-reported
+    // counts and locally-tracked real-time messages received while inactive.
+    const totalUnread = (buffer.unread || 0) + (buffer.notification || 0) + (buffer.localUnread || 0);
+
+    console.log('[setActiveBuffer] target:', buffer.shortName, '| lines:', buffer.lines.length, '| lastSeen:', buffer.lastSeen, '| localUnread:', buffer.localUnread, '| unread:', buffer.unread, '| notification:', buffer.notification, '| totalUnread:', totalUnread);
+
+    // Compute the effective lastSeen for this buffer on switch.
+    // Uses the saved line count from when we last left this buffer as the baseline,
+    // so that readmarker position is relative to what was actually visible at exit time,
+    // not the total accumulated line count (which may include lines added by other handlers).
+    const lastLineCount = getLastLineCount(bufferId);
+    const baselineLines = lastLineCount ?? buffer.lines.length;
+
+    let targetLastSeen = buffer.lastSeen;
+    if (targetLastSeen < 0 && totalUnread > 0 && buffer.lines.length > 0) {
+        targetLastSeen = Math.max(0, buffer.lines.length - totalUnread - 1);
+    } else if (targetLastSeen >= 0 && buffer.localUnread > 0) {
+        targetLastSeen = Math.max(0, baselineLines - 1 - buffer.localUnread);
+    } else if (targetLastSeen >= 0) {
+        // No local unreads — lastSeen stays as-is (already accurate from hotlist or prior visit).
+        // Clamp to current line count in case lines were removed.
+        targetLastSeen = Math.min(targetLastSeen, buffer.lines.length - 1);
     }
 
-    buffer.active = true;
-    buffer.unread = 0;
-    buffer.notification = 0;
-    buffer.localUnread = 0;
+    console.log('[setActiveBuffer] targetLastSeen:', targetLastSeen);
+
+    // Build a new buffers object with immutable updates to avoid in-place
+    // mutations that can race with concurrent handler updates (e.g. hotlist).
+    const updatedBuffers: Record<string, BufferData> = {};
+    for (const id in currentBuffers) {
+        const buf = currentBuffers[id];
+        if (!buf) continue;
+        if (id === prevId) {
+            // Set lastSeen to end of visible lines when leaving — marks everything displayed as read.
+            updatedBuffers[id] = { ...buf, active: false, lastSeen: buf.lines.length - 1 };
+        } else if (id === bufferId) {
+            updatedBuffers[id] = {
+                ...buf,
+                lines: [...buf.lines],
+                nicklist: { ...buf.nicklist },
+                active: true,
+                lastSeen: targetLastSeen,
+                unread: 0,
+                notification: 0,
+                localUnread: 0,
+            };
+        } else {
+            updatedBuffers[id] = buf;
+        }
+    }
+
+    // Discard unread lines above 2 screenfuls to keep GB responsive when loading
+    // buffers which have seen a lot of traffic (see issue #859). Adjust lastSeen
+    // so the readmarker stays at the correct position relative to visible content.
+    const linesPerScreen = 100;
+    const maxLines = 2 * linesPerScreen + 10;
+    const targetLinesLength = updatedBuffers[bufferId]!.lines.length;
+    if (targetLinesLength > maxLines) {
+        const linesToRemove = targetLinesLength - maxLines;
+        updatedBuffers[bufferId]!.lines.splice(0, linesToRemove);
+        updatedBuffers[bufferId]!.requestedLines -= linesToRemove;
+        targetLastSeen = Math.max(0, targetLastSeen - linesToRemove);
+        updatedBuffers[bufferId]!.lastSeen = targetLastSeen;
+        updatedBuffers[bufferId]!.allLinesFetched = false;
+    }
 
     activeBufferId.set(bufferId);
     activeBufferChanged.update(n => n + 1);
-    buffers.set({ ...currentBuffers });
+    buffers.set(updatedBuffers);
+    // Save target buffer's line count as baseline for next time we leave and return.
+    bufferLineCounts.update(counts => ({ ...counts, [bufferId]: savedLineCount }));
+    // Remove target buffer from localUnreadBuffers tracking since localUnread is now cleared.
+    localUnreadBuffers.update((s: Set<string>) => { const copy = new Set(s); copy.delete(bufferId); return copy; });
     return true;
 }
 
 export function clearAllUnread() {
-    const currentBuffers = get(buffers);
-    for (const id in currentBuffers) {
-        const buf = currentBuffers[id];
+    // Build immutable copies of all buffers and servers to ensure
+    // Svelte reactivity triggers correctly.
+    const updatedBuffers: Record<string, BufferData> = {};
+    for (const id in get(buffers)) {
+        const buf = get(buffers)[id];
         if (buf) {
-            buf.unread = 0;
-            buf.notification = 0;
+            updatedBuffers[id] = { ...buf, unread: 0, notification: 0 };
         }
     }
-    buffers.set({ ...currentBuffers });
-    const currentServers = get(servers);
-    for (const key in currentServers) {
-        const srv = currentServers[key];
-        if (srv) srv.unread = 0;
+    buffers.set(updatedBuffers);
+
+    const updatedServers: Record<string, { id: string; unread: number }> = {};
+    for (const key in get(servers)) {
+        const srv = get(servers)[key];
+        if (srv) {
+            updatedServers[key] = { ...srv, unread: 0 };
+        }
     }
-    servers.set({ ...currentServers });
+    servers.set(updatedServers);
 }
 
 export function closeBuffer(bufferId: string) {

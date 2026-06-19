@@ -32,22 +32,9 @@ test.beforeEach(async () => {
 });
 
 test('readmarker appears when there are unread messages', async () => {
-    // Create unread state by sending a message to #glowing-bear while on a different buffer
-    const pmItems = page.locator('[data-testid="buffer-item"]').filter({ hasNotText: '#glowing-bear' });
-    const pmCount = await pmItems.count();
-    
-    if (pmCount > 0) {
-        await pmItems.first().click();
-        await page.waitForTimeout(500);
-    } else {
-        await irc.sendPm('testuser', 'readmarker setup pm');
-        await page.waitForTimeout(1500);
-        
-        const pmItem = page.locator('[data-testid="buffer-item"]').filter({ hasNotText: '#glowing-bear' }).first();
-        await expect(pmItem).toBeVisible({ timeout: 10000 });
-        await pmItem.click();
-        await page.waitForTimeout(500);
-    }
+    // Switch to gbtest buffer so we're NOT on #glowing-bear when sending unread
+    await switchToBuffer(page, 'gbtest');
+    await page.waitForTimeout(500);
 
     // Send a message to #glowing-bear while we're NOT on it (creates unread)
     await irc.sendMessage('#glowing-bear', 'readmarker test message ' + Date.now());
@@ -82,23 +69,9 @@ test('readmarker appears when there are unread messages', async () => {
 });
 
 test('readmarker should appear when switching back to buffer with unread messages', async () => {
-    // Switch to the PM buffer first (so we're NOT on #glowing-bear)
-    const pmItems = page.locator('[data-testid="buffer-item"]').filter({ hasNotText: '#glowing-bear' });
-    const pmCount = await pmItems.count();
-
-    if (pmCount > 0) {
-        await pmItems.first().click();
-        await page.waitForTimeout(500);
-    } else {
-        // Create a PM buffer
-        await irc.sendPm('testuser', 'readmarker pm test');
-        await page.waitForTimeout(1500);
-
-        const pmItem = page.locator('[data-testid="buffer-item"]').filter({ hasNotText: '#glowing-bear' }).first();
-        await expect(pmItem).toBeVisible({ timeout: 10000 });
-        await pmItem.click();
-        await page.waitForTimeout(500);
-    }
+    // Switch to gbtest buffer so we're NOT on #glowing-bear when sending unread
+    await switchToBuffer(page, 'gbtest');
+    await page.waitForTimeout(500);
 
     // Send a message to #glowing-bear while we're on PM - this creates unread
     await irc.sendMessage('#glowing-bear', 'readmarker test message ' + Date.now());
@@ -113,14 +86,13 @@ test('readmarker should appear when switching back to buffer with unread message
 });
 
 test('new messages should appear below the readmarker', async () => {
-    // Ensure readmarker is present by switching buffers first
-    await irc.sendPm('testuser', 'readmarker setup pm');
-    await page.waitForTimeout(1500);
-
-    const pmItem = page.locator('[data-testid="buffer-item"]').filter({ hasNotText: '#glowing-bear' }).first();
-    await expect(pmItem).toBeVisible({ timeout: 10000 });
-    await pmItem.click();
+    // Switch to gbtest buffer to create unread state for #glowing-bear
+    await switchToBuffer(page, 'gbtest');
     await page.waitForTimeout(500);
+
+    // Send a message to #glowing-bear while away to create unread
+    await irc.sendMessage('#glowing-bear', 'readmarker setup msg ' + Date.now());
+    await page.waitForTimeout(1500);
 
     await switchToBuffer(page, '#glowing-bear');
     await page.waitForTimeout(500);
@@ -156,13 +128,8 @@ test('scroll position should be preserved when switching back to buffer', async 
     await irc.sendMessage('#glowing-bear', 'scroll test msg');
     await page.waitForTimeout(1000);
 
-    // Switch to PM buffer so we're NOT on #glowing-bear when sending unread
-    await irc.sendPm('testuser', 'scroll test pm');
-    await page.waitForTimeout(1500);
-
-    const pmItem = page.locator('[data-testid="buffer-item"]').filter({ hasNotText: '#glowing-bear' }).first();
-    await expect(pmItem).toBeVisible({ timeout: 10000 });
-    await pmItem.click();
+    // Switch to gbtest buffer so we're NOT on #glowing-bear when sending unread
+    await switchToBuffer(page, 'gbtest');
     await page.waitForTimeout(500);
 
     // Send another message to #glowing-bear while we're on PM - this creates unread

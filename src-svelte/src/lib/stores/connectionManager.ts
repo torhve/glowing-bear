@@ -131,15 +131,18 @@ export async function connect(host: string, port: number, path: string, password
                 console.log('[connect] connected=true, resolving promise');
                 connectionState.update(current => ({ ...current, wasEverConnected: true }));
 
-                // Start hotlist sync interval
-                hotlistInterval = setInterval(async () => {
-                    const hlMsg = Protocol.formatHdata({
-                        path: 'hotlist:gui_hotlist(*)',
-                        keys: []
-                    });
-                    const hlResp = await sendAsync(hlMsg);
-                    handleHotlistInfo(hlResp);
-                }, 60000);
+                // Start hotlist sync interval — only if user enabled it in settings.
+                // This keeps unread counts (mostly) in sync with other clients or terminal usage directly.
+                if (get(settings).hotlistsync) {
+                    hotlistInterval = setInterval(async () => {
+                        const hlMsg = Protocol.formatHdata({
+                            path: 'hotlist:gui_hotlist(*)',
+                            keys: []
+                        });
+                        const hlResp = await sendAsync(hlMsg);
+                        handleHotlistInfo(hlResp);
+                    }, 60000);
+                }
 
                 resolve();
             } catch (e) {
@@ -518,20 +521,14 @@ export async function fetchMoreLines(numLines: number = 0): Promise<any> {
             }, 30000);
         });
         // Process the fetched lines — clear old lines and refill (matching AngularJS flow).
-        // Preserve readmarker position: if lastSeen was set, calculate how many lines
-        // were above the readmarker and restore that offset in the new line array.
+        // Preserve readmarker position by subtracting the old line count from lastSeen
+        // after handleLineInfo increments it per-line (including injected date-change lines).
         const oldLength = buffer.lines.length;
-        const unseenCount = oldLength - buffer.lastSeen - 1; // lines below readmarker
         buffer.lines = [];
         buffer.requestedLines = 0;
-        // Pass false so lastSeen isn't incremented per-line during fetch.
-        // lastSeen is calculated from hotlist data (accurate unread state),
-        // not assumed from fetched line count.
-        handleLineInfo(message, false);
-        // Restore readmarker preserving the same number of unseen lines below it.
-        if (buffer.lastSeen >= 0 || unseenCount >= 0) {
-            buffer.lastSeen = Math.max(0, buffer.lines.length - unseenCount - 1);
-        }
+        handleLineInfo(message, true);
+        // Correct the read marker for the lines that were counted twice (old + new).
+        buffer.lastSeen -= oldLength;
 
         // Determine if all lines are fetched
         const linesReceived = message.objects?.[0]?.content?.length ?? 0;
@@ -600,6 +597,13 @@ export async function switchBuffer(bufferId: string): Promise<boolean> {
     requestAnimationFrame(() => {
         sendWeeChatCommand('/buffer set hotlist -1', bufferId);
         sendWeeChatCommand('/input set_unread_current_buffer', bufferId);
+        // Request authoritative current hotlist state from WeeChat to ensure
+        // stale counts are cleared (e.g., after scroll-to-bottom).
+        const hlMsg = Protocol.formatHdata({
+            path: 'hotlist:gui_hotlist(*)',
+            keys: []
+        });
+        sendAsync(hlMsg).catch(() => {});
     });
     // Nicklist backfill is handled by $effect in +page.svelte (guarded: only fetches if empty).
     return true;

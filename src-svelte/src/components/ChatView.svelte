@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { BufferLine } from '$lib/types';
   import { get } from 'svelte/store';
-  import { currentBuffer, saveScrollPosition, activeBufferId } from '$lib/stores/models';
+  import { currentBuffer, saveScrollPosition, activeBufferId, bufferBottom } from '$lib/stores/models';
   import { settings } from '$lib/stores/settings';
   import { fetchMoreLines } from '$lib/stores/connectionManager';
   import { buildMentionText, isFreeBuffer } from '$lib/utils';
@@ -26,8 +26,11 @@
   let prevActiveBufferId = $state<string>('');
   let prevLinesLength = $state(0);
   let prevScrollKey = $state<string>('');
-  let hasUnreadMessages = $derived($currentBuffer && $currentBuffer.lastSeen >= 0 && $currentBuffer.lastSeen < messages.length - 1);
-  let unreadCount = $derived($currentBuffer?.lastSeen != null && $currentBuffer.lastSeen >= 0 ? messages.length - $currentBuffer.lastSeen - 1 : 0);
+  // Read end index for readmarker positioning. setActiveBuffer folds localUnread
+  // into lastSeen at switch time, so lastSeen alone gives the correct boundary.
+  let readEndIndex = $derived($currentBuffer?.lastSeen ?? -1);
+  let hasUnreadMessages = $derived($currentBuffer && readEndIndex >= 0 && readEndIndex < messages.length - 1);
+  let unreadCount = $derived(readEndIndex >= 0 ? messages.length - readEndIndex - 1 : 0);
 
   function handleScroll() {
     if (!containerRef) return;
@@ -73,6 +76,11 @@
     }
   });
 
+  $effect(() => {
+    // Sync local isAtBottom state to shared bufferBottom store
+    bufferBottom.set(isAtBottom);
+  });
+
   $effect.pre(() => {
     // Auto-scroll when buffer changes or new lines arrive
     // Skip if loading more lines or was scrolled up during fetch
@@ -86,7 +94,7 @@
     // $derived values do NOT re-evaluate after await in async functions (Svelte 5 limitation).
     const currentBufferId = get(activeBufferId);
     const curHasUnreadMessages = hasUnreadMessages;
-    const curLastSeen = $currentBuffer.lastSeen;
+    const curReadEndIndex = readEndIndex;
     const curLinesLength = messages.length;
     const curBufferShortName = $currentBuffer.shortName;
     const bufferChanged = prevActiveBufferId !== currentBufferId;
@@ -116,7 +124,7 @@
       '| clientHeight:', containerRef!.clientHeight,
       '| isAtBottom:', isAtBottom,
       '| hasUnreadMessages:', curHasUnreadMessages,
-      '| lastSeen:', curLastSeen
+      '| readEndIndex:', curReadEndIndex
     );
 
     if (!curHasUnreadMessages) {
@@ -133,35 +141,39 @@
       });
     } else {
       // Unread messages present — scroll to readmarker
-      // Defer to rAF so Svelte DOM updates (including readmarker rendering) complete first
+      // Double rAF: first cycle lets Svelte render readmarker DOM, second positions it
       requestAnimationFrame(() => {
         const rmRow = document.querySelector('.readmarker');
         if (!rmRow || !rmRow.parentElement) {
           console.warn('[ChatView] readmarker row not in DOM yet');
+          isAtBottom = false;
           return;
         }
 
-        // Use getBoundingClientRect for accurate viewport-relative positioning.
-        // offsetTop is unreliable inside collapsed tables (relative to td, not container).
-        const rmRect = rmRow.getBoundingClientRect();
-        const containerRect = containerRef!.getBoundingClientRect();
+        // Second rAF ensures layout is computed after Svelte's DOM insert
+        requestAnimationFrame(() => {
+          // Use getBoundingClientRect for accurate viewport-relative positioning.
+          // offsetTop is unreliable inside collapsed tables (relative to td, not container).
+          const rmRect = rmRow.getBoundingClientRect();
+          const containerRect = containerRef!.getBoundingClientRect();
 
-        if (containerRef!.scrollHeight > containerRef!.clientHeight) {
-          // Position readmarker near middle of viewport (~45%) so it's visible with unread context below.
-          // targetY = container top + 0.45 * viewport height
-          const targetY = containerRect.top + containerRef!.clientHeight * 0.45;
-          // diff = how far to scroll: positive means scroll down, negative means scroll up
-          const diff = rmRect.top - targetY;
-          containerRef!.scrollTop = containerRef!.scrollTop + diff;
-        }
-        isAtBottom = false;
-        console.log(
-          '[ChatView] scroll → readmarker — scrollTop:', containerRef!.scrollTop,
-          '| bufferLines:', curLinesLength,
-          '| rmViewportY:', rmRect.top.toFixed(1),
-          '| containerViewportTop:', containerRect.top.toFixed(1),
-          '| clientHeight:', containerRef!.clientHeight
-        );
+          if (containerRef!.scrollHeight > containerRef!.clientHeight) {
+            // Position readmarker near middle of viewport (~45%) so it's visible with unread context below.
+            // targetY = container top + 0.45 * viewport height
+            const targetY = containerRect.top + containerRef!.clientHeight * 0.45;
+            // diff = how far to scroll: positive means scroll down, negative means scroll up
+            const diff = rmRect.top - targetY;
+            containerRef!.scrollTop = containerRef!.scrollTop + diff;
+          }
+          isAtBottom = false;
+          console.log(
+            '[ChatView] scroll → readmarker — scrollTop:', containerRef!.scrollTop,
+            '| bufferLines:', curLinesLength,
+            '| rmViewportY:', rmRect.top.toFixed(1),
+            '| containerViewportTop:', containerRect.top.toFixed(1),
+            '| clientHeight:', containerRef!.clientHeight
+          );
+        });
       });
     }
   });
@@ -248,9 +260,9 @@
             </tr>
           {/if}
 
-          {#if $currentBuffer.lastSeen >= 0 && $currentBuffer.lastSeen < messages.length - 1}
-            <!-- Read lines (up to and including lastSeen) -->
-            {#each messages.slice(0, $currentBuffer.lastSeen + 1) as message, i (i)}
+          {#if readEndIndex >= 0 && readEndIndex < messages.length - 1}
+            <!-- Read lines (up to and including readEndIndex) -->
+            {#each messages.slice(0, readEndIndex + 1) as message, i (i)}
               <BufferLineRow
                 {message}
                 index={i}
@@ -269,11 +281,11 @@
                 </div>
               </td>
             </tr>
-            <!-- Unread lines (after lastSeen) -->
-            {#each messages.slice($currentBuffer.lastSeen + 1) as message, i ($currentBuffer.lastSeen + 1 + i)}
+            <!-- Unread lines (after readEndIndex) -->
+            {#each messages.slice(readEndIndex + 1) as message, i (readEndIndex + 1 + i)}
               <BufferLineRow
                 {message}
-                index={$currentBuffer.lastSeen + 1 + i}
+                index={readEndIndex + 1 + i}
                 {messages}
                 {noembed}
                 onMention={handleMention}
