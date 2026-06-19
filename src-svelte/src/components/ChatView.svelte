@@ -330,8 +330,8 @@
   }
 
   .readmarker {
-    padding: 0 !important;
-    height: 1px !important;
+    padding: 2px 0 !important;
+    height: auto !important;
   }
 
   #readmarker {
