@@ -92,11 +92,6 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
       return idx === 9 ? 0 : idx + 1;
     }
 
-    function getJumpKey(buffer: BufferData): string | null {
-      if (!altKeyPressed && !($settings.showJumpKeys && $settings.enableQuickKeys)) return null;
-      return buffer.$jumpKey ?? null;
-    }
-
     function getBufferIcon(buffer: BufferData) {
       const iconName = getBufferIconName(buffer);
       if (iconName === 'hash') return Hash;
@@ -152,20 +147,11 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
                   </span>
                <!-- Quickkeys inline, unread badge absolutely positioned right -->
                <span class="flex items-center gap-1.5 flex-shrink-0 z-10">
-                       {#if getQuickKeyIndex(buffer) !== null || getJumpKey(buffer)}
-                         <span class="inline-flex items-center gap-0.5">
-                           {#if getQuickKeyIndex(buffer) !== null}
-                             <span class="inline-flex items-center justify-center px-1 h-4 text-[10px] font-bold rounded-full bg-accent/90 text-white shadow-sm">
-                               {getQuickKeyIndex(buffer)}
-                             </span>
-                           {/if}
-                           {#if getJumpKey(buffer)}
-                             <span class="inline-flex items-center justify-center px-1 h-4 text-[10px] font-bold rounded-full bg-purple-600 text-white shadow-sm">
-                               {getJumpKey(buffer)}
-                             </span>
-                           {/if}
-                         </span>
-                       {/if}
+                        {#if getQuickKeyIndex(buffer) !== null}
+                          <span class="inline-flex items-center justify-center px-1 h-4 text-[10px] font-bold rounded-full bg-accent/90 text-white shadow-sm">
+                            {getQuickKeyIndex(buffer)}
+                          </span>
+                        {/if}
                      </span>
                    {#if buffer.notification > 0 || buffer.unread > 0}
                       <span class="absolute right-1.5 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] font-semibold rounded-full shadow-sm {buffer.id === $activeBufferId ? (buffer.notification > 0 ? '!bg-red-600 !text-white' : '!bg-warning !text-black') : (buffer.notification > 0 ? 'bg-red-600/15 text-red-600' : 'bg-accent/15 text-accent')}">

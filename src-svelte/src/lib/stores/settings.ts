@@ -27,7 +27,6 @@ export const settings = writable<Settings>({
     enableQuickKeys: true,
     showNicklist: true,
     showQuickKeys: false,
-    showJumpKeys: false,
     highlightWords: ''
 });
 
