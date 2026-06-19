@@ -505,8 +505,8 @@
   });
 </script>
 
-<div data-testid="input-bar" class="md:p-2 md:pb-3" style="padding-bottom: env(safe-area-inset-bottom, 0px);">
-  <div class="md:mx-2 rounded-lg bg-surface border border-border px-3 py-2 shadow-lg">
+<div data-testid="input-bar" class="flex-shrink-0">
+  <div class="bg-surface border-t border-border px-3 py-2">
     <div class="flex items-center space-x-2">
 
     <input

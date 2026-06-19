@@ -556,18 +556,9 @@
       {#if showBufferList || !isMobile()}
         <BufferList altKeyPressed={_altKeyPressed} onBufferSelect={hideBufferListOnMobile} />
       {/if}
-      <div class="flex-1 flex flex-col min-w-0 relative">
+      <div class="flex-1 flex flex-col min-w-0">
         <ChatView />
-        <div class="absolute bottom-0 left-0 right-0 z-10 md:bottom-2">
-          {#if $currentBuffer && $currentBuffer.unread > 0}
-            <div class="flex justify-center pt-1">
-              <span class="px-2 py-0.5 rounded-full bg-surface-raised border border-border text-xs text-text-secondary shadow-md">
-                {$currentBuffer.unread} unread message{$currentBuffer.unread !== 1 ? 's' : ''}
-              </span>
-            </div>
-          {/if}
-          <InputBar />
-        </div>
+        <InputBar />
       </div>
       {#if $settings.showNicklist && !isMobile()}
         <Nicklist />
