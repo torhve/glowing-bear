@@ -2,7 +2,7 @@
 // Ported from notifications.js
 
 import { settings, updateSettings } from './stores/settings';
-import { buffers, activeBufferId, currentBuffer } from './stores/models';
+import { buffers, currentBuffer, setActiveBuffer } from './stores/models';
 import { get } from 'svelte/store';
 import type { BufferData } from './types';
 import { initFavicon, drawBadge, resetBadge } from './faviconBadge';
@@ -38,7 +38,7 @@ async function setupTauriNotificationListener(): Promise<void> {
         await notif.onAction((notification: { extra?: Record<string, unknown> }) => {
             const bufferId = notification.extra?.bufferId as string | undefined;
             if (bufferId) {
-                activeBufferId.set(bufferId);
+                setActiveBuffer(bufferId);
             }
         });
     } catch (e) {
@@ -132,7 +132,7 @@ export async function createHighlight(buffer: BufferData, message: string): Prom
 
         // Click handler - switch to the buffer
         notification.onclick = () => {
-            activeBufferId.set(buffer.id);
+            setActiveBuffer(buffer.id);
             notification.close();
             activeNotifications.delete(tag);
             window.focus();

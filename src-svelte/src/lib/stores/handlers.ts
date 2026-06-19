@@ -254,8 +254,9 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                     setSyncing(false);
                 }
             } else {
-                // After sync: increment lastSeen so readmarker stays in place.
-                if (buffer.lastSeen >= 0) {
+                // After sync: increment lastSeen only for active buffers.
+                // For inactive buffers, preserve lastSeen position — new lines become unread.
+                if (buffer.lastSeen >= 0 && buffer.id === activeId) {
                     buffer.lastSeen++;
                 }
 
@@ -533,7 +534,10 @@ export function handleHotlistChanged(message: ProtocolMessage) {
                 buffer.unread = counts[1] || 0;
                 buffer.notification = (counts[2] || 0) + (counts[3] || 0);
                 const unreadSum = counts.reduce((sum: number, n: number) => sum + n, 0);
-                buffer.lastSeen = buffer.lines.length - 1 - unreadSum;
+                // Only recalculate lastSeen if not already set — local data is more accurate.
+                if (buffer.lastSeen < 0) {
+                    buffer.lastSeen = Math.max(0, buffer.lines.length - 1 - unreadSum);
+                }
             } else {
                 buffer.unread = 0;
                 buffer.notification = 0;
@@ -806,6 +810,16 @@ export function handleLineInfo(message: ProtocolMessage, manually: boolean = tru
             }
             buffer.lines.push(line);
             if (manually) buffer.lastSeen++;
+        }
+    }
+
+    // Post-backfill: only set lastSeen for buffers that haven't been read before.
+    // If lastSeen is already >= 0, it was preserved from a previous session or
+    // adjusted by fetchMoreLines' oldLength subtraction — do not overwrite it.
+    const activeId = get(activeBufferId);
+    for (const buf of Object.values(currentBuffers)) {
+        if (buf.id === activeId && buf.lastSeen < 0 && buf.lines.length > 0) {
+            buf.lastSeen = buf.lines.length - 1;
         }
     }
 

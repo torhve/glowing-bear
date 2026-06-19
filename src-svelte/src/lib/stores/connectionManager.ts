@@ -6,6 +6,7 @@ import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo
 // TODO: Re-enable nick color customization when desired
 // import { IDEAL_NICK_COLORS, IDEAL_COLOR_NICKS_IN_NICKLIST, shouldAutoApply } from '$lib/stores/nickColors';
 import { Protocol } from '$lib/weechat';
+import type { ProtocolMessage } from '$lib/types';
 import { DEBUG_NICKLIST, DEBUG_WEECHAT_COMMANDS } from '$lib/debug';
 
 // Protocol instance for instance methods (setId, parse)
@@ -180,16 +181,9 @@ export async function connect(host: string, port: number, path: string, password
 
             let shouldReject = false;
 
-            if (get(connectionState).userDisconnect) {
-                // User initiated disconnect, don't auto-reconnect
-                connectionData = null;
-            } else if (!get(settings).autoconnect) {
-                // Autoconnect is OFF — stay disconnected, require manual login
-                connectionData = null;
-            } else if (typeof document !== 'undefined' && !document.hasFocus()) {
-                // First connection failed or user was not focused
-            } else if (!get(connectionState).wasEverConnected) {
-                // First connection failed — only show password error if we actually connected and auth failed
+            // Always detect error types for initial connections first,
+            // before autoconnect/focus checks that control reconnection behavior
+            if (!get(connectionState).wasEverConnected) {
                 if (evt.code === 403 || evt.code === 401) {
                     setErrors({ passwordError: true });
                     shouldReject = true;
@@ -207,6 +201,19 @@ export async function connect(host: string, port: number, path: string, password
                         setErrors({ serverUnreachable: true });
                     }
                 }
+            }
+
+            // Then decide reconnect behavior
+            if (get(connectionState).userDisconnect) {
+                // User initiated disconnect, don't auto-reconnect
+                connectionData = null;
+            } else if (!get(settings).autoconnect) {
+                // Autoconnect is OFF — stay disconnected, require manual login
+                connectionData = null;
+            } else if (typeof document !== 'undefined' && !document.hasFocus()) {
+                // User was not focused — stay disconnected
+            } else if (!get(connectionState).wasEverConnected) {
+                // First connection failed — don't reconnect (errors already set above)
             } else if (evt.code === 1006 || evt.code === 1011) {
                 // Unexpected disconnect after being connected — retry
                 scheduleReconnect();
@@ -338,7 +345,7 @@ async function fetchConfValue(name: string) {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic callback resolution/rejection types
-const callbacks: Record<number, { resolve: (v: any) => void; reject: (e: any) => void }> = {};
+const callbacks: Record<string, { resolve: (v: any) => void; reject: (e: any) => void }> = {};
 let currentCallbackId = 0;
 const pendingFetchBuffers = new Set<string>();
 
@@ -356,7 +363,7 @@ function hexStringToByte(hex: string): Uint8Array {
     return bytes;
 }
 
-function concatenateTypedArrays(...arrays: Uint8Array[]): Uint8Array {
+function concatenateTypedArrays(...arrays: Uint8Array[]): Uint8Array<ArrayBuffer> {
     const totalLength = arrays.reduce((sum, arr) => sum + arr.length, 0);
     const result = new Uint8Array(totalLength);
     let offset = 0;
@@ -390,10 +397,11 @@ export async function onMessage(data: ArrayBuffer) {
     const message = await protocolInstance.parse(data);
 
     if (message.id && callbacks[message.id]) {
-        callbacks[message.id].resolve(message);
+        const cb = callbacks[message.id]!;
+        cb.resolve(message);
         delete callbacks[message.id];
     } else if (message.id) {
-        handleMessage(message);
+        handleMessage(message as unknown as ProtocolMessage);
     }
 }
 
@@ -509,15 +517,21 @@ export async function fetchMoreLines(numLines: number = 0): Promise<any> {
                 }
             }, 30000);
         });
-        // Process the fetched lines — clear old lines and refill (matching AngularJS flow)
+        // Process the fetched lines — clear old lines and refill (matching AngularJS flow).
+        // Preserve readmarker position: if lastSeen was set, calculate how many lines
+        // were above the readmarker and restore that offset in the new line array.
         const oldLength = buffer.lines.length;
+        const unseenCount = oldLength - buffer.lastSeen - 1; // lines below readmarker
         buffer.lines = [];
         buffer.requestedLines = 0;
         // Pass false so lastSeen isn't incremented per-line during fetch.
         // lastSeen is calculated from hotlist data (accurate unread state),
         // not assumed from fetched line count.
         handleLineInfo(message, false);
-        buffer.lastSeen -= oldLength;
+        // Restore readmarker preserving the same number of unseen lines below it.
+        if (buffer.lastSeen >= 0 || unseenCount >= 0) {
+            buffer.lastSeen = Math.max(0, buffer.lines.length - unseenCount - 1);
+        }
 
         // Determine if all lines are fetched
         const linesReceived = message.objects?.[0]?.content?.length ?? 0;
@@ -561,15 +575,34 @@ export function sendWeeChatCommand(command: string, bufferId?: string) {
     sendWs(msg, 'cmd:' + command.substring(0, 50));
 }
 
-export function switchBuffer(bufferId: string) {
-    const success = setActiveBuffer(bufferId);
-    if (!success || !ws || ws.readyState !== WebSocket.OPEN) {
-        return success;
+export async function switchBuffer(bufferId: string): Promise<boolean> {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        return false;
     }
-    // Sync read marker with WeeChat — clear hotlist and unread for the new buffer
-    sendWeeChatCommand('/buffer set hotlist -1', bufferId);
-    sendWeeChatCommand('/input set_unread_current_buffer', bufferId);
-    return success;
+    // Fetch lines only for buffers that haven't been read yet (lastSeen < 0).
+    // Buffers with a valid readmarker position should not have their lines
+    // cleared and refetched — that would destroy the preserved lastSeen value.
+    const buffer = getBuffer(bufferId);
+    if (buffer && buffer.lastSeen < 0 && buffer.requestedLines < 100) {
+        try {
+            activeBufferId.set(bufferId);
+            await fetchMoreLines(100);
+        } catch {
+            // Silently ignore fetch failures on buffer switch
+        }
+    }
+    const success = setActiveBuffer(bufferId);
+    if (!success) {
+        return false;
+    }
+    // Defer hotlist/unread clear until after the scroll effect (rAF) has run,
+    // so that lastSeen calculation uses the correct localUnread value before it's zeroed out.
+    requestAnimationFrame(() => {
+        sendWeeChatCommand('/buffer set hotlist -1', bufferId);
+        sendWeeChatCommand('/input set_unread_current_buffer', bufferId);
+    });
+    // Nicklist backfill is handled by $effect in +page.svelte (guarded: only fetches if empty).
+    return true;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WeeChat buffer ID is a hex string from protocol
