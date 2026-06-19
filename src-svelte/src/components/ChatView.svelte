@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { BufferLine } from '$lib/types';
-  import { tick } from 'svelte';
   import { get } from 'svelte/store';
   import { currentBuffer, saveScrollPosition, activeBufferId } from '$lib/stores/models';
   import { settings } from '$lib/stores/settings';
@@ -28,6 +27,7 @@
   let prevLinesLength = $state(0);
   let prevScrollKey = $state<string>('');
   let hasUnreadMessages = $derived($currentBuffer && $currentBuffer.lastSeen >= 0 && $currentBuffer.lastSeen < messages.length - 1);
+  let unreadCount = $derived($currentBuffer?.lastSeen != null && $currentBuffer.lastSeen >= 0 ? messages.length - $currentBuffer.lastSeen - 1 : 0);
 
   function handleScroll() {
     if (!containerRef) return;
@@ -262,7 +262,11 @@
             <!-- Readmarker row between read and unread -->
             <tr class="readmarker" data-testid="readmarker">
               <td colspan="3">
-                <hr id="readmarker">
+                <div class="readmarker-container">
+                  <div class="readmarker-line"></div>
+                  <span class="readmarker-badge">{unreadCount} new</span>
+                  <div class="readmarker-line"></div>
+                </div>
               </td>
             </tr>
             <!-- Unread lines (after lastSeen) -->
@@ -328,18 +332,41 @@
   }
 
   .readmarker td {
-    padding: 10px 0 !important;
+    padding: 8px 0 !important;
   }
 
   .readmarker {
     height: auto !important;
   }
 
-  #readmarker {
-    border: none;
-    border-top: 2px solid var(--gb-ribbon, #f0ad4e) !important;
-    margin: 0;
+  .readmarker-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    position: relative;
   }
 
+  .readmarker-line {
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(to right, transparent, var(--gb-ribbon, #f0ad4e), var(--gb-ribbon, #f0ad4e), transparent);
+    opacity: 0.6;
+  }
+
+  .readmarker-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 10px;
+    border-radius: 9999px;
+    background-color: var(--gb-ribbon-light, rgba(240, 173, 78, 0.15));
+    border: 1px solid var(--gb-ribbon, #f0ad4e);
+    color: var(--gb-ribbon, #f0ad4e);
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+  }
 
 </style>
