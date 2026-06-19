@@ -1,24 +1,18 @@
 <script lang="ts">
 import { buffers, activeBufferId } from '$lib/stores/models';
 import { switchBuffer } from '$lib/stores/connectionManager';
+import { sortBuffers } from '$lib/utils';
 import type { BufferData } from '$lib/types';
 
 let { onBufferSelect = () => {} } = $props();
 
 // Buffers with unread activity, excluding active and hidden buffers.
 let entries = $derived(
-    Object.values($buffers)
-        .filter(b => !b.hidden && b.id !== $activeBufferId && (b.notification > 0 || b.unread > 0))
-        .sort((a, b) => {
-            // Highlights (notification) first, then regular unread.
-            const aHighlight = a.notification > 0 ? 1 : 0;
-            const bHighlight = b.notification > 0 ? 1 : 0;
-            if (aHighlight !== bHighlight) return bHighlight - aHighlight;
-            // Within same category, higher total count first.
-            const aTotal = a.notification + a.unread;
-            const bTotal = b.notification + b.unread;
-            return bTotal - aTotal;
-        })
+    sortBuffers(
+        Object.values($buffers)
+            .filter((b: BufferData) => !b.hidden && b.id !== $activeBufferId && (b.notification > 0 || b.unread > 0)),
+        false
+    )
 );
 
 // Truncate long buffer names to max 18 chars with ellipsis.

@@ -1,7 +1,8 @@
 <script lang="ts">
   import type { BufferData } from '$lib/types';
-  import { buffers, hotlist } from '$lib/stores/models';
+  import { buffers } from '$lib/stores/models';
   import { switchBuffer } from '$lib/stores/connectionManager';
+  import { sortBuffers } from '$lib/utils';
 
   import BaseDialog from '$components/BaseDialog.svelte';
   import FormInput from '$components/FormInput.svelte';
@@ -17,22 +18,6 @@
   let bufferSearchQuery = $state('');
   let selectedIndex = $state(0);
 
-  // Sort individual buffers by hotlist/activity priority
-  function sortBuffers(bufs: BufferData[]): BufferData[] {
-    return [...bufs].sort((a: BufferData, b: BufferData) => {
-      const aHotlist = $hotlist.find(h => h.buffer === a.id);
-      const bHotlist = $hotlist.find(h => h.buffer === b.id);
-      const aHasHighlight = (aHotlist?.count?.[3] ?? 0) > 0 ? 1 : 0;
-      const bHasHighlight = (bHotlist?.count?.[3] ?? 0) > 0 ? 1 : 0;
-      if (aHasHighlight !== bHasHighlight) return bHasHighlight - aHasHighlight;
-      const aActivity = a.unread + a.notification;
-      const bActivity = b.unread + b.notification;
-      if (aActivity > 0 && bActivity === 0) return -1;
-      if (aActivity === 0 && bActivity > 0) return 1;
-      return 0;
-    });
-  }
-
   let filteredBuffers = $derived(
     Object.values($buffers)
       .filter((buf: BufferData) => {
@@ -47,7 +32,7 @@
 
   // Group merged buffers by their shared number, sorted by first buffer's priority
   let groupedBuffers = $derived(
-    sortBuffers(filteredBuffers).reduce<BufferGroup[]>((groups, buf) => {
+    sortBuffers(filteredBuffers, false).reduce<BufferGroup[]>((groups, buf) => {
       const existing = groups.find(g => g.number === buf.number);
       if (existing) {
         existing.buffers.push(buf);

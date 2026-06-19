@@ -190,27 +190,36 @@ export function bufferMatchesSearch(buffer: any, search: string): boolean {
 export function getFilteredBuffers(search: string, onlyUnread: boolean, orderByServer: boolean): any[] {
     const allBuffers = get(buffers);
 
-    return Object.values(allBuffers)
-        .filter(b => !b.hidden)
-        .filter(b => bufferMatchesSearch(b, search))
-        .filter(b => !onlyUnread || b.unread > 0 || b.notification > 0 || b.active || b.pinned)
-        .sort((a, b) => {
-            if (orderByServer) {
-                return a.serverSortKey.localeCompare(b.serverSortKey);
-            }
-            return a.number - b.number;
-        });
+    return sortBuffers(
+        Object.values(allBuffers)
+            .filter((b: any) => !b.hidden)
+            .filter((b: any) => bufferMatchesSearch(b, search))
+            .filter((b: any) => !onlyUnread || b.unread > 0 || b.notification > 0 || b.active || b.pinned),
+        orderByServer
+    );
 }
 
 /**
- * Sort buffers by number, optionally grouped by server.
+ * Sort buffers: pinned first, then highlights, then unreads, then by number.
+ * Optionally groups by server when orderByServer is true.
  */
 export function sortBuffers(buffers: BufferData[], orderByServer: boolean): BufferData[] {
     const sorted = [...buffers];
     sorted.sort((a, b) => {
-        if (a.pinned && !b.pinned) return -1;
-        if (!a.pinned && b.pinned) return 1;
+        // Pinned buffers always on top
+        if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
 
+        // Highlights (notification > 0) before unreads
+        const aHighlight = a.notification > 0 ? 2 : 0;
+        const bHighlight = b.notification > 0 ? 2 : 0;
+        if (aHighlight !== bHighlight) return bHighlight - aHighlight;
+
+        // Unreads before inactive
+        const aUnread = a.unread > 0 ? 1 : 0;
+        const bUnread = b.unread > 0 ? 1 : 0;
+        if (aUnread !== bUnread) return bUnread - aUnread;
+
+        // By number (or serverSortKey if grouped)
         if (orderByServer) {
             return a.serverSortKey.localeCompare(b.serverSortKey) || a.number - b.number;
         }

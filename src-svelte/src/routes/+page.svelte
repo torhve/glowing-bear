@@ -276,33 +276,22 @@
       return;
     }
 
-    // Alt+A -> switch to buffer with activity (prioritize notification, then unread)
+    // Alt+A -> switch to next buffer with activity, following unified sort order
     if (e.altKey && (code === 97 || code === 65) && !e.ctrlKey) {
       e.preventDefault();
-      const allBuffs = get(buffers);
-      /* eslint-disable @typescript-eslint/no-explicit-any -- buffer objects from store */
-      const sortedBuffs = Object.values(allBuffs)
-        .filter((b: any) => !b.hidden)
-        .sort((a: any, b: any) => a.number - b.number);
+      const sortedBuffs = sortBuffers(
+        Object.values(get(buffers)).filter((b: BufferData) => !b.hidden),
+        get(settings).orderbyserver
+      );
       const currentId = get(activeBufferId);
-      let startIndex = sortedBuffs.findIndex((b: any) => b.id === currentId);
-      /* eslint-enable @typescript-eslint/no-explicit-any */
+      let startIndex = sortedBuffs.findIndex((b: BufferData) => b.id === currentId);
       if (startIndex === -1) startIndex = 0;
 
-      // First pass: find first buffer with notification > 0 (highest priority / highlight)
+      // Find next buffer with any activity (highlights and unreads are already first in sort order)
       for (let i = 1; i < sortedBuffs.length; i++) {
         const idx = (startIndex + i) % sortedBuffs.length;
         const b = sortedBuffs[idx];
-        if (b && b.notification > 0) {
-          switchBuffer(b.id);
-          return;
-        }
-      }
-      // Second pass: find first buffer with unread > 0
-      for (let i = 1; i < sortedBuffs.length; i++) {
-        const idx = (startIndex + i) % sortedBuffs.length;
-        const b = sortedBuffs[idx];
-        if (b && b.unread > 0) {
+        if (b && (b.notification > 0 || b.unread > 0)) {
           switchBuffer(b.id);
           return;
         }
@@ -312,14 +301,12 @@
     // Alt+Arrow up/down -> switch to adjacent buffer
     if (e.altKey && !e.ctrlKey && (code === 38 || code === 40)) {
       e.preventDefault();
-      /* eslint-disable @typescript-eslint/no-explicit-any -- buffer objects from store */
-      const allB = get(buffers);
-      const visible = Object.values(allB)
-        .filter((b: any) => !b.hidden)
-        .sort((a: any, b: any) => a.number - b.number);
+      const visible = sortBuffers(
+        Object.values(get(buffers)).filter((b: BufferData) => !b.hidden),
+        get(settings).orderbyserver
+      );
       const curId = get(activeBufferId);
-      const curIdx = visible.findIndex((b: any) => b.id === curId);
-      /* eslint-enable @typescript-eslint/no-explicit-any */
+      const curIdx = visible.findIndex((b: BufferData) => b.id === curId);
       if (curIdx === -1) return;
       const dir = code === 38 ? -1 : 1;
       const target = curIdx + dir;
