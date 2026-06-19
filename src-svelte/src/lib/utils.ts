@@ -220,24 +220,6 @@ export function sortBuffers(buffers: BufferData[], orderByServer: boolean): Buff
 }
 
 /**
- * Assign sequential jump keys (1-99) to all buffers sorted by buffer number.
- * Preserves existing $jumpKey values on buffers that already have them set.
- * Mirrors AngularJS getBufferQuickKeys filter logic from filters.js.
- */
-export function computeJumpKeys(buffers: BufferData[]): BufferData[] {
-    const sorted = [...buffers].sort((a, b) => a.number - b.number);
-    let keyIdx = 0;
-    sorted.forEach((buf) => {
-        if ((buf as BufferData & { hidden?: boolean }).hidden) return;
-        if (!(buf as BufferData & { $jumpKey?: string }).$jumpKey && keyIdx < 99) {
-            (buf as BufferData & { $jumpKey?: string }).$jumpKey = String(keyIdx + 1);
-        }
-        keyIdx++;
-    });
-    return buffers;
-}
-
-/**
  * Parse a relay URL string into host, port, and path.
  */
 export function parseRelayUrl(raw: string, defaultPort: string | number = 443): { host: string; port: number; path: string } {

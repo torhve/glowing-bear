@@ -167,7 +167,6 @@ export interface BufferData {
     hideBufferLineTimes: boolean;
     pinned: boolean;
     active: boolean;
-    $jumpKey?: string;
 }
 
 // ---- Connection ----
@@ -223,7 +222,6 @@ export interface Settings {
     enableQuickKeys: boolean;
     showNicklist: boolean;
     showQuickKeys: boolean;
-    showJumpKeys: boolean;
     highlightWords: string;
     angularTimeFormat?: string;
     supports_formatting_date?: boolean;

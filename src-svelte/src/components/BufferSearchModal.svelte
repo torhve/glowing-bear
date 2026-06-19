@@ -124,11 +124,7 @@
             <div class="text-lg text-text truncate">{buffer.shortName}</div>
             <div class="text-sm text-text-muted truncate">{buffer.fullName}</div>
           </div>
-          {#if buffer.$jumpKey}
-            <span class="mr-2 px-1.5 py-0.5 text-xs font-bold rounded bg-surface-raised border border-border">
-              {buffer.$jumpKey}
-            </span>
-          {/if}
+
           {#if buffer.notification >= 3}
             <span class="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-xs font-bold text-text bg-danger rounded">
               {buffer.notification}
