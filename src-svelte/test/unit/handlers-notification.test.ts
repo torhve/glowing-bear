@@ -16,7 +16,7 @@ vi.mock('$lib/stores/settings', () => ({
               alwaysnicklist: false, orderbyserver: false,
                 readlineBindings: false, useFavico: false, soundnotification: false,
                 enableMathjax: false, enableQuickKeys: false, showNicklist: true,
-                showQuickKeys: false, showJumpKeys: false, highlightWords: ''
+                showQuickKeys: false, showJumpKeys: false, highlightWords: '', hotlistsync: true
             });
             return () => {};
         }

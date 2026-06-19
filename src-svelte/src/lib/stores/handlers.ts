@@ -3,6 +3,8 @@ import {
     buffers,
     servers,
     activeBufferId,
+    bufferBottom,
+    localUnreadBuffers,
     weechatVersion,
     wconfig,
     addBuffer,
@@ -172,19 +174,43 @@ function handleBufferUpdate(buffer: any, message: BufferMessage) {
 }
 
 // ---- Buffer line added handler ----
+// Builds immutable copies of affected buffers first, then mutates only those copies.
+// This ensures Svelte's $derived($currentBuffer?.lines) sees a new array reference
+// and triggers re-render, which is required for readmarker rendering to work.
 export function handleBufferLineAdded(message: ProtocolMessage) {
     const lines = message.objects[0]?.content as BufferLineMessage[];
     if (!lines) {
         console.debug('[handler] _buffer_line_added: no content');
         return;
     }
-          const currentBuffers = get(buffers);
+
+    const currentBuffers = get(buffers);
     const activeId = get(activeBufferId);
-    const isWindowFocused = typeof document !== 'undefined' && document.hasFocus();
-    const newBufferMap: Record<string, BufferData> = {};
+    // Use Page Visibility API (same as AngularJS $rootScope.isWindowFocused).
+    // document.hidden is more reliable than hasFocus() for detecting tab-inactive periods.
+    const isWindowFocused = typeof document !== 'undefined' && !document.hidden;
+
+    // First pass: identify all affected buffer IDs
+    const affectedIds = new Set<string>();
+    for (const lineMsg of lines) {
+        affectedIds.add(lineMsg.buffer);
+    }
+
+    // Build immutable copies: deep-copy (new lines array) for affected buffers,
+    // shallow-copy for unchanged ones. Mutations below apply only to these copies.
+    const updatedBuffers: Record<string, BufferData> = {};
+    for (const id in currentBuffers) {
+        const buf = currentBuffers[id];
+        if (!buf) continue;
+        if (affectedIds.has(id)) {
+            updatedBuffers[id] = { ...buf, lines: [...buf.lines], nicklist: { ...buf.nicklist } };
+        } else {
+            updatedBuffers[id] = buf;
+        }
+    }
 
     for (const lineMsg of lines) {
-        let buffer = currentBuffers[lineMsg.buffer];
+        let buffer = updatedBuffers[lineMsg.buffer];
         if (!buffer) {
             // Buffer not in our store yet (e.g., WeeChat auto-created query buffer for PM).
             // Try to extract nick from prefix (format: <nick> or <nick!user@host>)
@@ -196,7 +222,7 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
             }
             console.log('[handler] creating buffer for:', lineMsg.buffer, 'nick:', inferredNick, 'msg:', lineMsg.message?.substring(0, 50));
 
-            const newBuffer: BufferData = {
+            buffer = {
                 id: lineMsg.buffer,
                 fullName: inferredNick,
                 shortName: inferredNick,
@@ -226,8 +252,7 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                 pinned: false,
                 active: false
             };
-            buffer = newBuffer;
-            newBufferMap[lineMsg.buffer] = newBuffer;
+            updatedBuffers[lineMsg.buffer] = buffer;
         }
 
         if (!buffer) {
@@ -238,10 +263,7 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
         const line = createBufferLine(lineMsg);
         buffer.requestedLines++;
 
-        // Update spokeAt timestamps for tab completion
-        handleNickMessageForSpeak(line);
-
-         console.debug('[handler] line displayed=', line.displayed, 'text=', line.text?.substring(0, 30), 'tags=', JSON.stringify(lineMsg.tags_array), 'notify=', buffer.notify);
+         console.debug('[handler] line displayed=', line.displayed, 'buffer=', buffer.fullName, 'text=', line.text?.substring(0, 30), 'tags=', JSON.stringify(lineMsg.tags_array), 'notify=', buffer.notify);
         if (line.displayed) {
             // Check for date change and inject date change message
             if (buffer.lines.length > 0) {
@@ -251,7 +273,7 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                 injectDateChangeMessageIfNeeded(buffer, false, oldDate, newDate);
             }
 
-              buffer.lines = [...buffer.lines, line];
+            buffer.lines = [...buffer.lines, line];
 
             // During initial sync, don't increment lastSeen per-line.
             // Instead, calculate it once after sync completes using the
@@ -266,18 +288,29 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                     setSyncing(false);
                 }
             } else {
-                // After sync: increment lastSeen only for active buffers.
-                // For inactive buffers, preserve lastSeen position — new lines become unread.
-                if (buffer.lastSeen >= 0 && buffer.id === activeId) {
-                    buffer.lastSeen++;
-                } else if (buffer.lastSeen >= 0 && buffer.id !== activeId) {
-                    // Track local unread count for inactive buffers
+                // After sync: for active buffers at bottom, set lastSeen to the
+                // last line so there are no phantom unread messages. For active
+                // buffers scrolled up, increment as before. For inactive buffers,
+                // track local unread count regardless of whether lastSeen is set.
+                if (buffer.id === activeId && buffer.lastSeen >= 0) {
+                    if (get(bufferBottom)) {
+                        buffer.lastSeen = buffer.lines.length - 1;
+                    } else {
+                        buffer.lastSeen++;
+                    }
+                } else if (buffer.id !== activeId) {
+                    // Track local unread count for all inactive buffers, even those
+                    // never visited (lastSeen < 0). This ensures readmarker appears
+                    // on first visit when messages arrived while away.
                     buffer.localUnread = (buffer.localUnread || 0) + 1;
+                    localUnreadBuffers.update((s: Set<string>) => new Set(s).add(buffer.id));
                 }
 
                 // Increment unread for real-time messages with notify_level=1 (message) only.
                 // PMs/highlights (notify_level>=2) increment notification, not unread.
-                if (lineMsg.notify_level === 1 && !(buffer.id === activeId && isWindowFocused)) {
+                // Only count as unread if the buffer's notify setting allows message-level notifications.
+                // Suppress for the active buffer when window is focused (user is looking at it).
+                if (buffer.notify > 1 && lineMsg.notify_level === 1 && !(buffer.id === activeId && isWindowFocused)) {
                     buffer.unread++;
                     const serverKey = `${buffer.plugin}.${buffer.server}`;
                     const server = get(servers)[serverKey];
@@ -285,9 +318,11 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                 }
             }
 
-            // Trigger notification subsystem for highlights/privates with notify_level >= 2
-            if (lineMsg.notify_level >= 2) {
-                const isPrivate = buffer.type === 'private' && buffer.id !== activeId;
+            // Trigger notification subsystem for highlights/privates with notify_level >= 2.
+            // Only count if the buffer's notify setting isn't "never", and suppress for the
+            // active buffer when window is focused (user is already viewing it).
+            if (lineMsg.notify_level >= 2 && !(buffer.id === activeId && isWindowFocused)) {
+                const isPrivate = buffer.type === 'private';
                 if (buffer.notify !== 0 && (lineMsg.highlight || isPrivate)) {
                     buffer.notification++;
                     const serverKey = `${buffer.plugin}.${buffer.server}`;
@@ -304,21 +339,8 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
         }
     }
 
-    // Create new buffer references to trigger Svelte reactivity
-    const updatedBuffers = {} as Record<string, BufferData>;
-    for (const id of Object.keys(currentBuffers)) {
-        const buf = currentBuffers[id];
-        if (buf) {
-            updatedBuffers[id] = { ...buf };
-        }
-    }
-    // Merge in any newly created buffers from inside the loop
-    for (const id of Object.keys(newBufferMap)) {
-        const newBuf = newBufferMap[id];
-        if (newBuf) {
-            updatedBuffers[id] = newBuf;
-        }
-    }
+    // Update spokeAt timestamps for tab completion on the immutable copies
+    handleNickMessageForSpeakOnBuffers(lines, updatedBuffers);
 
     // Update stores
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- buffer object type from models store
@@ -516,32 +538,62 @@ export function handleBufferClosing(message: ProtocolMessage) {
 
 // ---- Hotlist changed handler ----
 export function handleHotlistChanged(message: ProtocolMessage) {
+    const currentBuffers = get(buffers);
+    const activeId = get(activeBufferId);
+    const localUnread = get(localUnreadBuffers);
+    const lines = (message.objects || []).map(obj => {
+        const buf = currentBuffers[obj.pointer];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const counts = ((obj.content as any[])?.[0]?.count) ?? [0, 0, 0, 0];
+        return `  ${buf?.shortName || obj.pointer} (highlight=${counts[0]}, messages=${counts[1]}, private=${counts[2]}, not-processed=${counts[3]})`;
+    });
+    console.log('gui_hotlist:\n' + lines.join('\n'));
     const obj = message.objects[0]?.content?.[0];
     if (!obj) return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WeeChat hotlist object from protocol
     const content = obj.content as any[];
     if (content.length < 4) return;
     const [hotlistPointers] = content;
-    const currentBuffers = get(buffers);
     const currentServers = get(servers);
-    // Reset all non-active buffers before applying hotlist entries
+
+    // Build immutable copies of affected buffers and servers.
+    // Avoids in-place mutations that don't trigger Svelte reactivity
+    // when concurrent store updates (e.g. setActiveBuffer) are in flight.
+    const updatedBuffers = {} as Record<string, BufferData>;
     for (const id in currentBuffers) {
         const buf = currentBuffers[id];
-        if (buf && !buf.active) {
+        if (buf) {
+            updatedBuffers[id] = { ...buf, lines: [...buf.lines], nicklist: { ...buf.nicklist } };
+        }
+    }
+    const updatedServers = { ...currentServers };
+
+    // Reset unread counts on all non-active buffers before applying hotlist entries.
+    // Active buffers keep their existing unread state — WeeChat doesn't send
+    // hotlist counts for the buffer the user is currently viewing.
+    // Use activeId from store instead of buf.active to avoid stale copy issues.
+    for (const id in updatedBuffers) {
+        const buf = updatedBuffers[id];
+        if (buf && id !== activeId) {
             buf.unread = 0;
             buf.notification = 0;
         }
     }
-    for (const key in currentServers) {
-        const srv = currentServers[key];
+
+    // Reset all server unread totals before recalculating from hotlist entries.
+    for (const key in updatedServers) {
+        const srv = updatedServers[key];
         if (srv) srv.unread = 0;
     }
-    // Apply hotlist entries from WeeChat — mirror original AngularJS behavior
+
+    // Apply hotlist entries from WeeChat — mirror original AngularJS behavior.
+    // Skip buffers that are currently active (WeeChat doesn't report hotlist
+    // counts for the current buffer, and local unread tracking handles it).
     if (hotlistPointers) {
         const pointers = Array.isArray(hotlistPointers) ? hotlistPointers : [hotlistPointers];
         for (const bufferId of pointers) {
-            const buffer = currentBuffers[bufferId];
-            if (!buffer || buffer.active) continue;
+            const buffer = updatedBuffers[bufferId];
+            if (!buffer || bufferId === activeId) continue;
             const entry = message.objects.find(o => o.pointer === bufferId);
             if (entry?.content) {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic WeeChat relay object shape
@@ -549,8 +601,9 @@ export function handleHotlistChanged(message: ProtocolMessage) {
                 buffer.unread = counts[1] || 0;
                 buffer.notification = (counts[2] || 0) + (counts[3] || 0);
                 const unreadSum = counts.reduce((sum: number, n: number) => sum + n, 0);
-                // Only recalculate lastSeen if not already set — local data is more accurate.
-                if (buffer.lastSeen < 0) {
+                // Only recalculate lastSeen if not already set and no local unreads tracked.
+                // Buffers with localUnread > 0 have more accurate local data than stale WeeChat hotlist.
+                if (buffer.lastSeen < 0 && !localUnread.has(bufferId)) {
                     buffer.lastSeen = Math.max(0, buffer.lines.length - 1 - unreadSum);
                 }
             } else {
@@ -559,44 +612,80 @@ export function handleHotlistChanged(message: ProtocolMessage) {
             }
         }
     }
-    buffers.set({ ...currentBuffers });
-    servers.set({ ...currentServers });
+
+    buffers.set(updatedBuffers);
+    servers.set(updatedServers);
 }
 
 // ---- Hotlist handler ----
 export function handleHotlistInfo(message: ProtocolMessage) {
     const currentBuffers = get(buffers);
+    const activeId = get(activeBufferId);
     const currentServers = get(servers);
-
+    const localUnread = get(localUnreadBuffers);
 
     const hotlist = message.objects[0]?.content as HotlistEntry[];
     if (!hotlist) return;
 
     for (const entry of hotlist) {
-        const buffer = currentBuffers[entry.buffer];
-        if (!buffer || buffer.active) continue;
+        const bufName = currentBuffers[entry.buffer]?.shortName || entry.buffer;
+        console.log(`${bufName}: unread=${entry.count[1]}, highlight=${entry.count[2]}, private=${entry.count[3]}`);
+    }
+
+    // Build immutable copies of affected buffers and servers to ensure
+    // Svelte reactivity triggers correctly when unread counts change.
+    const updatedBuffers = {} as Record<string, BufferData>;
+    const updatedServers = { ...currentServers };
+
+    for (const id in currentBuffers) {
+        const buf = currentBuffers[id];
+        if (buf) {
+            updatedBuffers[id] = { ...buf };
+        }
+    }
+
+    // Reset unread counts on all non-active buffers first.
+    // This ensures stale counts are cleared even if WeeChat sends an empty
+    // hotlist (meaning all buffers have been read).
+    // Use activeId from store instead of buf.active to avoid stale copy issues.
+    for (const id in updatedBuffers) {
+        const buf = updatedBuffers[id];
+        if (buf && id !== activeId) {
+            buf.unread = 0;
+            buf.notification = 0;
+        }
+    }
+    // Reset all server unread totals before recalculating from hotlist entries.
+    for (const key in updatedServers) {
+        const srv = updatedServers[key];
+        if (srv) srv.unread = 0;
+    }
+
+    for (const entry of hotlist) {
+        const buffer = updatedBuffers[entry.buffer];
+        if (!buffer || entry.buffer === activeId) continue;
 
         // Store unread count from WeeChat hotlist.
         // During initial sync (buffer has no lines), defer lastSeen calculation
         // until after sync completes, when we know the total line count.
         buffer.unread = entry.count[1] || 0;
         buffer.notification = (entry.count[2] || 0) + (entry.count[3] || 0);
-        // Only calculate lastSeen if buffer already has lines (post-sync).
-        // During initial sync, buffer.lines.length === 0 so this would be wrong.
-        if (buffer.lines.length > 0) {
+        // Only calculate lastSeen if buffer has lines and no local unreads tracked.
+        // Buffers with localUnread > 0 have more accurate local data than stale WeeChat hotlist.
+        if (buffer.lines.length > 0 && !localUnread.has(entry.buffer)) {
             const unreadSum = entry.count.reduce((sum: number, n: number) => sum + n, 0);
             buffer.lastSeen = buffer.lines.length - 1 - unreadSum;
         }
 
         const serverKey = `${buffer.plugin}.${buffer.server}`;
-        const server = currentServers[serverKey];
+        const server = updatedServers[serverKey];
         if (server && entry.count[1] !== undefined && entry.count[2] !== undefined && entry.count[3] !== undefined) {
             server.unread += entry.count[1] + entry.count[2] + entry.count[3];
         }
     }
 
-    buffers.set({ ...currentBuffers });
-    servers.set({ ...currentServers });
+    buffers.set(updatedBuffers);
+    servers.set(updatedServers);
 }
 
 // ---- Nicklist handler ----
@@ -714,6 +803,46 @@ export function handleNickMessageForSpeak(line: BufferLine) {
                 if (curr_nick.name === nick) {
                     curr_nick.spokeAt = Date.now();
                     return;
+                }
+            }
+        }
+    }
+}
+
+// Updates spokeAt timestamps on pre-built buffer copies (for immutable updates).
+export function handleNickMessageForSpeakOnBuffers(lineMsgs: BufferLineMessage[], updatedBuffers: Record<string, BufferData>) {
+    const now = Date.now();
+    for (const lineMsg of lineMsgs) {
+        const line = createBufferLine(lineMsg);
+        const prefix = line.prefix;
+        if (prefix.length === 0) continue;
+
+        let nick = '';
+        const lastPart = prefix[prefix.length - 1];
+        if (lastPart && lastPart.text) {
+            nick = lastPart.text;
+        }
+
+        if (nick === " *" || nick === '') {
+            const match = line.text.match(/^(.+)\s/);
+            if (match && match[1]) {
+                nick = match[1];
+            }
+        }
+
+        if (!nick || nick === "" || nick === "=!=") continue;
+
+        for (const bufId in updatedBuffers) {
+            const buf = updatedBuffers[bufId];
+            if (!buf || !buf.nicklist) continue;
+            for (const groupIdx in buf.nicklist) {
+                const groupObj = buf.nicklist[groupIdx];
+                if (!groupObj) continue;
+                for (const curr_nick of groupObj.nicks) {
+                    if (curr_nick.name === nick) {
+                        curr_nick.spokeAt = now;
+                        break;
+                    }
                 }
             }
         }

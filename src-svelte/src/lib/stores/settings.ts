@@ -27,7 +27,9 @@ export const settings = writable<Settings>({
     enableQuickKeys: true,
     showNicklist: true,
     showQuickKeys: false,
-    highlightWords: ''
+    highlightWords: '',
+    debugBuildMetadata: false,
+    hotlistsync: true
 });
 
 // Load from localStorage on init

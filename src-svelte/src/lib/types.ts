@@ -223,6 +223,8 @@ export interface Settings {
     showNicklist: boolean;
     showQuickKeys: boolean;
     highlightWords: string;
+    debugBuildMetadata: boolean;
+    hotlistsync: boolean;
     angularTimeFormat?: string;
     supports_formatting_date?: boolean;
 }
