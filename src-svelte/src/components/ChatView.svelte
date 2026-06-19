@@ -216,7 +216,7 @@
     bind:this={containerRef}
     onscroll={handleScroll}
     data-testid="chat-messages"
-    class="flex-1 overflow-y-auto overflow-x-hidden bg-bg pb-16"
+    class="flex-1 overflow-y-auto overflow-x-hidden bg-bg"
     class:favorite-font={!$currentBuffer || !isFreeBuffer($currentBuffer)}
     class:free-font={$currentBuffer && isFreeBuffer($currentBuffer)}
     class:hideTime={$currentBuffer?.hideBufferLineTimes}
