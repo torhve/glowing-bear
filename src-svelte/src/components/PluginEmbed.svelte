@@ -8,6 +8,7 @@
   let { plugin }: { plugin: PluginMetadata } = $props();
 
   let embedRef = $state<HTMLDivElement | null>(null);
+  // svelte-ignore state_referenced_locally: only captures initial value; $effect on plugin.visible keeps it in sync
   let visible = $state(plugin.visible);
   let contentInjected = $state(false);
 

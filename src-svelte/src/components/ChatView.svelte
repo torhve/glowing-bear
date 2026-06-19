@@ -26,6 +26,7 @@
   let isAtBottom = $state(true);
   let prevActiveBufferId = $state<string>('');
   let prevLinesLength = $state(0);
+  let hasUnreadMessages = $derived($currentBuffer && $currentBuffer.lastSeen >= 0 && $currentBuffer.lastSeen < messages.length - 1);
 
   function handleScroll() {
     if (!containerRef) return;
@@ -86,8 +87,6 @@
       const currentBufferId = get(activeBufferId);
       const bufferChanged = prevActiveBufferId !== currentBufferId;
       const linesAdded = messages.length > prevLinesLength;
-      // Determine if there are unread messages with a readmarker (lastSeen >= 0 and not at end)
-      const hasUnreadMessages = $currentBuffer.lastSeen >= 0 && $currentBuffer.lastSeen < messages.length - 1;
 
       console.log(
         '[ChatView] scroll effect — buffer:', $currentBuffer.shortName,
@@ -95,9 +94,9 @@
         '| prevLinesLength:', prevLinesLength,
         '| bufferChanged:', bufferChanged,
         '| linesAdded:', linesAdded,
-        '| currentScrollTop:', containerRef.scrollTop,
-        '| scrollHeight:', containerRef.scrollHeight,
-        '| clientHeight:', containerRef.clientHeight,
+        '| currentScrollTop:', containerRef!.scrollTop,
+        '| scrollHeight:', containerRef!.scrollHeight,
+        '| clientHeight:', containerRef!.clientHeight,
         '| isAtBottom:', isAtBottom,
         '| hasUnreadMessages:', hasUnreadMessages,
         '| lastSeen:', $currentBuffer.lastSeen
@@ -105,32 +104,31 @@
 
       if ((bufferChanged || linesAdded) && !hasUnreadMessages) {
         // No unread messages — always scroll to bottom
-        containerRef.scrollTop = containerRef.scrollHeight;
+        containerRef!.scrollTop = containerRef!.scrollHeight;
         isAtBottom = true;
         console.log(
-          '[ChatView] scroll → bottom — scrollTop:', containerRef.scrollTop,
-          '| scrollHeight:', containerRef.scrollHeight,
+          '[ChatView] scroll → bottom — scrollTop:', containerRef!.scrollTop,
+          '| scrollHeight:', containerRef!.scrollHeight,
           '| bufferLines:', messages.length
         );
       } else if (hasUnreadMessages) {
-        // Buffer has unread messages — scroll to readmarker
-        const rm = document.getElementById('readmarker');
-        if (rm && rm.parentElement) {
-          const targetScrollTop = rm.offsetTop - rm.parentElement.scrollHeight + rm.scrollHeight;
-          if (targetScrollTop > 0) {
-            containerRef.scrollTop = targetScrollTop;
-            console.log(
-              '[ChatView] scroll → readmarker — scrollTop:', containerRef.scrollTop,
-              '| bufferLines:', messages.length
-            );
-          } else {
-            containerRef.scrollTop = containerRef.scrollHeight;
-            console.log(
-              '[ChatView] scroll → bottom (readmarker fallback) — scrollTop:', containerRef.scrollTop,
-              '| bufferLines:', messages.length
-            );
+        // Defer to rAF so Svelte DOM updates (including readmarker rendering) complete first
+        requestAnimationFrame(() => {
+          const rm = document.getElementById('readmarker');
+          if (!rm || !rm.parentElement) {
+            console.warn('[ChatView] readmarker not in DOM yet');
+            return;
           }
-        }
+          if (containerRef!.scrollHeight > containerRef!.clientHeight) {
+            const targetScrollTop = rm.offsetTop - containerRef!.clientHeight + rm.offsetHeight;
+            containerRef!.scrollTop = Math.max(0, targetScrollTop);
+          }
+          isAtBottom = false;
+          console.log(
+            '[ChatView] scroll → readmarker — scrollTop:', containerRef!.scrollTop,
+            '| bufferLines:', messages.length
+          );
+        });
       }
 
       prevActiveBufferId = currentBufferId;
@@ -220,7 +218,6 @@
             </tr>
           {/if}
 
-          <!-- Readmarker splits read/unread lines -->
           {#if $currentBuffer.lastSeen >= 0 && $currentBuffer.lastSeen < messages.length - 1}
             <!-- Read lines (up to and including lastSeen) -->
             {#each messages.slice(0, $currentBuffer.lastSeen + 1) as message, i (i)}
@@ -310,4 +307,6 @@
     border-top: 1px solid var(--gb-ribbon, #f0ad4e) !important;
     margin: 0;
   }
+
+
 </style>

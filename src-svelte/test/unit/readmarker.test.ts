@@ -78,14 +78,15 @@ function createLineMessage(
     tags: string[] = [],
     highlight: number = 0,
     displayed: number = 1,
-    notifyLevel: number = 1
+    notifyLevel: number = 1,
+    date?: number
 ): ProtocolMessage {
     return {
         objects: [{
             pointer: bufferId,
             content: [{
                 buffer: bufferId,
-                date: Date.now(),
+                date: date ?? Date.now(),
                 date_long: 0,
                 prefix: '\x19\u000304Nick\x19',
                 message: 'Test message',
@@ -263,8 +264,8 @@ describe('Readmarker behavior', () => {
             setActiveBuffer('0x200');
 
             const result = get(buffers)['0x200'];
-            // lastSeen = max(0, 100 - (5 + 2) - 1) = 92
-            expect(result!.lastSeen).toBe(92);
+            // lastSeen = max(0, 100 - 5 - 1) = 94 (uses only local unread, not notification)
+            expect(result!.lastSeen).toBe(94);
             expect(result!.unread).toBe(0);
             expect(result!.notification).toBe(0);
         });
@@ -283,6 +284,7 @@ describe('Readmarker behavior', () => {
             setActiveBuffer('0x200');
 
             const result = get(buffers)['0x200'];
+            // lastSeen preserved at 80 — not recalculated when already set
             expect(result!.lastSeen).toBe(80);
             expect(result!.unread).toBe(0);
             expect(result!.notification).toBe(0);
@@ -330,10 +332,10 @@ describe('Readmarker behavior', () => {
             // User switches to Buffer A
             setActiveBuffer('0x100');
 
-            // 3 new messages arrive on B while inactive
-            handleBufferLineAdded(createLineMessage('0x200', [], 0, 1, 1));
-            handleBufferLineAdded(createLineMessage('0x200', [], 0, 1, 1));
-            handleBufferLineAdded(createLineMessage('0x200', [], 0, 1, 1));
+            // 3 new messages arrive on B while inactive (dates continue from buffer)
+            handleBufferLineAdded(createLineMessage('0x200', [], 0, 1, 1, 100));
+            handleBufferLineAdded(createLineMessage('0x200', [], 0, 1, 1, 101));
+            handleBufferLineAdded(createLineMessage('0x200', [], 0, 1, 1, 102));
 
             let result = get(buffers)['0x200'];
             expect(result!.lastSeen).toBe(99);

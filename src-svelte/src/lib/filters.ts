@@ -1,3 +1,5 @@
+import DOMPurify from 'dompurify';
+
 // Filter functions for Glowing Bear
 // Ported from AngularJS filters.js
 
@@ -17,9 +19,6 @@
  */
 export function sanitizeHtml(html: string, opts: { allowEmbeds?: boolean } = {}): string {
     if (!html) return '';
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DOMPurify injected as global by Vite
-    const DOMPurify = (globalThis as any).DOMPurify;
-    if (!DOMPurify) return html;
     if (opts.allowEmbeds) {
         return DOMPurify.sanitize(html, {
             ADD_ATTR: ['target', 'allow', 'frameborder', 'allowfullscreen', 'scrolling'],

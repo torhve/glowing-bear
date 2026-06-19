@@ -346,6 +346,7 @@ export function setActiveBuffer(bufferId: string): boolean {
   const prevId = get(activeBufferId);
     if (prevId && currentBuffers[prevId]) {
         const prev = currentBuffers[prevId];
+        console.log('[buffer switch]', prev.shortName || prev.fullName, '→', buffer.shortName || buffer.fullName);
         prev.active = false;
         // Save line count when leaving this buffer (for lastSeen fallback on return).
         // Do NOT modify prev.lastSeen — let handleHotlistInfo / handleLineInfo manage it.
@@ -353,16 +354,17 @@ export function setActiveBuffer(bufferId: string): boolean {
         bufCopy.lines = [...prev.lines];
         bufferLineCounts.update(counts => ({ ...counts, [prevId]: bufCopy.lines.length }));
         previousBufferId.set(prevId);
+    } else if (prevId) {
+        console.log('[buffer switch]', '(none)', '→', buffer.shortName || buffer.fullName);
     }
 
     // Save local unread count before clearing (tracks ALL messages while non-active,
     // not just notify_level=1 — needed when WeeChat already displayed the message).
     const localUnread = buffer.unread;
 
-    // Calculate lastSeen for the incoming buffer using our local unread count.
-    // This is more accurate than WeeChat hotlist because WeeChat may have already
-    // displayed the message (e.g., gbbot sends via /msg in WeeChat itself).
-    if (localUnread > 0 && buffer.lines.length > 0) {
+    // Calculate lastSeen only if not already set. Existing lastSeen represents the
+    // user's actual reading position and should be preserved on return.
+    if (buffer.lastSeen < 0 && localUnread > 0 && buffer.lines.length > 0) {
         buffer.lastSeen = Math.max(0, buffer.lines.length - localUnread - 1);
     }
 
