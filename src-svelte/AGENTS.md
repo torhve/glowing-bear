@@ -13,7 +13,7 @@ Glowing Bear is a browser-based frontend for WeeChat IRC via WebSockets — **no
 | Testing | Vitest 2.x (unit) + Playwright 1.60.x (E2E) |
 | Protocol | `weechat.ts` (migrated from AngularJS `weechat.js`), `weechat-rest.ts` (unused, planned for future) |
 | Desktop | Tauri 2.x (Rust) in `../../src-tauri/` |
-| Libraries | fflate, DOMPurify, linkifyjs, linkify-string, zlibjs |
+| Libraries | fflate, DOMPurify |
 
 ## Project Structure
 
@@ -28,11 +28,12 @@ src-svelte/
 ├── test/unit/               # Vitest unit tests
 ├── e2e/                     # Playwright E2E tests (specs/, helpers/, fixtures/)
 ├── playwright.config.ts
+├── doc/weechat_relay_weechat.en.adoc  # WeeChat Relay API DOC
 ├── vite.config.ts / svelte.config.js / vitest.config.ts
 └── package.json
 ```
 
-Key files: `weechat.ts` (binary relay protocol parser/encoder, migrated from AngularJS), `weechat-rest.ts` (unused, planned for future), `connectionManager.ts` (WS lifecycle, handshake, sync), `handlers.ts` (dispatches → models stores), `models.ts` (writable stores: buffers, currentBuffer, connected, hotlist, servers, wconfig), `settings.ts` (localStorage persistence), `theme.ts` (CSS variable injection), `notifications.ts` (desktop notifications, sound, favicon badge), `faviconBadge.ts` (canvas-based favicon badge renderer), `linkTokens.ts` (link tokenization), `emojify.ts`, `imgur.ts`, `filters.ts`, `toast.ts`).
+Key files: `weechat.ts` (binary relay protocol parser/encoder, migrated from AngularJS), `connectionManager.ts` (WS lifecycle, handshake, sync), `handlers.ts` (dispatches → models stores), `models.ts` (writable stores: buffers, currentBuffer, connected, hotlist, servers, wconfig), `settings.ts` (localStorage persistence), `theme.ts` (CSS variable injection), `notifications.ts` (desktop notifications, sound, favicon badge), `faviconBadge.ts` (canvas-based favicon badge renderer), `linkTokens.ts` (link tokenization), `emojify.ts`, `imgur.ts`, `filters.ts`, `toast.ts`).
 
 ## Commands
 
@@ -108,7 +109,6 @@ Control API CLI: `test/irc-server/ctrl.sh` to send IRC commands (gbtest must be 
 ## Known Issues
 
 - **Svelte 5 `$effect.pre` orphan error** in dev-mode Playwright tests — filtered via `page.on('pageerror')` in `beforeEach`. Does NOT affect production.
-- **WeeChat relay timeouts** — restart with `npm run irc:stop && npm run irc:start`.
 - **Vitest browser mode is NOT used** — incompatible with Svelte 5.
 
 ## Prerequisites
