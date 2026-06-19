@@ -153,6 +153,7 @@ export interface BufferData {
     requestedLines: number;
     allLinesFetched: boolean;
     lastSeen: number;
+    localUnread: number;
     unread: number;
     notification: number;
     notify: number;

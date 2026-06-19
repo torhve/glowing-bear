@@ -107,6 +107,7 @@ export function createBuffer(message: {
         requestedLines: 0,
         allLinesFetched: false,
         lastSeen: -1,
+        localUnread: 0,
         unread: 0,
         notification: 0,
         notify: message.notify ?? 3,
@@ -360,7 +361,7 @@ export function setActiveBuffer(bufferId: string): boolean {
 
     // Save local unread count before clearing (tracks ALL messages while non-active,
     // not just notify_level=1 — needed when WeeChat already displayed the message).
-    const localUnread = buffer.unread;
+    const localUnread = buffer.localUnread || 0;
 
     // Calculate lastSeen only if not already set. Existing lastSeen represents the
     // user's actual reading position and should be preserved on return.
@@ -371,6 +372,7 @@ export function setActiveBuffer(bufferId: string): boolean {
     buffer.active = true;
     buffer.unread = 0;
     buffer.notification = 0;
+    buffer.localUnread = 0;
 
     activeBufferId.set(bufferId);
     activeBufferChanged.update(n => n + 1);

@@ -26,6 +26,7 @@
   let isAtBottom = $state(true);
   let prevActiveBufferId = $state<string>('');
   let prevLinesLength = $state(0);
+  let prevScrollKey = $state<string>('');
   let hasUnreadMessages = $derived($currentBuffer && $currentBuffer.lastSeen >= 0 && $currentBuffer.lastSeen < messages.length - 1);
 
   function handleScroll() {
@@ -72,7 +73,7 @@
     }
   });
 
- $effect.pre(() => {
+  $effect.pre(() => {
     // Auto-scroll when buffer changes or new lines arrive
     // Skip if loading more lines or was scrolled up during fetch
     if (!$currentBuffer || isLoadingMore || messages.length === 0 || !containerRef) {
@@ -81,58 +82,89 @@
       return;
     }
 
+    // Read reactive values BEFORE any await to avoid stale snapshots.
+    // $derived values do NOT re-evaluate after await in async functions (Svelte 5 limitation).
+    const currentBufferId = get(activeBufferId);
+    const curHasUnreadMessages = hasUnreadMessages;
+    const curLastSeen = $currentBuffer.lastSeen;
+    const curLinesLength = messages.length;
+    const curBufferShortName = $currentBuffer.shortName;
+    const bufferChanged = prevActiveBufferId !== currentBufferId;
+    const linesAdded = curLinesLength > prevLinesLength;
+
+    // If nothing changed, skip scroll operations entirely
+    if (!bufferChanged && !linesAdded) return;
+
+    // Dedup guard: run synchronously to prevent cascading rAFs on rapid line arrivals.
+    const scrollKey = `${currentBufferId}-${curLinesLength}`;
+    if (curHasUnreadMessages && prevScrollKey === scrollKey) return;
+    prevScrollKey = scrollKey;
+
+    console.log(
+      '[ChatView] scroll effect — buffer:', curBufferShortName,
+      '| totalLines:', curLinesLength,
+      '| prevLinesLength:', prevLinesLength,
+      '| bufferChanged:', bufferChanged,
+      '| linesAdded:', linesAdded,
+      '| scrollTop:', containerRef!.scrollTop,
+      '| scrollHeight:', containerRef!.scrollHeight,
+      '| clientHeight:', containerRef!.clientHeight,
+      '| isAtBottom:', isAtBottom,
+      '| hasUnreadMessages:', curHasUnreadMessages,
+      '| lastSeen:', curLastSeen
+    );
+
     (async () => {
       await tick();
 
-      const currentBufferId = get(activeBufferId);
-      const bufferChanged = prevActiveBufferId !== currentBufferId;
-      const linesAdded = messages.length > prevLinesLength;
-
-      console.log(
-        '[ChatView] scroll effect — buffer:', $currentBuffer.shortName,
-        '| totalLines:', messages.length,
-        '| prevLinesLength:', prevLinesLength,
-        '| bufferChanged:', bufferChanged,
-        '| linesAdded:', linesAdded,
-        '| currentScrollTop:', containerRef!.scrollTop,
-        '| scrollHeight:', containerRef!.scrollHeight,
-        '| clientHeight:', containerRef!.clientHeight,
-        '| isAtBottom:', isAtBottom,
-        '| hasUnreadMessages:', hasUnreadMessages,
-        '| lastSeen:', $currentBuffer.lastSeen
-      );
-
-      if ((bufferChanged || linesAdded) && !hasUnreadMessages) {
-        // No unread messages — always scroll to bottom
+      if (!curHasUnreadMessages) {
+        // No unread messages — scroll to bottom
         containerRef!.scrollTop = containerRef!.scrollHeight;
         isAtBottom = true;
         console.log(
           '[ChatView] scroll → bottom — scrollTop:', containerRef!.scrollTop,
           '| scrollHeight:', containerRef!.scrollHeight,
-          '| bufferLines:', messages.length
+          '| bufferLines:', curLinesLength
         );
-      } else if (hasUnreadMessages) {
+      } else {
+        // Unread messages present — scroll to readmarker
         // Defer to rAF so Svelte DOM updates (including readmarker rendering) complete first
         requestAnimationFrame(() => {
-          const rm = document.getElementById('readmarker');
-          if (!rm || !rm.parentElement) {
-            console.warn('[ChatView] readmarker not in DOM yet');
+          const rmRow = document.querySelector('.readmarker');
+          if (!rmRow || !rmRow.parentElement) {
+            console.warn('[ChatView] readmarker row not in DOM yet');
             return;
           }
+
+          // Use getBoundingClientRect to find element positions relative to viewport,
+          // then convert to document-relative offsets for accurate scroll math.
+          const rmRect = rmRow.getBoundingClientRect();
+          const containerRect = containerRef!.getBoundingClientRect();
+          const viewportTop = 0;
+
+          // Document position of readmarker and container top
+          const rmDocTop = rmRect.top - viewportTop + containerRef!.scrollTop;
+          const containerDocTop = containerRect.top - viewportTop + containerRef!.scrollTop;
+
           if (containerRef!.scrollHeight > containerRef!.clientHeight) {
-            const targetScrollTop = rm.offsetTop - containerRef!.clientHeight + rm.offsetHeight;
-            containerRef!.scrollTop = Math.max(0, targetScrollTop);
+            // Position readmarker at ~45% down the viewport so it's visible with unread context below.
+            // After scrolling: rmViewportY = rmDocTop - scrollTop
+            // We want: rmViewportY = containerDocTop + 0.45 * clientHeight
+            // So: scrollTop = rmDocTop - containerDocTop - 0.45 * clientHeight
+            containerRef!.scrollTop = rmDocTop - containerDocTop - containerRef!.clientHeight * 0.45;
           }
           isAtBottom = false;
           console.log(
             '[ChatView] scroll → readmarker — scrollTop:', containerRef!.scrollTop,
-            '| bufferLines:', messages.length
+            '| bufferLines:', curLinesLength,
+            '| rmDocTop:', rmDocTop.toFixed(1),
+            '| containerDocTop:', containerDocTop.toFixed(1)
           );
         });
       }
 
       prevActiveBufferId = currentBufferId;
-      prevLinesLength = messages.length;
+      prevLinesLength = curLinesLength;
     })();
   });
 
