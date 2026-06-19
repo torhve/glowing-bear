@@ -36,7 +36,7 @@ vi.mock('$lib/notifications', () => ({
     updateFavico: mockUpdateFavico,
 }));
 
-const { handleBufferLineAdded, handleHotlistChanged, handleHotlistInfo } = await import('$lib/stores/handlers');
+const { handleBufferLineAdded, handleHotlistInfo } = await import('$lib/stores/handlers');
 
 // Helper to create a test buffer
 function makeBuffer(id: string, opts: Partial<BufferData> = {}): BufferData {
@@ -99,24 +99,6 @@ function createLineMessage(
     };
 }
 
-// Helper to create a _hotlist_changed protocol message
-// Handler expects: objects[0].content[0] is an object with .content array (>=4 elements)
-// content[0] = pointers array; remaining elements are metadata
-// Per-pointer entries have .content[0].count = [idx0, msg, priv, hl]
-function createHotlistChanged(pointers: string[], countsMap: Record<string, number[]>): ProtocolMessage {
-    const metaFields = [0, 0, 0];
-    const objects = [
-        {
-            pointer: '0xhotlist',
-            content: [{ content: [[...pointers], ...metaFields] }]
-        },
-        ...pointers.map(ptr => ({
-            pointer: ptr,
-            content: [{ count: countsMap[ptr] || [0, 0, 0, 0] }]
-        }))
-    ];
-    return { objects };
-}
 
 // Helper to create a hotlist info protocol message
 // Format: objects[0].content = HotlistEntry[]
@@ -191,41 +173,6 @@ describe('Readmarker behavior', () => {
 
             const result = get(buffers)['0x100'];
             expect(result!.unread).toBe(0);
-        });
-    });
-
-    describe('handleHotlistChanged preserves lastSeen', () => {
-        it('updates unread/notification but does not overwrite lastSeen', () => {
-            const buf = makeBuffer('0x200', {
-                lines: Array.from({ length: 103 }, (_, i) => ({ prefix: [], content: [], date: i, shortTime: '', formattedTime: '', buffer: '0x200', tags: [], highlight: false, displayed: true, prefixtext: '', text: `line${i}`, showHiddenBrackets: false }) as any),
-                lastSeen: 99,
-                unread: 3,
-                notification: 0,
-                active: false
-            });
-            buffers.set({ '0x200': buf });
-            servers.set({ 'irc.server': { id: '0x200', unread: 3 } });
-
-            // Hotlist says only 1 unread message (WeeChat missed 2)
-            handleHotlistChanged(createHotlistChanged(['0x200'], { '0x200': [0, 1, 0, 0] }));
-
-            const result = get(buffers)['0x200'];
-            expect(result!.lastSeen).toBe(99);
-            expect(result!.unread).toBe(1);
-        });
-
-        it('skips active buffer in hotlist updates', () => {
-            const buf = makeBuffer('0x100', { lastSeen: 50, unread: 7, notification: 2, active: true });
-            buffers.set({ '0x100': buf });
-            activeBufferId.set('0x100');
-            servers.set({ 'irc.server': { id: '0x100', unread: 9 } });
-
-            handleHotlistChanged(createHotlistChanged(['0x100'], { '0x100': [0, 0, 0, 0] }));
-
-            const result = get(buffers)['0x100'];
-            expect(result!.unread).toBe(7);
-            expect(result!.notification).toBe(2);
-            expect(result!.lastSeen).toBe(50);
         });
     });
 
@@ -368,8 +315,13 @@ describe('Readmarker behavior', () => {
             expect(result!.unread).toBe(3);
             expect(result!.lines.length).toBe(103);
 
-            // Hotlist fires with partial data (WeeChat saw only 1 of 3)
-            handleHotlistChanged(createHotlistChanged(['0x200'], { '0x200': [0, 1, 0, 0] }));
+            // Polling hotlist fires with partial data (WeeChat saw only 1 of 3)
+            handleHotlistInfo({
+                objects: [{
+                    pointer: '0xhotlist',
+                    content: [{ buffer: '0x200', count: [0, 1, 0, 0] }]
+                }]
+            });
 
             result = get(buffers)['0x200'];
             // lastSeen should still be 99 — not overwritten by hotlist

@@ -536,87 +536,6 @@ export function handleBufferClosing(message: ProtocolMessage) {
     removeBuffer(bufferId, !!currentBuffers[bufferId]?.active);
 }
 
-// ---- Hotlist changed handler ----
-export function handleHotlistChanged(message: ProtocolMessage) {
-    const currentBuffers = get(buffers);
-    const activeId = get(activeBufferId);
-    const localUnread = get(localUnreadBuffers);
-    const lines = (message.objects || []).map(obj => {
-        const buf = currentBuffers[obj.pointer];
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const counts = ((obj.content as any[])?.[0]?.count) ?? [0, 0, 0, 0];
-        return `  ${buf?.shortName || obj.pointer} (highlight=${counts[0]}, messages=${counts[1]}, private=${counts[2]}, not-processed=${counts[3]})`;
-    });
-    console.log('gui_hotlist:\n' + lines.join('\n'));
-    const obj = message.objects[0]?.content?.[0];
-    if (!obj) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WeeChat hotlist object from protocol
-    const content = obj.content as any[];
-    if (content.length < 4) return;
-    const [hotlistPointers] = content;
-    const currentServers = get(servers);
-
-    // Build immutable copies of affected buffers and servers.
-    // Avoids in-place mutations that don't trigger Svelte reactivity
-    // when concurrent store updates (e.g. setActiveBuffer) are in flight.
-    const updatedBuffers = {} as Record<string, BufferData>;
-    for (const id in currentBuffers) {
-        const buf = currentBuffers[id];
-        if (buf) {
-            updatedBuffers[id] = { ...buf, lines: [...buf.lines], nicklist: { ...buf.nicklist } };
-        }
-    }
-    const updatedServers = { ...currentServers };
-
-    // Reset unread counts on all non-active buffers before applying hotlist entries.
-    // Active buffers keep their existing unread state — WeeChat doesn't send
-    // hotlist counts for the buffer the user is currently viewing.
-    // Use activeId from store instead of buf.active to avoid stale copy issues.
-    for (const id in updatedBuffers) {
-        const buf = updatedBuffers[id];
-        if (buf && id !== activeId) {
-            buf.unread = 0;
-            buf.notification = 0;
-        }
-    }
-
-    // Reset all server unread totals before recalculating from hotlist entries.
-    for (const key in updatedServers) {
-        const srv = updatedServers[key];
-        if (srv) srv.unread = 0;
-    }
-
-    // Apply hotlist entries from WeeChat — mirror original AngularJS behavior.
-    // Skip buffers that are currently active (WeeChat doesn't report hotlist
-    // counts for the current buffer, and local unread tracking handles it).
-    if (hotlistPointers) {
-        const pointers = Array.isArray(hotlistPointers) ? hotlistPointers : [hotlistPointers];
-        for (const bufferId of pointers) {
-            const buffer = updatedBuffers[bufferId];
-            if (!buffer || bufferId === activeId) continue;
-            const entry = message.objects.find(o => o.pointer === bufferId);
-            if (entry?.content) {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic WeeChat relay object shape
-                const counts = (entry.content as any[])[0]?.count || [0, 0, 0, 0];
-                buffer.unread = counts[1] || 0;
-                buffer.notification = (counts[2] || 0) + (counts[3] || 0);
-                const unreadSum = counts.reduce((sum: number, n: number) => sum + n, 0);
-                // Only recalculate lastSeen if not already set and no local unreads tracked.
-                // Buffers with localUnread > 0 have more accurate local data than stale WeeChat hotlist.
-                if (buffer.lastSeen < 0 && !localUnread.has(bufferId)) {
-                    buffer.lastSeen = Math.max(0, buffer.lines.length - 1 - unreadSum);
-                }
-            } else {
-                buffer.unread = 0;
-                buffer.notification = 0;
-            }
-        }
-    }
-
-    buffers.set(updatedBuffers);
-    servers.set(updatedServers);
-}
-
 // ---- Hotlist handler ----
 export function handleHotlistInfo(message: ProtocolMessage) {
     const currentBuffers = get(buffers);
@@ -994,7 +913,6 @@ const eventHandlers: Record<string, (msg: ProtocolMessage) => void> = {
     '_buffer_renamed': handleBufferRenamed,
     '_buffer_hidden': handleBufferHidden,
     '_buffer_unhidden': handleBufferUnhidden,
-    '_hotlist_changed': handleHotlistChanged,
     '_nicklist': handleNicklist,
     '_nicklist_diff': handleNicklistDiff
 };
