@@ -19,24 +19,13 @@ export type Theme = typeof themes[number];
 
 export const themeStore = writable<Theme>('dark');
 
-function ensureThemeLinkElement(theme: Theme) {
-    const existingLink = document.getElementById('themeCSS') as HTMLLinkElement;
-    if (existingLink) {
-        existingLink.href = `/css/themes/${theme}.css`;
-    } else {
-        const link = document.createElement('link');
-        link.id = 'themeCSS';
-        link.rel = 'stylesheet';
-        link.href = `/css/themes/${theme}.css`;
-        document.head.appendChild(link);
-    }
-}
+// Theme CSS variables (--gb-*) are now baked into the built app.css bundle.
+// Only need to set the data-theme attribute on <html> to activate a theme.
 
 export function setTheme(theme: Theme) {
     themeStore.set(theme);
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('gb_theme', theme);
-    ensureThemeLinkElement(theme);
 }
 
 export function loadTheme(): Theme {
@@ -51,5 +40,4 @@ export function initTheme() {
     const theme = loadTheme();
     themeStore.set(theme);
     document.documentElement.setAttribute('data-theme', theme);
-    ensureThemeLinkElement(theme);
 }

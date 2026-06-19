@@ -15,6 +15,21 @@ if (!existsSync(svgInput)) {
     process.exit(1);
 }
 
+const svgMtime = statSync(svgInput).mtimeMs;
+
+// Check if a destination file needs regeneration.
+// Regenerates if destination is missing or source is newer.
+function needsRegen(destPath) {
+    if (!existsSync(destPath)) return true;
+    return svgMtime > statSync(destPath).mtimeMs;
+}
+
+// Early exit if .icns exists and source SVG hasn't changed.
+if (existsSync(icnsOutput) && svgMtime <= statSync(icnsOutput).mtimeMs) {
+    console.log('.icns up to date, skipping generation.');
+    process.exit(0);
+}
+
 const svgBuffer = readFileSync(svgInput);
 
 // macOS iconutil requires an iconset directory with square PNGs:

@@ -6,6 +6,7 @@
   import { disconnect } from '$lib/stores/connectionManager';
   import SettingsModal from '$components/SettingsModal.svelte';
   import BufferSearchModal from '$components/BufferSearchModal.svelte';
+  import BufferHotlist from '$components/BufferHotlist.svelte';
   import Search from '@lucide/svelte/icons/search';
   import Users from '@lucide/svelte/icons/users';
   import Settings from '@lucide/svelte/icons/settings';
@@ -14,7 +15,7 @@
   import ArrowDown from '@lucide/svelte/icons/arrow-down';
   import MessageSquare from '@lucide/svelte/icons/message-square';
 
-  let { onBufferSelect = () => {}, onSearchOpen = () => {} } = $props();
+  let { onBufferSelect = () => {}, onSearchOpen = () => {}, bufferListVisible = true } = $props();
 
   function handleDisconnect() {
     disconnect();
@@ -29,16 +30,16 @@
 
 <div data-testid="top-bar" style="padding-top: env(safe-area-inset-top, 0px);">
   <div class="h-10 bg-surface-raised border-b border-border flex items-center px-2 space-x-2">
-    <div class="flex items-center space-x-2 flex-1">
-      <div class="flex items-center space-x-2">
-       <img src="/glowing-bear.svg" alt="logo" class="w-6 h-6 inline-block mr-1 flex-shrink-0" />
-        <span class="text-sm font-bold text-text">Glowing Bear</span>
+    <div class="flex items-center gap-1 flex-1 min-w-0">
+      <img src="/glowing-bear.svg" alt="logo" class="w-5 h-5 flex-shrink-0" />
+      {#if bufferListVisible}
+        <span data-testid="app-title" class="text-sm font-bold text-text">Glowing Bear</span>
         {#if $weechatVersion.length > 0}
           <span class="text-xs text-text-muted">| WeeChat {$weechatVersion.join('.')}</span>
         {/if}
-      </div>
-
-
+      {:else}
+        <BufferHotlist onBufferSelect={onBufferSelect} />
+      {/if}
     </div>
 
     <div class="flex items-center space-x-1">

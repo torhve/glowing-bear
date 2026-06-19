@@ -296,7 +296,6 @@
   }
 
   .prefix .compact-prefix.repeated-prefix {
-    color: var(--gb-repeated-prefix, #555);
     visibility: visible;
   }
 
