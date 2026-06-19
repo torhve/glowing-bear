@@ -1,7 +1,7 @@
 {
   "name": "glowing-bear-svelte",
   "private": true,
-  "version": "0.11.0",
+  "version": "0.20.0",
   "description": "Glowing Bear - Svelte frontend for WeeChat",
   "type": "module",
   "scripts": {
