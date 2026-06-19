@@ -25,6 +25,8 @@
     (window as any).__sendWeechatCommand = sendWeeChatCommand;
     (window as any).__setGbSettings = updateSettings;
     (window as any).__Protocol = Protocol;
+    (window as any).__hideBufferListOnMobile = hideBufferListOnMobile;
+    (window as any).__showBufferListOnMobile = showBufferListOnMobile;
     $effect(() => {
       (window as any).__wconfig = $wconfig;
       (window as any).__connected = $connected;
@@ -549,7 +551,7 @@
   <ConnectionForm />
 {:else}
   <div class="h-dvh flex flex-col bg-bg" data-testid="chat-view">
-    <TopBar onBufferSelect={hideBufferListOnMobile} onSearchOpen={showBufferListOnMobile} />
+    <TopBar bufferListVisible={showBufferList || !isMobile()} onBufferSelect={hideBufferListOnMobile} onSearchOpen={showBufferListOnMobile} />
     <div class="flex-1 flex overflow-hidden">
       {#if showBufferList || !isMobile()}
         <BufferList altKeyPressed={_altKeyPressed} onBufferSelect={hideBufferListOnMobile} />

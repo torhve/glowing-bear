@@ -13,7 +13,23 @@ if (!existsSync(svgInput)) {
     process.exit(1);
 }
 
-const svgBuffer = readFileSync(svgInput);
+const svgMtime = statSync(svgInput).mtimeMs;
+
+// Check if a destination file needs regeneration.
+// Regenerates if destination is missing or source is newer.
+function needsRegen(destPath) {
+    if (!existsSync(destPath)) return true;
+    return svgMtime > statSync(destPath).mtimeMs;
+}
+
+// Check if any output depends on the source SVG and needs updating.
+function anyPngNeedsRegen() {
+    for (const [filename] of icons) {
+        if (needsRegen(resolve(__dirname, filename))) return true;
+    }
+    if (needsRegen(resolve(__dirname, 'glowing_bear_128x128.ico'))) return true;
+    return false;
+}
 
 const icons = [
     ['favicon.png', 32],
@@ -27,10 +43,21 @@ const icons = [
     ['glowing_bear_1024x1024.png', 1024],
 ];
 
+// Early exit if no outputs need regeneration.
+if (!anyPngNeedsRegen()) {
+    console.log('Icons up to date, skipping generation.');
+    process.exit(0);
+}
+
+const svgBuffer = readFileSync(svgInput);
 console.log('Generating icons from ' + svgInput + '...');
 
 for (const [filename, size] of icons) {
     const output = resolve(__dirname, filename);
+    if (!needsRegen(output)) {
+        console.log(`  ⊘ ${filename} (${size}x${size}) — up to date`);
+        continue;
+    }
     try {
         const resvg = new Resvg(svgBuffer, {
             fitTo: { mode: 'width', value: size },
@@ -55,17 +82,23 @@ for (const [filename, size] of icons) {
     }
 }
 
-// Generate .ico from 128x128 PNG
-try {
-    execSync(
-        `magick convert "${resolve(__dirname, 'glowing_bear_128x128.png')}" -depth 8 "${resolve(__dirname, 'glowing_bear_128x128.ico')}"`,
-        { stdio: ['inherit', 'inherit', 'ignore'] }
-    );
-    const icoSize = statSync(resolve(__dirname, 'glowing_bear_128x128.ico')).size;
-    console.log(`  \u2713 glowing_bear_128x128.ico \u2014 ${(icoSize / 1024).toFixed(0)} KB`);
-} catch (e) {
-    console.error('  \u2717 Failed to generate .ico file');
-    process.exit(1);
+// Generate .ico from 128x128 PNG (only if source PNG or .ico needs updating)
+const png128Path = resolve(__dirname, 'glowing_bear_128x128.png');
+const icoPath = resolve(__dirname, 'glowing_bear_128x128.ico');
+if (needsRegen(icoPath) || needsRegen(png128Path)) {
+    try {
+        execSync(
+            `magick convert "${png128Path}" -depth 8 "${icoPath}"`,
+            { stdio: ['inherit', 'inherit', 'ignore'] }
+        );
+        const icoSize = statSync(icoPath).size;
+        console.log(`  \u2713 glowing_bear_128x128.ico \u2014 ${(icoSize / 1024).toFixed(0)} KB`);
+    } catch (e) {
+        console.error('  \u2717 Failed to generate .ico file');
+        process.exit(1);
+    }
+} else {
+    console.log('  ⊘ glowing_bear_128x128.ico — up to date');
 }
 
 // Regenerate webapp.manifest.json

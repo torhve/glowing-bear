@@ -6,6 +6,8 @@ test-results/
 e2e/test-results/
 e2e/playwright-report/
 
+*.tsbuildinfo
+
 # Coverage
 coverage/
 

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { connectToWeechat, clearSettings, waitForAppReady } from '../helpers/connection';
-import { botSay, botNotice, botSayColored, assertLastMessage } from '../helpers/messages';
+import { botSay, botNotice, botSayColored } from '../helpers/messages';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
 
