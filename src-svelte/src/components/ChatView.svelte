@@ -26,6 +26,7 @@
   let prevActiveBufferId = $state<string>('');
   let prevLinesLength = $state(0);
   let prevScrollKey = $state<string>('');
+  let readmarkerFailures = $state(0);
   // Read end index for readmarker positioning. setActiveBuffer folds localUnread
   // into lastSeen at switch time, so lastSeen alone gives the correct boundary.
   let readEndIndex = $derived($currentBuffer?.lastSeen ?? -1);
@@ -130,11 +131,25 @@
     if (!curHasUnreadMessages) {
       // No unread messages — scroll to bottom
       // Use rAF so DOM has updated after new lines were added.
+      readmarkerFailures = 0;
       requestAnimationFrame(() => {
         containerRef!.scrollTop = containerRef!.scrollHeight;
         isAtBottom = true;
         console.log(
           '[ChatView] scroll → bottom — scrollTop:', containerRef!.scrollTop,
+          '| scrollHeight:', containerRef!.scrollHeight,
+          '| bufferLines:', curLinesLength
+        );
+      });
+    } else if (readmarkerFailures >= 2) {
+      // Readmarker lookup failed twice — fallback to scrolling to bottom.
+      // The unread count may be stale or the readmarker may not render correctly.
+      readmarkerFailures = 0;
+      requestAnimationFrame(() => {
+        containerRef!.scrollTop = containerRef!.scrollHeight;
+        isAtBottom = true;
+        console.log(
+          '[ChatView] scroll → bottom (fallback) — scrollTop:', containerRef!.scrollTop,
           '| scrollHeight:', containerRef!.scrollHeight,
           '| bufferLines:', curLinesLength
         );
@@ -146,12 +161,15 @@
         const rmRow = document.querySelector('.readmarker');
         if (!rmRow || !rmRow.parentElement) {
           console.warn('[ChatView] readmarker row not in DOM yet');
+          readmarkerFailures++;
+          prevScrollKey = '';
           isAtBottom = false;
           return;
         }
 
         // Second rAF ensures layout is computed after Svelte's DOM insert
         requestAnimationFrame(() => {
+          readmarkerFailures = 0;
           // Use getBoundingClientRect for accurate viewport-relative positioning.
           // offsetTop is unreliable inside collapsed tables (relative to td, not container).
           const rmRect = rmRow.getBoundingClientRect();
