@@ -13,7 +13,7 @@
   import { initTheme } from '$lib/stores/theme';
   import { get } from 'svelte/store';
   import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig } from '$lib/stores/models';
-  import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer } from '$lib/stores/connectionManager';
+  import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer, getWs } from '$lib/stores/connectionManager';
   import { Protocol } from '$lib/weechat';
   import { initNotifications, updateTitle, updateFavico, onDisconnect } from '$lib/notifications';
   import { sortBuffers, parseRelayUrl, isPopoverOpen } from '$lib/utils';
@@ -25,6 +25,7 @@
     (window as any).__sendWeechatCommand = sendWeeChatCommand;
     (window as any).__setGbSettings = updateSettings;
     (window as any).__Protocol = Protocol;
+    (window as any).__getWs = getWs;
     (window as any).__hideBufferListOnMobile = hideBufferListOnMobile;
     (window as any).__showBufferListOnMobile = showBufferListOnMobile;
     $effect(() => {
@@ -150,7 +151,8 @@
       void (async () => {
         try {
           await fetchMoreLines(100);
-        } catch {
+        } catch (err) {
+          console.error('[+page] fetchMoreLines failed:', err);
           // Silently ignore fetch failures on buffer switch
         }
       })();

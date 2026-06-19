@@ -55,7 +55,8 @@ function doUpload(
                     } else {
                         reject(new Error('Upload failed: no link in response'));
                     }
-                } catch {
+                } catch (err) {
+                    console.error('[imgur] upload error:', err);
                     reject(new Error('Upload failed: invalid response'));
                 }
             } else {

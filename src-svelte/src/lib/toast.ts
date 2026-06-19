@@ -1,10 +1,16 @@
 import { writable, type Writable } from 'svelte/store';
 
+export interface ToastButton {
+    text: string;
+    action: () => void;
+}
+
 export interface Toast {
     id: number;
     message: string;
     type: 'info' | 'success' | 'error' | 'warning';
     duration: number;
+    buttons?: ToastButton[];
 }
 
 let nextId = 0;
@@ -17,6 +23,7 @@ export function addToast(message: string, options?: Partial<Omit<Toast, 'id' | '
         message,
         type: options?.type ?? 'info',
         duration: options?.duration ?? 5000,
+        buttons: options?.buttons,
     };
 
     toasts.update(current => [...current, toast]);
