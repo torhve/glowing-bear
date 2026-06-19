@@ -12,7 +12,7 @@
   let tokens = $derived(tokenizeAndCodify(text));
 </script>
 
-{#each tokens as token}
+{#each tokens as token, ti (ti)}
   {#if token.type === 'link'}
     <a href={token.value} target="_blank" rel="noopener noreferrer" class={linkClass}>{token.value}</a>
   {:else if token.type === 'code'}

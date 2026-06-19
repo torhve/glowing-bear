@@ -79,7 +79,7 @@
   </div>
 
   <div class="flex-1 overflow-y-auto" data-testid="nicklist-items">
-    {#each filteredNickGroups as [groupName, group]}
+    {#each filteredNickGroups as [groupName, group], gi (gi)}
         {#if groupName !== 'root'}
       <div class="border-b border-border">
         {#each group.nicks as nick (nick.name)}

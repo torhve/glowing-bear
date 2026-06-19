@@ -120,9 +120,9 @@
 {#if isDateChange}
   <tr class="bufferline date-change-row" data-testid="bufferline-row">
     <td colspan="3">
-      {#each tokenGroups as group}
+      {#each tokenGroups as group, gi (gi)}
         <span class="{group.classes}">
-          {#each group.tokens as token}
+          {#each group.tokens as token, ti (ti)}
             {#if token.type === 'link'}
               <a href={token.value} target="_blank" rel="noopener noreferrer" class="irc-link">{token.value}</a>
             {:else if token.type === 'code'}
@@ -153,7 +153,7 @@
       <span class="compact-prefix" class:repeated-prefix={isRepeatedPrefix}>
         <span onclick={handleMention} role="button" tabindex="0" class="mention-link" onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleMention(); } }}>
           {#if message.showHiddenBrackets}<span class="hidden-bracket">{'<'}</span>{/if}
-          {#each message.prefix as part}
+          {#each message.prefix as part, pi (pi)}
             {@const iconType = getIconType(part)}
             {#if iconType}
               {#if iconType === 'arrow-right'}
@@ -185,9 +185,9 @@
 
       <!-- Message content -->
       <span dir="auto" class="whitespace-pre-wrap break-words">
-        {#each tokenGroups as group}
+        {#each tokenGroups as group, gi (gi)}
           <span class="{group.classes}">
-            {#each group.tokens as token}
+            {#each group.tokens as token, ti (ti)}
               {#if token.type === 'link'}
                 <a href={token.value} target="_blank" rel="noopener noreferrer" class="irc-link">{token.value}</a>
               {:else if token.type === 'code'}
@@ -255,6 +255,9 @@
     }
 
     .message {
+      flex: 1;
+      min-width: 0;
+      flex-wrap: wrap;
       padding-left: 2px;
     }
   }
