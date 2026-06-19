@@ -7,13 +7,18 @@ let page: import('@playwright/test').Page;
 
 test.describe.configure({ mode: 'serial' });
 
-test.beforeAll(async ({ browser }) => {
+  test.beforeAll(async ({ browser }) => {
     page = await browser.newPage();
     await page.goto('http://localhost:8001/');
     await waitForAppReady(page);
     await clearSettings(page);
     page.on('pageerror', (error) => {
         if (error.message?.includes('effect_orphan')) return;
+    });
+    page.on('console', (msg) => {
+        if (msg.text().includes('[ChatView]') || msg.text().includes('[BOT]')) {
+            console.log(`[BROWSER ${msg.type()}] ${msg.text()}`);
+        }
     });
     await connectToWeechat(page);
 });
@@ -68,6 +73,23 @@ test('readmarker appears on second-to-last line with 1 unread when switching to 
     // Step 3: Switch back to #glowing-bear — this should reveal the readmarker
     await switchToBuffer(page, '#glowing-bear');
     await page.waitForTimeout(1500);
+
+    // Debug: check buffer state after switch
+    const debugState = await page.evaluate(() => {
+        const container = document.querySelector('[data-testid="chat-messages"]');
+        const readmarkerEl = document.getElementById('readmarker');
+        return {
+            scrollTop: container?.scrollTop ?? -1,
+            scrollHeight: container?.scrollHeight ?? -1,
+            clientHeight: container?.clientHeight ?? -1,
+            hasReadmarkerInDOM: !!readmarkerEl,
+            readmarkerOffsetTop: readmarkerEl ? readmarkerEl.offsetTop : -1,
+            readmarkerOffsetHeight: readmarkerEl ? readmarkerEl.offsetHeight : -1,
+            messageRows: document.querySelectorAll('[data-testid="bufferline-row"]').length,
+            tbodyTRs: document.querySelector('table tbody')?.querySelectorAll('tr').length ?? 0,
+        };
+    });
+    console.log('[BOT DEBUG] after switch:', JSON.stringify(debugState));
 
     // Step 4: Check that readmarker is visible
     const domInfo = await page.evaluate(() => {

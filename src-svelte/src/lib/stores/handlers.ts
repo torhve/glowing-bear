@@ -200,6 +200,7 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                 requestedLines: 0,
                 allLinesFetched: false,
                 lastSeen: -1,
+                localUnread: 0,
                 unread: 0,
                 notification: 0,
                 notify: 3,
@@ -258,6 +259,9 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                 // For inactive buffers, preserve lastSeen position — new lines become unread.
                 if (buffer.lastSeen >= 0 && buffer.id === activeId) {
                     buffer.lastSeen++;
+                } else if (buffer.lastSeen >= 0 && buffer.id !== activeId) {
+                    // Track local unread count for inactive buffers
+                    buffer.localUnread = (buffer.localUnread || 0) + 1;
                 }
 
                 // Increment unread for real-time messages with notify_level=1 (message) only.
