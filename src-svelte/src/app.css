@@ -1390,6 +1390,46 @@
   .cob-gray { background-color: var(--gb-cob-gray); }
   .cob-brown { background-color: var(--gb-cob-brown); }
   .cob-default { background-color: var(--gb-bg); }
+  /* WeeChat semantic style color classes — resolve per-theme via --gb-cof-* / --gb-cob-* vars */
+  .cof-chat_nick_self { color: var(--gb-cof-white); font-weight: bold; }
+  .cof-chat_nick { color: var(--gb-cof-cyan); }
+  .cof-chat_nick_other { color: var(--gb-cof-cyan); }
+  .cof-chat_nick_prefix { color: var(--gb-cof-green); }
+  .cof-chat_nick_suffix { color: var(--gb-cof-green); }
+  .cof-chat_nick_offline { color: var(--gb-cof-darkgray); }
+  .cof-chat_nick_offline_highlight { color: var(--gb-cof-white); }
+  .cof-chat_prefix_error { color: var(--gb-cof-lightred); }
+  .cof-chat_prefix_network { color: var(--gb-cof-magenta); }
+  .cof-chat_prefix_action { color: var(--gb-cof-white); }
+  .cof-chat_prefix_join { color: var(--gb-cof-green); }
+  .cof-chat_prefix_quit { color: var(--gb-cof-red); }
+  .cof-chat_prefix_more { color: var(--gb-cof-magenta); }
+  .cof-chat_prefix_suffix { color: var(--gb-cof-green); }
+  .cof-chat_prefix_buffer { color: var(--gb-cof-yellow); }
+  .cof-chat_prefix_buffer_inactive_buffer { color: var(--gb-cof-darkgray); }
+  .cof-chat_highlight { color: var(--gb-cof-lightred); }
+  .cof-chat_read_marker { color: var(--gb-cof-magenta); }
+  .cof-chat_text_found { color: var(--gb-cof-lightred); }
+  .cof-chat_tags { color: var(--gb-cof-red); }
+  .cof-chat_server { color: var(--gb-cof-yellow); }
+  .cof-chat_host { color: var(--gb-cof-cyan); }
+  .cof-chat_value { color: var(--gb-cof-cyan); }
+  .cof-chat_delimiters { color: var(--gb-cof-green); }
+  .cof-chat_day_change { color: var(--gb-cof-cyan); }
+  .cof-chat_time { color: var(--gb-cof-white); }
+  .cof-chat_time_delimiters { color: var(--gb-cof-gray); }
+  .cof-chat_buffer { color: var(--gb-cof-white); }
+  .cof-chat_channel { color: var(--gb-cof-white); }
+  .cof-chat_inactive_window { color: var(--gb-cof-darkgray); }
+  .cof-chat_inactive_buffer { color: var(--gb-cof-darkgray); }
+  .cof-emphasis { color: var(--gb-cof-lightred); }
+  .cof-invalid { color: var(--gb-cof-default); }
+  .cof-separator { color: var(--gb-cof-default); }
+
+  .cob-chat_highlight { background-color: var(--gb-cob-lightred); }
+  .cob-chat_nick_offline_highlight { background-color: var(--gb-cob-darkgray); }
+  .cob-emphasis { background-color: var(--gb-cob-lightred); }
+
 
   .cwf-black { color: var(--gb-cof-black); }
   .cwf-red { color: var(--gb-cof-red); }
