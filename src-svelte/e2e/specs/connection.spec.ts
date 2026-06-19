@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, disconnect, fillPortInput, waitForAppReady } from '../helpers/connection';
+import { connectToWeechat, disconnect, fillPortInput, waitForAppReady, setSettings } from '../helpers/connection';
 
 const RELAY_URL = 'ws://localhost:9001/weechat';
 const PASSWORD = 'testpassword123';
@@ -256,5 +256,85 @@ test.describe('WeeChat relay protocol (via browser WebSocket)', () => {
         }
 
         expect(result.success).toBe(true);
+    });
+});
+
+test.describe('Disconnect handling', () => {
+    test.beforeEach(async ({ page }) => {
+        page.on('pageerror', (error) => {
+            if (error.message?.includes('effect_orphan')) return;
+        });
+        await page.goto('http://localhost:8001/');
+        await page.evaluate(() => localStorage.removeItem('gb-settings'));
+        await page.waitForTimeout(500);
+        await page.reload();
+        await waitForAppReady(page);
+    });
+
+    test('should show disconnect toast when autoconnect is off after being connected', async ({ page }) => {
+        await connectToWeechat(page);
+        await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
+
+        // Disable autoconnect in settings
+        await setSettings(page, { autoconnect: false });
+
+        // Simulate WebSocket close (browser only allows 1000 or 3000-4999)
+        await page.evaluate(() => {
+            const ws = (window as any).__getWs?.();
+            if (ws) ws.close(3000, 'test disconnect');
+        });
+
+        // Toast should appear with disconnect message
+        await expect(page.getByTestId('toast').first()).toBeVisible({ timeout: 5000 });
+        await expect(page.getByText(/Disconnected from/i)).toBeVisible();
+    });
+
+    test('should reconnect when clicking toast reconnect button', async ({ page }) => {
+        await connectToWeechat(page);
+        await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
+
+        // Disable autoconnect to trigger disconnect toast instead of auto-reconnect
+        await setSettings(page, { autoconnect: false });
+
+        // Simulate WebSocket close
+        await page.evaluate(() => {
+            const ws = (window as any).__getWs?.();
+            if (ws) ws.close(3000, 'test disconnect');
+        });
+
+        // Wait for toast to appear
+        await expect(page.getByTestId('toast').first()).toBeVisible({ timeout: 5000 });
+
+        // Click reconnect button
+        await page.getByTestId('toast-reconnect-button').click();
+
+        // Should be connected again
+        await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
+    });
+
+    test('should show status dot changes on disconnect', async ({ page }) => {
+        await connectToWeechat(page);
+        await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
+
+        // WebSocket should be open when connected
+        let wsReadyState = await page.evaluate(() => {
+            const ws = (window as any).__getWs?.();
+            return ws ? ws.readyState : null;
+        });
+        expect(wsReadyState).toBe(WebSocket.OPEN);
+
+        // Disable autoconnect and disconnect
+        await setSettings(page, { autoconnect: false });
+        await page.evaluate(() => {
+            const ws = (window as any).__getWs?.();
+            if (ws) ws.close(3000, 'test disconnect');
+        });
+
+        // WebSocket should be closed after disconnect
+        wsReadyState = await page.evaluate(() => {
+            const ws = (window as any).__getWs?.();
+            return ws ? ws.readyState : null;
+        });
+        expect(wsReadyState).toBe(WebSocket.CLOSED);
     });
 });

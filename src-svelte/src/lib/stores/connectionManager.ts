@@ -3,6 +3,7 @@ import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectSt
 import { buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer } from '$lib/stores/models';
 import { settings } from '$lib/stores/settings';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist } from '$lib/stores/handlers';
+import { addToast, removeToast, toastStore } from '$lib/toast';
 // TODO: Re-enable nick color customization when desired
 // import { IDEAL_NICK_COLORS, IDEAL_COLOR_NICKS_IN_NICKLIST, shouldAutoApply } from '$lib/stores/nickColors';
 import { Protocol } from '$lib/weechat';
@@ -32,7 +33,7 @@ export async function connect(host: string, port: number, path: string, password
     }
 
     const url = `${proto}://${formattedHost}:${port}/${path}`;
-    console.log('Connecting to:', url);
+    console.log('Connecting to:', `${proto}://${formattedHost}:${port}`);
 
     // Detect if we're reconnecting after HMR killed an established connection
     // (old module's event listeners were torn down, but ws object survived in memory)
@@ -212,7 +213,32 @@ export async function connect(host: string, port: number, path: string, password
                 connectionData = null;
             } else if (!get(settings).autoconnect) {
                 // Autoconnect is OFF — stay disconnected, require manual login
-                connectionData = null;
+                if (get(connectionState).wasEverConnected) {
+                    const connInfo = connectionData ? [...connectionData] as [string, number, string, string, boolean, boolean] : null;
+                    connectionData = null;
+                    if (connInfo) {
+                        const [host, port] = connInfo;
+                        addToast(
+                            `Disconnected from ${host}:${port}`,
+                            {
+                                type: 'warning',
+                                duration: 0,
+                                buttons: [{
+                                    text: 'Reconnect',
+                                    action: () => {
+                                        const latest = get(toastStore);
+                                        const lastToast = latest[latest.length - 1];
+                                        if (lastToast) removeToast(lastToast.id);
+                                        const [h, p, path, pw, tls, noComp] = connInfo!;
+                                        connect(h, p, path, pw, tls, noComp);
+                                    }
+                                }]
+                            }
+                        );
+                    }
+                } else {
+                    connectionData = null;
+                }
             } else if (typeof document !== 'undefined' && !document.hasFocus()) {
                 // User was not focused — stay disconnected
             } else if (!get(connectionState).wasEverConnected) {
@@ -589,7 +615,8 @@ export async function switchBuffer(bufferId: string): Promise<boolean> {
         try {
             activeBufferId.set(bufferId);
             await fetchMoreLines(100);
-        } catch {
+        } catch (err) {
+            console.error('[setActiveBuffer] fetchMoreLines failed:', err);
             // Silently ignore fetch failures on buffer switch
         }
     }

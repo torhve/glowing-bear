@@ -50,6 +50,19 @@
             >
                 <X size={16} />
             </button>
+            {#if toast.buttons && toast.buttons.length > 0}
+                <div class="flex gap-2 mt-2">
+                    {#each toast.buttons as btn, i (btn.text + i)}
+                        <button
+                            onclick={() => btn.action()}
+                            class="px-3 py-1 text-xs font-medium rounded bg-accent text-white hover:bg-accent-hover"
+                            data-testid="toast-reconnect-button"
+                        >
+                            {btn.text}
+                        </button>
+                    {/each}
+                </div>
+            {/if}
         </div>
     {/each}
 </div>
