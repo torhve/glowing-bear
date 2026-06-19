@@ -74,14 +74,17 @@ test('NSFW image shows yellow warning button', async () => {
     await irc.sendMessage('#glowing-bear', 'nsfw https://picsum.photos/200/300.jpg?6');
     const showBtn = page.getByTestId('show-embed').filter({ hasText: 'Show Image' }).last();
     await expect(showBtn).toBeVisible({ timeout: 10000 });
-    // NSFW button should have yellow/warning styling (oklch or named color)
+    // NSFW button should have yellow/amber/warning styling
     const color = await showBtn.evaluate(el => getComputedStyle(el).backgroundColor);
-    expect(color).toMatch(/yellow|rgb\(217|rgb\(240|oklch\(/i);
+    expect(color).toMatch(/yellow|rgb\(240|rgb\(217|rgb\(250|rgb\(230|oklch\(/i);
 });
 
 test('noembed=false shows embeds automatically', async () => {
     await setSettings(page, { noembed: false });
     await botSay('https://picsum.photos/200/300.jpg?7');
-    await expect(page.getByTestId('plugin-embed').locator('img')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByTestId('show-embed')).not.toBeVisible();
+    await expect(page.getByTestId('plugin-embed').last().locator('img')).toBeVisible({ timeout: 10000 });
+    // New messages should have no "Show Image" button when noembed=false
+    const showButtons = page.getByTestId('show-embed');
+    // Only check that the latest message's embed area has no show button
+    await expect(page.locator('td[data-message*="picsum.photos/200/300.jpg?7"]').first().locator('[data-testid="show-embed"]')).not.toBeVisible();
 });

@@ -10,13 +10,64 @@ import { initFavicon, drawBadge, resetBadge } from './faviconBadge';
 // Notification permission state
 let notificationPermission: 'granted' | 'denied' | 'default' = 'default';
 
-// Track active notifications
+// Track active notifications (browser path only)
 const activeNotifications: Map<string, Notification> = new Map();
 
+// Tauri notification module (lazily loaded)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let tauriNotif: any = null;
+
+function isTauri(): boolean {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
+}
+
+async function ensureTauriNotification(): Promise<void> {
+    if (tauriNotif !== null || !isTauri()) return;
+    try {
+        tauriNotif = await import('@tauri-apps/plugin-notification');
+    } catch (e) {
+        console.warn('Tauri notification plugin unavailable:', e);
+    }
+}
+
+async function setupTauriNotificationListener(): Promise<void> {
+    if (!isTauri()) return;
+    try {
+        const notif = await import('@tauri-apps/plugin-notification');
+        await notif.onAction((notification: { extra?: Record<string, unknown> }) => {
+            const bufferId = notification.extra?.bufferId as string | undefined;
+            if (bufferId) {
+                activeBufferId.set(bufferId);
+            }
+        });
+    } catch (e) {
+        console.warn('Failed to setup Tauri notification listener:', e);
+    }
+}
+
 /**
- * Request notification permission from the browser
+ * Request notification permission — uses Tauri native API in Tauri, browser API otherwise
  */
 export async function requestNotificationPermission(): Promise<boolean> {
+    await ensureTauriNotification();
+
+    if (tauriNotif) {
+        try {
+            let granted = await tauriNotif.isPermissionGranted();
+            if (!granted) {
+                const permission = await tauriNotif.requestPermission();
+                granted = permission === 'granted';
+            }
+            notificationPermission = granted ? 'granted' : 'denied';
+            updateSettings({ notificationPermission });
+            return granted;
+        } catch (e) {
+            console.error('Error requesting Tauri notification permission:', e);
+            return false;
+        }
+    }
+
     if (!('Notification' in window)) {
         console.warn('This browser does not support desktop notification');
         return false;
@@ -36,13 +87,29 @@ export async function requestNotificationPermission(): Promise<boolean> {
  * Check if notifications are supported
  */
 export function isNotificationSupported(): boolean {
-    return 'Notification' in window;
+    return 'Notification' in window || isTauri();
 }
 
 /**
- * Create a desktop notification for a highlight
+ * Create a desktop notification for a highlight — uses Tauri native in Tauri, browser API otherwise
  */
-export function createHighlight(buffer: BufferData, message: string): void {
+export async function createHighlight(buffer: BufferData, message: string): Promise<void> {
+    await ensureTauriNotification();
+
+    if (tauriNotif) {
+        const bufferName = buffer.shortName || buffer.fullName;
+        try {
+            tauriNotif.sendNotification({
+                title: `[${bufferName}]`,
+                body: message.substring(0, 200),
+                extra: { bufferId: buffer.id },
+            });
+        } catch (e) {
+            console.error('Error sending Tauri notification:', e);
+        }
+        return;
+    }
+
     if (!isNotificationSupported() || notificationPermission !== 'granted') {
         return;
     }
@@ -89,6 +156,9 @@ export function cancelAll(): void {
         notification.close();
     });
     activeNotifications.clear();
+    if (tauriNotif?.cancelAll) {
+        tauriNotif.cancelAll().catch(() => {});
+    }
 }
 
 /**
@@ -176,6 +246,12 @@ export function initNotifications(): void {
         notificationPermission = s.notificationPermission;
     }
 
+    // Set up Tauri native notifications if running in Tauri
+    if (isTauri()) {
+        ensureTauriNotification();
+        setupTauriNotificationListener();
+    }
+
     initFavicon();
 }
 
@@ -189,5 +265,3 @@ export function onDisconnect(): void {
         document.title = 'Glowing Bear';
     }
 }
-
-

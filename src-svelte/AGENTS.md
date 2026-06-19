@@ -77,6 +77,9 @@ npm run irc:start / irc:stop  # Start/stop gbtest environment
 ### Sending input to WeeChat
 `InputBar.svelte` handles user input with readline keybindings, history, tab completion (delegates to `completeNick()` in `src/lib/utils.ts`). Input is sent through `connectionManager`.
 
+### Programmatic mount
+`mount(Component, { target, props })` returns the component's **exports**, not the DOM element. For components with no exports (no `export` declarations), it returns `{}`. If you need to pass data to a mounted component, use `props` — don't try to access the element via the return value.
+
 ## Business Context
 
 Free/open-source IRC web frontend for WeeChat. Users run their own WeeChat instance (VPS, home server, Pi) and connect directly — no intermediary server. Key users: sysadmins, gamers, privacy-conscious IRC users. Performance matters: virtual scrolling (~50-100 DOM nodes). Must work as a PWA (offline-capable) on mobile. Security model: user controls their own server entirely.
@@ -122,6 +125,8 @@ Control API CLI: `test/irc-server/ctrl.sh` to send IRC commands (gbtest must be 
 
 ### Reactivity
 Immutable updates only — never mutate store objects in-place. Spread copies: `buffers.set({ ...get(buffers) })`. Read via `get(store)`, mutate the copy, then `store.set(copy)`.
+
+**{#if} blocks after async boundaries do NOT reliably trigger** — setting `$state` or `$derived` values inside an `async` function (after `await`) may not cause `{#if}` to re-evaluate. Workaround: push placeholder items synchronously before any `await`, then update them in-place after the async operation completes. For modals/dialogs, render unconditionally and control visibility via `.showPopover()` / `.hidePopover()` instead of `{#if}`.
 
 ### Function Comments
 Every non-trivial function needs a brief comment above it explaining intent.

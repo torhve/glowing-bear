@@ -15,6 +15,7 @@
       ]
     },
     "opener:allow-default-urls",
-    "window-state:default"
+    "window-state:default",
+    "notification:default"
   ]
 }
