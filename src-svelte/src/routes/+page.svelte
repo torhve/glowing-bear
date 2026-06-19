@@ -146,7 +146,7 @@
     if (!$connected) return;
     const buf = $currentBuffer;
     if (!buf) return;
-    if (buf.requestedLines < 100) {
+    if (buf.requestedLines < 100 && !buf.allLinesFetched) {
       void (async () => {
         try {
           await fetchMoreLines(100);
