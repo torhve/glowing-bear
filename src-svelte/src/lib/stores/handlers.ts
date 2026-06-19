@@ -105,11 +105,22 @@ export function handleBufferInfo(message: ProtocolMessage) {
         }
     }
 
-    // If no buffer was auto-resumed, go to first one
-    const bufferKeys = Object.keys(get(buffers));
-    const firstBufferKey = bufferKeys[0];
-    if (firstBufferKey && !shouldResume(firstBufferKey)) {
-        setActiveBuffer(firstBufferKey);
+    // If no buffer was auto-resumed, prefer weechat.core before falling back to first buffer
+    let targetBufferId: string | null = null;
+    const allBuffers = get(buffers);
+    for (const id in allBuffers) {
+        const buf = allBuffers[id];
+        if (buf?.shortName === 'core' && buf?.plugin === 'weechat') {
+            targetBufferId = id;
+            break;
+        }
+    }
+    if (!targetBufferId) {
+        const bufferKeys = Object.keys(allBuffers);
+        targetBufferId = bufferKeys[0] || null;
+    }
+    if (targetBufferId) {
+        setActiveBuffer(targetBufferId);
     }
 }
 

@@ -359,14 +359,14 @@ export function setActiveBuffer(bufferId: string): boolean {
         console.log('[buffer switch]', '(none)', '→', buffer.shortName || buffer.fullName);
     }
 
-    // Save local unread count before clearing (tracks ALL messages while non-active,
-    // not just notify_level=1 — needed when WeeChat already displayed the message).
-    const localUnread = buffer.localUnread || 0;
+    // Save total unread count from WeeChat hotlist before clearing.
+    // This is used to calculate the correct lastSeen position (read marker).
+    const totalUnread = (buffer.unread || 0) + (buffer.notification || 0);
 
     // Calculate lastSeen only if not already set. Existing lastSeen represents the
     // user's actual reading position and should be preserved on return.
-    if (buffer.lastSeen < 0 && localUnread > 0 && buffer.lines.length > 0) {
-        buffer.lastSeen = Math.max(0, buffer.lines.length - localUnread - 1);
+    if (buffer.lastSeen < 0 && totalUnread > 0 && buffer.lines.length > 0) {
+        buffer.lastSeen = Math.max(0, buffer.lines.length - totalUnread - 1);
     }
 
     buffer.active = true;
