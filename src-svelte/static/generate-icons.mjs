@@ -37,6 +37,7 @@ for (const [filename, size] of icons) {
         });
         const pngBuffer = resvg.render().asPng();
 
+        // Pad to exact square with transparent background
         const squared = await sharp(pngBuffer)
             .resize(size, size, {
                 fit: 'contain',
@@ -47,9 +48,9 @@ for (const [filename, size] of icons) {
 
         writeFileSync(output, squared);
         const fileSize = statSync(output).size;
-        console.log('  OK ' + filename + ' (' + size + 'x' + size + ') ' + (fileSize / 1024).toFixed(0) + ' KB');
+        console.log(`  \u2713 ${filename} (${size}x${size}) \u2014 ${(fileSize / 1024).toFixed(0)} KB`);
     } catch (e) {
-        console.error('  FAIL ' + filename + ': ' + e.message);
+        console.error(`  \u2717 Failed to generate ${filename}: ${e.message}`);
         process.exit(1);
     }
 }
@@ -57,13 +58,13 @@ for (const [filename, size] of icons) {
 // Generate .ico from 128x128 PNG
 try {
     execSync(
-        'magick convert "' + resolve(__dirname, 'glowing_bear_128x128.png') + '" -depth 8 "' + resolve(__dirname, 'glowing_bear_128x128.ico') + '"',
+        `magick convert "${resolve(__dirname, 'glowing_bear_128x128.png')}" -depth 8 "${resolve(__dirname, 'glowing_bear_128x128.ico')}"`,
         { stdio: ['inherit', 'inherit', 'ignore'] }
     );
     const icoSize = statSync(resolve(__dirname, 'glowing_bear_128x128.ico')).size;
-    console.log('  OK glowing_bear_128x128.ico ' + (icoSize / 1024).toFixed(0) + ' KB');
+    console.log(`  \u2713 glowing_bear_128x128.ico \u2014 ${(icoSize / 1024).toFixed(0)} KB`);
 } catch (e) {
-    console.error('  FAIL .ico generation');
+    console.error('  \u2717 Failed to generate .ico file');
     process.exit(1);
 }
 
@@ -102,5 +103,5 @@ const manifest = {
 };
 
 writeFileSync(resolve(__dirname, 'webapp.manifest.json'), JSON.stringify(manifest, null, 4) + '\n');
-console.log('  OK webapp.manifest.json regenerated');
+console.log(`  \u2713 webapp.manifest.json regenerated`);
 console.log('Done.');

@@ -17,7 +17,17 @@ if (!existsSync(svgInput)) {
 
 const svgBuffer = readFileSync(svgInput);
 
-// macOS iconutil requires square PNGs in an iconset directory
+// macOS iconutil requires an iconset directory with square PNGs:
+//   icon_16x16.png        (16x16)
+//   icon_16x16@2x.png     (32x32)   — retina
+//   icon_32x32.png        (32x32)
+//   icon_32x32@2x.png     (64x64)   — retina
+//   icon_128x128.png      (128x128)
+//   icon_128x128@2x.png   (256x256)  — retina
+//   icon_256x256.png      (256x256)
+//   icon_256x256@2x.png   (512x512)  — retina
+//   icon_512x512.png      (512x512)
+//   icon_512x512@2x.png   (1024x1024) — retina
 const iconsetSizes = [
     [16, 16],
     [16, 32],   // @2x
@@ -39,10 +49,8 @@ mkdirSync(iconsetDir, { recursive: true });
 console.log('Generating .icns from ' + svgInput + '...');
 
 for (const [w, h] of iconsetSizes) {
-    const size = h;
-    const name = (w === h)
-        ? 'icon_' + w + 'x' + w + '.png'
-        : 'icon_' + w + 'x' + w + '@2x.png';
+    const size = h; // target pixel dimension (for @2x, this is 2x the base size)
+    const name = w === h ? `icon_${w}x${w}.png` : `icon_${w}x${w}@2x.png`;
     const outputPath = resolve(iconsetDir, name);
     try {
         const resvg = new Resvg(svgBuffer, {
@@ -50,6 +58,7 @@ for (const [w, h] of iconsetSizes) {
         });
         let pngBuffer = resvg.render().asPng();
 
+        // Pad to exact square with transparent background (SVG viewBox is 457x437)
         pngBuffer = await sharp(pngBuffer)
             .resize(size, size, {
                 fit: 'contain',
@@ -60,22 +69,22 @@ for (const [w, h] of iconsetSizes) {
 
         writeFileSync(outputPath, pngBuffer);
         const fileSize = statSync(outputPath).size;
-        console.log('  OK ' + name + ' (' + size + 'x' + size + ') ' + (fileSize / 1024).toFixed(0) + ' KB');
+        console.log(`  \u2713 ${name} (${size}x${size}) \u2014 ${(fileSize / 1024).toFixed(0)} KB`);
     } catch (e) {
-        console.error('  FAIL ' + name + ': ' + e.message);
+        console.error(`  \u2717 Failed to generate ${name}: ${e.message}`);
         rmSync(iconsetDir, { recursive: true, force: true });
         process.exit(1);
     }
 }
 
 try {
-    execSync('iconutil --convert icns --output "' + icnsOutput + '" "' + iconsetDir + '"', {
+    execSync(`iconutil --convert icns --output "${icnsOutput}" "${iconsetDir}"`, {
         stdio: 'inherit',
     });
     const icnsSize = statSync(icnsOutput).size;
-    console.log('  OK glowing-bear.icns ' + (icnsSize / 1024).toFixed(0) + ' KB');
+    console.log(`  \u2713 glowing-bear.icns \u2014 ${(icnsSize / 1024).toFixed(0)} KB`);
 } catch (e) {
-    console.error('  FAIL iconutil');
+    console.error('  \u2717 iconutil failed');
     process.exit(1);
 } finally {
     if (existsSync(iconsetDir)) {

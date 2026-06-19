@@ -13,7 +13,7 @@
     size: number;
     dataUrl: string;
     progress: number;
-    status: 'preview' | 'uploading' | 'success' | 'error';
+    status: 'loading' | 'preview' | 'uploading' | 'success' | 'error';
     result?: { link: string; deletehash: string };
     error?: string;
   }
@@ -27,6 +27,11 @@
     onInsert?: (urls: string[]) => void;
     onClose?: () => void;
   } = $props();
+
+  // Hold ref to BaseDialog component to access its <dialog> element
+  let baseDialogRef = $state<{ dialog: HTMLDialogElement | undefined }>();
+  let dialog = $derived(baseDialogRef?.dialog);
+export { dialog };
 
   let isUploading = $state(false);
   let currentUploadIndex = $state(0);
@@ -56,7 +61,7 @@
     for (let i = 0; i < images.length; i++) {
       currentUploadIndex = i;
       const img = images[i];
-      if (!img) continue;
+      if (!img || img.status === 'loading') continue;
 
       img.status = 'uploading';
       img.progress = 0;
@@ -104,16 +109,22 @@
   }
 
   let phase = $derived(
-    isUploading ? 'uploading' : images.some(i => i.status !== 'preview') ? 'complete' : 'preview'
+    isUploading
+      ? 'uploading'
+      : images.some(i => i.status === 'loading')
+        ? 'loading'
+        : images.some(i => i.status !== 'preview')
+          ? 'complete'
+          : 'preview'
   );
 </script>
 
-<BaseDialog id="image-upload-preview" labelledby="preview-title">
+<BaseDialog bind:this={baseDialogRef} id="image-upload-preview" labelledby="preview-title">
   <div class="flex flex-col max-h-[85vh]">
     <!-- Header -->
     <div class="flex items-center justify-between px-6 py-4 border-b border-border">
       <h3 id="preview-title" class="text-lg font-bold text-text">
-        {phase === 'preview' ? 'Preview images' : phase === 'uploading' ? 'Uploading...' : 'Upload results'}
+        {phase === 'loading' ? 'Reading files...' : phase === 'preview' ? 'Preview images' : phase === 'uploading' ? 'Uploading...' : 'Upload results'}
       </h3>
       <button
         type="button"
@@ -141,7 +152,13 @@
             >
               <!-- Thumbnail -->
               <div class="aspect-square bg-bg/50 relative">
-                <img src={img.dataUrl} alt={img.name} class="w-full h-full object-contain p-2" />
+                {#if img.status === 'loading'}
+                  <div class="absolute inset-0 flex items-center justify-center">
+                    <Loader2 size={24} class="text-text-muted animate-spin" />
+                  </div>
+                {:else if img.dataUrl}
+                  <img src={img.dataUrl} alt={img.name} class="w-full h-full object-contain p-2" />
+                {/if}
                 {#if img.status === 'uploading'}
                   <!-- Progress overlay -->
                   <div class="absolute inset-0 bg-black/60 flex items-center justify-center">
@@ -203,11 +220,23 @@
     <!-- Footer actions -->
     <div class="px-6 py-4 border-t border-border flex justify-between items-center">
       <span class="text-sm text-text-muted">
-        {images.filter(i => i.status === 'success').length}/{images.length} uploaded
+        {phase === 'loading' ? 'Reading files...' : images.filter(i => i.status === 'success').length + '/' + images.length + ' uploaded'}
       </span>
 
       <div class="flex gap-2">
-        {#if phase === 'preview'}
+        {#if phase === 'loading'}
+          <button
+            type="button"
+            popovertarget="image-upload-preview"
+            popovertargetaction="hide"
+            onclick={handleClose}
+            class="px-4 py-2 border border-border text-text hover:bg-border rounded text-sm transition-colors flex items-center gap-2"
+            data-testid="cancel-loading-button"
+          >
+            <Loader2 size={16} class="animate-spin" />
+            Reading files...
+          </button>
+        {:else if phase === 'preview'}
           <button
             type="button"
             onclick={handleClose}

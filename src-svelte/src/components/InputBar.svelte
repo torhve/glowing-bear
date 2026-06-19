@@ -17,7 +17,7 @@
     size: number;
     dataUrl: string;
     progress: number;
-    status: 'preview' | 'uploading' | 'success' | 'error';
+    status: 'loading' | 'preview' | 'uploading' | 'success' | 'error';
     result?: { link: string; deletehash: string };
     error?: string;
   }
@@ -28,13 +28,18 @@
     onInsertUrls?: (urls: string[]) => void;
   } = $props();
 
+  // Debug flag — open console and set `window.__debugPaste = true` before pasting
+  let debugPaste = $derived(typeof window !== 'undefined' && (window as any).__debugPaste === true);
+  function log(...args: unknown[]) { if (debugPaste) console.log('[paste]', ...args); }
+
   let inputRef = $state<HTMLTextAreaElement>();
   let fileInputRef = $state<HTMLInputElement>();
   let message = $state('');
   let _iterCandidate: string | null = $state(null);
   let isDraggingFile = $state(false);
   let previewImages = $state<PreviewItem[]>([]);
-  let previewOpen = $derived(previewImages.length > 0);
+  // Ref to ImageUploadPreview component for programmatic dialog show/hide
+  let previewDialogRef = $state<{ dialog: HTMLDialogElement | undefined }>();
   let nextImageId = $state(1);
 
   let canSend = $derived($currentBuffer && message.length > 0);
@@ -289,49 +294,34 @@
   }
 
   // Convert files to preview items and open the preview modal.
+  // Collect images for preview. Pushes placeholders synchronously before any await,
+  // then reads files asynchronously and updates placeholders in-place.
   // base64Strings handles images from clipboard.getAsString() fallback (macOS Safari).
   async function collectImagesForPreview(
     files: FileList | File[],
     base64Strings?: string[],
   ): Promise<void> {
     const imageFiles = Array.from(files).filter(f => f.type.match(/image.*/));
-    console.log('[collectImagesForPreview] entered — files:', Array.from(files).map(f => ({ name: f.name, type: f.type })), 'base64Strings:', base64Strings?.length ?? 0);
-    console.log('[collectImagesForPreview] after filter — imageFiles:', imageFiles.length, imageFiles.map(f => ({ name: f.name, type: f.type })));
-    if (imageFiles.length === 0 && !(base64Strings?.length)) {
-      console.log('[collectImagesForPreview] no images found, returning early');
-      return;
-    }
+    if (imageFiles.length === 0 && !(base64Strings?.length)) return;
 
-    const newItems: PreviewItem[] = [];
-
+    // Phase 1: push placeholder items synchronously to trigger dialog open
+    const placeholders: PreviewItem[] = [];
     for (const file of imageFiles) {
-      console.log('[collectImagesForPreview] reading file:', file.name, file.type, file.size + ' bytes');
-      const dataUrl = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          console.log('[collectImagesForPreview] FileReader done for', file.name, 'dataUrl length:', (reader.result as string).length);
-          resolve(reader.result as string);
-        };
-        reader.onerror = (e) => {
-          console.error('[collectImagesForPreview] FileReader error for', file.name, e);
-          resolve('');
-        };
-        reader.readAsDataURL(file);
-      });
-      newItems.push({
+      placeholders.push({
         id: nextImageId++,
         name: file.name,
         size: file.size,
-        dataUrl,
+        dataUrl: '',
         progress: 0,
-        status: 'preview',
+        status: 'loading',
       });
     }
 
     // Add base64 data URLs directly (no FileReader needed)
+    const directItems: PreviewItem[] = [];
     if (base64Strings) {
       for (const dataUrl of base64Strings) {
-        newItems.push({
+        directItems.push({
           id: nextImageId++,
           name: 'pasted-image.png',
           size: Math.round(dataUrl.length * 0.75),
@@ -342,9 +332,27 @@
       }
     }
 
-    console.log('[collectImagesForPreview] setting previewImages:', previewImages.length + newItems.length, 'total items');
-    previewImages = [...previewImages, ...newItems];
-    previewOpen = true;
+    for (const item of [...placeholders, ...directItems]) {
+      previewImages.push(item);
+    }
+
+    // Show dialog programmatically — avoids {#if} reactivity issues after async boundaries
+    previewDialogRef?.dialog?.showPopover();
+
+    // Phase 2: read files asynchronously and update placeholders in-place
+    for (let i = 0; i < imageFiles.length; i++) {
+      const file = imageFiles[i]!;
+      const placeholder = placeholders[i]!;
+      const dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => resolve('');
+        reader.readAsDataURL(file);
+      });
+      placeholder.dataUrl = dataUrl;
+      placeholder.status = dataUrl ? 'preview' : 'error';
+    }
+
     inputRef?.focus();
   }
 
@@ -357,9 +365,10 @@
     onInsertUrls(urls);
   }
 
+  // Close image preview dialog
   function closePreview() {
-    previewOpen = false;
-    previewImages = [];
+    previewDialogRef?.dialog?.hidePopover();
+    previewImages.splice(0);
     inputRef?.focus();
   }
 
@@ -371,46 +380,60 @@
   async function handlePaste(e: ClipboardEvent) {
     const data = e.clipboardData;
     if (!data) {
-      console.log('[handlePaste] no clipboardData');
+      log('no clipboardData');
       return;
     }
 
     // Strategy 1: clipboardData.files (Firefox on macOS)
+    // Firefox's clipboard files are ephemeral and get GC'd before FileReader can read them,
+    // so we must read their content immediately within this event handler.
     const allFiles = Array.from(data.files);
     const files = allFiles.filter(f => f.type.match(/image.*/));
-    console.log('[handlePaste] clipboardData.files:', allFiles.length, 'total,', files.length, 'images', allFiles.map(f => ({ name: f.name, type: f.type })));
+    log('clipboardData.files:', allFiles.length, 'total,', files.length, 'images', allFiles.map(f => ({ name: f.name, type: f.type })));
     if (files.length > 0) {
       e.preventDefault();
-      console.log('[handlePaste] using strategy 1 (files), calling collectImagesForPreview');
-      void collectImagesForPreview(files);
+      log('using strategy 1 (files), reading immediately to avoid GC');
+      const dataUrls = await Promise.all(
+        files.map(file =>
+          new Promise<string>(resolve => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = () => resolve('');
+            reader.readAsDataURL(file);
+          }),
+        ),
+      );
+      const validUrls = dataUrls.filter(u => u.length > 0);
+      log('strategy 1 resolved', validUrls.length, 'data URLs');
+      void collectImagesForPreview([], validUrls);
       return;
     }
 
     // Strategy 2+3: clipboardData.items API (Chrome, Safari)
     const items = data.items;
     if (!items) {
-      console.log('[handlePaste] no clipboardData.items');
+      log('no clipboardData.items');
       return;
     }
 
     const imageFiles: File[] = [];
     const imageStringsPromises: Promise<string | null>[] = [];
 
-    console.log('[handlePaste] clipboardData.items count:', items.length);
+    log('clipboardData.items count:', items.length);
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      console.log('[handlePaste] item[' + i + ']:', item?.kind, item?.type);
+      log('item[' + i + ']:', item?.kind, item?.type);
       if (item && item.type.startsWith('image/')) {
         const file = item.getAsFile();
         if (file) {
-          console.log('[handlePaste] item[' + i + '] getAsFile() succeeded:', file.name, file.type, file.size + ' bytes');
+          log('item[' + i + '] getAsFile() succeeded:', file.name, file.type, file.size + ' bytes');
           imageFiles.push(file);
         } else {
-          console.log('[handlePaste] item[' + i + '] getAsFile() returned null, falling back to getAsString');
+          log('item[' + i + '] getAsFile() returned null, falling back to getAsString');
           imageStringsPromises.push(
             new Promise(resolve => {
               item.getAsString(s => {
-                console.log('[handlePaste] getAsString callback:', s ? 'got ' + s.substring(0, 60) + '...' : 'null');
+                log('getAsString callback:', s ? 'got ' + s.substring(0, 60) + '...' : 'null');
                 resolve(s || null);
               });
             }),
@@ -419,9 +442,9 @@
       }
     }
 
-    console.log('[handlePaste] collected:', imageFiles.length, 'files,', imageStringsPromises.length, 'promises');
+    log('collected:', imageFiles.length, 'files,', imageStringsPromises.length, 'promises');
     if (imageFiles.length === 0 && imageStringsPromises.length === 0) {
-      console.log('[handlePaste] no images found, aborting');
+      log('no images found, aborting');
       return;
     }
 
@@ -430,7 +453,7 @@
     // Wait for all getAsString callbacks to complete before processing
     const resolvedStrings = await Promise.all(imageStringsPromises);
     const strings = resolvedStrings.filter((s): s is string => s !== null && s.length > 0);
-    console.log('[handlePaste] resolved strings:', strings.length);
+    log('resolved strings:', strings.length);
 
     void collectImagesForPreview(imageFiles, strings.length ? strings : undefined);
   }
@@ -542,10 +565,9 @@
   </div>
 </div>
 
-{#if previewOpen}
-  <ImageUploadPreview
-    images={previewImages}
-    onInsert={handleInsertUrls}
-    onClose={closePreview}
-  />
-{/if}
+<ImageUploadPreview
+  bind:this={previewDialogRef}
+  images={previewImages}
+  onInsert={handleInsertUrls}
+  onClose={closePreview}
+/>
