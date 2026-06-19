@@ -872,17 +872,25 @@ export function handleLineInfo(message: ProtocolMessage, manually: boolean = tru
                 injectDateChangeMessageIfNeeded(buffer, manually, oldDate, newDate);
             }
             buffer.lines.push(line);
-            if (manually) buffer.lastSeen++;
+            // Only increment lastSeen for manual loads when no unread messages
+            // exist yet — otherwise defer to post-backfill which accounts for
+            // hotlist-reported unread counts. For scroll-back fetches where
+            // lastSeen is already >= 0 from a previous visit, always increment.
+            if (manually && (buffer.lastSeen >= 0 || (buffer.unread === 0 && buffer.notification === 0))) {
+                buffer.lastSeen++;
+            }
         }
     }
 
-    // Post-backfill: only set lastSeen for buffers that haven't been read before.
-    // If lastSeen is already >= 0, it was preserved from a previous session or
-    // adjusted by fetchMoreLines' oldLength subtraction — do not overwrite it.
-    const activeId = get(activeBufferId);
+    // Post-backfill: set lastSeen for buffers with lastSeen < 0 after loading.
+    // Account for hotlist-reported unread counts so the readmarker appears at
+    // the correct position instead of being hidden at the bottom.
     for (const buf of Object.values(currentBuffers)) {
-        if (buf.id === activeId && buf.lastSeen < 0 && buf.lines.length > 0) {
-            buf.lastSeen = buf.lines.length - 1;
+        if (buf.lastSeen < 0 && buf.lines.length > 0) {
+            const unreadSum = (buf.unread || 0) + (buf.notification || 0);
+            buf.lastSeen = unreadSum > 0
+                ? Math.max(0, buf.lines.length - unreadSum - 1)
+                : buf.lines.length - 1;
         }
     }
 
