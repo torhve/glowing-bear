@@ -103,8 +103,8 @@ function drawOnCanvas(count: number, type: 'notification' | 'unread'): void {
     ctx.fillStyle = textColor;
     ctx.fillText(formatted, cx, cy + 0.5);
 
-    // Update favicon link
-    const links = document.querySelectorAll("link[rel*='icon']");
+    // Update only the primary favicon link (32x32), not other icons
+    const links = document.querySelectorAll("link[rel='icon'][sizes='32x32']");
     for (const link of links) {
         link.setAttribute('href', canvas.toDataURL('image/png'));
     }
@@ -123,8 +123,10 @@ export function drawBadge(count: number, type: 'notification' | 'unread'): void 
  */
 export function resetBadge(): void {
     if (typeof document === 'undefined') return;
-    const links = document.querySelectorAll("link[rel*='icon']");
+    const links = document.querySelectorAll("link[rel='icon'][sizes='32x32']");
     for (const link of links) {
-        link.setAttribute('href', '/favicon.png');
+        if (link.getAttribute('href') !== '/favicon.png') {
+            link.setAttribute('href', '/favicon.png');
+        }
     }
 }
