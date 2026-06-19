@@ -357,8 +357,8 @@ import Key from '@lucide/svelte/icons/key';
         </summary>
         <div class="px-4 pb-3 text-sm text-text-secondary space-y-2">
           <p>Glowing Bear is a free, open-source web frontend for WeeChat — no backend required.</p>
-          <p>This is a complete rewrite from the original AngularJS codebase into Svelte 5 + TypeScript. The old version was unmaintainable and had no tests. Everything still runs entirely as static files in your browser, connecting directly to your WeeChat instance via WebSocket relay — zero intermediary server.</p>
-          <p>Stack: SvelteKit 2, Svelte 5 runes, TypeScript, Tailwind CSS v4, Vite 6, Vitest, Playwright, fflate, DOMPurify, linkifyjs, zlibjs.</p>
+          <p>This is a complete rewrite from the original AngularJS codebase into Svelte 5 + TypeScript. The old version was hard to maintain and had next to no tests. Everything still runs entirely as static files in your browser, connecting directly to your WeeChat instance via WebSocket relay — zero intermediary server.</p>
+          <p>Stack: SvelteKit 2, Svelte 5 runes, TypeScript, Tailwind CSS v4, Vite 6, Vitest, Playwright E2E testing, fflate, DOMPurify</p>
         </div>
       </details>
       <details class="bg-surface rounded border border-border">
