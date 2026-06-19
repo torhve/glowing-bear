@@ -351,7 +351,7 @@ import Key from '@lucide/svelte/icons/key';
     </form>
 
 <div class="space-y-2">
-      <details class="bg-surface rounded border border-border">
+      <details open class="bg-surface rounded border border-border">
         <summary class="px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
           <img src="/glowing-bear.svg" class="w-4 h-4" alt="" />About
         </summary>
