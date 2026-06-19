@@ -95,10 +95,15 @@
     // If nothing changed, skip scroll operations entirely
     if (!bufferChanged && !linesAdded) return;
 
-    // Dedup guard: run synchronously to prevent cascading rAFs on rapid line arrivals.
+    // Dedup guard: run synchronously to prevent cascading effect re-runs.
     const scrollKey = `${currentBufferId}-${curLinesLength}`;
-    if (curHasUnreadMessages && prevScrollKey === scrollKey) return;
+    if (prevScrollKey === scrollKey) return;
+
+    // Update tracking state SYNCHRONOUSLY (not inside async IIFE) so that
+    // when the effect re-runs from other reactive changes, the dedup guard catches it.
     prevScrollKey = scrollKey;
+    prevActiveBufferId = currentBufferId;
+    prevLinesLength = curLinesLength;
 
     console.log(
       '[ChatView] scroll effect — buffer:', curBufferShortName,
@@ -114,11 +119,10 @@
       '| lastSeen:', curLastSeen
     );
 
-    (async () => {
-      await tick();
-
-      if (!curHasUnreadMessages) {
-        // No unread messages — scroll to bottom
+    if (!curHasUnreadMessages) {
+      // No unread messages — scroll to bottom
+      // Use rAF so DOM has updated after new lines were added.
+      requestAnimationFrame(() => {
         containerRef!.scrollTop = containerRef!.scrollHeight;
         isAtBottom = true;
         console.log(
@@ -126,46 +130,40 @@
           '| scrollHeight:', containerRef!.scrollHeight,
           '| bufferLines:', curLinesLength
         );
-      } else {
-        // Unread messages present — scroll to readmarker
-        // Defer to rAF so Svelte DOM updates (including readmarker rendering) complete first
-        requestAnimationFrame(() => {
-          const rmRow = document.querySelector('.readmarker');
-          if (!rmRow || !rmRow.parentElement) {
-            console.warn('[ChatView] readmarker row not in DOM yet');
-            return;
-          }
+      });
+    } else {
+      // Unread messages present — scroll to readmarker
+      // Defer to rAF so Svelte DOM updates (including readmarker rendering) complete first
+      requestAnimationFrame(() => {
+        const rmRow = document.querySelector('.readmarker');
+        if (!rmRow || !rmRow.parentElement) {
+          console.warn('[ChatView] readmarker row not in DOM yet');
+          return;
+        }
 
-          // Use getBoundingClientRect to find element positions relative to viewport,
-          // then convert to document-relative offsets for accurate scroll math.
-          const rmRect = rmRow.getBoundingClientRect();
-          const containerRect = containerRef!.getBoundingClientRect();
-          const viewportTop = 0;
+        // Use getBoundingClientRect for accurate viewport-relative positioning.
+        // offsetTop is unreliable inside collapsed tables (relative to td, not container).
+        const rmRect = rmRow.getBoundingClientRect();
+        const containerRect = containerRef!.getBoundingClientRect();
 
-          // Document position of readmarker and container top
-          const rmDocTop = rmRect.top - viewportTop + containerRef!.scrollTop;
-          const containerDocTop = containerRect.top - viewportTop + containerRef!.scrollTop;
-
-          if (containerRef!.scrollHeight > containerRef!.clientHeight) {
-            // Position readmarker at ~45% down the viewport so it's visible with unread context below.
-            // After scrolling: rmViewportY = rmDocTop - scrollTop
-            // We want: rmViewportY = containerDocTop + 0.45 * clientHeight
-            // So: scrollTop = rmDocTop - containerDocTop - 0.45 * clientHeight
-            containerRef!.scrollTop = rmDocTop - containerDocTop - containerRef!.clientHeight * 0.45;
-          }
-          isAtBottom = false;
-          console.log(
-            '[ChatView] scroll → readmarker — scrollTop:', containerRef!.scrollTop,
-            '| bufferLines:', curLinesLength,
-            '| rmDocTop:', rmDocTop.toFixed(1),
-            '| containerDocTop:', containerDocTop.toFixed(1)
-          );
-        });
-      }
-
-      prevActiveBufferId = currentBufferId;
-      prevLinesLength = curLinesLength;
-    })();
+        if (containerRef!.scrollHeight > containerRef!.clientHeight) {
+          // Position readmarker near middle of viewport (~45%) so it's visible with unread context below.
+          // targetY = container top + 0.45 * viewport height
+          const targetY = containerRect.top + containerRef!.clientHeight * 0.45;
+          // diff = how far to scroll: positive means scroll down, negative means scroll up
+          const diff = rmRect.top - targetY;
+          containerRef!.scrollTop = containerRef!.scrollTop + diff;
+        }
+        isAtBottom = false;
+        console.log(
+          '[ChatView] scroll → readmarker — scrollTop:', containerRef!.scrollTop,
+          '| bufferLines:', curLinesLength,
+          '| rmViewportY:', rmRect.top.toFixed(1),
+          '| containerViewportTop:', containerRect.top.toFixed(1),
+          '| clientHeight:', containerRef!.clientHeight
+        );
+      });
+    }
   });
 
   function handleMention(message: BufferLine) {
