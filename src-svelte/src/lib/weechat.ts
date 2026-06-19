@@ -701,6 +701,24 @@ export class Protocol {
         ptr: function (this: Protocol, obj: unknown) { return this.strDirect(obj); }
     };
 
+    // Default type mappings for hdata keys without explicit type specifiers.
+    // WeeChat relay sends keys as bare names (e.g., "number" not "number:int").
+    private static readonly hdataKeyTypes: Readonly<Record<string, string>> = Object.freeze({
+        number: 'int',
+        hidden: 'chr',
+        notify: 'int',
+        type: 'int',
+        full_name: 'str',
+        short_name: 'str',
+        title: 'str',
+        local_variables: 'htb',
+        nicklist: 'chr',
+        prev_buffer: 'ptr',
+        next_buffer: 'ptr',
+        plugin: 'str',
+        name: 'str'
+    });
+
     // Static utility: parse raw WeeChat formatted text into rich text parts
     static rawText2Rich(text: string): RichPart[] {
         return rawText2Rich(text);
@@ -846,7 +864,10 @@ export class Protocol {
             tmp.pointers = paths.map(() => this.getPointer());
             for (const keyEntry of keys) {
                 const key = keyEntry[0]!;
-                const type = keyEntry[1] ?? '';
+                let type = keyEntry[1] ?? '';
+                if (!type) {
+                    type = Protocol.hdataKeyTypes[key] ?? 'str';
+                }
                 tmp[key] = this.runType(type);
             }
             objs.push(tmp);
