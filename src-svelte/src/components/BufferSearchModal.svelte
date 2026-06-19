@@ -19,7 +19,8 @@
         const query = bufferSearchQuery.toLowerCase();
         return buf.shortName.toLowerCase().includes(query) ||
                buf.fullName.toLowerCase().includes(query) ||
-               (buf.rtitle || '').toLowerCase().includes(query);
+               (buf.rtitle || '').toLowerCase().includes(query) ||
+               String(buf.number).includes(query);
       })
       .sort((a: BufferData, b: BufferData) => {
         const aHotlist = $hotlist.find(h => h.buffer === a.id);
@@ -120,9 +121,14 @@
           class:bg-accent={idx === selectedIndex}
           data-search-index={idx}
         >
-          <div class="flex-1 min-w-0">
-            <div class="text-lg text-text truncate">{buffer.shortName}</div>
-            <div class="text-sm text-text-muted truncate">{buffer.fullName}</div>
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="flex-shrink-0 px-1.5 py-0.5 text-[11px] font-bold rounded bg-surface-raised border border-border">
+              {buffer.number}
+            </span>
+            <div class="min-w-0 flex-1">
+              <div class="text-sm font-semibold truncate">{buffer.shortName}</div>
+              <div class="text-xs text-text-secondary truncate">{buffer.fullName}</div>
+            </div>
           </div>
 
           {#if buffer.notification >= 3}

@@ -249,7 +249,7 @@ describe('Readmarker behavior', () => {
         });
     });
 
-    describe('setActiveBuffer calculates lastSeen from local unread', () => {
+    describe('setActiveBuffer calculates lastSeen from unread + notification', () => {
         it('calculates lastSeen when switching to a buffer with unread messages but no lastSeen', () => {
             const buf = makeBuffer('0x200', {
                 lines: Array.from({ length: 100 }, (_, i) => ({ prefix: [], content: [], date: i, shortTime: '', formattedTime: '', buffer: '0x200', tags: [], highlight: false, displayed: true, prefixtext: '', text: `line${i}`, showHiddenBrackets: false }) as any),
@@ -264,8 +264,8 @@ describe('Readmarker behavior', () => {
             setActiveBuffer('0x200');
 
             const result = get(buffers)['0x200'];
-            // lastSeen = max(0, 100 - 5 - 1) = 94 (uses only local unread, not notification)
-            expect(result!.lastSeen).toBe(94);
+            // lastSeen = max(0, 100 - (5+2) - 1) = 92 (uses unread + notification)
+            expect(result!.lastSeen).toBe(92);
             expect(result!.unread).toBe(0);
             expect(result!.notification).toBe(0);
         });
