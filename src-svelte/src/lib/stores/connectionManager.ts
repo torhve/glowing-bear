@@ -475,6 +475,11 @@ export async function fetchMoreLines(numLines: number = 0): Promise<any> {
     const buffer = getBuffer(bufferId);
     if (!buffer) throw new Error('No active buffer');
 
+    // Prevent redundant fetches when all lines have already been loaded
+    if (buffer.allLinesFetched) {
+        return;
+    }
+
     const bufferIdStr = '0x' + buffer.id;
     if (pendingFetchBuffers.has(bufferIdStr)) {
         return;
