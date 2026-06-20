@@ -13,6 +13,7 @@
   import Keyboard from '@lucide/svelte/icons/keyboard';
   import Download from '@lucide/svelte/icons/download';
   import MessageCircle from '@lucide/svelte/icons/message-circle';
+import Globe from '@lucide/svelte/icons/globe';
 import Eye from '@lucide/svelte/icons/eye';
 import EyeOff from '@lucide/svelte/icons/eye-off';
 import Lock from '@lucide/svelte/icons/lock';
@@ -415,6 +416,16 @@ import Key from '@lucide/svelte/icons/key';
           WeeChat 2.9+ is required. Set up an encrypted relay with /relay add tls.weechat 9001
         </div>
       </details>
+      {#if windowsTauri}
+        <details class="info-accordion bg-surface rounded border border-border" data-info-section="flags">
+          <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
+            <Globe size={14} />Flag emoji rendering on Windows
+          </summary>
+          <div class="info-accordion-content px-4 pb-3 text-sm text-text-secondary">
+            <p>Windows doesn't include a font that renders country flag emojis by default. To see flag emojis properly, install <a href="https://github.com/Chasmical/flag-emojis-for-windows" target="_blank" rel="noopener noreferrer" class="text-accent underline hover:no-underline">Flag Emojis for Windows</a>.</p>
+          </div>
+        </details>
+      {/if}
       <details class="info-accordion bg-surface rounded border border-border" data-info-section="usage">
         <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
           <Keyboard size={14} />Usage instructions
