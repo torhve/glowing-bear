@@ -17,7 +17,6 @@ import {
     parseRichText,
     removeBuffer,
     pendingBufferSwitch,
-    getLastLineCount,
     setSyncing,
     isSyncing
 } from '$lib/stores/models';
@@ -73,6 +72,10 @@ export function handleBufferInfo(message: ProtocolMessage) {
     // lastSeen per-line; instead calculate it once after sync completes.
     setSyncing(true);
 
+    // Track whether any buffer was auto-resumed during this loop.
+    // If so, skip the fallback (weechat core / first buffer) below.
+    let resumed = false;
+
     for (const bufferMsg of bufferInfos) {
         const bufferId = bufferMsg.pointers[0];
         if (!bufferId) continue;
@@ -102,12 +105,14 @@ export function handleBufferInfo(message: ProtocolMessage) {
             // Auto-resume
             if (shouldResume(buffer.id)) {
                 setActiveBuffer(buffer.id);
+                resumed = true;
                 console.debug('[handler]   auto-resumed to:', buffer.id);
             }
         }
     }
 
-    // If no buffer was auto-resumed, prefer weechat.core before falling back to first buffer
+    // If no buffer was auto-resumed, prefer weechat.core before falling back to first buffer.
+    if (resumed) return;
     let targetBufferId: string | null = null;
     const allBuffers = get(buffers);
     for (const id in allBuffers) {

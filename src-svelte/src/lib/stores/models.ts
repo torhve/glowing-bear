@@ -1,6 +1,7 @@
 import { writable, get, derived } from 'svelte/store';
 
 export const activeBufferChanged = writable(0);
+import { recordBuffer } from '$lib/stores/bufferResume';
 import type {
     BufferData,
     BufferLine,
@@ -321,10 +322,6 @@ export function getScrollPosition(bufferId: string): number | undefined {
     return get(bufferScrollPositions)[bufferId];
 }
 
-export function getLastLineCount(bufferId: string): number | undefined {
-    return get(bufferLineCounts)[bufferId];
-}
-
 export const currentBuffer = derived(
     [buffers, activeBufferId],
     ([$buffers, $activeBufferId]) => $buffers[$activeBufferId] || null
@@ -370,24 +367,20 @@ export function setActiveBuffer(bufferId: string): boolean {
 
     console.log('[setActiveBuffer] target:', buffer.shortName, '| lines:', buffer.lines.length, '| lastSeen:', buffer.lastSeen, '| localUnread:', buffer.localUnread, '| unread:', buffer.unread, '| notification:', buffer.notification, '| totalUnread:', totalUnread);
 
-    // Compute the effective lastSeen for this buffer on switch.
-    // Uses the saved line count from when we last left this buffer as the baseline,
-    // so that readmarker position is relative to what was actually visible at exit time,
-    // not the total accumulated line count (which may include lines added by other handlers).
-    const lastLineCount = getLastLineCount(bufferId);
-    const baselineLines = lastLineCount ?? buffer.lines.length;
+    // Compute effective unread count that avoids double-counting.
+    // handleBufferLineAdded increments both unread AND localUnread for
+    // inactive buffers with notify > 1, so totalUnread would be the union.
+    // Use weechatUnread (unread + notification) plus any localUnread excess.
+    const weechatUnread = (buffer.unread || 0) + (buffer.notification || 0);
+    const localUnread = (buffer.localUnread || 0);
+    const effectiveUnread = weechatUnread + Math.max(0, localUnread - weechatUnread);
 
+    // Recalculate lastSeen from effective unread whenever unread exists,
+    // to handle stale values set during sync before the hotlist was processed.
     let targetLastSeen = buffer.lastSeen;
-    if (targetLastSeen < 0 && totalUnread > 0 && buffer.lines.length > 0) {
-        targetLastSeen = Math.max(0, buffer.lines.length - totalUnread - 1);
+    if (buffer.lines.length > 0 && effectiveUnread > 0) {
+        targetLastSeen = Math.max(0, buffer.lines.length - effectiveUnread - 1);
     } else if (targetLastSeen >= 0) {
-        // If user already saw everything up to baseline (lastSeen at end of visible lines),
-        // don't subtract localUnread — those lines arrived after the read marker and shouldn't
-        // shift it backward. Only subtract if lastSeen is behind baseline (partial read).
-        if (buffer.localUnread > 0 && targetLastSeen < baselineLines - 1) {
-            targetLastSeen = Math.max(0, targetLastSeen - buffer.localUnread);
-        }
-        // Clamp to current line count in case lines were removed.
         targetLastSeen = Math.min(targetLastSeen, buffer.lines.length - 1);
     }
 
@@ -440,6 +433,8 @@ export function setActiveBuffer(bufferId: string): boolean {
     bufferLineCounts.update(counts => ({ ...counts, [bufferId]: savedLineCount }));
     // Remove target buffer from localUnreadBuffers tracking since localUnread is now cleared.
     localUnreadBuffers.update((s: Set<string>) => { const copy = new Set(s); copy.delete(bufferId); return copy; });
+    // Record the last-viewed buffer for reconnect auto-resume recovery.
+    recordBuffer(bufferId);
     return true;
 }
 
