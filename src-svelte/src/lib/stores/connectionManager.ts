@@ -21,6 +21,93 @@ let connectionData: [string, number, string, string, boolean, boolean] | null = 
 let wasClosingDuringConnect = false;
 let connecting = false;
 
+// Persist WebSocket across Vite HMR by saving/restoring on window (dev only).
+// Prevents "WebSocket not open" errors and query floods after hot reload.
+let hmrCooldownUntil = 0;
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+    const savedWs = (window as any).__gb_ws;
+    if (savedWs && savedWs.readyState === WebSocket.OPEN) {
+        ws = savedWs;
+        // Capture local reference for type narrowing in closures below.
+        const restoredWs = savedWs;
+        console.log('[connect] HMR: restored WebSocket from previous module');
+        restoredWs.onmessage = (event: MessageEvent) => {
+            if (event.data instanceof ArrayBuffer) {
+                onMessage(event.data);
+            }
+        };
+        // Re-attach onclose handler for the restored socket
+        restoredWs.onclose = (evt: CloseEvent) => {
+            Object.keys(callbacks).forEach(k => {
+                const id = parseInt(k, 10);
+                if (callbacks[id]) {
+                    callbacks[id].reject(new Error('WebSocket closed'));
+                }
+                delete callbacks[id];
+            });
+            connecting = false;
+            if (reconnectingTimer) {
+                clearTimeout(reconnectingTimer);
+                reconnectingTimer = null;
+            }
+            console.log('Disconnected from relay', evt.code, evt.reason);
+            if (hotlistInterval) {
+                clearInterval(hotlistInterval);
+                hotlistInterval = null;
+            }
+            setConnectionStatus('disconnected');
+            connected.set(false);
+
+            if (get(connectionState).userDisconnect) {
+                connectionData = null;
+            } else if (!get(settings).autoconnect) {
+                if (get(connectionState).wasEverConnected) {
+                    const connInfo = connectionData ? [...connectionData] as [string, number, string, string, boolean, boolean] : null;
+                    connectionData = null;
+                    if (connInfo) {
+                        const [host, port] = connInfo;
+                        addToast(
+                            `Disconnected from ${host}:${port}`,
+                            {
+                                type: 'warning',
+                                duration: 0,
+                                buttons: [{
+                                    text: 'Reconnect',
+                                    action: () => {
+                                        const latest = get(toastStore);
+                                        const lastToast = latest[latest.length - 1];
+                                        if (lastToast) removeToast(lastToast.id);
+                                        const [h, p, path, pw, tls, noComp] = connInfo!;
+                                        connect(h, p, path, pw, tls, noComp);
+                                    }
+                                }]
+                            }
+                        );
+                    }
+                } else {
+                    connectionData = null;
+                }
+            } else if (typeof document !== 'undefined' && !document.hasFocus()) {
+                // stay disconnected
+            } else if (!get(connectionState).wasEverConnected) {
+                // first connection failed — don't reconnect
+            } else if (evt.code === 1006 || evt.code === 1011) {
+                scheduleReconnect();
+            } else if (evt.code === 403 || evt.code === 401) {
+                setErrors({ passwordError: true });
+            } else {
+                scheduleReconnect();
+            }
+        };
+        restoredWs.onerror = (evt: Event) => {
+            console.error('Relay error:', evt);
+            setConnectionStatus('error');
+        };
+        hmrCooldownUntil = Date.now() + 500;
+        console.log('[connect] HMR cooldown active for 500ms');
+    }
+}
+
 export async function connect(host: string, port: number, path: string, password: string, tls: boolean, noCompression: boolean) {
     clearErrors();
 
@@ -44,6 +131,10 @@ export async function connect(host: string, port: number, path: string, password
         console.log('[connect] HMR reload detected: previous connection was OPEN');
     }
     if (ws) {
+        // Save WS to window before closing, so next HMR can restore it.
+        if (import.meta.env.DEV && typeof window !== 'undefined') {
+            (window as any).__gb_ws = ws;
+        }
         ws.close();
         ws = null;
     }
@@ -398,6 +489,10 @@ async function fetchConfValue(name: string) {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- async callback pattern with complex WeeChat protocol response
     function sendAsync(message: string): Promise<any> {
+    // Suppress queries during HMR cooldown to prevent cascading requests after hot reload.
+    if (Date.now() < hmrCooldownUntil) {
+        return Promise.reject(new Error('HMR cooldown active'));
+    }
     return new Promise((resolve, reject) => {
         if (!ws || ws.readyState !== WebSocket.OPEN) {
             reject(new Error('WebSocket not open'));
@@ -527,6 +622,10 @@ export function disconnect() {
     if (ws) {
         const quitMsg = Protocol.formatQuit();
         sendWs(quitMsg, 'quit');
+        // Save WS to window before closing, so next HMR can restore it.
+        if (import.meta.env.DEV && typeof window !== 'undefined') {
+            (window as any).__gb_ws = ws;
+        }
         ws.close();
         ws = null;
     }
@@ -554,6 +653,10 @@ export async function requestNicklist(bufferId: string) {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- async fetch returns protocol response
 export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: string): Promise<any> {
+    // Suppress during HMR cooldown to prevent cascading fetch requests after hot reload.
+    if (Date.now() < hmrCooldownUntil) {
+        return;
+    }
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         throw new Error('WebSocket not open');
     }
@@ -669,7 +772,14 @@ export function sendWeeChatCommand(command: string, bufferId?: string) {
     sendWs(msg, 'cmd:' + command.substring(0, 50));
 }
 
+// Deduplicate hotlist queries: prevent cascading requests during rapid buffer switches.
+let lastHotlistQueryTime = 0;
+
 export async function switchBuffer(bufferId: string): Promise<boolean> {
+    // Suppress during HMR cooldown to prevent cascading effect-triggered switches.
+    if (Date.now() < hmrCooldownUntil) {
+        return false;
+    }
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         return false;
     }
@@ -694,6 +804,11 @@ export async function switchBuffer(bufferId: string): Promise<boolean> {
     requestAnimationFrame(() => {
         sendWeeChatCommand('/buffer set hotlist -1', bufferId);
         sendWeeChatCommand('/input set_unread_current_buffer', bufferId);
+        // Deduplicate: skip hotlist query if one was sent recently (< 300ms apart).
+        // Prevents cascading queries during rapid buffer switches or HMR reloads.
+        const now = Date.now();
+        if (now - lastHotlistQueryTime < 300) return;
+        lastHotlistQueryTime = now;
         // Request authoritative current hotlist state from WeeChat to ensure
         // stale counts are cleared (e.g., after scroll-to-bottom).
         const hlMsg = Protocol.formatHdata({
