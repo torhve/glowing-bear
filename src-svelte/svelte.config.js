@@ -13,8 +13,10 @@ const config = {
 			strict: false
 		}),
 		alias: {
+			'$lib': 'src/lib',
+			'$lib/*': 'src/lib/*',
 			'$components': 'src/components',
-			'$lib/*': 'src/lib/*'
+			'$components/*': 'src/components/*',
 		}
 	}
 };

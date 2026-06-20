@@ -6,22 +6,35 @@ test.describe('Features', () => {
         page.on('pageerror', (error) => {
             if (error.message?.includes('effect_orphan')) return;
         });
+        // Clear saved settings and unregister service workers to avoid stale state bleed between test files
         await page.goto('http://localhost:8001/');
+        await page.evaluate(() => localStorage.removeItem('gb-settings'));
+        await page.evaluate(async () => {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            for (const reg of registrations) {
+                await reg.unregister();
+            }
+        });
+        await page.waitForTimeout(500);
+        await page.reload();
         await waitForAppReady(page);
     });
 
     test('should display all help panels on connection form', async ({ page }) => {
         const details = page.locator('details');
-        await expect(details).toHaveCount(5);
-        await expect(details.nth(0).locator('summary')).toContainText('Connection settings');
-        await expect(details.nth(1).locator('summary')).toContainText('Getting Started');
-        await expect(details.nth(2).locator('summary')).toContainText('Usage instructions');
-        await expect(details.nth(3).locator('summary')).toContainText('Install app');
-        await expect(details.nth(4).locator('summary')).toContainText('Get involved');
+        // 6 panels: About (open by default), Connection settings, Getting Started, Usage, Install app, Get involved
+        await expect(details).toHaveCount(6);
+        await expect(details.nth(0).locator('summary')).toContainText('About');
+        await expect(details.nth(1).locator('summary')).toContainText('Connection settings');
+        await expect(details.nth(2).locator('summary')).toContainText('Getting Started');
+        await expect(details.nth(3).locator('summary')).toContainText('Usage instructions');
+        await expect(details.nth(4).locator('summary')).toContainText('Install app');
+        await expect(details.nth(5).locator('summary')).toContainText('Get involved');
     });
 
     test('should toggle help panel content', async ({ page }) => {
-        const details = page.locator('details').first();
+        // Use the second details panel (Connection settings) which starts closed
+        const details = page.locator('details').nth(1);
         await details.locator('summary').click();
         await expect(details.locator('div')).toBeVisible();
         await details.locator('summary').click();
@@ -90,7 +103,7 @@ test.describe('Features', () => {
     });
 
     test('should have proper page structure', async ({ page }) => {
-        await expect(page.locator('div.min-h-screen')).toBeVisible();
+        await expect(page.locator('div.h-dvh')).toBeVisible();
         await expect(page.locator('div.w-full.max-w-lg')).toBeVisible();
         await expect(page.locator('form.bg-surface')).toBeVisible();
     });

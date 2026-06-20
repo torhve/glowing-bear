@@ -84,16 +84,46 @@ test('pinned buffers appear before unpinned in sorted list', async () => {
     // Pin the second buffer if available
     const pinButtons = page.getByTestId('pin-buffer');
     const count = await pinButtons.count();
+    let pinnedIdx = -1;
     if (count >= 2) {
         await pinButtons.nth(1).click({ force: true });
         await page.waitForTimeout(500);
+        pinnedIdx = 1;
+    } else if (count >= 1) {
+        await pinButtons.nth(0).click({ force: true });
+        await page.waitForTimeout(500);
+        pinnedIdx = 0;
     }
 
-    // Get all buffer names in order
+    if (pinnedIdx === -1) {
+        test.skip();
+        return;
+    }
+
+    // Get all buffer items and their pin button titles to determine pinned status
     const bufferItems = page.getByTestId('buffer-item');
     const bufferCount = await bufferItems.count();
-    expect(bufferCount).toBeGreaterThanOrEqual(1);
+    expect(bufferCount).toBeGreaterThanOrEqual(2);
 
-    const firstBufferText = await bufferItems.first().textContent();
-    expect(firstBufferText).toBeTruthy();
+    // Collect buffer names and whether each is pinned
+    const bufferData: { name: string; pinned: boolean }[] = [];
+    for (let i = 0; i < bufferCount; i++) {
+        const name = await bufferItems.nth(i).textContent();
+        // Check the pin button title on this specific buffer item
+        const pinBtn = bufferItems.nth(i).getByTestId('pin-buffer');
+        const title = await pinBtn.getAttribute('title');
+        bufferData.push({ name: name || '', pinned: title === 'Unpin buffer' });
+    }
+
+    // All pinned buffers should appear before all unpinned buffers
+    let foundUnpinned = false;
+    for (const buf of bufferData) {
+        if (buf.pinned && foundUnpinned) {
+            // A pinned buffer appeared after an unpinned one — failure
+            throw new Error(`Pinned buffer "${buf.name}" found after unpinned buffer`);
+        }
+        if (!buf.pinned) {
+            foundUnpinned = true;
+        }
+    }
 });

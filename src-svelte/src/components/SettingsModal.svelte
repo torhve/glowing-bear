@@ -18,6 +18,20 @@ import BaseDialog from '$components/BaseDialog.svelte';
 
   let notifPermissionStatus = $derived($settings.notificationPermission);
 
+  // Font size slider state synced with settings store
+  let fontSizePx = $state(14);
+
+  // Sync slider position from settings store
+  $effect(() => {
+    const fs = $settings.fontsize || '14px';
+    const m = /^\s*(\d+)\s*(?:px)?\s*$/.exec(fs);
+    if (m && m[1]) {
+      fontSizePx = Math.min(36, Math.max(6, parseInt(m[1], 10)));
+    } else {
+      fontSizePx = 14;
+    }
+  });
+
   function handleThemeChange(theme: string) {
     setTheme(theme as typeof $themeStore);
     updateSettings({ theme });
@@ -31,14 +45,6 @@ import BaseDialog from '$components/BaseDialog.svelte';
 
   const appVersion = '0.11.0';
 
-  const fontFamilies = [
-    'Inconsolata, Consolas, Monaco, Ubuntu Mono, monospace',
-    'Monaco, Menlo, Consolas, monospace',
-    'Courier New, monospace',
-    'Helvetica Neue, Arial, sans-serif',
-    'sans-serif'
-  ];
-
   function handleNotificationPermission() {
     requestNotificationPermission();
   }
@@ -47,7 +53,7 @@ import BaseDialog from '$components/BaseDialog.svelte';
     updateSettings({
       theme: 'dark',
       fontsize: '14px',
-      fontfamily: fontFamilies[0],
+      fontfamily: 'Inconsolata, Consolas, Monaco, Ubuntu Mono, monospace',
       customCSS: '',
       iToken: '',
       iAlb: '',
@@ -105,27 +111,42 @@ import BaseDialog from '$components/BaseDialog.svelte';
 
           <div>
             <label for="font-family" class="block text-sm text-text-secondary mb-1">Font Family</label>
-            <select
+            <input
               id="font-family"
+              data-testid="font-family-input"
+              type="text"
               value={$settings.fontfamily}
-              onchange={(e) => updateSettings({ fontfamily: e.currentTarget.value })}
+              oninput={(e: Event) => updateSettings({ fontfamily: (e.target as HTMLInputElement).value })}
+              placeholder="Inconsolata, Consolas, Monaco, monospace"
               class="w-full px-3 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent"
-            >
-              {#each fontFamilies as family (family)}
-                <option value={family}>{family.split(',')[0]}</option>
-              {/each}
-            </select>
+            />
           </div>
 
           <div>
              <label for="font-size" class="block text-sm text-text-secondary mb-1">Font Size</label>
-             <FormInput
-               id="font-size"
-               type="text"
-               value={$settings.fontsize}
-               oninput={(e: Event) => updateSettings({ fontsize: (e.target as HTMLInputElement).value })}
-               placeholder="14px"
-             />
+             <div class="flex items-center gap-2">
+               <FormInput
+                 id="font-size"
+                 data-testid="font-size-input"
+                 type="text"
+                 value={$settings.fontsize}
+                 oninput={(e: Event) => updateSettings({ fontsize: (e.target as HTMLInputElement).value })}
+                 placeholder="14px"
+                 extraClass="w-20"
+               />
+               <input
+                 id="font-size-slider"
+                 data-testid="font-size-slider"
+                 type="range"
+                 min={6}
+                 max={36}
+                 step={1}
+                 bind:value={fontSizePx}
+                 oninput={() => updateSettings({ fontsize: fontSizePx + 'px' })}
+                 class="flex-1 accent-accent cursor-pointer"
+               />
+               <span class="text-xs text-text-muted w-8 text-right">{fontSizePx}px</span>
+             </div>
            </div>
 
           <div>

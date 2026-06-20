@@ -54,8 +54,19 @@ test('shows multiple bot messages in order', async () => {
     await botSay('Message one');
     await botSay('Message two');
     await botSay('Message three');
-    const msgRow = page.locator('[data-testid="bufferline-row"] td.message').filter({ hasText: 'Message three' }).first();
-    await expect(msgRow).toBeVisible({ timeout: 10000 });
+
+    // Wait for all messages to render before checking order — prevents false negatives when
+    // relay delivery is slower than the test advances.
+    for (const msg of ['Message one', 'Message two', 'Message three']) {
+        const msgRow = page.locator('[data-testid="bufferline-row"] td.message').filter({ hasText: msg }).first();
+        await expect(msgRow).toBeVisible({ timeout: 10000 });
+    }
+
+    // Verify ordering: "Message one" should appear above "Message three"
+    const rows = page.locator('[data-testid="bufferline-row"]');
+    const oneIndex = await rows.filter({ hasText: 'Message one' }).first().evaluate(el => (el as HTMLTableRowElement).rowIndex);
+    const threeIndex = await rows.filter({ hasText: 'Message three' }).first().evaluate(el => (el as HTMLTableRowElement).rowIndex);
+    expect(oneIndex).toBeLessThan(threeIndex);
 });
 
 test('shows notices from bot', async () => {

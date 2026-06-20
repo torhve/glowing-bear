@@ -330,11 +330,13 @@ test.describe('Disconnect handling', () => {
             if (ws) ws.close(3000, 'test disconnect');
         });
 
-        // WebSocket should be closed after disconnect
-        wsReadyState = await page.evaluate(() => {
-            const ws = (window as any).__getWs?.();
-            return ws ? ws.readyState : null;
-        });
-        expect(wsReadyState).toBe(WebSocket.CLOSED);
+        // Poll until WebSocket reaches CLOSED state (may briefly be CLOSING)
+        await expect(async () => {
+            wsReadyState = await page.evaluate(() => {
+                const ws = (window as any).__getWs?.();
+                return ws ? ws.readyState : null;
+            });
+            expect(wsReadyState).toBe(WebSocket.CLOSED);
+        }).toPass({ timeout: 5000 });
     });
 });
