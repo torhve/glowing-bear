@@ -27,11 +27,11 @@ async function ensureTauriNotification(): Promise<void> {
     }
 }
 
+// Register listener for notification actions (mobile-only: interactive buttons)
 async function setupTauriNotificationListener(): Promise<void> {
-    if (!isTauri()) return;
+    if (!isTauri() || !tauriNotif) return;
     try {
-        const notif = await import('@tauri-apps/plugin-notification');
-        await notif.onAction((notification: { extra?: Record<string, unknown> }) => {
+        await tauriNotif.onAction((notification: { extra?: Record<string, unknown> }) => {
             const bufferId = notification.extra?.bufferId as string | undefined;
             if (bufferId) {
                 setActiveBuffer(bufferId);
@@ -233,9 +233,9 @@ export function playNotificationSound(): void {
 }
 
 /**
- * Initialize the notification system
+ * Initialize the notification system — async to ensure Tauri module loads before registering listeners
  */
-export function initNotifications(): void {
+export async function initNotifications(): Promise<void> {
     // Load persisted permission state from settings
     const s = get(settings);
     if (s.notificationPermission && s.notificationPermission !== 'default') {
@@ -244,8 +244,8 @@ export function initNotifications(): void {
 
     // Set up Tauri native notifications if running in Tauri
     if (isTauri()) {
-        ensureTauriNotification();
-        setupTauriNotificationListener();
+        await ensureTauriNotification();
+        await setupTauriNotificationListener();
     }
 
     initFavicon();

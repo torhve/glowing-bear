@@ -129,15 +129,15 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
             </div>
          {/if}
          {#each groupBufs as buffer (buffer.id)}
-                 <div
-                     role="button"
-                     tabindex="0"
-                     onclick={() => handleBufferClick(buffer.id)}
-                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleBufferClick(buffer.id); }}
-                     data-testid="buffer-item"
-                     {@attach tooltipAttachment(buffer)}
-                     class="group relative flex items-center px-2 py-1 cursor-pointer hover:bg-accent/10 {buffer.id === $activeBufferId ? 'border-l-[3px] border-l-accent bg-accent/20' : ''}"
-                   >
+                <div
+                    role="button"
+                    tabindex="0"
+                    onclick={() => handleBufferClick(buffer.id)}
+                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleBufferClick(buffer.id); }}
+                    data-testid="buffer-item"
+                    {@attach tooltipAttachment(buffer)}
+                    class="group relative flex items-center px-2 py-1 cursor-pointer hover:bg-accent/10 {buffer.id === $activeBufferId ? 'border-l-[3px] border-l-accent bg-accent/20' : ''}"
+                  >
                   {#if getBufferIcon(buffer)}
                     {@const Icon = getBufferIcon(buffer)}
                    <Icon size={12} class="buffer-icon text-text-muted flex-shrink-0" />

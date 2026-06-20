@@ -10,6 +10,7 @@ export default defineConfig({
     alias: {
       $lib: path.resolve('./src/lib'),
       $components: path.resolve('./src/components'),
+      '@tauri-apps/plugin-notification': path.resolve('./test/unit/mocks/tauri-plugin-notification.js'),
     },
   },
   test: {
