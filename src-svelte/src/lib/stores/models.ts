@@ -258,7 +258,7 @@ export const previousBufferId = writable<string>('');
 // Tracks scroll Y position per buffer for read marker restoration
 export const bufferScrollPositions = writable<Record<string, number>>({});
 
-// Tracks buffer line count at last visit (for accurate lastSeen calculation)
+// Tracks buffer line count at last visit.
 export const bufferLineCounts = writable<Record<string, number>>({});
 
 // Tracks which buffers have local-only unread messages (not reported by WeeChat).
@@ -285,10 +285,7 @@ export function setSyncing(value: boolean) {
         // This allows rapid-fire sync lines to keep us in sync mode.
         syncEndTimer = setTimeout(() => {
             syncing = false;
-            const cb = onSyncExit;
-            onSyncExit = null;
             syncEndTimer = null;
-            if (cb) cb();
         }, 200);
     }
 }
@@ -297,12 +294,6 @@ export function isSyncing(): boolean {
     return syncing;
 }
 
-// Called when sync mode exits — recalculates lastSeen for buffers
-// that have unread messages but haven't had lastSeen calculated yet.
-let onSyncExit: (() => void) | null = null;
-export function registerSyncExitCallback(cb: () => void) {
-    onSyncExit = cb;
-}
 
 export function saveScrollPosition(bufferId: string, scrollTop: number) {
     bufferScrollPositions.update(pos => ({ ...pos, [bufferId]: scrollTop }));
@@ -350,26 +341,19 @@ export function setActiveBuffer(bufferId: string): boolean {
     if (prevId && currentBuffers[prevId]) {
         const prev = currentBuffers[prevId];
         console.log('[buffer switch]', prev.shortName || prev.fullName, '→', buffer.shortName || buffer.fullName);
-        // Save line count when leaving this buffer (for lastSeen fallback on return).
         bufferLineCounts.update(counts => ({ ...counts, [prevId]: prev.lines.length }));
         previousBufferId.set(prevId);
     } else if (prevId) {
         console.log('[buffer switch]', '(none)', '→', buffer.shortName || buffer.fullName);
     }
 
-    // Capture target buffer's current line count as baseline for next visit.
-    // Saved AFTER computing targetLastSeen so we don't overwrite the exit-time baseline.
     const savedLineCount = buffer.lines.length;
 
-    // Save total unread count before clearing — includes both WeeChat-reported
-    // counts and locally-tracked real-time messages received while inactive.
-    const totalUnread = (buffer.unread || 0) + (buffer.notification || 0) + (buffer.localUnread || 0);
-
-    console.log('[setActiveBuffer] target:', buffer.shortName, '| lines:', buffer.lines.length, '| lastSeen:', buffer.lastSeen, '| localUnread:', buffer.localUnread, '| unread:', buffer.unread, '| notification:', buffer.notification, '| totalUnread:', totalUnread);
+    console.log('[setActiveBuffer] target:', buffer.shortName, '| lines:', buffer.lines.length, '| lastSeen:', buffer.lastSeen, '| localUnread:', buffer.localUnread, '| unread:', buffer.unread, '| notification:', buffer.notification);
 
     // Compute effective unread count that avoids double-counting.
     // handleBufferLineAdded increments both unread AND localUnread for
-    // inactive buffers with notify > 1, so totalUnread would be the union.
+    // inactive buffers with notify > 1, so totalUnread would overcount.
     // Use weechatUnread (unread + notification) plus any localUnread excess.
     const weechatUnread = (buffer.unread || 0) + (buffer.notification || 0);
     const localUnread = (buffer.localUnread || 0);
@@ -429,7 +413,6 @@ export function setActiveBuffer(bufferId: string): boolean {
     activeBufferId.set(bufferId);
     activeBufferChanged.update(n => n + 1);
     buffers.set(updatedBuffers);
-    // Save target buffer's line count as baseline for next time we leave and return.
     bufferLineCounts.update(counts => ({ ...counts, [bufferId]: savedLineCount }));
     // Remove target buffer from localUnreadBuffers tracking since localUnread is now cleared.
     localUnreadBuffers.update((s: Set<string>) => { const copy = new Set(s); copy.delete(bufferId); return copy; });
