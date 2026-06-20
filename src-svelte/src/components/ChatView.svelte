@@ -105,8 +105,9 @@
     if (!bufferChanged && !linesAdded) return;
 
     // Dedup guard: run synchronously to prevent cascading effect re-runs.
+    // Bypass when readmarker lookup previously failed, allowing retry.
     const scrollKey = `${currentBufferId}-${curLinesLength}`;
-    if (prevScrollKey === scrollKey) return;
+    if (prevScrollKey === scrollKey && readmarkerFailures === 0) return;
 
     // Update tracking state SYNCHRONOUSLY (not inside async IIFE) so that
     // when the effect re-runs from other reactive changes, the dedup guard catches it.

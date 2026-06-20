@@ -492,12 +492,12 @@ export async function requestNicklist(bufferId: string) {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- async fetch returns protocol response
-export async function fetchMoreLines(numLines: number = 0): Promise<any> {
+export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: string): Promise<any> {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         throw new Error('WebSocket not open');
     }
 
-    const bufferId = get(activeBufferId);
+    const bufferId = explicitBufferId ?? get(activeBufferId);
     const buffer = getBuffer(bufferId);
     if (!buffer) throw new Error('No active buffer');
 
@@ -551,25 +551,30 @@ export async function fetchMoreLines(numLines: number = 0): Promise<any> {
                 }
             }, 30000);
         });
+        // Re-read the buffer from the store after await. handleBufferLineAdded may have
+        // created a new store copy during the async wait, so our captured reference is stale.
+        const freshBuffer = getBuffer(bufferId);
+        if (!freshBuffer) return;
         // Process the fetched lines — clear old lines and refill (matching AngularJS flow).
         // Preserve readmarker position by subtracting the old line count from lastSeen
         // after handleLineInfo increments it per-line (including injected date-change lines).
-        const oldLength = buffer.lines.length;
-        buffer.lines = [];
-        buffer.requestedLines = 0;
+        const oldLength = freshBuffer.lines.length;
+        freshBuffer.lines = [];
+        freshBuffer.requestedLines = 0;
         handleLineInfo(message, true);
         // Correct the read marker for the lines that were counted twice (old + new).
-        buffer.lastSeen -= oldLength;
+        freshBuffer.lastSeen -= oldLength;
 
         // Determine if all lines are fetched
         const linesReceived = message.objects?.[0]?.content?.length ?? 0;
-        if (linesReceived < numLines && buffer) {
-            buffer.allLinesFetched = true;
+        if (linesReceived < numLines && freshBuffer) {
+            freshBuffer.allLinesFetched = true;
         }
     } catch (err) {
         console.warn('[fetchMoreLines] fetch failed, marking allLinesFetched:', err);
-        if (buffer) {
-            buffer.allLinesFetched = true;
+        const fallbackBuffer = getBuffer(bufferId);
+        if (fallbackBuffer) {
+            fallbackBuffer.allLinesFetched = true;
         }
     } finally {
         pendingFetchBuffers.delete(bufferIdStr);
@@ -613,8 +618,7 @@ export async function switchBuffer(bufferId: string): Promise<boolean> {
     const buffer = getBuffer(bufferId);
     if (buffer && buffer.lastSeen < 0 && buffer.requestedLines < 100) {
         try {
-            activeBufferId.set(bufferId);
-            await fetchMoreLines(100);
+            await fetchMoreLines(100, bufferId);
         } catch (err) {
             console.error('[setActiveBuffer] fetchMoreLines failed:', err);
             // Silently ignore fetch failures on buffer switch
