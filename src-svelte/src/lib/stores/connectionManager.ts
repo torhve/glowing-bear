@@ -67,7 +67,7 @@ export async function connect(host: string, port: number, path: string, password
 
                 // Handshake
                 const handshakeMsg = Protocol.formatHandshake({
-                    password_hash_algo: (isSecureContext && tls) ? 'pbkdf2+sha512' : 'plain',
+                    password_hash_algo: isSecureContext ? 'pbkdf2+sha512' : 'plain',
                     compression: noCompression ? 'off' : 'zlib'
                 });
 
