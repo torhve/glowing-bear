@@ -67,6 +67,7 @@ test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
     page = await browser.newPage();
+    await page.route('**/cdnjs.cloudflare.com/**', (route) => route.abort());
     await page.goto('http://localhost:8001/');
     await waitForAppReady(page);
     await clearSettings(page);
@@ -101,7 +102,6 @@ test('vertical swipe on chat area does not switch buffers', async () => {
     // Use existing #glowing-bear buffer
     await waitForBuffer(page, 'glowing-bear', 10000);
     await switchToBuffer(page, 'glowing-bear');
-    await page.waitForTimeout(500);
 
     const beforeBuffer = await getCurrentBufferName(page);
     expect(beforeBuffer).toBe('#glowing-bear');
@@ -119,7 +119,6 @@ test('vertical swipe on chat area does not switch buffers', async () => {
         width / 2,
         height * 0.8,
     );
-    await page.waitForTimeout(300);
 
     // Buffer should NOT have changed
     const afterBuffer = await getCurrentBufferName(page);
@@ -139,7 +138,6 @@ test('horizontal swipe right from left edge shows buffer list on mobile', async 
 
     // Swipe right from left edge on document-level (not element-targeted)
     await swipeOnDocument(page, 10, height / 2, width - 50, height / 2);
-    await page.waitForTimeout(300);
 
     // Buffer list should now be visible
     await expect(page.getByTestId('buffer-list')).toBeVisible({ timeout: 5000 });
@@ -152,7 +150,6 @@ test('horizontal swipe left from right edge opens nicklist on mobile', async () 
 
     // Ensure buffer list is shown so we start from a clean state
     await swipeOnDocument(page, 10, 334, 325, 334);
-    await page.waitForTimeout(300);
 
     const width = 375;
     const height = 667;
@@ -164,7 +161,6 @@ test('horizontal swipe left from right edge opens nicklist on mobile', async () 
 
     // Swipe left from right edge (start near right edge)
     await swipeOnDocument(page, width - 10, height / 2, 50, height / 2);
-    await page.waitForTimeout(300);
 
     // Nicklist overlay should now be on-screen (translate-x-0)
     await expect(overlay).toHaveClass(/translate-x-0/);

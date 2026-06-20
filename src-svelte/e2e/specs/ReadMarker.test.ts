@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, clearSettings, waitForAppReady } from '../helpers/connection';
+import { createConnectedPage } from '../fixtures/auth';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
 
@@ -8,14 +8,10 @@ let page: import('@playwright/test').Page;
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
-    page = await browser.newPage();
-    await page.goto('http://localhost:8001/');
-    await waitForAppReady(page);
-    await clearSettings(page);
+    page = await createConnectedPage(browser);
     page.on('pageerror', (error) => {
         if (error.message?.includes('effect_orphan')) return;
     });
-    await connectToWeechat(page);
 });
 
 test.afterAll(async () => {
@@ -62,21 +58,17 @@ test.describe('basic', () => {
         await chatContainer.evaluate((el) => {
             (el as HTMLElement).scrollTop = (el as HTMLElement).scrollHeight;
         });
-        await page.waitForTimeout(500);
     });
 
     test('readmarker appears when there are unread messages', async () => {
         // Switch to gbtest buffer so we're NOT on #glowing-bear when sending unread
         await switchToBuffer(page, 'gbtest');
-        await page.waitForTimeout(500);
 
         // Send a message to #glowing-bear while we're NOT on it (creates unread)
         await irc.sendMessage('#glowing-bear', 'readmarker test message ' + Date.now());
-        await page.waitForTimeout(2000);
 
         // Switch back to #glowing-bear — readmarker should appear
         await switchToBuffer(page, '#glowing-bear');
-        await page.waitForTimeout(1000);
 
         // Wait for readmarker to be visible
         const readmarker = page.getByTestId('readmarker');
@@ -106,15 +98,12 @@ test.describe('basic', () => {
     test('readmarker should appear when switching back to buffer with unread messages', async () => {
         // Switch to gbtest buffer so we're NOT on #glowing-bear when sending unread
         await switchToBuffer(page, 'gbtest');
-        await page.waitForTimeout(500);
 
         // Send a message to #glowing-bear while we're on PM - this creates unread
         await irc.sendMessage('#glowing-bear', 'readmarker test message ' + Date.now());
-        await page.waitForTimeout(2000);
 
         // Switch back to #glowing-bear - readmarker should appear
         await switchToBuffer(page, '#glowing-bear');
-        await page.waitForTimeout(1000);
 
         const readmarker = page.getByTestId('readmarker');
         await expect(readmarker).toBeVisible();
@@ -123,14 +112,11 @@ test.describe('basic', () => {
     test('new messages should appear below the readmarker', async () => {
         // Switch to gbtest buffer to create unread state for #glowing-bear
         await switchToBuffer(page, 'gbtest');
-        await page.waitForTimeout(500);
 
         // Send a message to #glowing-bear while away to create unread
         await irc.sendMessage('#glowing-bear', 'readmarker setup msg ' + Date.now());
-        await page.waitForTimeout(1500);
 
         await switchToBuffer(page, '#glowing-bear');
-        await page.waitForTimeout(500);
 
         const readmarker = page.getByTestId('readmarker');
         await expect(readmarker).toBeVisible();
@@ -143,7 +129,6 @@ test.describe('basic', () => {
         // Send a new message from bot - it should appear below the readmarker
         const uniqueMsg = 'message after readmarker ' + Date.now();
         await irc.sendMessage('#glowing-bear', uniqueMsg);
-        await page.waitForTimeout(2000);
 
         // Verify the new message actually appeared in the DOM
         const msgCell = page.locator('[data-testid="chat-messages"] td.message').filter({ hasText: uniqueMsg });
@@ -166,19 +151,15 @@ test.describe('basic', () => {
     test('scroll position should be preserved when switching back to buffer', async () => {
         // Send a message from bot while we're on #glowing-bear so it's displayed
         await irc.sendMessage('#glowing-bear', 'scroll test msg');
-        await page.waitForTimeout(1000);
 
         // Switch to gbtest buffer so we're NOT on #glowing-bear when sending unread
         await switchToBuffer(page, 'gbtest');
-        await page.waitForTimeout(500);
 
         // Send another message to #glowing-bear while we're on PM - this creates unread
         await irc.sendMessage('#glowing-bear', 'scroll test unread ' + Date.now());
-        await page.waitForTimeout(2000);
 
         // Switch back to #glowing-bear — should show readmarker (not bottom)
         await switchToBuffer(page, '#glowing-bear');
-        await page.waitForTimeout(800);
 
         // Wait for readmarker to be visible and unread lines below it
         const readmarker = page.getByTestId('readmarker');
@@ -223,7 +204,6 @@ test.describe('buffer switch', () => {
 
         // Switch to #glowing-bear and ensure we're at bottom (fully read)
         await switchToBuffer(page, '#glowing-bear');
-        await page.waitForTimeout(1000);
 
         // Verify we're at the bottom
         let state = await getReadmarkerState();
@@ -234,21 +214,17 @@ test.describe('buffer switch', () => {
         await irc.sendMessage('#glowing-bear', 'readmarker-switch-test msg-1');
         await irc.sendMessage('#glowing-bear', 'readmarker-switch-test msg-2');
         await irc.sendMessage('#glowing-bear', 'readmarker-switch-test msg-3');
-        await page.waitForTimeout(2000);
 
         // Switch away to gbtest buffer
         await switchToBuffer(page, 'gbtest');
-        await page.waitForTimeout(500);
 
         // Send messages to #glowing-bear while we're NOT on it (creates unread)
         await irc.sendMessage('#glowing-bear', 'readmarker-switch-test unread-msg-1');
         await irc.sendMessage('#glowing-bear', 'readmarker-switch-test unread-msg-2');
-        await page.waitForTimeout(2000);
 
         // Switch back to #glowing-bear — readmarker should appear at correct position
         await waitForBuffer(page, '#glowing-bear', 15000);
         await switchToBuffer(page, '#glowing-bear');
-        await page.waitForTimeout(1000);
 
         // Readmarker should be visible and unread lines below it
         const readmarker = page.getByTestId('readmarker');
@@ -293,21 +269,16 @@ test.describe('buffer switch', () => {
 
         // Switch to #glowing-bear and ensure we're at bottom
         await switchToBuffer(page, '#glowing-bear');
-        await page.waitForTimeout(1000);
 
         // Send messages while on this buffer (fully read)
         await irc.sendMessage('#glowing-bear', 'multi-switch-test msg-1');
-        await page.waitForTimeout(1000);
 
         // First cycle: switch away, create unread, switch back
         await waitForBuffer(page, 'gbtest', 10000);
         await switchToBuffer(page, 'gbtest');
-        await page.waitForTimeout(500);
         await irc.sendMessage('#glowing-bear', 'multi-switch-test unread-1');
-        await page.waitForTimeout(2000);
         await waitForBuffer(page, '#glowing-bear', 10000);
         await switchToBuffer(page, '#glowing-bear');
-        await page.waitForTimeout(1000);
 
         const readmarker = page.getByTestId('readmarker');
         await expect(readmarker).toBeVisible({ timeout: 5000 });
@@ -321,17 +292,13 @@ test.describe('buffer switch', () => {
         await chatContainer.evaluate((el) => {
             (el as HTMLElement).scrollTop = (el as HTMLElement).scrollHeight;
         });
-        await page.waitForTimeout(500);
 
         // Second cycle: switch away again, create more unread, switch back
         await waitForBuffer(page, 'gbtest', 10000);
         await switchToBuffer(page, 'gbtest');
-        await page.waitForTimeout(500);
         await irc.sendMessage('#glowing-bear', 'multi-switch-test unread-2');
-        await page.waitForTimeout(2000);
         await waitForBuffer(page, '#glowing-bear', 10000);
         await switchToBuffer(page, '#glowing-bear');
-        await page.waitForTimeout(1000);
 
         await expect(readmarker).toBeVisible({ timeout: 5000 });
 
@@ -358,26 +325,20 @@ test.describe('bot message', () => {
         // Then wait for #glowing-bear channel
         await waitForBuffer(page, '#glowing-bear', 15000);
         await switchToBuffer(page, '#glowing-bear');
-        await page.waitForTimeout(500);
     });
 
     test('readmarker appears on second-to-last line with 1 unread when switching to buffer after bot message', async () => {
         // Switch to gbtest buffer so we're NOT on #glowing-bear when message arrives
         await switchToBuffer(page, 'gbtest');
-        await page.waitForTimeout(500);
 
         // Send a new message to #glowing-bear while away (creates unread)
         const uniqueMsgId = Date.now();
         const response = await irc.sendMessage('#glowing-bear', `readmarker test ${uniqueMsgId}`);
         expect(response.ok).toBe(true);
 
-        // Wait for relay message to arrive
-        await page.waitForTimeout(2000);
-
         // Switch back to #glowing-bear — this should reveal the readmarker
         await waitForBuffer(page, '#glowing-bear', 15000);
         await switchToBuffer(page, '#glowing-bear');
-        await page.waitForTimeout(1000);
 
         const readmarker = page.getByTestId('readmarker');
         await expect(readmarker).toBeVisible({ timeout: 5000 });

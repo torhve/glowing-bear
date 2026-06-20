@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, clearSettings, setSettings, waitForAppReady } from '../helpers/connection';
+import { createConnectedPage } from '../fixtures/auth';
+import { setSettings } from '../helpers/connection';
 import { botSay } from '../helpers/messages';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
@@ -9,14 +10,10 @@ let page: import('@playwright/test').Page;
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
-    page = await browser.newPage();
-    await page.goto('http://localhost:8001/');
-    await waitForAppReady(page);
-    await clearSettings(page);
+    page = await createConnectedPage(browser);
     page.on('pageerror', (error) => {
         if (error.message?.includes('effect_orphan')) return;
     });
-    await connectToWeechat(page);
     await waitForBuffer(page, '#glowing-bear', 15000);
     await switchToBuffer(page, '#glowing-bear');
 });

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, clearSettings, waitForAppReady } from '../helpers/connection';
+import { createConnectedPage } from '../fixtures/auth';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 
 let page: import('@playwright/test').Page;
@@ -7,14 +7,10 @@ let page: import('@playwright/test').Page;
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
-    page = await browser.newPage();
-    await page.goto('http://localhost:8001/');
-    await waitForAppReady(page);
-    await clearSettings(page);
+    page = await createConnectedPage(browser);
     page.on('pageerror', (error) => {
         if (error.message?.includes('effect_orphan')) return;
     });
-    await connectToWeechat(page);
     await waitForBuffer(page, '#glowing-bear', 15000);
     await switchToBuffer(page, '#glowing-bear');
 });
@@ -49,16 +45,7 @@ test('chat container handles scroll event at top without throwing', async () => 
     const chatContainer = page.locator('[data-testid="chat-messages"]');
     await expect(chatContainer).toBeAttached();
 
-    // Simulate scrolling to top — handleScroll checks scrollTop < 50
-    await chatContainer.evaluate((el) => {
-        el.scrollTop = 0;
-        el.dispatchEvent(new Event('scroll', { bubbles: true }));
-    });
-
-    // Wait for any potential fetch attempt to resolve/reject
-    await page.waitForTimeout(2000);
-
-    // Verify no console errors from the scroll handler
+    // Set up error listener first, then trigger scroll
     const pageErrors: string[] = [];
     page.on('pageerror', (err) => {
         if (!err.message?.includes('effect_orphan')) {
@@ -66,6 +53,16 @@ test('chat container handles scroll event at top without throwing', async () => 
         }
     });
 
+    // Simulate scrolling to top — handleScroll checks scrollTop < 50
+    await chatContainer.evaluate((el) => {
+        el.scrollTop = 0;
+        el.dispatchEvent(new Event('scroll', { bubbles: true }));
+    });
+
+    // Wait for any potential fetch attempt to resolve/reject
+    await page.waitForTimeout(500);
+
+    // Verify no console errors from the scroll handler
     await expect(pageErrors).toHaveLength(0);
 });
 
@@ -80,7 +77,4 @@ test('repeated scroll events at top do not cause cascading errors', async () => 
         });
         await page.waitForTimeout(50);
     }
-
-    // Should complete without errors
-    await page.waitForTimeout(300);
 });

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, clearSettings, waitForAppReady, sendWeechatCommand } from '../helpers/connection';
+import { createConnectedPage } from '../fixtures/auth';
+import { sendWeechatCommand } from '../helpers/connection';
 import { botSay } from '../helpers/messages';
 import { switchToBuffer, switchToBufferMobile, waitForBuffer, waitForBufferMobile } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
@@ -9,15 +10,11 @@ let page: import('@playwright/test').Page;
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
-    page = await browser.newPage();
+    page = await createConnectedPage(browser);
     await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('http://localhost:8001/');
-    await waitForAppReady(page);
-    await clearSettings(page);
     page.on('pageerror', (error) => {
         if (error.message?.includes('effect_orphan')) return;
     });
-    await connectToWeechat(page);
 });
 
 test.afterAll(async () => {
@@ -48,7 +45,6 @@ test('hotlist visible on mobile after buffer selection', async () => {
     // Click a buffer from the list — visible before any selection on mobile
     await switchToBuffer(page, 'glowing-bear');
     await botSay('hotlist test message 2');
-    await page.waitForTimeout(500);
     // Buffer list hidden on mobile after selection
     await expect(page.getByTestId('buffer-list')).not.toBeVisible();
     // Title hidden, hotlist rendered in its place
@@ -86,7 +82,6 @@ test('clicking hotlist item switches buffer', async () => {
     await firstItem.click();
     await botSay('switch test message');
     await page.waitForTimeout(3000);
-    await page.waitForTimeout(500);
     const topicBar = page.getByTestId('topic-bar');
     await expect(topicBar).toBeVisible();
     const topicText = await topicBar.textContent();

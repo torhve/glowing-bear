@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, clearSettings, waitForAppReady } from '../helpers/connection';
+import { createConnectedPage } from '../fixtures/auth';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
 
@@ -8,10 +8,7 @@ let page: import('@playwright/test').Page;
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
-    page = await browser.newPage();
-    await page.goto('http://localhost:8001/');
-    await waitForAppReady(page);
-    await clearSettings(page);
+    page = await createConnectedPage(browser);
     page.on('pageerror', (error) => {
         if (error.message?.includes('effect_orphan')) return;
     });
@@ -21,7 +18,6 @@ test.beforeAll(async ({ browser }) => {
             console.log('SCROLL-DEBUG:', msg.text());
         }
     });
-    await connectToWeechat(page);
 });
 
 test.afterAll(async () => {
@@ -37,7 +33,7 @@ test.beforeEach(async () => {
     await chatContainer.evaluate((el) => {
         (el as HTMLElement).scrollTop = (el as HTMLElement).scrollHeight;
     });
-    await page.waitForTimeout(500);
+    await waitForScrollSettled(3000);
 });
 
 async function getChatScrollState() {
@@ -98,8 +94,6 @@ test('should scroll to bottom when switching to a buffer with many lines', async
     // Wait for scroll to settle at bottom
     await waitForScrollSettled(8000);
 
-    await page.waitForTimeout(300);
-
     const state = await getChatScrollState();
     expect(state).not.toBeNull();
     expect(state!.totalLines).toBeGreaterThanOrEqual(20);
@@ -116,7 +110,6 @@ test('should scroll to readmarker when switching to buffer with unread messages'
     // Switch away to gbtest buffer
     await waitForBuffer(page, 'gbtest', 10000);
     await switchToBuffer(page, 'gbtest');
-    await page.waitForTimeout(500);
 
     // Send messages to #glowing-bear while we're NOT on it (creates unread)
     await irc.sendMessage('#glowing-bear', 'scroll test message 1');
@@ -125,7 +118,7 @@ test('should scroll to readmarker when switching to buffer with unread messages'
 
     // Switch back to #glowing-bear — should scroll to readmarker, not bottom
     await switchToBuffer(page, '#glowing-bear');
-    await page.waitForTimeout(1000);
+    await waitForScrollSettled();
 
     const state = await getChatScrollState();
     expect(state).not.toBeNull();

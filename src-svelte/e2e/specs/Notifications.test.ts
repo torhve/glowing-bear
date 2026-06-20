@@ -19,6 +19,7 @@ test.beforeAll(async ({ browser }) => {
             }
         } as any;
     });
+    await page.route('**/cdnjs.cloudflare.com/**', (route) => route.abort());
     await page.goto('http://localhost:8001/');
     await waitForAppReady(page);
     await clearSettings(page);
@@ -41,12 +42,12 @@ test.beforeEach(async () => {
 
 async function openSettings() {
     await page.getByTestId('settings-button').click();
-    await page.waitForTimeout(300);
+    await expect(page.getByTestId('settings-modal')).toBeVisible();
 }
 
 async function closeSettings() {
     await page.getByTestId('settings-modal-close').click();
-    await page.waitForTimeout(300);
+    await expect(page.getByTestId('settings-modal')).not.toBeVisible();
 }
 
 test('notification settings section is visible in settings modal', async () => {
@@ -111,7 +112,6 @@ test('toggling favico badge setting persists', async () => {
 test('document title updates with unread count on highlight', async () => {
     // Switch to the main channel buffer
     await page.getByTestId('buffer-item').first().click();
-    await page.waitForTimeout(500);
 
     // Send a message that will trigger a notification (PM)
     await irc.sendPm('testuser', 'Highlight test message!');
@@ -143,7 +143,6 @@ test('sound plays when soundnotification is enabled', async () => {
     // Switch to channel buffer so PM triggers notification
     const firstItem = page.getByTestId('buffer-item').first();
     await firstItem.click();
-    await page.waitForTimeout(500);
 
     // Send a PM (triggers notify_private → playNotificationSound)
     await irc.sendPm('testuser', 'Sound test message!');
@@ -174,7 +173,6 @@ test('sound does NOT play when soundnotification is disabled', async () => {
     // Switch to channel buffer so PM triggers notification
     const firstItem = page.getByTestId('buffer-item').first();
     await firstItem.click();
-    await page.waitForTimeout(500);
 
     // Send a PM (should NOT trigger playNotificationSound because setting is off)
     await irc.sendPm('testuser', 'No sound test message!');
@@ -193,8 +191,8 @@ test('notification permission button exists and is clickable when default', asyn
 
     // Clicking should attempt to request permission (may be blocked in headless)
     await button.click();
-    // Just verify the click doesn't throw an error
-    await page.waitForTimeout(500);
+    // Verify the modal is still open (click didn't crash)
+    await expect(page.getByTestId('settings-modal')).toBeVisible();
     await closeSettings();
 });
 
@@ -247,7 +245,6 @@ test('creates a Web Notification with correct title and body on PM', async () =>
     // Switch to channel buffer so PM triggers notification
     const firstItem = page.getByTestId('buffer-item').first();
     await firstItem.click();
-    await page.waitForTimeout(500);
 
     // Send a PM
     await irc.sendPm('testuser', 'Web Notification API test');
@@ -270,7 +267,6 @@ test('Web Notification body is truncated to 200 characters', async () => {
 
     const firstItem = page.getByTestId('buffer-item').first();
     await firstItem.click();
-    await page.waitForTimeout(500);
 
     const longMsg = 'A'.repeat(500);
     await irc.sendPm('testuser', longMsg);
@@ -289,7 +285,6 @@ test('Web Notification includes buffer ID as tag', async () => {
 
     const firstItem = page.getByTestId('buffer-item').first();
     await firstItem.click();
-    await page.waitForTimeout(500);
 
     await irc.sendPm('testuser', 'Tag test message');
     await page.waitForTimeout(2000);
@@ -309,7 +304,6 @@ test('does NOT create Web Notification when permission is default', async () => 
 
     const firstItem = page.getByTestId('buffer-item').first();
     await firstItem.click();
-    await page.waitForTimeout(500);
 
     await irc.sendPm('testuser', 'Should not notify');
     await page.waitForTimeout(2000);
@@ -326,7 +320,6 @@ test('does NOT create Web Notification when permission is denied', async () => {
 
     const firstItem = page.getByTestId('buffer-item').first();
     await firstItem.click();
-    await page.waitForTimeout(500);
 
     await irc.sendPm('testuser', 'Should not notify');
     await page.waitForTimeout(2000);
@@ -343,7 +336,6 @@ test('multiple PMs create multiple Web Notifications', async () => {
 
     const firstItem = page.getByTestId('buffer-item').first();
     await firstItem.click();
-    await page.waitForTimeout(500);
 
     await irc.sendPm('testuser', 'First notification');
     await irc.sendPm('testuser', 'Second notification');
