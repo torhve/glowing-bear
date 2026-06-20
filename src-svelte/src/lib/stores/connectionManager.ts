@@ -382,9 +382,7 @@ function scheduleReconnect() {
         buffers.set({});
         servers.set({});
 
-        connect(host, port, path, password, tls, noCompression).catch(() => {
-            scheduleReconnect();
-        });
+        connect(host, port, path, password, tls, noCompression);
     }, delay);
 }
 
