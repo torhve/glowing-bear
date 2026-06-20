@@ -142,42 +142,44 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
                    {@const Icon = getBufferIcon(buffer)}
                   <Icon size={12} class="text-text-muted flex-shrink-0" />
                 {/if}
-                <span class="text-xs {getNotifyClass(buffer)} flex-1 min-w-0 ml-0.5 truncate">
-                    {getDisplayName(buffer)}
-                  </span>
-               <!-- Quickkeys inline, unread badge absolutely positioned right -->
-               <span class="flex items-center gap-1.5 flex-shrink-0 z-10">
-                        {#if getQuickKeyIndex(buffer) !== null}
-                          <span class="inline-flex items-center justify-center px-1 h-4 text-[10px] font-bold rounded-full bg-accent/90 text-white shadow-sm">
-                            {getQuickKeyIndex(buffer)}
-                          </span>
-                        {/if}
-                     </span>
-                   {#if buffer.notification > 0 || buffer.unread > 0}
-                      <span class="absolute right-1.5 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] font-semibold rounded-full shadow-sm {buffer.id === $activeBufferId ? (buffer.notification > 0 ? '!bg-red-600 !text-white' : '!bg-warning !text-black') : (buffer.notification > 0 ? 'bg-red-600/15 text-red-600' : 'bg-accent/15 text-accent')}">
-                         {buffer.notification > 0 ? buffer.notification : buffer.unread}
-                       </span>
-                      {/if}
-               <button
-                    onclick={(e) => { e.stopPropagation(); handleTogglePin(buffer.id); }}
-                     class="text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100 focus:opacity-100 mr-2.5"
-                    data-testid="pin-buffer"
-                   title="{buffer.pinned ? 'Unpin buffer' : 'Pin buffer'}"
-                 >
-                  {#if buffer.pinned}
-                    <PinOff size={14} />
-                  {:else}
-                    <Pin size={14} />
-                  {/if}
-                </button>
+                 <span class="text-xs {getNotifyClass(buffer)} flex-1 min-w-0 ml-0.5 truncate pl-7 pr-6">
+                     {getDisplayName(buffer)}
+                   </span>
+                <!-- Quickkeys inline -->
+                <span class="flex items-center gap-1.5 flex-shrink-0 z-10">
+                         {#if getQuickKeyIndex(buffer) !== null}
+                           <span class="inline-flex items-center justify-center px-1 h-4 text-[10px] font-bold rounded-full bg-accent/90 text-white shadow-sm">
+                             {getQuickKeyIndex(buffer)}
+                           </span>
+                         {/if}
+                      </span>
+                    {#if buffer.notification > 0 || buffer.unread > 0}
+                       <span class="absolute right-5 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] font-semibold rounded-full shadow-sm {buffer.id === $activeBufferId ? (buffer.notification > 0 ? '!bg-red-600 !text-white' : '!bg-warning !text-black') : (buffer.notification > 0 ? 'bg-red-600/15 text-red-600' : 'bg-accent/15 text-accent')}">
+                          {buffer.notification > 0 ? buffer.notification : buffer.unread}
+                        </span>
+                       {/if}
+                <!-- Pin button absolute left -->
                 <button
-                   onclick={(e) => { e.stopPropagation(); handleCloseBuffer(buffer.id); }}
-                    class="text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100 focus:opacity-100"
-                   class:opacity-100={buffer.id === $activeBufferId}
-                   data-testid="close-buffer"
-                 >
-                   <X size={14} />
+                     onclick={(e) => { e.stopPropagation(); handleTogglePin(buffer.id); }}
+                      class="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100 focus:opacity-100"
+                     data-testid="pin-buffer"
+                    title="{buffer.pinned ? 'Unpin buffer' : 'Pin buffer'}"
+                  >
+                   {#if buffer.pinned}
+                     <PinOff size={14} />
+                   {:else}
+                     <Pin size={14} />
+                   {/if}
                  </button>
+                <!-- Close button absolute right -->
+                 <button
+                    onclick={(e) => { e.stopPropagation(); handleCloseBuffer(buffer.id); }}
+                     class="absolute right-1 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100 focus:opacity-100"
+                    class:opacity-100={buffer.id === $activeBufferId}
+                    data-testid="close-buffer"
+                  >
+                    <X size={14} />
+                  </button>
             </div>
         {/each}
       </div>
