@@ -572,6 +572,7 @@ export function handleHotlistInfo(message: ProtocolMessage) {
         if (buf && id !== activeId) {
             buf.unread = 0;
             buf.notification = 0;
+            buf.localUnread = 0;
         }
     }
     // Reset all server unread totals before recalculating from hotlist entries.

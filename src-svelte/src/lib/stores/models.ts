@@ -380,10 +380,13 @@ export function setActiveBuffer(bufferId: string): boolean {
     let targetLastSeen = buffer.lastSeen;
     if (targetLastSeen < 0 && totalUnread > 0 && buffer.lines.length > 0) {
         targetLastSeen = Math.max(0, buffer.lines.length - totalUnread - 1);
-    } else if (targetLastSeen >= 0 && buffer.localUnread > 0) {
-        targetLastSeen = Math.max(0, baselineLines - 1 - buffer.localUnread);
     } else if (targetLastSeen >= 0) {
-        // No local unreads — lastSeen stays as-is (already accurate from hotlist or prior visit).
+        // If user already saw everything up to baseline (lastSeen at end of visible lines),
+        // don't subtract localUnread — those lines arrived after the read marker and shouldn't
+        // shift it backward. Only subtract if lastSeen is behind baseline (partial read).
+        if (buffer.localUnread > 0 && targetLastSeen < baselineLines - 1) {
+            targetLastSeen = Math.max(0, targetLastSeen - buffer.localUnread);
+        }
         // Clamp to current line count in case lines were removed.
         targetLastSeen = Math.min(targetLastSeen, buffer.lines.length - 1);
     }
