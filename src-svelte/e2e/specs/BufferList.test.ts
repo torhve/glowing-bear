@@ -76,10 +76,22 @@ test('should filter buffers when searching', async () => {
     await page.getByTestId('search-button').click();
     await page.waitForTimeout(200);
     const searchInput = page.getByPlaceholder('Search buffers...');
-    await searchInput.fill('weechat');
-    const items = page.getByTestId('buffer-item');
-    const count = await items.count();
-    expect(count).toBeGreaterThanOrEqual(0);
+    // Count all visible buffers before filtering
+    const allItemsBefore = page.getByTestId('buffer-item');
+    const countBefore = await allItemsBefore.count();
+    expect(countBefore).toBeGreaterThanOrEqual(1);
+    // Fill with a query that matches #glowing-bear
+    await searchInput.fill('#glowing-bear');
+    await page.waitForTimeout(300);
+    // Only matching buffers should be visible
+    const filteredItems = page.getByTestId('buffer-item');
+    const filteredCount = await filteredItems.count();
+    expect(filteredCount).toBeGreaterThanOrEqual(1);
+    // All visible items should contain the search query text
+    for (let i = 0; i < filteredCount; i++) {
+        const text = await filteredItems.nth(i).textContent();
+        expect(text?.toLowerCase()).toContain('#glowing-bear'.toLowerCase());
+    }
 });
 
 test('should close buffer search with Escape key', async () => {

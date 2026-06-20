@@ -48,10 +48,24 @@ test('should have nicklist search input', async () => {
 });
 
 test('should filter nicks when searching', async () => {
+    // Count all visible nick items before filtering
+    const allNicksBefore = page.getByTestId('nick-item');
+    const countBefore = await allNicksBefore.count();
+    // Use a common nick that likely exists (bot user 'gbbot' or similar)
     const searchInput = page.getByTestId('nicklist-search');
     await searchInput.clear();
-    await searchInput.fill('test');
-    await expect(page.getByTestId('nicklist-items')).toBeVisible({ timeout: 5000 });
+    // Search for a specific nick pattern — 'gb' matches 'gbbot' if present
+    await searchInput.fill('gb');
+    await page.waitForTimeout(300);
+    // Verify only matching nicks are visible
+    const filteredNicks = page.getByTestId('nick-item');
+    const filteredCount = await filteredNicks.count();
+    // Should have at least one result, and all should contain the search text
+    expect(filteredCount).toBeGreaterThanOrEqual(1);
+    for (let i = 0; i < filteredCount; i++) {
+        const text = await filteredNicks.nth(i).textContent();
+        expect(text?.toLowerCase()).toContain('gb');
+    }
 });
 
 test('should have nicklist items container', async () => {
@@ -111,6 +125,11 @@ test('should have display options in settings', async () => {
     await page.getByTestId('settings-button').click();
     await page.waitForTimeout(200);
     await expect(page.getByTestId('settings-modal')).toBeVisible();
+    // Verify specific display-related settings are present
+    await expect(page.getByText('Show nicklist')).toBeAttached();
+    await expect(page.getByText('Only show buffers with unread messages')).toBeAttached();
+    await expect(page.getByText('Group by server')).toBeAttached();
+    await expect(page.getByText('Enable quick keys')).toBeAttached();
     await page.getByTestId('settings-modal-close').click();
     await page.waitForTimeout(100);
 });

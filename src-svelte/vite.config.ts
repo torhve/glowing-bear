@@ -2,8 +2,8 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { SvelteKitPWA } from '@vite-pwa/sveltekit';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
-import path from 'path';
 
+// Aliases managed via svelte.config.js kit.alias (propagated to Vite by SvelteKit)
 export default defineConfig({
   plugins: [
     sveltekit(),
@@ -20,12 +20,6 @@ export default defineConfig({
       },
     }),
   ],
-  resolve: {
-    alias: {
-      $lib: path.resolve('./src/lib'),
-      $components: path.resolve('./src/components'),
-    },
-  },
   optimizeDeps: {
     exclude: ['@lucide/svelte'],
   },
@@ -40,5 +34,22 @@ export default defineConfig({
   },
   server: {
     port: 8001,
+    watch: {
+      ignored: [
+        '**/build/**',
+        '**/.svelte-kit/**',
+        '**/.opencode/**',
+        '**/.playwright-mcp/**',
+        '**/e2e/**',
+        '**/test/**',
+        '**/test-results/**',
+        '**/playwright-report/**',
+        '**/doc/**',
+        '**/plans/**',
+        '**/specs/**',
+        '**/library/**',
+        '**/coverage/**',
+      ],
+    },
   },
 });

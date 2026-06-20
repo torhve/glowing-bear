@@ -58,20 +58,21 @@ test('hotlist visible on mobile after buffer selection', async () => {
 
 // Bot sends messages to #glowing-bear while user views core.weechat → hotlist populates.
 test('hotlist shows buffers with unread messages', async () => {
-    // Bot sends messages to #glowing-bear (inactive buffer)
-    await botSay('hotlist test message 1');
-    await botSay('hotlist test message 2');
+    // Send PM to testuser which creates an inactive buffer (not #glowing-bear)
     await irc.sendPm('testuser', 'hotlist shows buffers with unread messages!');
-    await page.waitForTimeout(2000);
-    // Wait for hotlist sync interval
-    // why tho, buffer line added should show at once???
-    // Hotlist should show ggbbot with count
+
+    // Verify message rendered before checking hotlist — prevents false negatives when
+    // relay delivery is slower than the test advances. The hotlist sync interval fires every ~5s,
+    // so we wait for both DOM content and the sync cycle.
+    const msgRow = page.locator('[data-testid="bufferline-row"] td.message').first();
+    await expect(msgRow).toBeVisible({ timeout: 10000 });
+    await page.waitForTimeout(3000);
+
     const items = page.getByTestId('hotlist-buffer-item');
     const count = await items.count();
     expect(count).toBeGreaterThanOrEqual(1);
     const firstItem = items.first();
     await expect(firstItem).toContainText('gbbot');
-    // Count badge should show 2
     const countBadge = firstItem.getByTestId('hotlist-count');
     await expect(countBadge).toContainText(/\(\d+\)/);
 });

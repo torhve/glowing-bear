@@ -19,6 +19,7 @@ import Key from '@lucide/svelte/icons/key';
  import Monitor from '@lucide/svelte/icons/monitor';
   import List from '@lucide/svelte/icons/list';
   import Save from '@lucide/svelte/icons/save';
+  import Loader2 from '@lucide/svelte/icons/loader-2';
   import FormInput from './FormInput.svelte';
 
   let hostField = $state('');
@@ -330,10 +331,6 @@ import Key from '@lucide/svelte/icons/key';
         </div>
       {/if}
 
-        {#if $connectionState.status === 'connecting'}
-         <div data-testid="connecting-state" class="text-center text-accent">Connecting...</div>
-       {/if}
-
       <button
         data-testid="connect-button"
         type="submit"
@@ -341,12 +338,12 @@ import Key from '@lucide/svelte/icons/key';
         class="w-full px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded transition-colors"
       >
        {#if $connectionState.status === 'connecting'}
-          <Zap size={16} class="inline-block mr-1 animate-pulse" />
-          Connecting...
-        {:else}
-          <Zap size={16} class="inline-block mr-1" />
-          Connect
-        {/if}
+           <Loader2 size={16} class="inline-block mr-1 animate-spin" />
+           Connecting...
+         {:else}
+           <Zap size={16} class="inline-block mr-1" />
+           Connect
+         {/if}
       </button>
     </form>
 

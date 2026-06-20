@@ -32,6 +32,12 @@ test.beforeEach(async () => {
     page.on('pageerror', (error) => {
         if (error.message?.includes('effect_orphan')) return;
     });
+    // Clear stale readmarker from prior serial tests by scrolling to bottom
+    const chatContainer = page.locator('[data-testid="chat-messages"]');
+    await chatContainer.evaluate((el) => {
+        (el as HTMLElement).scrollTop = (el as HTMLElement).scrollHeight;
+    });
+    await page.waitForTimeout(500);
 });
 
 async function getChatScrollState() {
@@ -103,10 +109,12 @@ test('should scroll to bottom when switching to a buffer with many lines', async
 
 test('should scroll to readmarker when switching to buffer with unread messages', async () => {
     // First ensure we're on #glowing-bear and scrolled to bottom
+    await waitForBuffer(page, '#glowing-bear', 15000);
     await switchToBuffer(page, '#glowing-bear');
     await waitForScrollSettled();
 
     // Switch away to gbtest buffer
+    await waitForBuffer(page, 'gbtest', 10000);
     await switchToBuffer(page, 'gbtest');
     await page.waitForTimeout(500);
 
@@ -128,6 +136,7 @@ test('should scroll to readmarker when switching to buffer with unread messages'
 
 test('should scroll to bottom when switching to fresh buffer with no unread', async () => {
     // Switch to gbtest (core buffer — typically has fewer lines)
+    await waitForBuffer(page, 'gbtest', 10000);
     await switchToBuffer(page, 'gbtest');
     await waitForScrollSettled();
 
@@ -138,16 +147,15 @@ test('should scroll to bottom when switching to fresh buffer with no unread', as
     // Switch back — since we were away, this is a "switch" and should show readmarker
     // But if there are NO unread (lastSeen was already set), it should scroll to bottom
     // This tests the edge case where buffer was fully read before leaving
+    await waitForBuffer(page, '#glowing-bear', 15000);
     await switchToBuffer(page, '#glowing-bear');
     await waitForScrollSettled();
 
     const state = await getChatScrollState();
     expect(state).not.toBeNull();
 
-    // Either at bottom or at readmarker — both are valid behaviors
-    // The key assertion: the last message row should be visible in the DOM
-    const rows = page.locator('[data-testid="bufferline-row"]');
-    await expect(rows.last()).toBeVisible();
+    // Should be at or very near bottom (readmarker not expected since lastSeen already set)
+    expect(state!.scrollDiffFromBottom).toBeLessThanOrEqual(5);
 });
 
 test('debug logging captures scroll state for all buffer switches', async () => {
