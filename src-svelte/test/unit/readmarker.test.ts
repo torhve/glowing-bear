@@ -36,6 +36,16 @@ vi.mock('$lib/notifications', () => ({
     updateFavico: mockUpdateFavico,
 }));
 
+// Mock bufferResume store — models.ts now imports recordBuffer for auto-resume.
+vi.mock('$lib/stores/bufferResume', () => ({
+    lastBufferId: {
+        subscribe: (fn: (val: string) => void) => { fn(''); return () => {}; },
+        set: vi.fn(),
+    },
+    recordBuffer: vi.fn(),
+    shouldResume: vi.fn().mockReturnValue(false),
+}));
+
 const { handleBufferLineAdded, handleHotlistInfo } = await import('$lib/stores/handlers');
 
 // Helper to create a test buffer
@@ -117,6 +127,8 @@ describe('Readmarker behavior', () => {
         buffers.set({});
         servers.set({});
         activeBufferId.set('');
+        // Reset document.hidden to visible for focused test scenarios.
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
     });
 
     describe('handleBufferLineAdded', () => {
@@ -265,6 +277,8 @@ describe('Readmarker behavior', () => {
                 notification: 0,
                 active: false
             });
+            // Set requestedLines to match actual line count so pruning subtraction is consistent.
+            buf.requestedLines = 250;
             buffers.set({ '0x300': buf });
             servers.set({ 'irc.server': { id: '0x300', unread: 0 } });
 
@@ -275,8 +289,8 @@ describe('Readmarker behavior', () => {
             expect(result!.lines.length).toBe(210);
             // lastSeen adjusted: 200 - 40 = 160
             expect(result!.lastSeen).toBe(160);
-            // requestedLines reduced by same amount
-            expect(result!.requestedLines).toBe(0);
+            // requestedLines reduced by same amount: 250 - 40 = 210
+            expect(result!.requestedLines).toBe(210);
             // allLinesFetched reset to allow refetching pruned lines
             expect(result!.allLinesFetched).toBe(false);
         });
@@ -383,8 +397,6 @@ describe('Readmarker behavior', () => {
             servers.set({ 'irc.server': { id: '0x800', unread: 0 } });
             activeBufferId.set('0x800');
 
-            document.hasFocus = () => true;
-
             handleBufferLineAdded(createLineMessage('0x800', [], 1, 1, 3));
 
             const result = get(buffers)['0x800'];
@@ -397,7 +409,8 @@ describe('Readmarker behavior', () => {
             servers.set({ 'irc.server': { id: '0x900', unread: 0 } });
             activeBufferId.set('0x900');
 
-            document.hasFocus = () => false;
+            // The handler uses document.hidden (Page Visibility API) for focus detection, not hasFocus.
+            Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
 
             handleBufferLineAdded(createLineMessage('0x900', [], 1, 1, 3));
 
@@ -410,8 +423,6 @@ describe('Readmarker behavior', () => {
             buffers.set({ '0xA00': buf });
             servers.set({ 'irc.server': { id: '0xA00', unread: 0 } });
             activeBufferId.set('0xA00');
-
-            document.hasFocus = () => true;
 
             handleBufferLineAdded(createLineMessage('0xA00', [], 0, 1, 1));
 
