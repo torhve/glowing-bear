@@ -6,6 +6,9 @@ export interface ConnectionState {
     errors: ConnectionError;
     userDisconnect: boolean;
     wasEverConnected: boolean;
+    // Reconnect loop guard
+    reconnectAttempts: number;
+    lastReconnectAt: number;
 }
 
 interface ConnectionStats {
@@ -32,7 +35,9 @@ const initialState: ConnectionState = {
         serverUnreachable: false
     },
     userDisconnect: false,
-    wasEverConnected: false
+    wasEverConnected: false,
+    reconnectAttempts: 0,
+    lastReconnectAt: 0
 };
 
 const initialStats: ConnectionStats = {
@@ -70,7 +75,9 @@ export function disconnect() {
         status: 'disconnected',
         userDisconnect: true,
         wasEverConnected: false,
-        errors: { ...initialState.errors }
+        errors: { ...initialState.errors },
+        reconnectAttempts: 0,
+        lastReconnectAt: 0
     });
     connectionStats.set(initialStats);
 }
@@ -122,5 +129,27 @@ export function formatDuration(ms: number): string {
     if (hours < 24) return `${hours}h ${minutes % 60}m`;
     const days = Math.floor(hours / 24);
     return `${days}d ${hours % 24}h`;
+}
+
+// Reset reconnect attempt counter on successful connection
+export function resetReconnectAttempts() {
+    connectionState.update(current => ({ ...current, reconnectAttempts: 0, lastReconnectAt: 0 }));
+}
+
+// Set reconnect attempt count to a specific value (used by tests)
+export function setReconnectAttempts(attempts: number) {
+    connectionState.update(current => ({ ...current, reconnectAttempts: attempts, lastReconnectAt: Date.now() }));
+}
+
+// Increment reconnect attempt counter
+export function incrementReconnectAttempts(): number {
+    let attempts = 0;
+    connectionState.update(current => {
+        current.reconnectAttempts++;
+        current.lastReconnectAt = Date.now();
+        attempts = current.reconnectAttempts;
+        return { ...current };
+    });
+    return attempts;
 }
 

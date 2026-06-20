@@ -74,11 +74,11 @@ import BaseDialog from '$components/BaseDialog.svelte';
 </script>
 
 <BaseDialog id="settings-modal" labelledby="settings-title">
-  <div class="flex flex-col max-h-[85vh]">
-    <div class="px-6 py-4 border-b border-border flex items-center justify-between">
+  <div class="settings-modal-content flex flex-col max-h-[85vh]">
+    <div class="settings-header px-6 py-4 border-b border-border flex items-center justify-between">
       <h2 id="settings-title" class="text-lg font-bold text-white">Settings</h2>
       <div class="flex items-center space-x-2">
-        <span class="text-xs text-text-muted">Glowing Bear version {appVersion} · WeeChat {$weechatVersion.join('.')}</span>
+        <span class="settings-version text-xs text-text-muted">Glowing Bear version {appVersion} · WeeChat {$weechatVersion.join('.')}</span>
         <button
           type="button"
           data-testid="settings-modal-close"
@@ -90,9 +90,9 @@ import BaseDialog from '$components/BaseDialog.svelte';
       </div>
     </div>
 
-    <div class="flex-1 overflow-y-auto p-6 space-y-6">
-      <section>
-        <h3 class="text-sm font-bold text-text uppercase tracking-wide mb-3 flex items-center gap-2"><Palette size={14} />Appearance</h3>
+    <div class="settings-body flex-1 overflow-y-auto p-6 space-y-6">
+      <section class="settings-section" data-settings-section="appearance">
+        <h3 class="settings-section-header text-sm font-bold text-text uppercase tracking-wide mb-3 flex items-center gap-2"><Palette size={14} />Appearance</h3>
         <div class="space-y-3">
           <div>
             <label for="theme-selector" class="block text-sm text-text-secondary mb-1">Theme</label>
@@ -123,31 +123,40 @@ import BaseDialog from '$components/BaseDialog.svelte';
           </div>
 
           <div>
-             <label for="font-size" class="block text-sm text-text-secondary mb-1">Font Size</label>
-             <div class="flex items-center gap-2">
-               <FormInput
-                 id="font-size"
-                 data-testid="font-size-input"
-                 type="text"
-                 value={$settings.fontsize}
-                 oninput={(e: Event) => updateSettings({ fontsize: (e.target as HTMLInputElement).value })}
-                 placeholder="14px"
-                 extraClass="w-20"
-               />
-               <input
-                 id="font-size-slider"
-                 data-testid="font-size-slider"
-                 type="range"
-                 min={6}
-                 max={36}
-                 step={1}
-                 bind:value={fontSizePx}
-                 oninput={() => updateSettings({ fontsize: fontSizePx + 'px' })}
-                 class="flex-1 accent-accent cursor-pointer"
-               />
-               <span class="text-xs text-text-muted w-8 text-right">{fontSizePx}px</span>
-             </div>
-           </div>
+            <label for="font-size" class="block text-sm text-text-secondary mb-1">Font Size</label>
+            <div class="flex flex-col gap-1">
+              <div class="flex items-center gap-2">
+                <input
+                  id="font-size-slider"
+                  data-testid="font-size-slider"
+                  type="range"
+                  min={6}
+                  max={36}
+                  step={1}
+                  bind:value={fontSizePx}
+                  oninput={() => updateSettings({ fontsize: fontSizePx + 'px' })}
+                  class="flex-1 accent-accent cursor-pointer"
+                />
+                <span class="font-size-label text-xs text-text-muted w-8 text-right">{fontSizePx}px</span>
+              </div>
+              <FormInput
+                id="font-size"
+                data-testid="font-size-input"
+                type="text"
+                value={$settings.fontsize}
+                oninput={(e: Event) => {
+                  const val = (e.target as HTMLInputElement).value!;
+                  const m = val.match(/^(\d+)(?:px)?$/);
+                  if (m && m[1]) {
+                    fontSizePx = Math.min(36, Math.max(6, parseInt(m[1], 10)));
+                  }
+                  updateSettings({ fontsize: val });
+                }}
+                placeholder="14px"
+                extraClass="w-20"
+              />
+            </div>
+          </div>
 
           <div>
             <label for="custom-css" class="block text-sm text-text-secondary mb-1">Custom CSS</label>
@@ -164,106 +173,114 @@ import BaseDialog from '$components/BaseDialog.svelte';
         </div>
       </section>
 
-      <section>
-        <h3 class="text-sm font-bold text-text uppercase tracking-wide mb-3 flex items-center gap-2"><Monitor size={14} />Display</h3>
+      <section class="settings-section" data-settings-section="display">
+        <h3 class="settings-section-header text-sm font-bold text-text uppercase tracking-wide mb-3 flex items-center gap-2"><Monitor size={14} />Display</h3>
         <div class="space-y-2">
-          <label class="flex items-center justify-between py-2">
-            <span class="text-sm text-text">Show nicklist</span>
+          <label class="settings-option flex items-center justify-between py-2" data-settings-option="showNicklist">
+            <span class="settings-option-label text-sm text-text">Show nicklist</span>
             <input
               type="checkbox"
               checked={$settings.showNicklist}
               onchange={() => updateSettings({ showNicklist: !$settings.showNicklist })}
               class="w-4 h-4"
+              data-settings-checkbox="showNicklist"
             />
           </label>
 
-          <label class="flex items-center justify-between py-2">
-            <span class="text-sm text-text">Only show buffers with unread messages</span>
+          <label class="settings-option flex items-center justify-between py-2" data-settings-option="onlyUnread">
+            <span class="settings-option-label text-sm text-text">Only show buffers with unread messages</span>
             <input
               type="checkbox"
               checked={$settings.onlyUnread}
               onchange={() => updateSettings({ onlyUnread: !$settings.onlyUnread })}
               class="w-4 h-4"
+              data-settings-checkbox="onlyUnread"
             />
           </label>
 
-          <label class="flex items-center justify-between py-2">
-            <span class="text-sm text-text">Hide embedded content by default</span>
+          <label class="settings-option flex items-center justify-between py-2" data-settings-option="noembed">
+            <span class="settings-option-label text-sm text-text">Hide embedded content by default</span>
             <input
               type="checkbox"
               checked={$settings.noembed}
               onchange={() => updateSettings({ noembed: !$settings.noembed })}
               class="w-4 h-4"
+              data-settings-checkbox="noembed"
             />
           </label>
 
-          <label class="flex items-center justify-between py-2">
-            <span class="text-sm text-text">Hierarchical buffer view (group by server)</span>
+          <label class="settings-option flex items-center justify-between py-2" data-settings-option="orderbyserver">
+            <span class="settings-option-label text-sm text-text">Hierarchical buffer view (group by server)</span>
             <input
               type="checkbox"
               checked={$settings.orderbyserver}
               onchange={() => updateSettings({ orderbyserver: !$settings.orderbyserver })}
               class="w-4 h-4"
+              data-settings-checkbox="orderbyserver"
             />
           </label>
 
-        <label class="flex items-center justify-between py-2">
-            <span class="text-sm text-text">Enable readline keybindings (Ctrl+A/E/U/W/B/F)</span>
+        <label class="settings-option flex items-center justify-between py-2" data-settings-option="readlineBindings">
+            <span class="settings-option-label text-sm text-text">Enable readline keybindings (Ctrl+A/E/U/W/B/F)</span>
             <input
               type="checkbox"
               checked={$settings.readlineBindings}
               onchange={() => updateSettings({ readlineBindings: !$settings.readlineBindings })}
               class="w-4 h-4"
+              data-settings-checkbox="readlineBindings"
             />
           </label>
 
-          <label class="flex items-center justify-between py-2">
-            <span class="text-sm text-text">Use Alt+[0-9] to switch buffers</span>
+          <label class="settings-option flex items-center justify-between py-2" data-settings-option="enableQuickKeys">
+            <span class="settings-option-label text-sm text-text">Use Alt+[0-9] to switch buffers</span>
             <input
               type="checkbox"
               checked={$settings.enableQuickKeys}
               onchange={() => updateSettings({ enableQuickKeys: !$settings.enableQuickKeys })}
               class="w-4 h-4"
+              data-settings-checkbox="enableQuickKeys"
             />
           </label>
         </div>
       </section>
 
-      <section>
-        <h3 class="text-sm font-bold text-text uppercase tracking-wide mb-3 flex items-center gap-2"><Bell size={14} />Notifications</h3>
+      <section class="settings-section" data-settings-section="notifications">
+        <h3 class="settings-section-header text-sm font-bold text-text uppercase tracking-wide mb-3 flex items-center gap-2"><Bell size={14} />Notifications</h3>
         <div class="space-y-2">
-          <label class="flex items-center justify-between py-2">
-            <span class="text-sm text-text">Display unread count in favicon</span>
+          <label class="settings-option flex items-center justify-between py-2" data-settings-option="useFavico">
+            <span class="settings-option-label text-sm text-text">Display unread count in favicon</span>
             <input
               type="checkbox"
               checked={$settings.useFavico}
               onchange={() => updateSettings({ useFavico: !$settings.useFavico })}
               data-testid="favico-checkbox"
               class="w-4 h-4"
+              data-settings-checkbox="useFavico"
             />
           </label>
 
-          <label class="flex items-center justify-between py-2">
-            <span class="text-sm text-text">Play sound on notification</span>
+          <label class="settings-option flex items-center justify-between py-2" data-settings-option="soundnotification">
+            <span class="settings-option-label text-sm text-text">Play sound on notification</span>
             <input
               type="checkbox"
               checked={$settings.soundnotification}
               onchange={() => updateSettings({ soundnotification: !$settings.soundnotification })}
               data-testid="sound-checkbox"
               class="w-4 h-4"
+              data-settings-checkbox="soundnotification"
             />
           </label>
 
           {#if notifSupported}
-             {#if notifPermissionStatus === 'granted'}
-               <div class="flex items-center gap-2 py-1">
-                 <span class="text-xs text-green-400 font-medium">✓ Granted</span>
-               </div>
-             {:else if notifPermissionStatus === 'denied'}
-               <div class="space-y-1">
-                 <div class="flex items-center gap-2 py-1">
-                   <span class="text-xs text-red-400 font-medium">✕ Denied</span>
-                 </div>
+              {#if notifPermissionStatus === 'granted'}
+                <div class="notification-status granted flex items-center gap-2 py-1">
+                  <span class="text-xs text-green-400 font-medium">✓ Granted</span>
+                </div>
+              {:else if notifPermissionStatus === 'denied'}
+                <div class="notification-status denied space-y-1">
+                  <div class="flex items-center gap-2 py-1">
+                    <span class="text-xs text-red-400 font-medium">✕ Denied</span>
+                  </div>
                  <p class="text-xs text-text-secondary">Permission was denied. Please enable notifications in your browser settings.</p>
                </div>
              {:else}
@@ -281,16 +298,17 @@ import BaseDialog from '$components/BaseDialog.svelte';
         </div>
       </section>
 
-      <section>
-       <h3 class="text-sm font-bold text-text uppercase tracking-wide mb-3 flex items-center gap-2"><Sliders size={14} />Advanced</h3>
+      <section class="settings-section" data-settings-section="advanced">
+        <h3 class="settings-section-header text-sm font-bold text-text uppercase tracking-wide mb-3 flex items-center gap-2"><Sliders size={14} />Advanced</h3>
         <div class="space-y-2">
-          <label class="flex items-center justify-between py-2">
-            <span class="text-sm text-text">Enable LaTeX math rendering (KaTeX)</span>
+          <label class="settings-option flex items-center justify-between py-2" data-settings-option="enableMathjax">
+            <span class="settings-option-label text-sm text-text">Enable LaTeX math rendering (KaTeX)</span>
             <input
               type="checkbox"
               checked={$settings.enableMathjax}
               onchange={() => updateSettings({ enableMathjax: !$settings.enableMathjax })}
               class="w-4 h-4"
+              data-settings-checkbox="enableMathjax"
             />
           </label>
 
@@ -318,27 +336,29 @@ import BaseDialog from '$components/BaseDialog.svelte';
         </div>
       </section>
 
-      <section>
-        <h3 class="text-sm font-bold text-text uppercase tracking-wide mb-3 flex items-center gap-2"><Plug size={14} />Connection</h3>
+      <section class="settings-section" data-settings-section="connection">
+        <h3 class="settings-section-header text-sm font-bold text-text uppercase tracking-wide mb-3 flex items-center gap-2"><Plug size={14} />Connection</h3>
         <div class="space-y-2">
-          <label class="flex items-center justify-between py-2">
-            <span class="text-sm text-text">Save password in browser</span>
+          <label class="settings-option flex items-center justify-between py-2" data-settings-option="savepassword">
+            <span class="settings-option-label text-sm text-text">Save password in browser</span>
             <input
               type="checkbox"
               checked={$settings.savepassword}
               onchange={() => updateSettings({ savepassword: !$settings.savepassword })}
               class="w-4 h-4"
+              data-settings-checkbox="savepassword"
             />
           </label>
 
           {#if $settings.savepassword}
-            <label class="flex items-center justify-between py-2">
-              <span class="text-sm text-text">Automatically connect</span>
+            <label class="settings-option flex items-center justify-between py-2" data-settings-option="autoconnect">
+              <span class="settings-option-label text-sm text-text">Automatically connect</span>
               <input
                 type="checkbox"
                 checked={$settings.autoconnect}
                 onchange={() => updateSettings({ autoconnect: !$settings.autoconnect })}
                 class="w-4 h-4"
+                data-settings-checkbox="autoconnect"
               />
             </label>
           {/if}
@@ -346,8 +366,9 @@ import BaseDialog from '$components/BaseDialog.svelte';
       </section>
     </div>
 
-    <div class="px-6 py-4 border-t border-border flex items-center justify-between">
+    <div class="settings-footer px-6 py-4 border-t border-border flex items-center justify-between">
       <button
+        data-testid="reset-settings-button"
         type="button"
         onclick={resetSettings}
         class="px-3 py-1.5 text-sm text-danger hover:text-danger hover:bg-surface-raised rounded transition-colors"
@@ -356,6 +377,7 @@ import BaseDialog from '$components/BaseDialog.svelte';
         Reset to Defaults
       </button>
       <button
+        data-testid="done-settings-button"
         type="button"
         popovertarget="settings-modal"
         popovertargetaction="hide"

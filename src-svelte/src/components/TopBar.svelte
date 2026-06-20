@@ -35,13 +35,13 @@
 </script>
 
 <div data-testid="top-bar" style="padding-top: env(safe-area-inset-top, 0px);">
-  <div class="h-10 bg-surface-raised border-b border-border flex items-center px-2 space-x-2" data-tauri-drag-region>
+  <div class="top-bar-inner h-10 bg-surface-raised border-b border-border flex items-center px-2 space-x-2" data-tauri-drag-region>
     <div class="flex items-center gap-1 flex-1 min-w-0" data-tauri-drag-region>
-      <img src="/glowing-bear.svg" alt="logo" class="w-5 h-5 flex-shrink-0" />
+      <img src="/glowing-bear.svg" alt="logo" class="app-logo w-5 h-5 flex-shrink-0" />
       {#if bufferListVisible}
         <span data-testid="app-title" class="text-sm font-bold text-text">Glowing Bear</span>
         {#if $weechatVersion.length > 0}
-          <span class="text-xs text-text-muted">| WeeChat {$weechatVersion.join('.')}</span>
+          <span class="weechat-version text-xs text-text-muted">| WeeChat {$weechatVersion.join('.')}</span>
         {/if}
       {:else}
         <BufferHotlist onBufferSelect={onBufferSelect} />
@@ -84,7 +84,7 @@
           id="connection-stats-popover"
           class="absolute right-[50px] top-[calc(100%+6px)] z-50 min-w-[180px] bg-surface-raised border border-border rounded-lg shadow-xl p-3 text-xs opacity-0 transition-opacity duration-150 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto"
         >
-          <div class="absolute -top-1.5 right-4 w-3 h-3 bg-surface-raised border-r border-t border-border rotate-45"></div>
+          <div class="popover-arrow absolute -top-1.5 right-4 w-3 h-3 bg-surface-raised border-r border-t border-border rotate-45"></div>
           {#if $connectionStats.lastMessageAt > 0}
             <div class="flex items-center gap-2 text-text-secondary mb-2">
               <MessageSquare size={14} />
@@ -114,17 +114,18 @@
         </div>
         <button
           data-tauri-drag-region="false"
+          data-testid="connection-status-button"
           popovertarget="connection-stats-popover"
-          class="flex items-center space-x-1 px-2 py-1 rounded text-xs hover:text-white hover:bg-surface-raised"
+          class="connection-status-btn flex items-center space-x-1 px-2 py-1 rounded text-xs hover:text-white hover:bg-surface-raised"
           type="button"
         >
-          <div class="w-2 h-2 rounded-full {
+          <div class="connection-dot w-2 h-2 rounded-full {
             $connectionState.status === 'connected' ? 'bg-success' :
             $connectionState.status === 'connecting' || $connectionState.status === 'reconnecting' ? 'bg-warning animate-pulse' :
             $connectionState.status === 'error' ? 'bg-danger' :
             'bg-text-muted'
           }"></div>
-          <span class="text-text-secondary hidden sm:inline">
+          <span class="connection-status-text text-text-secondary hidden sm:inline">
             {$connectionState.status === 'connected' ? '' :
              $connectionState.status === 'connecting' ? 'Connecting...' :
              $connectionState.status === 'reconnecting' ? 'Reconnecting...' :

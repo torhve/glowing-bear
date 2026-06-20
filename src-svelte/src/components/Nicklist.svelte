@@ -58,8 +58,8 @@
 
 {#if showNicklist && hasNicklist}
 <div class="w-52 sm:w-28 lg:w-30 bg-surface border-l border-border flex flex-col overflow-hidden" data-testid="nicklist">
-  <div class="h-10 bg-surface-raised border-b border-border flex items-center justify-between px-3">
-    <span class="flex items-center gap-1.5"><Users size={14} />Nicklist</span>
+  <div class="nicklist-header h-10 bg-surface-raised border-b border-border flex items-center justify-between px-3">
+    <span class="nicklist-title flex items-center gap-1.5"><Users size={14} />Nicklist</span>
     {#if onClose}
       <button
         onclick={onClose}
@@ -72,9 +72,9 @@
     {/if}
   </div>
 
-  <div class="px-2 py-1 border-b border-border">
+  <div class="nicklist-search-area px-2 py-1 border-b border-border">
     <div class="relative">
-      <Search size={14} class="absolute left-2 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+      <Search size={14} class="nicklist-search-icon absolute left-2 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
       <FormInput
         value={searchQuery}
         oninput={(e: Event) => { searchQuery = (e.target as HTMLInputElement).value; }}
@@ -91,11 +91,11 @@
   <div class="flex-1 overflow-y-auto" data-testid="nicklist-items">
     {#each filteredNickGroups as [groupName, group], gi (gi)}
         {#if groupName !== 'root'}
-      <div class="border-b border-border">
+      <div class="nick-group border-b border-border">
         {#each group.nicks as nick (nick.name)}
           <div
             data-testid="nick-item"
-            class="px-3 py-0.5 flex items-center hover:bg-surface-raised"
+            class="nick-item px-3 py-0.5 flex items-center hover:bg-surface-raised"
             onclick={() => {
               if (DEBUG_NICKLIST) console.log('[nicklist] clicked', nick.name);
               pendingBufferSwitch.set(nick.name);
@@ -110,10 +110,10 @@
             tabindex="0"
             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); insertNickIntoInput(nick.name); } }}
           >
-            <span class="text-xs {getPrefixClass(getPrefix(nick.prefix))} mr-1">
+            <span class="nick-prefix text-xs {getPrefixClass(getPrefix(nick.prefix))} mr-1">
               {getPrefix(nick.prefix)}
             </span>
-            <span class="text-sm truncate {nick.nameClasses.join(' ')}">
+            <span class="nick-name text-sm truncate {nick.nameClasses.join(' ')}">
               {nick.name}
             </span>
           </div>
@@ -125,8 +125,8 @@
 </div>
 {:else if showNicklist && !hasNicklist && onClose}
 <div class="w-52 sm:w-28 lg:w-30 bg-surface border-l border-border flex flex-col overflow-hidden" data-testid="nicklist">
-  <div class="h-10 bg-surface-raised border-b border-border flex items-center justify-between px-3">
-    <span class="flex items-center gap-1.5"><Users size={14} />Nicklist</span>
+  <div class="nicklist-header h-10 bg-surface-raised border-b border-border flex items-center justify-between px-3">
+    <span class="nicklist-title flex items-center gap-1.5"><Users size={14} />Nicklist</span>
     {#if onClose}
       <button
         onclick={onClose}

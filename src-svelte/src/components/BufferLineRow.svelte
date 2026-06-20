@@ -40,6 +40,7 @@
 
   const urlRegex = /(?:(?:https?|ftp):\/\/|www\.|ftp\.)\S*[^\s.;,(){}<>[\]]/gi;
 
+  // Extract embeddable URLs from message text and build plugin metadata for each.
   function buildMetadata(): PluginMetadata[] {
     if (!message.text) {
       return [];
@@ -71,8 +72,10 @@
         }
       }
 
-      if (name && get(settings).debugBuildMetadata) {
-        console.log(`[buildMetadata] url="${url}" name="${name}" content="${content}" nsfw=${/nsfw/i.test(message.text)}`);
+      if (name) {
+        if (get(settings).debugBuildMetadata) {
+          console.log(`[buildMetadata] url="${url}" name="${name}" content="${content}" nsfw=${/nsfw/i.test(message.text)}`);
+        }
         result.push({
           content,
           nsfw: /nsfw/i.test(message.text),
@@ -129,7 +132,7 @@
               <a href={token.value} target="_blank" rel="noopener noreferrer" class="irc-link">{token.value}</a>
             {:else if token.type === 'code'}
               <span class="hidden-bracket">{token.delimiter}</span>
-              <code>{token.value}</code>
+              <code class="irc-code">{token.value}</code>
               <span class="hidden-bracket">{token.delimiter}</span>
             {:else}
               {token.value}
@@ -170,7 +173,7 @@
                 <Minus class={(part.classes || []).join(' ')} width={12} height={12} />
               {/if}
             {:else}
-              <span class="{(part.classes || []).join(' ')}">{part.text}</span>
+              <span class="prefix-part {(part.classes || []).join(' ')}">{part.text}</span>
             {/if}
           {/each}
           {#if message.showHiddenBrackets}<span class="hidden-bracket">{'>'}</span>{/if}
@@ -186,15 +189,15 @@
       {/if}
 
       <!-- Message content -->
-      <span dir="auto" class="whitespace-pre-wrap break-words">
+      <span dir="auto" class="message-content whitespace-pre-wrap break-words">
         {#each tokenGroups as group, gi (gi)}
-          <span class="{group.classes}">
+          <span class="token-group {group.classes}">
             {#each group.tokens as token, ti (ti)}
               {#if token.type === 'link'}
                 <a href={token.value} target="_blank" rel="noopener noreferrer" class="irc-link">{token.value}</a>
               {:else if token.type === 'code'}
                 <span class="hidden-bracket">{token.delimiter}</span>
-                <code>{token.value}</code>
+                <code class="irc-code">{token.value}</code>
                 <span class="hidden-bracket">{token.delimiter}</span>
               {:else}
                 {token.value}
@@ -210,7 +213,7 @@
 <style>
   .bufferline {
     line-height: 1;
-    padding: 2px 0;
+    padding: 2px 0 1px 0;
   }
 
   .bufferline.highlight {
@@ -219,7 +222,7 @@
 
   .time {
     text-align: right;
-    padding: 0 2px 0 4px;
+    padding: 0 2px 0 6px;
     vertical-align: top;
   }
 
@@ -241,6 +244,7 @@
 
     .time {
       margin-right: 2px;
+      padding-left: 4px;
     }
 
     .prefix {
@@ -250,6 +254,7 @@
       overflow: visible;
       text-overflow: clip;
       font-family: inherit;
+      padding: 0 3px 0 1px;
     }
 
     .prefix .compact-prefix {
@@ -260,7 +265,7 @@
       flex: 1;
       min-width: 0;
       flex-wrap: wrap;
-      padding-left: 2px;
+      padding-left: 3px;
     }
   }
 
@@ -279,7 +284,7 @@
 
   .prefix {
     max-width: 120px;
-    padding: 0 3px 0 1px;
+    padding: 0 4px 0 2px;
     vertical-align: top;
     white-space: nowrap;
     text-align: right;
@@ -305,7 +310,7 @@
   }
 
   .message {
-    padding: 1px 2px 0 2px;
+    padding: 1px 2px 1px 4px;
     vertical-align: top;
     white-space: preserve-breaks;
     word-break: break-word;
@@ -313,6 +318,13 @@
 
   .irc-link {
     color: #3b82f6;
+  }
+
+  .irc-code {
+    font-family: var(--font-mono, monospace);
+    background: var(--gb-inline-code-bg, rgba(255, 255, 255, 0.1));
+    padding: 0 2px;
+    border-radius: 2px;
   }
 
 </style>
