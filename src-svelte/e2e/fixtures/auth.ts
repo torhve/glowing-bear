@@ -6,7 +6,7 @@ import { connectToWeechat, clearSettings, waitForAppReady } from '../helpers/con
 export async function createConnectedPage(browser: Browser): Promise<Page> {
     const page = await browser.newPage();
     await page.route('**/cdnjs.cloudflare.com/**', route => route.abort());
-    await page.goto('/');
+    await page.goto('http://localhost:8001/');
     await waitForAppReady(page);
     await clearSettings(page);
     await connectToWeechat(page);

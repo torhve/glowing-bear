@@ -153,7 +153,7 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
                           {/if}
                      {#if buffer.notification > 0 || buffer.unread > 0}
                         <span class="buffer-notification-badge px-1.5 py-0.5 text-[10px] font-semibold rounded-full shadow-sm {buffer.id === $activeBufferId ? (buffer.notification > 0 ? '!bg-red-600 !text-white' : '!bg-warning !text-black') : (buffer.notification > 0 ? 'bg-red-600/15 text-red-600' : 'bg-accent/15 text-accent')}">
-                           {buffer.notification > 0 ? buffer.notification : buffer.unread}
+                           {buffer.notification + buffer.unread}
                          </span>
                        {/if}
                 <button

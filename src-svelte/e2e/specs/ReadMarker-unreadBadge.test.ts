@@ -4,21 +4,38 @@ import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
 
 let page: import('@playwright/test').Page;
+const consoleLogs: string[] = [];
 
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
     page = await createConnectedPage(browser);
+    page.on('console', msg => {
+        const text = `[${msg.type()}] ${msg.text()}`;
+        consoleLogs.push(text);
+    });
     page.on('pageerror', (error) => {
         if (error.message?.includes('effect_orphan')) return;
+        consoleLogs.push(`[ERROR] ${error.message}`);
     });
 });
 
 test.afterAll(async () => {
+    console.log('\n\n========== CONSOLE LOG SUMMARY ==========');
+    console.log('Total console messages:', consoleLogs.length);
+    const relevant = consoleLogs.filter(l =>
+        l.includes('[setActiveBuffer]') ||
+        l.includes('[buffer switch]') ||
+        l.includes('unread=') ||
+        l.includes('localUnread')
+    );
+    console.log(`\nRelevant protocol/model logs (${relevant.length}):`);
+    relevant.forEach(l => console.log(l));
     await page.close();
 });
 
 test.beforeEach(async () => {
+    consoleLogs.length = 0;
     page.on('pageerror', (error) => {
         if (error.message?.includes('effect_orphan')) return;
     });
@@ -39,10 +56,28 @@ test('readmarker appears when switching back after receiving messages elsewhere'
     // Bot sends messages to #glowing-bear while we're on another buffer
     await irc.sendMessage('#glowing-bear', 'unread-badge-test msg-1-' + Date.now());
     await irc.sendMessage('#glowing-bear', 'unread-badge-test msg-2-' + Date.now());
+    await irc.sendMessage('#glowing-bear', 'testuser: and a highlight for good measure' + Date.now());
+
+    // Wait for messages to be processed and console logs to appear
+    await page.waitForTimeout(2000);
+
+    // Verify console logged unread counts before switch
+    const preSwitchLogs = consoleLogs.filter(l => l.includes('#glowing-bear'));
+    expect(preSwitchLogs.length).toBeGreaterThan(0);
 
     // Switch back to #glowing-bear — readmarker should appear
     await waitForBuffer(page, '#glowing-bear', 15000);
     await switchToBuffer(page, '#glowing-bear');
+
+    // Wait for setActiveBuffer console log
+    await page.waitForTimeout(500);
+
+    const postSwitchLogs = consoleLogs.filter(l => l.includes('[setActiveBuffer]'));
+    expect(postSwitchLogs.length).toBeGreaterThan(0);
+
+    // Console should show the buffer state with unread/localUnread values
+    const activeBufferLog = postSwitchLogs.find(l => l.includes('#glowing-bear'));
+    expect(activeBufferLog).toBeDefined();
 
     // Readmarker should be visible
     const readmarker = page.getByTestId('readmarker');
@@ -71,9 +106,22 @@ test('readmarker appears after scroll-to-bottom followed by new unreads', async 
     // Bot sends new messages to #glowing-bear
     await irc.sendMessage('#glowing-bear', 'unread-scroll-test msg-' + Date.now());
 
+    // Wait for message processing
+    await page.waitForTimeout(2000);
+
+    // Verify console logged unread counts before switch
+    const preSwitchLogs = consoleLogs.filter(l => l.includes('#glowing-bear'));
+    expect(preSwitchLogs.length).toBeGreaterThan(0);
+
     // Switch back — readmarker should appear again
     await waitForBuffer(page, '#glowing-bear', 15000);
     await switchToBuffer(page, '#glowing-bear');
+
+    // Wait for setActiveBuffer console log
+    await page.waitForTimeout(500);
+
+    const postSwitchLogs = consoleLogs.filter(l => l.includes('[setActiveBuffer]'));
+    expect(postSwitchLogs.length).toBeGreaterThan(0);
 
     const readmarker = page.getByTestId('readmarker');
     await expect(readmarker).toBeVisible();
@@ -119,6 +167,13 @@ test('other buffer unread counts preserved when switching active buffer', async 
     // Send messages to #glowing-bear (creates unread)
     await irc.sendMessage('#glowing-bear', 'other-buffer-count-test-' + Date.now());
 
+    // Wait for message processing and hotlist sync
+    await page.waitForTimeout(6000);
+
+    // Verify console logged unread counts
+    const preSwitchLogs = consoleLogs.filter(l => l.includes('#glowing-bear'));
+    expect(preSwitchLogs.length).toBeGreaterThan(0);
+
     // Wait for the unread badge to actually appear in the buffer list
     const glowItem = page.getByTestId('buffer-item').filter({ hasText: 'glowing-bear' }).first();
     await expect(glowItem).toBeVisible({ timeout: 10000 });
@@ -134,11 +189,23 @@ test('other buffer unread counts preserved when switching active buffer', async 
     const beforeText = await getUnreadBadge('glowing-bear');
     const beforeTotal = parseInt(beforeText, 10) || 0;
 
+    // Console should show matching unread count
+    const unreadLog = preSwitchLogs.find(l => l.includes('unread=') && l.includes('#glowing-bear'));
+    if (unreadLog) {
+        console.log('[DIAG] Badge DOM shows:', beforeTotal, '| Console log:', unreadLog);
+    }
+
     // Now switch to a different buffer (not #glowing-bear)
     const otherItems = page.locator('[data-testid="buffer-item"]').filter({ hasNotText: 'glowing-bear' });
     const otherCount = await otherItems.count();
     if (otherCount > 1) {
         await otherItems.nth(1).click();
+
+        // Wait for setActiveBuffer console log
+        await page.waitForTimeout(500);
+
+        const postSwitchLogs = consoleLogs.filter(l => l.includes('[setActiveBuffer]'));
+        expect(postSwitchLogs.length).toBeGreaterThan(0);
 
         // Read unread badge text for #glowing-bear after switching away
         const afterText = await getUnreadBadge('glowing-bear');
