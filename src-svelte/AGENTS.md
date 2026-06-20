@@ -110,6 +110,7 @@ Control API CLI: `test/irc-server/ctrl.sh` to send IRC commands (gbtest must be 
 
 - **Svelte 5 `$effect.pre` orphan error** in dev-mode Playwright tests — filtered via `page.on('pageerror')` in `beforeEach`. Does NOT affect production.
 - **Vitest browser mode is NOT used** — incompatible with Svelte 5.
+- **Tauri on Windows uses MSWebView2** (tracks stable Edge Chromium version, auto-updates via Microsoft Update). Some modern CSS features may not be available in the bundled WebView. Always provide fallbacks: use `min-h-[100vh] min-h-dvh` instead of bare `h-dvh`, and test Tauri builds on Windows for layout issues.
 
 ## Prerequisites
 
