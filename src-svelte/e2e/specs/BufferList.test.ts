@@ -298,6 +298,47 @@ test.describe('onlyUnread filter', () => {
         const countAfter = await allItemsAfter.count();
         expect(countAfter).toBeGreaterThanOrEqual(1);
     });
+
+    test('should keep active buffer visible when clicking it with onlyUnread enabled', async () => {
+        // Close any open modals from previous tests
+        const modalVisible = await page.getByTestId('settings-modal').isVisible().catch(() => false);
+        if (modalVisible) {
+            await page.getByTestId('settings-modal-close').click();
+            await page.waitForTimeout(200);
+        }
+
+        // Ensure we are on #glowing-bear buffer
+        await switchToBuffer(page, '#glowing-bear');
+        await page.waitForTimeout(500);
+
+        // Enable onlyUnread filter
+        await page.getByTestId('settings-button').click();
+        await page.waitForTimeout(200);
+        await page.locator('label:has-text("Only show buffers with unread messages")').click();
+        await page.waitForTimeout(200);
+        await page.getByTestId('settings-modal-close').click();
+        await page.waitForTimeout(500);
+
+        // Verify #glowing-bear is visible as the active buffer
+        const gbItem = page.getByTestId('buffer-item').filter({ hasText: '#glowing-bear' }).first();
+        await expect(gbItem).toBeVisible({ timeout: 5000 });
+
+        // Click the same buffer again - this triggers switchBuffer which zeroes unread counts
+        await gbItem.click();
+        await page.waitForTimeout(1000);
+
+        // The buffer should STILL be visible because it's the active buffer
+        const gbItemAfter = page.getByTestId('buffer-item').filter({ hasText: '#glowing-bear' }).first();
+        await expect(gbItemAfter).toBeVisible({ timeout: 5000 });
+
+        // Disable onlyUnread filter for subsequent tests
+        await page.getByTestId('settings-button').click();
+        await page.waitForTimeout(200);
+        await page.locator('label:has-text("Only show buffers with unread messages")').click();
+        await page.waitForTimeout(200);
+        await page.getByTestId('settings-modal-close').click();
+        await page.waitForTimeout(200);
+    });
 });
 
 test.describe('quick keys display', () => {
