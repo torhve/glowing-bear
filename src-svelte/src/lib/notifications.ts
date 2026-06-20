@@ -37,8 +37,8 @@ async function setupTauriNotificationListener(): Promise<void> {
                 setActiveBuffer(bufferId);
             }
         });
-    } catch (e) {
-        console.warn('Failed to setup Tauri notification listener:', e);
+    } catch {
+        /* Windows toast notifications don't support action callbacks */
     }
 }
 
