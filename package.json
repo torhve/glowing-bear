@@ -45,6 +45,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@tauri-apps/plugin-notification": "^2.3.3",
     "@tauri-apps/plugin-opener": "^2.5.3",
     "angular": "^1.8.3",
     "angular-route": "^1.8.3",
