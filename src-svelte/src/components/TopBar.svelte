@@ -36,7 +36,7 @@
 
 <div data-testid="top-bar" style="padding-top: env(safe-area-inset-top, 0px);">
   <div class="h-10 bg-surface-raised border-b border-border flex items-center px-2 space-x-2" data-tauri-drag-region>
-    <div class="flex items-center gap-1 flex-1 min-w-0">
+    <div class="flex items-center gap-1 flex-1 min-w-0" data-tauri-drag-region>
       <img src="/glowing-bear.svg" alt="logo" class="w-5 h-5 flex-shrink-0" />
       {#if bufferListVisible}
         <span data-testid="app-title" class="text-sm font-bold text-text">Glowing Bear</span>
