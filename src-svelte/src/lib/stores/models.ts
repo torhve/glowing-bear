@@ -63,13 +63,16 @@ export function parseRichText(text: string | undefined | null): RichTextPart[] {
 }
 
 // ---- Buffer creation ----
+// Accepts either a full BufferMessage from the protocol or a minimal shape
+// with just { bufferId, fullName, shortName }. The latter is used for
+// inline fallback when WeeChat auto-creates a query buffer from an incoming PM.
 export function createBuffer(message: {
-    pointers: string[];
+    pointers?: string[];
     full_name: string;
     short_name: string;
-    title: RichTextPart[];
-    hidden: number;
-    number: number;
+    title?: RichTextPart[] | string;
+    hidden?: number;
+    number?: number;
     type?: number;
     notify?: number;
     local_variables?: {
@@ -79,6 +82,7 @@ export function createBuffer(message: {
         pinned?: string;
     };
 }): BufferData {
+    const id = (message.pointers && message.pointers[0]) || '';
     const fullName = message.full_name;
     const shortName = message.short_name;
     const trimmedName = shortName.replace(/^[#&+]/, '') || (shortName ? ' ' : null);
@@ -94,14 +98,14 @@ export function createBuffer(message: {
     const serverSortKey = `${plugin}.${server}${type === 'server' ? '' : '.' + shortName}`.toLowerCase();
 
     const buffer: BufferData = {
-        id: message.pointers[0] || '',
+        id,
         fullName,
         shortName,
         hidden: !!message.hidden,
         trimmedName,
         nameClasses: [],
         prefix,
-        number: message.number,
+        number: message.number ?? 0,
         title,
         rtitle: title.map(t => t.text).join(''),
         lines: [],
