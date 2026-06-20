@@ -7,7 +7,7 @@ license = "GPL-3.0"
 repository = "https://github.com/glowing-bear/glowing-bear"
 default-run = "glowing-bear"
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.82"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -19,3 +19,5 @@ tauri = { version = "2", features = [] }
 tauri-plugin-window-state = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-notification = "2"
+# TODO: add updater for self-updating:
+# tauri-plugin-updater = "2"
