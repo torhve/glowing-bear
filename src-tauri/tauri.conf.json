@@ -10,6 +10,7 @@
     "frontendDist": "../src-svelte/build"
   },
   "app": {
+    "macOSPrivateApi": true,
     "withGlobalTauri": true,
     "windows": [
       {
