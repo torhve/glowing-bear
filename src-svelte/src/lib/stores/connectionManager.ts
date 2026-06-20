@@ -24,6 +24,7 @@ let connecting = false;
 export async function connect(host: string, port: number, path: string, password: string, tls: boolean, noCompression: boolean) {
     clearErrors();
 
+    const hasCryptoSubtle = typeof crypto.subtle !== 'undefined';
     const proto = tls ? 'wss' : 'ws';
 
     // Handle IPv6
@@ -64,9 +65,9 @@ export async function connect(host: string, port: number, path: string, password
                 Object.keys(callbacks).forEach(k => delete callbacks[parseInt(k, 10)]);
                 currentCallbackId = 0;
 
-                // Handshake — always request pbkdf2+sha512; WeeChat responds with what it supports
+                // Handshake — request pbkdf2+sha512 only if crypto.subtle is available
                 const handshakeMsg = Protocol.formatHandshake({
-                    password_hash_algo: 'pbkdf2+sha512',
+                    password_hash_algo: hasCryptoSubtle ? 'pbkdf2+sha512' : 'plain',
                     compression: noCompression ? 'off' : 'zlib'
                 });
 
@@ -77,10 +78,10 @@ export async function connect(host: string, port: number, path: string, password
                 const nonce = hexStringToByte(content?.nonce || '');
                 const iterations = content?.password_hash_iterations || 0;
 
-                // Initialize connection
-                if (passwordMethod === 'pbkdf2+sha512') {
+                // Initialize connection — fallback to plain if pbkdf2 requested but crypto.subtle unavailable
+                if (passwordMethod === 'pbkdf2+sha512' && hasCryptoSubtle) {
                     await initializePBKDF2(password, nonce, iterations);
-                } else if (passwordMethod === 'plain') {
+                } else if (passwordMethod === 'plain' || passwordMethod === 'pbkdf2+sha512') {
                     const initMsg = Protocol.formatInit('plain:' + password, null);
                     // Fire-and-forget: WeeChat increments callback IDs so sendAsync would timeout
                     if (ws && ws.readyState === WebSocket.OPEN) {
