@@ -23,7 +23,7 @@ import {
 import { shouldResume } from '$lib/stores/bufferResume';
 import { createHighlight, playNotificationSound, updateTitle, updateFavico } from '$lib/notifications';
 import { DEBUG_NICKLIST } from '$lib/debug';
-import type { ProtocolMessage, BufferMessage, BufferLine, BufferLineMessage, NickMessage, NickGroupMessage, HotlistEntry, BufferData } from '$lib/types';
+import type { ProtocolMessage, BufferMessage, BufferLineMessage, NickMessage, NickGroupMessage, HotlistEntry, BufferData } from '$lib/types';
 
 // ---- Version handler ----
 export function handleVersionInfo(message: ProtocolMessage) {
@@ -218,7 +218,8 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
         let buffer = updatedBuffers[lineMsg.buffer];
         if (!buffer) {
             // Buffer not in our store yet (e.g., WeeChat auto-created query buffer for PM).
-            // Try to extract nick from prefix (format: <nick> or <nick!user@host>)
+            // Extract nick from prefix (format: <nick> or <nick!user@host>) and delegate
+            // to createBuffer so the construction logic lives in a single place.
             let inferredNick = '';
             const prefix = lineMsg.prefix || '';
             const nickMatch = prefix.match(/^<([^>]+)>/);
@@ -227,36 +228,14 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
             }
             console.log('[handler] creating buffer for:', lineMsg.buffer, 'nick:', inferredNick, 'msg:', lineMsg.message?.substring(0, 50));
 
-            buffer = {
-                id: lineMsg.buffer,
-                fullName: inferredNick,
-                shortName: inferredNick,
-                hidden: false,
-                trimmedName: inferredNick.replace(/^[#&+]/, '') || null,
-                nameClasses: [],
-                prefix: '',
-                number: 0,
-                title: [],
-                rtitle: inferredNick,
-                lines: [],
-                requestedLines: 0,
-                allLinesFetched: false,
-                lastSeen: -1,
-                localUnread: 0,
-                unread: 0,
-                notification: 0,
+            buffer = createBuffer({
+                pointers: [lineMsg.buffer],
+                full_name: inferredNick,
+                short_name: inferredNick,
+                type: 2,
                 notify: 3,
-                nicklist: {},
-                serverSortKey: `irc.${inferredNick.toLowerCase()}`,
-                indent: true,
-                bufferType: 2,
-                type: 'private' as const,
-                plugin: 'irc',
-                server: '',
-                hideBufferLineTimes: false,
-                pinned: false,
-                active: false
-            };
+                local_variables: { type: 'private', plugin: 'irc' }
+            });
             updatedBuffers[lineMsg.buffer] = buffer;
         }
 
@@ -694,7 +673,10 @@ export function handleNicklist(message: ProtocolMessage) {
 }
 
 // ---- Update nick spokeAt timestamp for tab completion ----
-export function handleNickMessageForSpeak(line: BufferLine) {
+// Extracts the nick from a message's prefix or text, then updates spokeAt
+// on the matching nick within a single buffer's nicklist.
+function updateNickSpokeAtInBuffer(buffer: BufferData, lineMsg: BufferLineMessage, now: number) {
+    const line = createBufferLine(lineMsg);
     const prefix = line.prefix;
     if (prefix.length === 0) return;
 
@@ -716,61 +698,29 @@ export function handleNickMessageForSpeak(line: BufferLine) {
 
     if (!nick || nick === "" || nick === "=!=") return;
 
-    const allBuffers = get(buffers);
-    for (const bufId in allBuffers) {
-        const buf = allBuffers[bufId];
-        if (!buf || !buf.nicklist) continue;
-        for (const groupIdx in buf.nicklist) {
-            const groupObj = buf.nicklist[groupIdx];
-            if (!groupObj) continue;
-            const nicks = groupObj.nicks;
-            for (const curr_nick of nicks) {
-                if (curr_nick.name === nick) {
-                    curr_nick.spokeAt = Date.now();
-                    return;
-                }
+    // Only search this specific buffer's nicklist — O(n) where n = nicks in
+    // one buffer instead of O(all nicks across all buffers).
+    if (!buffer.nicklist) return;
+    for (const groupIdx in buffer.nicklist) {
+        const groupObj = buffer.nicklist[groupIdx];
+        if (!groupObj) continue;
+        for (const curr_nick of groupObj.nicks) {
+            if (curr_nick.name === nick) {
+                curr_nick.spokeAt = now;
+                break;
             }
         }
     }
 }
 
 // Updates spokeAt timestamps on pre-built buffer copies (for immutable updates).
+// Each line message is matched to its buffer and only that buffer's nicklist is searched.
 export function handleNickMessageForSpeakOnBuffers(lineMsgs: BufferLineMessage[], updatedBuffers: Record<string, BufferData>) {
     const now = Date.now();
     for (const lineMsg of lineMsgs) {
-        const line = createBufferLine(lineMsg);
-        const prefix = line.prefix;
-        if (prefix.length === 0) continue;
-
-        let nick = '';
-        const lastPart = prefix[prefix.length - 1];
-        if (lastPart && lastPart.text) {
-            nick = lastPart.text;
-        }
-
-        if (nick === " *" || nick === '') {
-            const match = line.text.match(/^(.+)\s/);
-            if (match && match[1]) {
-                nick = match[1];
-            }
-        }
-
-        if (!nick || nick === "" || nick === "=!=") continue;
-
-        for (const bufId in updatedBuffers) {
-            const buf = updatedBuffers[bufId];
-            if (!buf || !buf.nicklist) continue;
-            for (const groupIdx in buf.nicklist) {
-                const groupObj = buf.nicklist[groupIdx];
-                if (!groupObj) continue;
-                for (const curr_nick of groupObj.nicks) {
-                    if (curr_nick.name === nick) {
-                        curr_nick.spokeAt = now;
-                        break;
-                    }
-                }
-            }
-        }
+        const buffer = updatedBuffers[lineMsg.buffer];
+        if (!buffer) continue;
+        updateNickSpokeAtInBuffer(buffer, lineMsg, now);
     }
 }
 
