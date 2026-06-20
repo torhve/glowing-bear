@@ -505,9 +505,9 @@
   });
 </script>
 
-<div data-testid="input-bar" class="flex-shrink-0">
-  <div class="bg-surface border-t border-border px-3 py-2">
-    <div class="flex items-center space-x-2">
+<div data-testid="input-bar" class="input-bar-container flex-shrink-0">
+  <div class="input-bar-inner bg-surface border-t border-border px-3 py-2">
+    <div class="input-bar-row flex items-center space-x-2">
 
     <input
       type="file"
@@ -531,14 +531,14 @@
       data-testid="message-input"
       placeholder={$currentBuffer ? `Message ${$currentBuffer.shortName}` : 'Select a buffer to start chatting...'}
       rows={1}
-      class="flex-1 bg-input-bg border border-border rounded px-3 py-2 text-text text-sm placeholder-text-muted focus:outline-none focus:border-accent resize-none transition-colors {isDraggingFile ? 'border-accent bg-accent/10' : ''}"
+      class="input-bar-textarea flex-1 bg-input-bg border border-border rounded px-3 py-2 text-text text-sm placeholder-text-muted focus:outline-none focus:border-accent resize-none transition-colors {isDraggingFile ? 'border-accent bg-accent/10' : ''}"
       style="min-height: 36px; max-height: 150px;"
     ></textarea>
 
     <button
       onclick={() => fileInputRef?.click()}
       data-testid="upload-image-button"
-      class="px-2 py-2 text-text-secondary hover:text-text hover:bg-border rounded transition-colors"
+      class="input-bar-upload px-2 py-2 text-text-secondary hover:text-text hover:bg-border rounded transition-colors"
       title="Upload image"
     >
       <Camera size={18} />
@@ -547,7 +547,7 @@
     <button
       onclick={() => { if (inputRef) { const caret = getCaretPos(); const result = completeNick(message, caret, _iterCandidate); if (result) { message = result.text; _iterCandidate = result.iterCandidate; setTimeout(() => setCaretPos(result.cursor), 0); } } }}
       data-testid="nick-complete-button"
-      class="px-2 py-2 text-text-secondary hover:text-text hover:bg-border rounded transition-colors"
+      class="input-bar-nickcomplete px-2 py-2 text-text-secondary hover:text-text hover:bg-border rounded transition-colors"
       title="Complete nick"
     >
       <Megaphone size={18} />
@@ -557,7 +557,7 @@
       onclick={handleSend}
       disabled={!canSend}
       data-testid="send-button"
-      class="px-3 py-2 bg-accent hover:bg-accent-hover disabled:bg-border disabled:cursor-not-allowed text-white rounded transition-colors"
+      class="input-bar-send px-3 py-2 bg-accent hover:bg-accent-hover disabled:bg-border disabled:cursor-not-allowed text-white rounded transition-colors"
     >
       <Send size={16} />
     </button>

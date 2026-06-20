@@ -180,14 +180,15 @@ import Key from '@lucide/svelte/icons/key';
   }
 </script>
 
-<div class="h-dvh bg-bg flex flex-col overflow-y-auto">
+<div class="connection-page h-dvh bg-bg flex flex-col overflow-y-auto">
   {#if windowsTauri}
-    <div class="h-8 bg-surface-raised border-b border-border flex items-center justify-end px-2 space-x-1 flex-shrink-0" data-tauri-drag-region>
+    <div class="tauri-titlebar h-8 bg-surface-raised border-b border-border flex items-center justify-end px-2 space-x-1 flex-shrink-0" data-tauri-drag-region>
       <div data-tauri-drag-region="false">
         <button
           onclick={() => minimizeWindow()}
           class="px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-danger rounded"
           title="Minimize"
+          data-testid="minimize-button"
         >
           <Minimize2 size={14} />
         </button>
@@ -197,6 +198,7 @@ import Key from '@lucide/svelte/icons/key';
           onclick={() => toggleMaximizeWindow()}
           class="px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-surface-raised rounded"
           title="Maximize"
+          data-testid="maximize-button"
         >
           <Maximize2 size={14} />
         </button>
@@ -206,26 +208,27 @@ import Key from '@lucide/svelte/icons/key';
           onclick={() => closeWindow()}
           class="px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-danger rounded"
           title="Close"
+          data-testid="close-button"
         >
           <X size={14} />
         </button>
       </div>
     </div>
   {/if}
-  <div class="flex-1 flex items-center justify-center overflow-y-auto px-4">
-    <div class="w-full max-w-lg space-y-6">
-      <div class="text-center mb-6">
-      <img src="/glowing-bear.svg" alt="logo" class="w-20 h-20 mx-auto mb-2" />
-      <h1 class="text-3xl font-bold text-text">Glowing Bear</h1>
-      <p class="text-sm text-text-secondary mt-1">WeeChat web frontend</p>
+  <div class="connection-content flex-1 flex items-center justify-center overflow-y-auto px-4">
+    <div class="connection-card w-full max-w-lg space-y-6">
+      <div class="connection-branding text-center mb-6">
+      <img src="/glowing-bear.svg" alt="logo" class="connection-logo w-20 h-20 mx-auto mb-2" />
+      <h1 class="connection-title text-3xl font-bold text-text">Glowing Bear</h1>
+      <p class="connection-subtitle text-sm text-text-secondary mt-1">WeeChat web frontend</p>
     </div>
 
     <form
       onsubmit={(e) => { e.preventDefault(); handleConnect(); }}
-      class="bg-surface rounded-lg p-6 space-y-4 border border-border"
+      class="connection-form bg-surface rounded-lg p-6 space-y-4 border border-border"
     >
-<div class="grid grid-cols-4 gap-2">
-        <div class="col-span-3">
+<div class="connection-host-row grid grid-cols-4 gap-2">
+        <div class="connection-host-field col-span-3">
           <label for="host" class="block text-xs text-text-secondary mb-1">WeeChat relay hostname</label>
             <div class="relative">
               <Monitor size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
@@ -241,7 +244,7 @@ import Key from '@lucide/svelte/icons/key';
                />
              </div>
         </div>
-       <div class="min-w-[5rem]">
+        <div class="connection-port-field min-w-[5rem]">
           <label for="port" class="block text-xs text-text-secondary mb-1">Port</label>
             <div class="relative">
               <List size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
@@ -258,7 +261,7 @@ import Key from '@lucide/svelte/icons/key';
         </div>
       </div>
 
-      <div>
+      <div class="connection-password-field">
         <label for="password" class="block text-xs text-text-secondary mb-1">WeeChat relay password</label>
         <div class="relative">
           <Key size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
@@ -286,7 +289,7 @@ import Key from '@lucide/svelte/icons/key';
         </div>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="connection-tls-row flex items-center gap-2">
         <input
           id="tls"
           data-testid="tls-checkbox"
@@ -301,7 +304,7 @@ import Key from '@lucide/svelte/icons/key';
         </label>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="connection-savepassword-row flex items-center gap-2">
         <input
           id="savepassword"
           data-testid="savepassword-checkbox"
@@ -317,7 +320,7 @@ import Key from '@lucide/svelte/icons/key';
       </div>
 
       {#if savepassword}
-        <div class="flex items-center gap-2">
+        <div class="connection-autoconnect-row flex items-center gap-2">
           <input
             id="autoconnect"
             data-testid="autoconnect-checkbox"
@@ -334,37 +337,37 @@ import Key from '@lucide/svelte/icons/key';
       {/if}
 
       {#if $connectionState.errors.hmrReloadError}
-        <div data-testid="error-message" class="bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
+        <div data-testid="error-message" data-error-type="hmr-reload" class="connection-error bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
           Connection lost during page reload — click Connect to retry
         </div>
       {/if}
       {#if $connectionState.errors.serverUnreachable}
-        <div data-testid="error-message" class="bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
+        <div data-testid="error-message" data-error-type="server-unreachable" class="connection-error bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
           Unable to reach WeeChat relay at {hostField}:{port} — check that it is running and reachable
         </div>
       {/if}
       {#if $connectionState.errors.errorMessage}
-        <div data-testid="error-message" class="bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
+        <div data-testid="error-message" data-error-type="connection-error" class="connection-error bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
           Connection error: The client was unable to connect to the WeeChat relay
         </div>
       {/if}
       {#if $connectionState.errors.passwordError}
-        <div data-testid="error-message" class="bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
+        <div data-testid="error-message" data-error-type="password-error" class="connection-error bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
           Error: wrong password or token
         </div>
       {/if}
       {#if $connectionState.errors.tlsError}
-        <div data-testid="error-message" class="bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
+        <div data-testid="error-message" data-error-type="tls-error" class="connection-error bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
           Secure connection error: Could not establish TLS connection
         </div>
       {/if}
       {#if $connectionState.errors.oldWeechatError}
-        <div data-testid="error-message" class="bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
+        <div data-testid="error-message" data-error-type="old-weechat" class="connection-error bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
           WeeChat version error: WeeChat version must be 2.9 or later
         </div>
       {/if}
       {#if $connectionState.errors.hashAlgorithmDisagree}
-        <div data-testid="error-message" class="bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
+        <div data-testid="error-message" data-error-type="hash-algorithm" class="connection-error bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
           Hash algorithm error: Please set relay.network.password_hash_algo to "pbkdf2+sha512" or "plain" in WeeChat
         </div>
       {/if}
@@ -385,54 +388,54 @@ import Key from '@lucide/svelte/icons/key';
       </button>
     </form>
 
-<div class="space-y-2">
-      <details open class="bg-surface rounded border border-border">
-        <summary class="px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
+<div class="info-accordion-container space-y-2">
+      <details open class="info-accordion bg-surface rounded border border-border" data-info-section="about">
+        <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
           <img src="/glowing-bear.svg" class="w-4 h-4" alt="" />About
         </summary>
-        <div class="px-4 pb-3 text-sm text-text-secondary space-y-2">
+        <div class="info-accordion-content px-4 pb-3 text-sm text-text-secondary space-y-2">
           <p>Glowing Bear is a free, open-source web frontend for WeeChat — no backend required.</p>
           <p>This is a complete rewrite from the original AngularJS codebase into Svelte 5 + TypeScript. The old version was hard to maintain and had next to no tests. Everything still runs entirely as static files in your browser, connecting directly to your WeeChat instance via WebSocket relay — zero intermediary server.</p>
           <p>Stack: SvelteKit 2, Svelte 5 runes, TypeScript, Tailwind CSS v4, Vite 6, Vitest, Playwright E2E testing, fflate, DOMPurify</p>
         </div>
       </details>
-      <details class="bg-surface rounded border border-border">
-        <summary class="px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
+      <details class="info-accordion bg-surface rounded border border-border" data-info-section="connection">
+        <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
           <Settings2 size={14} />Connection settings
         </summary>
-        <div class="px-4 pb-3 text-sm text-text-secondary">
+        <div class="info-accordion-content px-4 pb-3 text-sm text-text-secondary">
           Enter your WeeChat relay address above and click Connect.
         </div>
       </details>
-      <details class="bg-surface rounded border border-border">
-        <summary class="px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
+      <details class="info-accordion bg-surface rounded border border-border" data-info-section="getting-started">
+        <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
           <Rocket size={14} />Getting Started
         </summary>
-        <div class="px-4 pb-3 text-sm text-text-secondary">
+        <div class="info-accordion-content px-4 pb-3 text-sm text-text-secondary">
           WeeChat 2.9+ is required. Set up an encrypted relay with /relay add tls.weechat 9001
         </div>
       </details>
-      <details class="bg-surface rounded border border-border">
-        <summary class="px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
+      <details class="info-accordion bg-surface rounded border border-border" data-info-section="usage">
+        <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
           <Keyboard size={14} />Usage instructions
         </summary>
-        <div class="px-4 pb-3 text-sm text-text-secondary">
+        <div class="info-accordion-content px-4 pb-3 text-sm text-text-secondary">
           Alt+0-9: Quick switch buffer, Alt+J: Jump to buffer, Alt+` : Previous buffer, Alt+A: Next activity, Alt+Up/Down: Adjacent buffer, Alt+h: Clear unread, Alt+n: Toggle nicklist, Alt+l: Focus input, Alt+G: Search buffers, Double Esc: Disconnect, Tab: Nick completion, Readline: Ctrl+A/E/U/W/B/F/K
         </div>
       </details>
-      <details class="bg-surface rounded border border-border">
-        <summary class="px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
+      <details class="info-accordion bg-surface rounded border border-border" data-info-section="install">
+        <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
           <Download size={14} />Install app
         </summary>
-        <div class="px-4 pb-3 text-sm text-text-secondary">
+        <div class="info-accordion-content px-4 pb-3 text-sm text-text-secondary">
           Chrome: Menu > Add to home screen. Desktop: Create application shortcuts.
         </div>
       </details>
-      <details class="bg-surface rounded border border-border">
-        <summary class="px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
+      <details class="info-accordion bg-surface rounded border border-border" data-info-section="get-involved">
+        <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
           <MessageCircle size={14} />Get involved
         </summary>
-        <div class="px-4 pb-3 text-sm text-text-secondary">
+        <div class="info-accordion-content px-4 pb-3 text-sm text-text-secondary">
           Check out our GitHub page or join #glowing-bear on libera.chat!
         </div>
       </details>

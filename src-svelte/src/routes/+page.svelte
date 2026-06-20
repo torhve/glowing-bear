@@ -13,6 +13,7 @@
   import { initTheme } from '$lib/stores/theme';
   import { get } from 'svelte/store';
   import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig } from '$lib/stores/models';
+  import { connectionState, setReconnectAttempts } from '$lib/stores/connectionStore';
   import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer, getWs } from '$lib/stores/connectionManager';
   import { Protocol } from '$lib/weechat';
   import { initNotifications, updateTitle, updateFavico, onDisconnect } from '$lib/notifications';
@@ -22,8 +23,10 @@
   if (typeof window !== 'undefined' && import.meta.env.DEV) {
     (window as any).__wconfig = wconfig;
     (window as any).__connected = connected;
+    (window as any).__connectionState = connectionState;
     (window as any).__sendWeechatCommand = sendWeeChatCommand;
     (window as any).__setGbSettings = updateSettings;
+    (window as any).__setReconnectAttempts = setReconnectAttempts;
     (window as any).__Protocol = Protocol;
     (window as any).__getWs = getWs;
     (window as any).__hideBufferListOnMobile = hideBufferListOnMobile;
@@ -31,6 +34,7 @@
     $effect(() => {
       (window as any).__wconfig = $wconfig;
       (window as any).__connected = $connected;
+      (window as any).__connectionState = $connectionState;
     });
   }
   /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -550,30 +554,31 @@
 {#if !$connected}
   <ConnectionForm />
 {:else}
-  <div class="h-dvh flex flex-col bg-bg" data-testid="chat-view">
+  <div class="main-layout h-dvh flex flex-col bg-bg" data-testid="chat-view">
     <TopBar bufferListVisible={showBufferList || !isMobile()} onBufferSelect={hideBufferListOnMobile} onSearchOpen={showBufferListOnMobile} />
-    <div class="flex-1 flex overflow-hidden">
+    <div class="main-content flex-1 flex overflow-hidden">
       {#if showBufferList || !isMobile()}
         <BufferList altKeyPressed={_altKeyPressed} onBufferSelect={hideBufferListOnMobile} />
       {/if}
-      <div class="flex-1 flex flex-col min-w-0">
+      <div class="chat-area flex-1 flex flex-col min-w-0">
         <ChatView />
         <InputBar />
       </div>
       {#if $settings.showNicklist && !isMobile() && hasCurrentBufferNicklist}
         <Nicklist />
       {/if}
+      <!-- Desktop nicklist rendered inline -->
       {#if isMobile() && (hasCurrentBufferNicklist || $settings.alwaysnicklist)}
-        <div class="fixed top-0 right-0 bottom-0 h-screen w-52 sm:w-28 lg:w-30 z-50 transition-transform duration-200 ease-out {nicklistOpenOnMobile ? 'translate-x-0' : 'translate-x-full'}">
+        <div class="mobile-nicklist-overlay fixed top-0 right-0 bottom-0 h-screen w-52 sm:w-28 lg:w-30 z-50 transition-transform duration-200 ease-out {nicklistOpenOnMobile ? 'translate-x-0' : 'translate-x-full'}">
           <button
             onclick={() => { nicklistOpenOnMobile = false; }}
             data-testid="nicklist-close-button"
-            class="absolute top-1 left-2 z-10 px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-surface-raised rounded"
+            class="mobile-nicklist-close absolute top-1 left-2 z-10 px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-surface-raised rounded"
             title="Close nicklist"
           >
             <X size={16} />
           </button>
-          <div class="h-full bg-surface border-l border-border flex flex-col overflow-hidden">
+          <div class="mobile-nicklist-container h-full bg-surface border-l border-border flex flex-col overflow-hidden">
             <Nicklist onClose={() => { nicklistOpenOnMobile = false; }} />
           </div>
         </div>
