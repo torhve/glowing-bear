@@ -226,7 +226,7 @@ import Key from '@lucide/svelte/icons/key';
       </div>
     </div>
   {/if}
-  <div class="connection-content flex-1 flex items-start justify-center px-4">
+  <div class="connection-content flex-1 flex items-start justify-center px-4 pt-6">
     <div class="connection-card w-full max-w-lg space-y-6">
       <div class="connection-branding text-center mb-6">
       <img src="/glowing-bear.svg" alt="logo" class="connection-logo w-20 h-20 mx-auto mb-2" />

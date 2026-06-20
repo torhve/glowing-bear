@@ -18,6 +18,7 @@
   import { Protocol } from '$lib/weechat';
   import { initNotifications, updateTitle, updateFavico, onDisconnect } from '$lib/notifications';
   import { sortBuffers, parseRelayUrl, isPopoverOpen } from '$lib/utils';
+  import { addToast, toastStore } from '$lib/toast';
 
   /* eslint-disable @typescript-eslint/no-explicit-any -- dev-time debug globals on window */
   if (typeof window !== 'undefined' && import.meta.env.DEV) {
@@ -31,6 +32,8 @@
     (window as any).__getWs = getWs;
     (window as any).__hideBufferListOnMobile = hideBufferListOnMobile;
     (window as any).__showBufferListOnMobile = showBufferListOnMobile;
+    (window as any).__addToast = addToast;
+    (window as any).__toastStore = toastStore;
     $effect(() => {
       (window as any).__wconfig = $wconfig;
       (window as any).__connected = $connected;
