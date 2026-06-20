@@ -353,8 +353,8 @@ export function setActiveBuffer(bufferId: string): boolean {
 
     // Compute effective unread count that avoids double-counting.
     // handleBufferLineAdded increments both unread AND localUnread for
-    // inactive buffers with notify > 1, so totalUnread would overcount.
-    // Use weechatUnread (unread + notification) plus any localUnread excess.
+    // inactive buffers with notify > 1. Use weechatUnread plus the excess
+    // to account for messages not tracked in the WeeChat hotlist.
     const weechatUnread = (buffer.unread || 0) + (buffer.notification || 0);
     const localUnread = (buffer.localUnread || 0);
     const effectiveUnread = weechatUnread + Math.max(0, localUnread - weechatUnread);
