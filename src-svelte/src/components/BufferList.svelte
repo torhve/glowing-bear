@@ -23,7 +23,7 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
     sortBuffers(
       Object.values($buffers)
         .filter(buf => !buf.hidden)
-        .filter(buf => !$settings.onlyUnread || buf.unread > 0 || buf.notification > 0 || buf.active || buf.pinned),
+        .filter(buf => !$settings.onlyUnread || buf.unread > 0 || buf.notification > 0 || buf.id === $activeBufferId || buf.pinned),
       $settings.orderbyserver
     )
   );

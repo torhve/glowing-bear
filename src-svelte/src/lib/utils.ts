@@ -187,14 +187,14 @@ export function bufferMatchesSearch(buffer: any, search: string): boolean {
 
 // Get filtered buffers
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- buffer array return type
-export function getFilteredBuffers(search: string, onlyUnread: boolean, orderByServer: boolean): any[] {
+export function getFilteredBuffers(search: string, onlyUnread: boolean, orderByServer: boolean, activeBufferId: string): any[] {
     const allBuffers = get(buffers);
 
     return sortBuffers(
         Object.values(allBuffers)
             .filter((b: any) => !b.hidden)
             .filter((b: any) => bufferMatchesSearch(b, search))
-            .filter((b: any) => !onlyUnread || b.unread > 0 || b.notification > 0 || b.active || b.pinned),
+            .filter((b: any) => !onlyUnread || b.unread > 0 || b.notification > 0 || b.id === activeBufferId || b.pinned),
         orderByServer
     );
 }
