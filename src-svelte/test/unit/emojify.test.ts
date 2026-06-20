@@ -32,6 +32,28 @@ describe('shortnameToUnicode', () => {
     });
 });
 
+describe('shortnameToUnicode flags', () => {
+    it('converts :flag_us: to US flag', () => {
+        expect(shortnameToUnicode(':flag_us:')).toBe('\u{1F1FA}\u{1F1F8}');
+    });
+
+    it('converts :flag_gb: to UK flag', () => {
+        expect(shortnameToUnicode(':flag_gb:')).toBe('\u{1F1EC}\u{1F1E7}');
+    });
+
+    it('converts :rainbow_flag: to rainbow flag ZWJ sequence', () => {
+        expect(shortnameToUnicode(':rainbow_flag:')).toBe('\u{1F3F3}\uFE0F\u200D\u{1F308}');
+    });
+
+    it('converts :england: to TAG sequence', () => {
+        expect(shortnameToUnicode(':england:')).toBe('\u{1f3f4}\u{e0067}\u{e0062}\u{e0065}\u{e006e}\u{e0067}\u{e007f}');
+    });
+
+    it('returns original text for unknown flag shortcode', () => {
+        expect(shortnameToUnicode(':flag_xx:')).toBe(':flag_xx:');
+    });
+});
+
 describe('emojifyInput', () => {
     it('converts :smile: to emoji in input', () => {
         const result = emojifyInput('hello :smile:', 12);
