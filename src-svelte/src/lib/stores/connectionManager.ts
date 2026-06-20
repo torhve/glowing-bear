@@ -579,6 +579,7 @@ export async function onMessage(data: ArrayBuffer) {
 
     if (message.id && callbacks[message.id]) {
         const cb = callbacks[message.id]!;
+        console.debug('[connect] recvAsync id=' + message.id + ' objects=' + message.objects.length);
         cb.resolve(message);
         delete callbacks[message.id];
     } else if (message.id) {

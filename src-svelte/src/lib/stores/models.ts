@@ -410,6 +410,8 @@ export function setActiveBuffer(bufferId: string): boolean {
         updatedBuffers[bufferId]!.lines.splice(0, linesToRemove);
         updatedBuffers[bufferId]!.requestedLines -= linesToRemove;
         targetLastSeen = Math.max(0, targetLastSeen - linesToRemove);
+        // Clamp to the new buffer length so readmarker doesn't point past end.
+        targetLastSeen = Math.min(targetLastSeen, updatedBuffers[bufferId]!.lines.length - 1);
         updatedBuffers[bufferId]!.lastSeen = targetLastSeen;
         updatedBuffers[bufferId]!.allLinesFetched = false;
     }
@@ -428,14 +430,23 @@ export function setActiveBuffer(bufferId: string): boolean {
 export function clearAllUnread() {
     // Build immutable copies of all buffers and servers to ensure
     // Svelte reactivity triggers correctly.
+    // Also clear localUnread/lastSeen so readmarkers don't persist for
+    // locally-tracked unreads that WeeChat's hotlist doesn't report.
     const updatedBuffers: Record<string, BufferData> = {};
     for (const id in get(buffers)) {
         const buf = get(buffers)[id];
         if (buf) {
-            updatedBuffers[id] = { ...buf, unread: 0, notification: 0 };
+            updatedBuffers[id] = {
+                ...buf,
+                unread: 0,
+                notification: 0,
+                localUnread: 0,
+                lastSeen: buf.lines.length - 1,
+            };
         }
     }
     buffers.set(updatedBuffers);
+    localUnreadBuffers.update(() => new Set());
 
     const updatedServers: Record<string, { id: string; unread: number }> = {};
     for (const key in get(servers)) {

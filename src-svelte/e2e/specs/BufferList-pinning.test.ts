@@ -75,27 +75,23 @@ test('clicking unpin button changes icon back to pushpin icon', async () => {
 });
 
 test('pinned buffers appear before unpinned in sorted list', async () => {
-    // Pin the second buffer if available
-    const pinButtons = page.getByTestId('pin-buffer');
-    const count = await pinButtons.count();
-    let pinnedIdx = -1;
-    if (count >= 2) {
-        await pinButtons.nth(1).click({ force: true });
-        await expect(pinButtons.nth(1)).toHaveAttribute('title', 'Unpin buffer', { timeout: 5000 });
-        pinnedIdx = 1;
-    } else if (count >= 1) {
-        await pinButtons.nth(0).click({ force: true });
-        await expect(pinButtons.nth(0)).toHaveAttribute('title', 'Unpin buffer', { timeout: 5000 });
-        pinnedIdx = 0;
-    }
+    // Pin a buffer and verify it moves to the top of the sorted list.
+    // After pinning, the list re-sorts (pinned first), so we identify
+    // the pinned buffer by its text content, not by index position.
+    const bufferItems = page.getByTestId('buffer-item');
+    const count = await bufferItems.count();
+    expect(count).toBeGreaterThanOrEqual(2);
 
-    if (pinnedIdx === -1) {
-        test.skip();
-        return;
-    }
+    // Identify the second buffer item by its text content before pinning
+    const targetName = await bufferItems.nth(1).textContent();
+    const targetBuffer = page.getByTestId('buffer-item').filter({ hasText: targetName?.trim() || '' }).first();
+    const targetPinButton = targetBuffer.getByTestId('pin-buffer');
+
+    await targetPinButton.click({ force: true });
+    // Wait for re-sort — identify the same buffer by text content
+    await expect(targetBuffer.getByTestId('pin-buffer')).toHaveAttribute('title', 'Unpin buffer', { timeout: 5000 });
 
     // Get all buffer items and their pin button titles to determine pinned status
-    const bufferItems = page.getByTestId('buffer-item');
     const bufferCount = await bufferItems.count();
     expect(bufferCount).toBeGreaterThanOrEqual(2);
 

@@ -30,14 +30,29 @@ async function getReadmarkerState() {
         if (!container) return null;
         const rows = document.querySelectorAll('[data-testid="bufferline-row"]');
         const rm = container.querySelector('.readmarker');
-        const allRows = container.querySelectorAll('table tbody tr');
-        const rmIndex = Array.from(allRows).findIndex(t => t.classList.contains('readmarker'));
-        const lastLineIndex = rows.length - 1;
+
+        // Count bufferline-rows below the readmarker using DOM sibling traversal.
+        // Index arithmetic (lastLineIndex - rmIndex) is unreliable because the tbody
+        // contains mixed row types (fetchmore, readmarker, bufferline) with different
+        // indexing bases. Sibling traversal directly counts what we care about.
+        let linesBelowReadmarker = -1;
+        if (rm) {
+            let count = 0;
+            let sibling = rm.nextElementSibling;
+            while (sibling) {
+                if (sibling.hasAttribute('data-testid') && (sibling as HTMLElement).getAttribute('data-testid') === 'bufferline-row') {
+                    count++;
+                }
+                sibling = sibling.nextElementSibling;
+            }
+            linesBelowReadmarker = count;
+        }
+
         return {
             hasReadmarker: !!rm,
-            readmarkerIndex: rmIndex,
+            readmarkerIndex: rm ? Array.from(container.querySelectorAll('table tbody tr')).findIndex(t => t.classList.contains('readmarker')) : -1,
             totalLines: rows.length,
-            linesBelowReadmarker: rmIndex >= 0 ? lastLineIndex - rmIndex : -1,
+            linesBelowReadmarker,
             scrollTop: container.scrollTop,
             scrollHeight: container.scrollHeight,
             clientHeight: container.clientHeight,
