@@ -8,7 +8,7 @@ use tauri::Manager;
 fn main() {
   tauri::Builder::default()
     .setup(|app| {
-      if cfg!(target_os = "windows") {
+      if cfg!(target_os = "windows") || cfg!(target_os = "macos") {
         let window = app.get_webview_window("main").unwrap();
         window.set_decorations(false)?;
       }
