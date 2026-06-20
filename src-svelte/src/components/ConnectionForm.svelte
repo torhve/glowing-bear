@@ -4,6 +4,7 @@
   import { connectionState, setConnectionStatus, setErrors, clearErrors } from '$lib/stores/connectionStore';
   import { settings, updateSettings } from '$lib/stores/settings';
   import { addToast } from '$lib/toast';
+  import { isWindowsTauri, minimizeWindow, toggleMaximizeWindow, closeWindow } from '$lib/tauriWindow';
 
   import { parseRelayUrl } from '$lib/utils';
   import Zap from '@lucide/svelte/icons/zap';
@@ -20,7 +21,12 @@ import Key from '@lucide/svelte/icons/key';
   import List from '@lucide/svelte/icons/list';
   import Save from '@lucide/svelte/icons/save';
   import Loader2 from '@lucide/svelte/icons/loader-2';
+  import Minimize2 from '@lucide/svelte/icons/minimize-2';
+  import Maximize2 from '@lucide/svelte/icons/maximize-2';
+  import X from '@lucide/svelte/icons/x';
   import FormInput from './FormInput.svelte';
+
+  let windowsTauri = $derived(isWindowsTauri());
 
   let hostField = $state('');
   let port = $state('443');
@@ -174,9 +180,41 @@ import Key from '@lucide/svelte/icons/key';
   }
 </script>
 
-<div class="h-dvh bg-bg flex flex-col items-center overflow-y-auto py-12 px-4">
-  <div class="w-full max-w-lg space-y-6">
-    <div class="text-center mb-6">
+<div class="h-dvh bg-bg flex flex-col overflow-y-auto">
+  {#if windowsTauri}
+    <div class="h-8 bg-surface-raised border-b border-border flex items-center justify-end px-2 space-x-1 flex-shrink-0" data-tauri-drag-region>
+      <div data-tauri-drag-region="false">
+        <button
+          onclick={() => minimizeWindow()}
+          class="px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-danger rounded"
+          title="Minimize"
+        >
+          <Minimize2 size={14} />
+        </button>
+      </div>
+      <div data-tauri-drag-region="false">
+        <button
+          onclick={() => toggleMaximizeWindow()}
+          class="px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-surface-raised rounded"
+          title="Maximize"
+        >
+          <Maximize2 size={14} />
+        </button>
+      </div>
+      <div data-tauri-drag-region="false">
+        <button
+          onclick={() => closeWindow()}
+          class="px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-danger rounded"
+          title="Close"
+        >
+          <X size={14} />
+        </button>
+      </div>
+    </div>
+  {/if}
+  <div class="flex-1 flex items-center justify-center overflow-y-auto px-4">
+    <div class="w-full max-w-lg space-y-6">
+      <div class="text-center mb-6">
       <img src="/glowing-bear.svg" alt="logo" class="w-20 h-20 mx-auto mb-2" />
       <h1 class="text-3xl font-bold text-text">Glowing Bear</h1>
       <p class="text-sm text-text-secondary mt-1">WeeChat web frontend</p>
@@ -399,5 +437,6 @@ import Key from '@lucide/svelte/icons/key';
         </div>
       </details>
     </div>
+  </div>
   </div>
 </div>

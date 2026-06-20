@@ -6,6 +6,7 @@ import { buffers, currentBuffer, setActiveBuffer } from './stores/models';
 import { get } from 'svelte/store';
 import type { BufferData } from './types';
 import { initFavicon, drawBadge, resetBadge } from './faviconBadge';
+import { isTauri } from './tauriWindow';
 
 // Notification permission state
 let notificationPermission: 'granted' | 'denied' | 'default' = 'default';
@@ -16,11 +17,6 @@ const activeNotifications: Map<string, Notification> = new Map();
 // Tauri notification module (lazily loaded)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let tauriNotif: any = null;
-
-function isTauri(): boolean {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
-}
 
 async function ensureTauriNotification(): Promise<void> {
     if (tauriNotif !== null || !isTauri()) return;

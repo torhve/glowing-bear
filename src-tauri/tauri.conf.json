@@ -17,6 +17,7 @@
         "height": 600,
         "resizable": true,
         "title": "Glowing Bear",
+        "transparent": true,
         "width": 800
       }
     ],
