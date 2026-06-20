@@ -3,8 +3,17 @@
   windows_subsystem = "windows"
 )]
 
+use tauri::Manager;
+
 fn main() {
   tauri::Builder::default()
+    .setup(|app| {
+      if cfg!(target_os = "windows") {
+        let window = app.get_webview_window("main").unwrap();
+        window.set_decorations(false)?;
+      }
+      Ok(())
+    })
     .plugin(tauri_plugin_window_state::Builder::new().build())
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_notification::init())
