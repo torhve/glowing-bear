@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, clearSettings, waitForAppReady } from '../helpers/connection';
+import { createConnectedPage } from '../fixtures/auth';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
 
@@ -8,14 +8,10 @@ let page: import('@playwright/test').Page;
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
-    page = await browser.newPage();
-    await page.goto('http://localhost:8001/');
-    await waitForAppReady(page);
-    await clearSettings(page);
+    page = await createConnectedPage(browser);
     page.on('pageerror', (error) => {
         if (error.message?.includes('effect_orphan')) return;
     });
-    await connectToWeechat(page);
 });
 
 test.afterAll(async () => {
@@ -44,7 +40,6 @@ async function findPmBuffer() {
 
 test('creates buffer on PM from bot', async () => {
     await irc.sendPm('testuser', 'Hello from bot!');
-    await page.waitForTimeout(2000);
     const pmItem = await findPmBuffer();
     expect(pmItem).not.toBeNull();
     await expect(pmItem!).toBeVisible({ timeout: 10000 });
@@ -52,7 +47,6 @@ test('creates buffer on PM from bot', async () => {
 
 test('shows unread count on PM buffer', async () => {
     await irc.sendPm('testuser', 'Hello from bot!');
-    await page.waitForTimeout(2000);
 
     const pmBufferItem = await findPmBuffer();
     expect(pmBufferItem).not.toBeNull();
@@ -67,8 +61,6 @@ test('shows unread count on PM buffer', async () => {
 
 test('shows notification badge on PM buffer', async () => {
     await irc.sendPm('testuser', 'Notification test message!');
-    await page.waitForTimeout(2000);
-
     const pmBufferItem = await findPmBuffer();
     expect(pmBufferItem).not.toBeNull();
     await expect(pmBufferItem!).toBeVisible({ timeout: 10000 });
@@ -90,14 +82,10 @@ test('shows notification badge on PM buffer', async () => {
 
 test('switches to PM buffer and shows message', async () => {
     await irc.sendPm('testuser', 'Hello from bot!');
-    await page.waitForTimeout(2000);
-
     const pmBufferItem = await findPmBuffer();
     expect(pmBufferItem).not.toBeNull();
     await pmBufferItem!.click();
-    await page.waitForTimeout(500);
-
-    await expect(page.getByTestId('chat-messages')).toBeVisible();
+    await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 5000 });
 
     const msgRow = page.getByRole('cell', { name: 'Hello from bot!' }).first();
     await expect(msgRow).toBeVisible({ timeout: 10000 });
@@ -121,7 +109,6 @@ test('closes PM buffer cleanly', async () => {
     // but the click should not throw an error
     await pmBufferItem.hover();
     await closeBtn.click();
-    await page.waitForTimeout(500);
 
     // Chat view should still be visible (app didn't crash)
     await expect(page.getByTestId('chat-view')).toBeVisible();

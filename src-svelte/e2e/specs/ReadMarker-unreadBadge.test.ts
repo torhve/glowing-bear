@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, clearSettings, waitForAppReady } from '../helpers/connection';
+import { createConnectedPage } from '../fixtures/auth';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
 
@@ -8,14 +8,10 @@ let page: import('@playwright/test').Page;
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
-    page = await browser.newPage();
-    await page.goto('http://localhost:8001/');
-    await waitForAppReady(page);
-    await clearSettings(page);
+    page = await createConnectedPage(browser);
     page.on('pageerror', (error) => {
         if (error.message?.includes('effect_orphan')) return;
     });
-    await connectToWeechat(page);
 });
 
 test.afterAll(async () => {
@@ -39,17 +35,14 @@ test('readmarker appears when switching back after receiving messages elsewhere'
     // Switch to gbtest so we're NOT on #glowing-bear when messages arrive
     await waitForBuffer(page, 'gbtest', 10000);
     await switchToBuffer(page, 'gbtest');
-    await page.waitForTimeout(500);
 
     // Bot sends messages to #glowing-bear while we're on another buffer
     await irc.sendMessage('#glowing-bear', 'unread-badge-test msg-1-' + Date.now());
     await irc.sendMessage('#glowing-bear', 'unread-badge-test msg-2-' + Date.now());
-    await page.waitForTimeout(3000);
 
     // Switch back to #glowing-bear — readmarker should appear
     await waitForBuffer(page, '#glowing-bear', 15000);
     await switchToBuffer(page, '#glowing-bear');
-    await page.waitForTimeout(1500);
 
     // Readmarker should be visible
     const readmarker = page.getByTestId('readmarker');
@@ -64,28 +57,23 @@ test('readmarker appears after scroll-to-bottom followed by new unreads', async 
     // Ensure we're on #glowing-bear and at bottom
     await waitForBuffer(page, '#glowing-bear', 15000);
     await switchToBuffer(page, '#glowing-bear');
-    await page.waitForTimeout(500);
 
     // Scroll to bottom to mark as fully read
     const chatContainer = page.locator('[data-testid="chat-messages"]');
     await chatContainer.evaluate((el) => {
         (el as HTMLElement).scrollTop = (el as HTMLElement).scrollHeight;
     });
-    await page.waitForTimeout(300);
 
     // Switch away to receive messages elsewhere
     await waitForBuffer(page, 'gbtest', 10000);
     await switchToBuffer(page, 'gbtest');
-    await page.waitForTimeout(500);
 
     // Bot sends new messages to #glowing-bear
     await irc.sendMessage('#glowing-bear', 'unread-scroll-test msg-' + Date.now());
-    await page.waitForTimeout(3000);
 
     // Switch back — readmarker should appear again
     await waitForBuffer(page, '#glowing-bear', 15000);
     await switchToBuffer(page, '#glowing-bear');
-    await page.waitForTimeout(1500);
 
     const readmarker = page.getByTestId('readmarker');
     await expect(readmarker).toBeVisible();
@@ -127,7 +115,6 @@ test('other buffer unread counts preserved when switching active buffer', async 
     // Switch to gbtest so #glowing-bear is inactive
     await waitForBuffer(page, 'gbtest', 10000);
     await switchToBuffer(page, 'gbtest');
-    await page.waitForTimeout(500);
 
     // Send messages to #glowing-bear (creates unread)
     await irc.sendMessage('#glowing-bear', 'other-buffer-count-test-' + Date.now());
@@ -136,7 +123,8 @@ test('other buffer unread counts preserved when switching active buffer', async 
     const glowItem = page.getByTestId('buffer-item').filter({ hasText: 'glowing-bear' }).first();
     await expect(glowItem).toBeVisible({ timeout: 10000 });
     // Badge is a span with rounded-full class positioned absolutely on the right side of the item
-    await glowItem.locator('span.rounded-full').waitFor({ state: 'visible', timeout: 5000 });
+    // Wait up to 8s for hotlist sync (WeeChat relay syncs every ~5s)
+    await glowItem.locator('span.rounded-full').waitFor({ state: 'visible', timeout: 8000 });
 
     // Read unread badge text for #glowing-bear from the DOM before second switch.
     const getUnreadBadge = async (name: string) => {
@@ -151,7 +139,6 @@ test('other buffer unread counts preserved when switching active buffer', async 
     const otherCount = await otherItems.count();
     if (otherCount > 1) {
         await otherItems.nth(1).click();
-        await page.waitForTimeout(500);
 
         // Read unread badge text for #glowing-bear after switching away
         const afterText = await getUnreadBadge('glowing-bear');

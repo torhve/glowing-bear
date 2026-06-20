@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, clearSettings, waitForAppReady } from '../helpers/connection';
+import { createConnectedPage } from '../fixtures/auth';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 
 let page: import('@playwright/test').Page;
@@ -7,14 +7,10 @@ let page: import('@playwright/test').Page;
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
-    page = await browser.newPage();
-    await page.goto('http://localhost:8001/');
-    await waitForAppReady(page);
-    await clearSettings(page);
+    page = await createConnectedPage(browser);
     page.on('pageerror', (error) => {
         if (error.message?.includes('effect_orphan')) return;
     });
-    await connectToWeechat(page);
     await waitForBuffer(page, '#glowing-bear', 15000);
     await switchToBuffer(page, '#glowing-bear');
 });
@@ -40,7 +36,6 @@ test('should display the topic bar with buffer name', async () => {
 
 test('should display the topic modal when clicking topic bar', async () => {
     await page.getByTestId('topic-bar').first().click();
-    await page.waitForTimeout(300);
     await expect(page.getByTestId('topic-modal')).toBeVisible({ timeout: 5000 });
     // Click the backdrop to close
     const modal = page.getByTestId('topic-modal');

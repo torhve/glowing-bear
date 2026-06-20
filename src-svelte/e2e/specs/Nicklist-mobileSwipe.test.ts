@@ -46,6 +46,7 @@ test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
     browserPage = await browser.newPage();
+    await browserPage.route('**/cdnjs.cloudflare.com/**', (route) => route.abort());
     await browserPage.goto('http://localhost:8001/');
     await waitForAppReady(browserPage);
     await clearSettings(browserPage);
@@ -76,7 +77,6 @@ test('nicklist is visible on desktop', async () => {
     // Switch to #glowing-bear which has nick data (required for nicklist to render)
     await waitForBuffer(browserPage, '#glowing-bear', 10000);
     await switchToBuffer(browserPage, '#glowing-bear');
-    await browserPage.waitForTimeout(500);
     await expect(browserPage.getByTestId('nicklist')).toBeVisible({ timeout: 10000 });
 });
 
@@ -87,7 +87,6 @@ test('swipe from right edge opens nicklist on mobile', async () => {
     await connectToWeechat(browserPage);
     await waitForBuffer(browserPage, '#glowing-bear', 10000);
     await switchToBuffer(browserPage, '#glowing-bear');
-    await browserPage.waitForTimeout(500);
 
     // Nicklist overlay should be hidden initially (nicklistOpenOnMobile = false)
     await expect(browserPage.locator('.mobile-nicklist-overlay')).toHaveClass(/translate-x-full/);
@@ -101,7 +100,6 @@ test('swipe from right edge opens nicklist on mobile', async () => {
 
     // Perform swipe left from right edge to open nicklist
     await swipeGesture(browserPage, startX, startY, endX, endY);
-    await browserPage.waitForTimeout(300);
 
     // Check nicklist overlay is now open
     await expect(browserPage.locator('.mobile-nicklist-overlay')).toHaveClass(/translate-x-0/);
@@ -112,7 +110,6 @@ test('swipe right closes nicklist on mobile', async () => {
     const overlayClass = await browserPage.locator('.mobile-nicklist-overlay').getAttribute('class');
     if (overlayClass?.includes('translate-x-0')) {
         await swipeGesture(browserPage, 50, 333, 365, 333);
-        await browserPage.waitForTimeout(300);
     }
     await disconnect(browserPage);
     await setSettings(browserPage, { showNicklist: true });
@@ -120,7 +117,6 @@ test('swipe right closes nicklist on mobile', async () => {
     await connectToWeechat(browserPage);
     await waitForBuffer(browserPage, '#glowing-bear', 10000);
     await switchToBuffer(browserPage, '#glowing-bear');
-    await browserPage.waitForTimeout(500);
 
     // Open nicklist first via swipe
     const width = 375;
@@ -131,7 +127,6 @@ test('swipe right closes nicklist on mobile', async () => {
     const endY = height / 2;
 
     await swipeGesture(browserPage, startX, startY, endX, endY);
-    await browserPage.waitForTimeout(300);
 
     // Verify nicklist is open (translate-x-0 means visible)
     await expect(browserPage.locator('.mobile-nicklist-overlay')).toHaveClass(/translate-x-0/);
@@ -143,7 +138,6 @@ test('swipe right closes nicklist on mobile', async () => {
     const closeEndY = height / 2;
 
     await swipeGesture(browserPage, closeStartX, closeStartY, closeEndX, closeEndY);
-    await browserPage.waitForTimeout(300);
 
     // Nicklist should be closed (translate-x-full means hidden)
     await expect(browserPage.locator('.mobile-nicklist-overlay')).toHaveClass(/translate-x-full/);
@@ -154,7 +148,6 @@ test('close button in nicklist header works on mobile', async () => {
     const overlayClass = await browserPage.locator('.mobile-nicklist-overlay').getAttribute('class');
     if (overlayClass?.includes('translate-x-0')) {
         await swipeGesture(browserPage, 50, 333, 365, 333);
-        await browserPage.waitForTimeout(300);
     }
     await disconnect(browserPage);
     await setSettings(browserPage, { showNicklist: true });
@@ -162,7 +155,6 @@ test('close button in nicklist header works on mobile', async () => {
     await connectToWeechat(browserPage);
     await waitForBuffer(browserPage, '#glowing-bear', 10000);
     await switchToBuffer(browserPage, '#glowing-bear');
-    await browserPage.waitForTimeout(500);
 
     // Open nicklist via swipe
     const width = 375;
@@ -173,14 +165,12 @@ test('close button in nicklist header works on mobile', async () => {
     const endY = height / 2;
 
     await swipeGesture(browserPage, startX, startY, endX, endY);
-    await browserPage.waitForTimeout(300);
 
     // Verify nicklist is open
     await expect(browserPage.locator('.mobile-nicklist-overlay')).toHaveClass(/translate-x-0/);
 
     // Click the close button inside the nicklist header
     await browserPage.getByTestId('mobile-nicklist-close').click();
-    await browserPage.waitForTimeout(300);
 
     // Nicklist should be closed
     await expect(browserPage.locator('.mobile-nicklist-overlay')).toHaveClass(/translate-x-full/);
@@ -191,7 +181,6 @@ test('swipe right from left shows buffer list on mobile', async () => {
     const overlayClass = await browserPage.locator('.mobile-nicklist-overlay').getAttribute('class');
     if (overlayClass?.includes('translate-x-0')) {
         await swipeGesture(browserPage, 50, 333, 365, 333);
-        await browserPage.waitForTimeout(300);
     }
     await disconnect(browserPage);
     await browserPage.setViewportSize({ width: 375, height: 667 });
@@ -209,7 +198,6 @@ test('swipe right from left shows buffer list on mobile', async () => {
 
     // Perform swipe right from left edge
     await swipeGesture(browserPage, startX, startY, endX, endY);
-    await browserPage.waitForTimeout(300);
 
     // Buffer list should now be visible
     await expect(browserPage.getByTestId('buffer-list')).toBeVisible({ timeout: 5000 });

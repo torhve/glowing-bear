@@ -1,19 +1,15 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, clearSettings, waitForAppReady } from '../helpers/connection';
+import { createConnectedPage } from '../fixtures/auth';
 
 let page: import('@playwright/test').Page;
 
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
-    page = await browser.newPage();
-    await page.goto('http://localhost:8001/');
-    await waitForAppReady(page);
-    await clearSettings(page);
+    page = await createConnectedPage(browser);
     page.on('pageerror', (error) => {
         if (error.message?.includes('effect_orphan')) return;
     });
-    await connectToWeechat(page);
 });
 
 test.afterAll(async () => {
@@ -32,10 +28,9 @@ test.beforeEach(async () => {
         const title = await btn.getAttribute('title');
         if (title === 'Unpin buffer') {
             await btn.click({ force: true });
-            await page.waitForTimeout(200);
+            await expect(btn).toHaveAttribute('title', 'Pin buffer', { timeout: 5000 });
         }
     }
-    await page.waitForTimeout(300);
 });
 
 test('pin button is visible on buffer items', async () => {
@@ -58,7 +53,7 @@ test('pin button shows pushpin icon when not pinned', async () => {
 test('clicking pin button changes icon to pin icon', async () => {
     const firstPinButton = page.getByTestId('pin-buffer').first();
     await firstPinButton.click({ force: true });
-    await page.waitForTimeout(500);
+    await expect(firstPinButton).toHaveAttribute('title', 'Unpin buffer', { timeout: 5000 });
     // After pinning, the PinOff icon should be shown
     await expect(firstPinButton.locator('svg')).toBeAttached();
 });
@@ -66,16 +61,15 @@ test('clicking pin button changes icon to pin icon', async () => {
 test('after pinning, title changes to Unpin buffer', async () => {
     const firstPinButton = page.getByTestId('pin-buffer').first();
     await firstPinButton.click({ force: true });
-    await page.waitForTimeout(500);
     await expect(firstPinButton).toHaveAttribute('title', 'Unpin buffer');
 });
 
 test('clicking unpin button changes icon back to pushpin icon', async () => {
     const firstPinButton = page.getByTestId('pin-buffer').first();
     await firstPinButton.click({ force: true });
-    await page.waitForTimeout(500);
+    await expect(firstPinButton).toHaveAttribute('title', 'Unpin buffer', { timeout: 5000 });
     await firstPinButton.click({ force: true });
-    await page.waitForTimeout(500);
+    await expect(firstPinButton).toHaveAttribute('title', 'Pin buffer', { timeout: 5000 });
     // After unpinning, the Pin icon should be shown again
     await expect(firstPinButton.locator('svg')).toBeAttached();
 });
@@ -87,11 +81,11 @@ test('pinned buffers appear before unpinned in sorted list', async () => {
     let pinnedIdx = -1;
     if (count >= 2) {
         await pinButtons.nth(1).click({ force: true });
-        await page.waitForTimeout(500);
+        await expect(pinButtons.nth(1)).toHaveAttribute('title', 'Unpin buffer', { timeout: 5000 });
         pinnedIdx = 1;
     } else if (count >= 1) {
         await pinButtons.nth(0).click({ force: true });
-        await page.waitForTimeout(500);
+        await expect(pinButtons.nth(0)).toHaveAttribute('title', 'Unpin buffer', { timeout: 5000 });
         pinnedIdx = 0;
     }
 
