@@ -434,6 +434,14 @@
 
   let showBufferList = $state(true);
   let nicklistOpenOnMobile = $state(false);
+  // Whether current buffer has nick data to display (used for auto-hiding nicklist)
+  let hasCurrentBufferNicklist = $derived(
+    $currentBuffer?.nicklist
+      ? Object.entries($currentBuffer.nicklist).some(([name, group]) =>
+          name !== 'root' && group.nicks.length > 0
+        )
+      : false
+  );
   let touchStartX = 0;
   let touchStartY = 0;
   let touchStartTime = 0;
@@ -504,7 +512,8 @@
       // Swipe left -> check if from right edge (nicklist) or general (buffer list)
       else {
         const rightEdgeThreshold = 40;
-        if (touchStartX > window.innerWidth - rightEdgeThreshold && !nicklistOpenOnMobile) {
+        // Only open nicklist on swipe if buffer has nicks or alwaysnicklist is set
+        if (touchStartX > window.innerWidth - rightEdgeThreshold && !nicklistOpenOnMobile && (hasCurrentBufferNicklist || $settings.alwaysnicklist)) {
           nicklistOpenOnMobile = true;
         } else if (nicklistOpenOnMobile) {
           nicklistOpenOnMobile = false;
@@ -551,10 +560,10 @@
         <ChatView />
         <InputBar />
       </div>
-      {#if $settings.showNicklist && !isMobile()}
+      {#if $settings.showNicklist && !isMobile() && hasCurrentBufferNicklist}
         <Nicklist />
       {/if}
-      {#if isMobile()}
+      {#if isMobile() && (hasCurrentBufferNicklist || $settings.alwaysnicklist)}
         <div class="fixed top-0 right-0 bottom-0 h-screen w-52 sm:w-28 lg:w-30 z-50 transition-transform duration-200 ease-out {nicklistOpenOnMobile ? 'translate-x-0' : 'translate-x-full'}">
           <button
             onclick={() => { nicklistOpenOnMobile = false; }}

@@ -156,3 +156,29 @@ test('should show nicklist again after toggling off and on', async () => {
     await page.waitForTimeout(300);
     await expect(page.getByTestId('nicklist')).toBeAttached();
 });
+
+test('should hide nicklist on buffers without nick data', async () => {
+    // Ensure nicklist is enabled (previous toggle tests may have turned it off)
+    await setSettings(page, { showNicklist: true });
+    await page.waitForTimeout(300);
+    // Nicklist should be visible on the current channel buffer
+    await expect(page.getByTestId('nicklist')).toBeVisible({ timeout: 5000 });
+
+    // Switch to a server-level buffer (no nicklist) — e.g. 'gbtest' or 'irc.gbtest'
+    const serverBuffer = page.getByTestId('buffer-item').filter({ hasText: /gbtest/i }).first();
+    if ((await serverBuffer.isVisible().catch(() => false))) {
+        await serverBuffer.click();
+        await page.waitForTimeout(500);
+        // Nicklist should be hidden (not attached) for server buffers
+        await expect(page.getByTestId('nicklist')).not.toBeAttached({ timeout: 5000 });
+    }
+
+    // Switch back to a channel buffer to restore nicklist
+    const channelBuffer = page.getByTestId('buffer-item').filter({ hasText: /#gbtest|glowing-bear/i }).first();
+    if ((await channelBuffer.isVisible().catch(() => false))) {
+        await channelBuffer.click();
+        await page.waitForTimeout(500);
+        // Nicklist should reappear
+        await expect(page.getByTestId('nicklist')).toBeVisible({ timeout: 5000 });
+    }
+});

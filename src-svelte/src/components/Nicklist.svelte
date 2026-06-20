@@ -13,7 +13,17 @@
   let { onClose }: { onClose?: () => void } = $props();
   let searchQuery = $state('');
 
+  // Whether settings allow showing the nicklist
   let showNicklist = $derived($settings.showNicklist);
+
+  // Whether current buffer actually has nick data to display
+  let hasNicklist = $derived(
+    $currentBuffer?.nicklist
+      ? Object.entries($currentBuffer.nicklist).some(([name, group]) =>
+          name !== 'root' && group.nicks.length > 0
+        )
+      : false
+  );
 
   let filteredNickGroups = $derived(
     $currentBuffer?.nicklist
@@ -46,7 +56,7 @@
   }
 </script>
 
-{#if showNicklist}
+{#if showNicklist && hasNicklist}
 <div class="w-52 sm:w-28 lg:w-30 bg-surface border-l border-border flex flex-col overflow-hidden" data-testid="nicklist">
   <div class="h-10 bg-surface-raised border-b border-border flex items-center justify-between px-3">
     <span class="flex items-center gap-1.5"><Users size={14} />Nicklist</span>
@@ -111,6 +121,25 @@
       </div>
         {/if}
     {/each}
+  </div>
+</div>
+{:else if showNicklist && !hasNicklist && onClose}
+<div class="w-52 sm:w-28 lg:w-30 bg-surface border-l border-border flex flex-col overflow-hidden" data-testid="nicklist">
+  <div class="h-10 bg-surface-raised border-b border-border flex items-center justify-between px-3">
+    <span class="flex items-center gap-1.5"><Users size={14} />Nicklist</span>
+    {#if onClose}
+      <button
+        onclick={onClose}
+        data-testid="mobile-nicklist-close"
+        class="px-1 py-0.5 text-sm text-text-secondary hover:text-white hover:bg-surface-raised rounded"
+        title="Close nicklist"
+      >
+        ✕
+      </button>
+    {/if}
+  </div>
+  <div class="flex-1 flex items-center justify-center p-4">
+    <p class="text-sm text-text-muted text-center">No nicklist for this buffer</p>
   </div>
 </div>
 {/if}
