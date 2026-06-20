@@ -53,11 +53,12 @@
             {#if toast.buttons && toast.buttons.length > 0}
                 <div class="toast-actions flex gap-2 mt-2">
                     {#each toast.buttons as btn, i (btn.text + i)}
-                        <button
-                            onclick={() => btn.action()}
-                            class="px-3 py-1 text-xs font-medium rounded bg-accent text-white hover:bg-accent-hover"
-                            data-toast-action
-                        >
+                    <button
+                        onclick={() => btn.action()}
+                        class="px-3 py-1 text-xs font-medium rounded bg-accent text-white hover:bg-accent-hover"
+                        data-toast-action
+                        data-testid={`toast-${btn.text.toLowerCase()}-button`}
+                    >
                             {btn.text}
                         </button>
                     {/each}
