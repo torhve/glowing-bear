@@ -179,6 +179,18 @@ function handleBufferUpdate(buffer: any, message: BufferMessage) {
 }
 
 // ---- Buffer line added handler ----
+/**
+ * Strips WeeChat formatting codes from prefix and message for notification display.
+ * Returns a plain-text body suitable for desktop notifications.
+ */
+function formatNotificationBody(lineMsg: BufferLineMessage): string {
+    const prefixParts = parseRichText(lineMsg.prefix);
+    const messageParts = parseRichText(lineMsg.message);
+    const prefixText = prefixParts.map(p => p.text).join('').trim();
+    const msgText = messageParts.map(p => p.text).join('');
+    return prefixText ? `<${prefixText}> ${msgText}` : msgText;
+}
+
 // Builds immutable copies of affected buffers first, then mutates only those copies.
 // This ensures Svelte's $derived($currentBuffer?.lines) sees a new array reference
 // and triggers re-render, which is required for readmarker rendering to work.
@@ -313,11 +325,8 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                     const server = get(servers)[serverKey];
                     if (server) server.unread++;
 
-                    // Strip WeeChat formatting codes from message for notification display
-                    const formattedParts = parseRichText(lineMsg.message);
-                    const strippedMessage = formattedParts.map(p => p.text).join('');
-                    const prefixText = (lineMsg.prefix || '').trim();
-                    const notificationBody = prefixText ? `<${prefixText}> ${strippedMessage}` : strippedMessage;
+                    // Strip WeeChat formatting codes from message/prefix for notification display
+                    const notificationBody = formatNotificationBody(lineMsg);
 
                     // Trigger notification subsystem
                     createHighlight(buffer, notificationBody);
