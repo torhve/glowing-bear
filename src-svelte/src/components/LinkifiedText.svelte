@@ -12,14 +12,16 @@
   let tokens = $derived(tokenizeAndCodify(text));
 </script>
 
+<span class="linkified-text">
 {#each tokens as token, ti (ti)}
   {#if token.type === 'link'}
-    <a href={token.value} target="_blank" rel="noopener noreferrer" class={linkClass}>{token.value}</a>
+    <a href={token.value} target="_blank" rel="noopener noreferrer" class="linkified-link {linkClass}">{token.value}</a>
   {:else if token.type === 'code'}
     <span class="hidden-bracket">{token.delimiter}</span>
-    <code>{token.value}</code>
+    <code class="linkified-code">{token.value}</code>
     <span class="hidden-bracket">{token.delimiter}</span>
   {:else}
     {token.value}
   {/if}
 {/each}
+</span>

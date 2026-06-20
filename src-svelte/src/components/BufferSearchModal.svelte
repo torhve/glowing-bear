@@ -90,10 +90,11 @@
 </script>
 
 <BaseDialog id="buffer-search-modal" labelledby="buffer-search-title" noAnimation ontoggle={handleToggle}>
-  <div class="flex flex-col max-h-[85vh]">
-    <div class="px-4 py-3 border-b border-border flex items-center justify-between">
+  <div class="buffer-search-content flex flex-col max-h-[85vh]">
+    <div class="buffer-search-header px-4 py-3 border-b border-border flex items-center justify-between">
       <h2 id="buffer-search-title" class="text-sm font-bold text-text">Search Buffers</h2>
       <button
+        data-testid="buffer-search-close"
         type="button"
         popovertarget="buffer-search-modal"
         popovertargetaction="hide"
@@ -104,9 +105,9 @@
       </button>
     </div>
 
-    <div class="px-4 py-2 border-b border-border">
+    <div class="buffer-search-input-area px-4 py-2 border-b border-border">
       <div class="relative">
-        <Search size={14} class="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+        <Search size={14} class="buffer-search-icon absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
         <FormInput
           id="buffer-search"
           type="text"
@@ -120,36 +121,36 @@
       </div>
     </div>
 
-    <div class="flex-1 overflow-y-auto p-2">
+    <div class="buffer-search-results flex-1 overflow-y-auto p-2">
       {#each groupedBuffers as group, idx (group.number)}
         <button
           onclick={() => handleBufferClick(group.buffers[0]!)}
-          class="w-full px-3 py-3 text-left flex items-center relative rounded hover:bg-surface-raised transition-colors {idx === selectedIndex ? '!bg-accent' : ''}"
+          class="buffer-search-item w-full px-3 py-3 text-left flex items-center relative rounded hover:bg-surface-raised transition-colors {idx === selectedIndex ? '!bg-accent' : ''}"
           data-search-index={idx}
         >
           <div class="flex items-center gap-2 min-w-0">
-            <span class="flex-shrink-0 px-1.5 py-0.5 text-xs font-bold rounded bg-surface-raised border border-border text-white">
+            <span class="buffer-search-number flex-shrink-0 px-1.5 py-0.5 text-xs font-bold rounded bg-surface-raised border border-border text-white">
               {group.number}
             </span>
             <div class="min-w-0 flex-1">
-              <div class="text-base font-bold truncate text-white">{group.buffers.map(b => b.shortName).join(', ')}</div>
-              <div class="text-sm truncate text-white/70">{group.buffers.map(b => b.fullName).join(', ')}</div>
+              <div class="buffer-search-shortname text-base font-bold truncate text-white">{group.buffers.map(b => b.shortName).join(', ')}</div>
+              <div class="buffer-search-fullname text-sm truncate text-white/70">{group.buffers.map(b => b.fullName).join(', ')}</div>
             </div>
           </div>
 
           {#if group.buffers.some(b => b.notification >= 3)}
-            <span class="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-xs font-bold rounded bg-danger/60 text-white">
+            <span class="buffer-search-badge notification-badge absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-xs font-bold rounded bg-danger/60 text-white">
               {group.buffers.reduce((sum, b) => sum + b.notification, 0)}
             </span>
           {:else if group.buffers.some(b => b.notification > 0 || b.unread > 0)}
-            <span class="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-xs font-bold rounded bg-warning/60 text-white">
+            <span class="buffer-search-badge unread-badge absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-xs font-bold rounded bg-warning/60 text-white">
               {group.buffers.reduce((sum, b) => sum + (b.notification > 0 ? b.notification : b.unread), 0)}
             </span>
           {/if}
         </button>
       {/each}
       {#if groupedBuffers.length === 0 && bufferSearchQuery}
-        <div class="px-3 py-8 text-center text-white/50 text-sm">No buffers found</div>
+        <div class="buffer-search-no-results px-3 py-8 text-center text-white/50 text-sm">No buffers found</div>
       {/if}
     </div>
   </div>

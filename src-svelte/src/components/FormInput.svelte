@@ -41,7 +41,7 @@
     return v === 'search' ? 'pl-8' : 'pl-3';
   }
 
-  const combinedClass = $derived(`w-full bg-input-bg border border-border rounded text-text focus:outline-none focus:border-accent placeholder-text-muted ${getSizeClass(size)} ${getVariantClass(variant)} ${extraClass}`);
+  const combinedClass = $derived(`form-input w-full bg-input-bg border border-border rounded text-text focus:outline-none focus:border-accent placeholder-text-muted ${getSizeClass(size)} ${getVariantClass(variant)} ${extraClass}`);
 </script>
 
 <input
