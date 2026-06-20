@@ -4,7 +4,7 @@
   import { connectionState, connectionStats, formatBytes, timeAgo, formatDuration } from '$lib/stores/connectionStore';
   import { settings, updateSettings } from '$lib/stores/settings';
   import { disconnect } from '$lib/stores/connectionManager';
-  import { isWindowsTauri, minimizeWindow, toggleMaximizeWindow, closeWindow } from '$lib/tauriWindow';
+  import { isWindowsTauri, isMacOSTauri, minimizeWindow, toggleMaximizeWindow, closeWindow } from '$lib/tauriWindow';
   import SettingsModal from '$components/SettingsModal.svelte';
   import BufferSearchModal from '$components/BufferSearchModal.svelte';
   import BufferHotlist from '$components/BufferHotlist.svelte';
@@ -22,6 +22,7 @@
   let { onBufferSelect = () => {}, onSearchOpen = () => {}, bufferListVisible = true } = $props();
 
   let windowsTauri = $derived(isWindowsTauri());
+  let macosTauri = $derived(isMacOSTauri());
 
   function handleDisconnect() {
     disconnect();
@@ -37,6 +38,13 @@
 <div data-testid="top-bar" style="padding-top: env(safe-area-inset-top, 0px);">
   <div class="top-bar-inner h-10 bg-surface-raised border-b border-border flex items-center px-2 space-x-2" data-tauri-drag-region>
     <div class="flex items-center gap-1 flex-1 min-w-0" data-tauri-drag-region>
+      {#if macosTauri}
+        <div class="flex items-center gap-1 mr-1">
+          <button data-tauri-drag-region="false" onclick={() => closeWindow()} class="w-3 h-3 rounded-full bg-[#ff5f57] border border-[#e54b3f]/30 cursor-pointer" title="Close" data-testid="traffic-light-close"></button>
+          <button data-tauri-drag-region="false" onclick={() => minimizeWindow()} class="w-3 h-3 rounded-full bg-[#febc26] border border-[#dfca1d]/30 cursor-default" title="Minimize" data-testid="traffic-light-minimize"></button>
+          <button data-tauri-drag-region="false" onclick={() => toggleMaximizeWindow()} class="w-3 h-3 rounded-full bg-[#27c93f] border border-[#1aab29]/30 cursor-default" title="Full Screen" data-testid="traffic-light-maximize"></button>
+        </div>
+      {/if}
       <img src="/glowing-bear.svg" alt="logo" class="app-logo w-5 h-5 flex-shrink-0" />
       {#if bufferListVisible}
         <span data-testid="app-title" class="text-sm font-bold text-text">Glowing Bear</span>

@@ -14,6 +14,11 @@ function isWindowsPlatform(): boolean {
     return typeof navigator !== 'undefined' && /windows/i.test(navigator.userAgent);
 }
 
+// Detect macOS platform via user agent string
+function isMacOSPlatform(): boolean {
+    return typeof navigator !== 'undefined' && /macintosh|mac\sos\sx/i.test(navigator.userAgent);
+}
+
 async function ensureTauriWindow(): Promise<void> {
     if (tauriWindow !== null || !isTauri()) return;
     try {
@@ -26,6 +31,11 @@ async function ensureTauriWindow(): Promise<void> {
 // Check if we are running on Windows inside Tauri
 function isWindowsTauri(): boolean {
     return isTauri() && isWindowsPlatform();
+}
+
+// Check if we are running on macOS inside Tauri
+function isMacOSTauri(): boolean {
+    return isTauri() && isMacOSPlatform();
 }
 
 // Minimize the current window (no-op outside Tauri)
@@ -72,4 +82,4 @@ async function closeWindow(): Promise<void> {
     }
 }
 
-export { isTauri, isWindowsTauri, minimizeWindow, toggleMaximizeWindow, closeWindow };
+export { isTauri, isWindowsTauri, isMacOSTauri, minimizeWindow, toggleMaximizeWindow, closeWindow };
