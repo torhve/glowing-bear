@@ -82,7 +82,7 @@
   $effect(() => {
     // Initialize theme, notifications, touch gestures, and attempt auto-connect on mount
     initTheme();
-    initNotifications();
+    void initNotifications();
     initTouchGestures();
     void tryAutoConnect();
     document.body.setAttribute('data-app-ready', 'true');
