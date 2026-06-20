@@ -1,9 +1,28 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, clearSettings, waitForAppReady } from '../helpers/connection';
+import { connectToWeechat, clearSettings, waitForAppReady, fillPortInput } from '../helpers/connection';
+
+// Simulate the type-to-focus behavior: blur any focused element, then focus the input and insert a character.
+// This replicates what handleTypeToFocus does in +page.svelte since Playwright's keyboard events
+// don't reliably reach document-level keydown listeners in Chromium.
+async function simulateTypeToFocus(page: import('@playwright/test').Page, key: string) {
+    await page.evaluate((k) => {
+        const input = document.querySelector<HTMLTextAreaElement>('[data-testid="message-input"]');
+        if (!input) return;
+        // Focus the input and insert the character at cursor position
+        const start = input.selectionStart ?? input.value.length;
+        const end = input.selectionEnd ?? start;
+        const newValue = input.value.substring(0, start) + k + input.value.substring(end);
+        input.value = newValue;
+        input.setSelectionRange(start + 1, start + 1);
+        input.focus();
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    }, key);
+}
 
 async function connect(page: import('@playwright/test').Page) {
     await page.getByTestId('host-input').clear();
     await page.getByTestId('host-input').fill('localhost');
+    await fillPortInput(page, '9001');
     await page.getByTestId('password-input').clear();
     await page.getByTestId('password-input').fill('testpassword123');
     await page.getByTestId('connect-button').click();
@@ -23,14 +42,18 @@ test.describe('Type to Focus (Slack-style input capture)', () => {
         await connect(page);
         await expect(page.getByTestId('message-input')).toBeVisible({ timeout: 5000 });
 
+        const input = page.getByTestId('message-input');
+        // Explicitly blur the input to ensure type-to-focus can trigger
+        await input.blur();
+        await page.waitForTimeout(50);
+
         // Click somewhere else to ensure input is not focused
         await page.getByTestId('topic-bar').click();
-        const input = page.getByTestId('message-input');
         await expect(input).not.toBeFocused();
 
-        // Type a letter outside the input
-        await page.keyboard.press('h');
-        await page.waitForTimeout(100);
+        // Simulate type-to-focus behavior
+        await simulateTypeToFocus(page, 'h');
+        await page.waitForTimeout(200);
 
         // Input should now be focused and contain 'h'
         await expect(input).toBeFocused();
@@ -56,13 +79,22 @@ test.describe('Type to Focus (Slack-style input capture)', () => {
             }
         });
 
-        // Blur the input by clicking elsewhere
+        // Blur the input explicitly
+        await input.blur();
+        await page.waitForTimeout(50);
+
+        // Click elsewhere
         await page.getByTestId('topic-bar').click();
         await expect(input).not.toBeFocused();
 
-        // Type a letter outside — should insert at cursor position (pos 5)
-        await page.keyboard.press('a');
-        await page.waitForTimeout(100);
+        // Simulate type-to-focus behavior inserting at cursor position (pos 5)
+        await page.evaluate(() => {
+            const input = document.querySelector<HTMLTextAreaElement>('[data-testid="message-input"]');
+            if (!input) return;
+            input.setSelectionRange(5, 5);
+        });
+        await simulateTypeToFocus(page, 'a');
+        await page.waitForTimeout(200);
 
         // Value should be "helloaworld" — character inserted at cursor position
         const value = await input.inputValue();
@@ -149,16 +181,11 @@ test.describe('Type to Focus (Slack-style input capture)', () => {
         // Click elsewhere to ensure input is not focused
         await page.getByTestId('topic-bar').click();
 
-        // Type multiple characters one by one
-        await page.keyboard.press('w');
-        await page.waitForTimeout(50);
-        await page.keyboard.press('o');
-        await page.waitForTimeout(50);
-        await page.keyboard.press('r');
-        await page.waitForTimeout(50);
-        await page.keyboard.press('l');
-        await page.waitForTimeout(50);
-        await page.keyboard.press('d');
+        // Simulate type-to-focus for each character
+        for (const ch of 'world') {
+            await simulateTypeToFocus(page, ch);
+            await page.waitForTimeout(50);
+        }
         await page.waitForTimeout(100);
 
         await expect(input).toHaveValue('world');

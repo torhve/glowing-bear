@@ -58,14 +58,15 @@ test('shows multiple bot messages in order', async () => {
     // Wait for all messages to render before checking order — prevents false negatives when
     // relay delivery is slower than the test advances.
     for (const msg of ['Message one', 'Message two', 'Message three']) {
-        const msgRow = page.locator('[data-testid="bufferline-row"] td.message').filter({ hasText: msg }).first();
+        const msgRow = page.locator('[data-testid="bufferline-row"] td.message').filter({ hasText: msg }).last();
         await expect(msgRow).toBeVisible({ timeout: 10000 });
     }
 
     // Verify ordering: "Message one" should appear above "Message three"
+    // Use last() to target the most recent messages sent in this test, avoiding stale ones from prior serial tests.
     const rows = page.locator('[data-testid="bufferline-row"]');
-    const oneIndex = await rows.filter({ hasText: 'Message one' }).first().evaluate(el => (el as HTMLTableRowElement).rowIndex);
-    const threeIndex = await rows.filter({ hasText: 'Message three' }).first().evaluate(el => (el as HTMLTableRowElement).rowIndex);
+    const oneIndex = await rows.filter({ hasText: 'Message one' }).last().evaluate(el => (el as HTMLTableRowElement).rowIndex);
+    const threeIndex = await rows.filter({ hasText: 'Message three' }).last().evaluate(el => (el as HTMLTableRowElement).rowIndex);
     expect(oneIndex).toBeLessThan(threeIndex);
 });
 

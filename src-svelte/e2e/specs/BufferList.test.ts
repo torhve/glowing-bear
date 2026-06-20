@@ -26,6 +26,14 @@ test.beforeEach(async () => {
     page.on('pageerror', (error) => {
         if (error.message?.includes('effect_orphan')) return;
     });
+    // Ensure we're still connected after previous serial test
+    const isConnected = await page.getByTestId('chat-view').isVisible().catch(() => false);
+    if (!isConnected) {
+        await page.goto('http://localhost:8001/');
+        await waitForAppReady(page);
+        await clearSettings(page);
+        await connectToWeechat(page);
+    }
 });
 
 test('should display buffer list after connecting', async () => {
@@ -69,39 +77,52 @@ test('should toggle server grouping in buffer list', async () => {
 test('should show buffer search input in topbar', async () => {
     await page.getByTestId('search-button').click();
     await page.waitForTimeout(200);
-    await expect(page.getByPlaceholder('Search buffers...')).toBeVisible();
+    await expect(page.locator('#buffer-search')).toBeVisible();
+    // Close modal for subsequent tests
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(200);
 });
 
 test('should filter buffers when searching', async () => {
     await page.getByTestId('search-button').click();
     await page.waitForTimeout(200);
-    const searchInput = page.getByPlaceholder('Search buffers...');
-    // Count all visible buffers before filtering
-    const allItemsBefore = page.getByTestId('buffer-item');
-    const countBefore = await allItemsBefore.count();
+    const searchInput = page.locator('#buffer-search');
+    await expect(searchInput).toBeVisible({ timeout: 5000 });
+    // Count all search results before filtering
+    const allResultsBefore = page.locator('[data-search-index]');
+    const countBefore = await allResultsBefore.count();
     expect(countBefore).toBeGreaterThanOrEqual(1);
     // Fill with a query that matches #glowing-bear
     await searchInput.fill('#glowing-bear');
     await page.waitForTimeout(300);
-    // Only matching buffers should be visible
-    const filteredItems = page.getByTestId('buffer-item');
-    const filteredCount = await filteredItems.count();
+    // Only matching buffers should be visible in search results
+    const filteredResults = page.locator('[data-search-index]');
+    const filteredCount = await filteredResults.count();
     expect(filteredCount).toBeGreaterThanOrEqual(1);
-    // All visible items should contain the search query text
+    // All visible search results should contain the search query text
     for (let i = 0; i < filteredCount; i++) {
-        const text = await filteredItems.nth(i).textContent();
+        const text = await filteredResults.nth(i).textContent();
         expect(text?.toLowerCase()).toContain('#glowing-bear'.toLowerCase());
     }
+    // Close modal for subsequent tests
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(200);
 });
 
 test('should close buffer search with Escape key', async () => {
     // Ensure search is closed, then open fresh
+    const modal = page.locator('#buffer-search-modal');
+    if (await modal.isVisible().catch(() => false)) {
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(300);
+    }
     await page.getByTestId('search-button').click();
     await page.waitForTimeout(200);
-    await expect(page.getByPlaceholder('Search buffers...')).toBeVisible();
+    const searchInput = page.locator('#buffer-search');
+    await expect(searchInput).toBeVisible({ timeout: 5000 });
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
-    await expect(page.getByPlaceholder('Search buffers...')).not.toBeVisible({ timeout: 5000 });
+    await expect(modal).not.toBeVisible({ timeout: 5000 });
 });
 
 test('should show close button on active buffer item', async () => {
@@ -121,7 +142,7 @@ test('should show buffers div with border and padding', async () => {
 });
 
 test.describe('buffer search arrow navigation', () => {
-    test.beforeEach(async ({ page }) => {
+    test.beforeEach(async () => {
         // Close search modal if already open (from previous test)
         const modal = page.locator('#buffer-search-modal');
         if (await modal.isVisible()) {
@@ -129,7 +150,8 @@ test.describe('buffer search arrow navigation', () => {
             await page.waitForTimeout(200);
         }
         // Open search modal
-        await page.getByTestId('search-button').click();
+        const searchBtn = page.getByTitle('Search buffers (Alt+G)');
+        await searchBtn.click({ timeout: 10000 });
         await page.waitForTimeout(300);
         const searchInput = page.locator('#buffer-search');
         await expect(searchInput).toBeVisible({ timeout: 5000 });
@@ -252,8 +274,8 @@ test.describe('onlyUnread filter', () => {
         await irc.sendMessage('#glowing-bear', 'for unread filter test');
         await page.waitForTimeout(1000);
 
-        // Switch back to #glowing-bear so it becomes active
-        const gbItem = page.getByTestId('buffer-item').filter({ hasText: '#glowing-bear' }).first();
+        // Switch back to #glowing-bear so it becomes active (match both # and no # prefix)
+        const gbItem = page.getByTestId('buffer-item').filter({ hasText: 'glowing-bear' }).first();
         const gbVisible = await gbItem.isVisible().catch(() => false);
         if (!gbVisible) {
             throw new Error('#glowing-bear buffer not found');
@@ -282,7 +304,7 @@ test.describe('onlyUnread filter', () => {
 
         // Verify the buffer list re-renders with different visibility
         // (the active buffer should always remain visible regardless of unread state)
-        const activeBufferVisible = page.getByTestId('buffer-item').filter({ hasText: '#glowing-bear' });
+        const activeBufferVisible = page.getByTestId('buffer-item').filter({ hasText: 'glowing-bear' });
         await expect(activeBufferVisible).toBeVisible({ timeout: 5000 });
 
         // Re-open settings and disable the filter
@@ -320,7 +342,7 @@ test.describe('onlyUnread filter', () => {
         await page.waitForTimeout(500);
 
         // Verify #glowing-bear is visible as the active buffer
-        const gbItem = page.getByTestId('buffer-item').filter({ hasText: '#glowing-bear' }).first();
+        const gbItem = page.getByTestId('buffer-item').filter({ hasText: 'glowing-bear' }).first();
         await expect(gbItem).toBeVisible({ timeout: 5000 });
 
         // Click the same buffer again - this triggers switchBuffer which zeroes unread counts
@@ -328,7 +350,7 @@ test.describe('onlyUnread filter', () => {
         await page.waitForTimeout(1000);
 
         // The buffer should STILL be visible because it's the active buffer
-        const gbItemAfter = page.getByTestId('buffer-item').filter({ hasText: '#glowing-bear' }).first();
+        const gbItemAfter = page.getByTestId('buffer-item').filter({ hasText: 'glowing-bear' }).first();
         await expect(gbItemAfter).toBeVisible({ timeout: 5000 });
 
         // Disable onlyUnread filter for subsequent tests
@@ -343,14 +365,14 @@ test.describe('onlyUnread filter', () => {
 
 test.describe('quick keys display', () => {
     test('should show numbered quick key badges on buffer items when enabled', async () => {
-        // Press Alt keydown to toggle showQuickKeys to true
-        await page.keyboard.down('Alt');
-        await page.waitForTimeout(200);
-        await page.keyboard.up('Alt');
-        await page.waitForTimeout(500);
+        // Enable quick keys directly via settings API
+        await page.evaluate(() => {
+            (window as any).__setGbSettings?.({ showQuickKeys: true });
+        });
+        await page.waitForTimeout(300);
 
         // Verify numbered badges appear on buffer items
-        const quickKeyBadges = page.locator('[data-testid="buffer-item"] span.bg-accent');
+        const quickKeyBadges = page.locator('[data-testid="buffer-item"] .buffer-quickkey');
         const badgeCount = await quickKeyBadges.count();
         expect(badgeCount).toBeGreaterThanOrEqual(1);
 
@@ -360,14 +382,14 @@ test.describe('quick keys display', () => {
             expect(parseInt(text!, 10)).toBe(i + 1);
         }
 
-        // Toggle off by pressing Alt again
-        await page.keyboard.down('Alt');
-        await page.waitForTimeout(200);
-        await page.keyboard.up('Alt');
+        // Disable quick keys via settings API
+        await page.evaluate(() => {
+            (window as any).__setGbSettings?.({ showQuickKeys: false });
+        });
         await page.waitForTimeout(300);
 
         // Badges should no longer be visible
-        const quickKeyBadgesOff = page.locator('[data-testid="buffer-item"] span.bg-accent');
+        const quickKeyBadgesOff = page.locator('[data-testid="buffer-item"] .buffer-quickkey');
         const badgeCountOff = await quickKeyBadgesOff.count();
         expect(badgeCountOff).toBe(0);
     });

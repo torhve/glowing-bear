@@ -103,9 +103,9 @@ test.describe('Features', () => {
     });
 
     test('should have proper page structure', async ({ page }) => {
-        await expect(page.locator('div.h-dvh')).toBeVisible();
-        await expect(page.locator('div.w-full.max-w-lg')).toBeVisible();
-        await expect(page.locator('form.bg-surface')).toBeVisible();
+        await expect(page.locator('div.min-h-dvh')).toBeVisible();
+        await expect(page.locator('div.connection-card')).toBeVisible();
+        await expect(page.locator('form.connection-form')).toBeVisible();
     });
 
     test('should persist inputs after reload', async ({ page }) => {

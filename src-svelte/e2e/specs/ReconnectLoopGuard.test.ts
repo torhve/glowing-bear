@@ -76,7 +76,7 @@ test.describe('Reconnect loop guard', () => {
         await expect(page.getByText(/Connection lost after 8 failed reconnect attempts/)).toBeVisible();
 
         // Click Retry button
-        await page.getByTestId('toast-reconnect-button').click();
+        await page.getByTestId('toast-retry-button').click();
 
         // Should reconnect successfully
         await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
