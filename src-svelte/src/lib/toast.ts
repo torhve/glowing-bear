@@ -18,6 +18,7 @@ let nextId = 0;
 const toasts: Writable<Toast[]> = writable([]);
 
 export function addToast(message: string, options?: Partial<Omit<Toast, 'id' | 'message'>>) {
+    console.log('[toast] addToast:', options?.type ?? 'info', message.substring(0, 100));
     const toast: Toast = {
         id: ++nextId,
         message,
@@ -36,10 +37,12 @@ export function addToast(message: string, options?: Partial<Omit<Toast, 'id' | '
 }
 
 export function removeToast(id: number) {
+    console.log('[toast] removeToast:', id);
     toasts.update(current => current.filter(t => t.id !== id));
 }
 
 export function clearToasts() {
+    console.log('[toast] clearToasts');
     toasts.set([]);
 }
 

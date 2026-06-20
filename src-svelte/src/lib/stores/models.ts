@@ -466,3 +466,28 @@ export function removeBuffer(bufferId: string, wasActive: boolean) {
         }
     }
 }
+
+export function checkAndNavigatePendingNotificationBuffer(): void {
+    try {
+        const pendingRaw = localStorage.getItem('gb_pendingNotificationBuffer');
+        if (!pendingRaw) return;
+        
+        const pending = JSON.parse(pendingRaw) as { bufferId: string; timestamp: number };
+        console.log('[models] Found pending notification buffer:', pending.bufferId, 'timestamp:', new Date(pending.timestamp).toISOString());
+        
+        const currentBuffers = get(buffers);
+        if (pending.bufferId in currentBuffers) {
+            console.log('[models] Buffer exists, navigating to:', pending.bufferId);
+            setActiveBuffer(pending.bufferId);
+            localStorage.removeItem('gb_pendingNotificationBuffer');
+        } else {
+            console.warn('[models] Pending buffer not found in store, clearing stale entry');
+            localStorage.removeItem('gb_pendingNotificationBuffer');
+        }
+    } catch (e) {
+        console.error('[models] Error checking pending notification buffer:', e);
+        try {
+            localStorage.removeItem('gb_pendingNotificationBuffer');
+        } catch { /* ignore */ }
+    }
+}
