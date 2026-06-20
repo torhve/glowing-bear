@@ -224,4 +224,54 @@ describe('PM/Highlight Notification Handling', () => {
         const srv = get(servers)['irc.server'];
         expect(srv!.unread).toBe(1);
     });
+
+    it('strips WeeChat formatting codes from prefix in notification body', () => {
+        handleBufferLineAdded({
+            objects: [{
+                pointer: '0x100',
+                content: [{
+                    buffer: '0x100',
+                    date: Date.now(),
+                    date_long: 0,
+                    prefix: '\x19\u000304NickName\x19',
+                    message: 'Test message',
+                    tags_array: [],
+                    displayed: 1,
+                    notify_level: 3,
+                    highlight: 1
+                }]
+            }]
+        } as ProtocolMessage);
+
+        expect(mockCreateHighlight).toHaveBeenCalledTimes(1);
+        const [, body] = mockCreateHighlight.mock.calls[0]!;
+        expect(body).toContain('NickName');
+        expect(body).not.toContain('\x19');
+        expect(body).not.toContain('\x03');
+    });
+
+    it('strips WeeChat formatting codes from message in notification body', () => {
+        handleBufferLineAdded({
+            objects: [{
+                pointer: '0x100',
+                content: [{
+                    buffer: '0x100',
+                    date: Date.now(),
+                    date_long: 0,
+                    prefix: 'NickName',
+                    message: '\x190304red text\x1900',
+                    tags_array: [],
+                    displayed: 1,
+                    notify_level: 3,
+                    highlight: 1
+                }]
+            }]
+        } as ProtocolMessage);
+
+        expect(mockCreateHighlight).toHaveBeenCalledTimes(1);
+        const [, body] = mockCreateHighlight.mock.calls[0]!;
+        expect(body).toContain('red text');
+        expect(body).not.toContain('\x19');
+        expect(body).not.toContain('\x03');
+    });
 });
