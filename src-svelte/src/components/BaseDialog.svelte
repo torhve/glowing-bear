@@ -31,7 +31,7 @@ export { dialogRef as dialog };
   popover="auto"
   aria-labelledby={labelledby}
   data-testid={id}
-  class="fixed left-0 right-0 top-16 mx-auto max-h-[85vh] w-full max-w-2xl overflow-hidden rounded-lg border-none bg-surface p-0 shadow-xl {animationClasses} {backdropClasses}"
+  class="base-dialog fixed left-0 right-0 top-16 mx-auto max-h-[85vh] w-full max-w-2xl overflow-hidden rounded-lg border-none bg-surface p-0 shadow-xl {animationClasses} {backdropClasses}"
 >
   {@render children()}
 </dialog>

@@ -225,7 +225,7 @@
   }
 </script>
 
-<div class="flex-1 flex flex-col overflow-hidden">
+<div class="chat-view-container flex-1 flex flex-col overflow-hidden">
   {#if $currentBuffer}
     <button
       type="button"
@@ -235,9 +235,9 @@
       title="Click to view topic"
     >
       <FileText size={14} class="text-text-muted mr-1 flex-shrink-0" />
-      <span class="text-text">{$currentBuffer.shortName}</span>
-      <span class="text-text-muted mx-2">-</span>
-      <span class="text-text-secondary truncate">
+      <span class="topic-channel-name text-text">{$currentBuffer.shortName}</span>
+      <span class="topic-separator text-text-muted mx-2">-</span>
+      <span class="topic-text text-text-secondary truncate">
         <LinkifiedText text={topicText} />
       </span>
     </button>
@@ -254,16 +254,16 @@
     style="font-size: var(--font-size, 13px);"
   >
     {#if !$currentBuffer}
-      <div class="flex items-center justify-center h-full text-text-muted">
+      <div class="chat-empty-state flex items-center justify-center h-full text-text-muted">
         <div class="text-center">
           <Inbox size={48} class="mx-auto mb-3 opacity-50" />
-          <p class="text-lg mb-2">No buffer selected</p>
-          <p class="text-sm">Select a buffer from the buffer list</p>
+          <p class="chat-empty-title text-lg mb-2">No buffer selected</p>
+          <p class="chat-empty-subtitle text-sm">Select a buffer from the buffer list</p>
         </div>
       </div>
     {:else}
-      <table>
-        <tbody>
+      <table class="chat-table">
+        <tbody class="chat-tbody">
           <!-- Fetch more lines row -->
           {#if !$currentBuffer.allLinesFetched && messages.length > 0}
             <tr class="bufferline fetchmore-row">
@@ -324,7 +324,7 @@
           {/if}
         </tbody>
       </table>
-      <span bind:this={endOfBufferRef}></span>
+      <span bind:this={endOfBufferRef} data-end-of-buffer></span>
     {/if}
   </div>
 
@@ -336,13 +336,15 @@
 />
 
 <style>
-  table {
+  table,
+  .chat-table {
     width: 100%;
     border-collapse: collapse;
   }
 
   @media (max-width: 640px) {
-    table {
+    table,
+    .chat-table {
       border-collapse: separate;
       border-spacing: 2px 3px;
     }

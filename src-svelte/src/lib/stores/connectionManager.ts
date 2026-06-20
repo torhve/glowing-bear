@@ -1,5 +1,5 @@
 import { get } from 'svelte/store';
-import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore, connectionState, recordBytesReceived, recordBytesSent } from '$lib/stores/connectionStore';
+import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, incrementReconnectAttempts } from '$lib/stores/connectionStore';
 import { buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer } from '$lib/stores/models';
 import { settings } from '$lib/stores/settings';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist } from '$lib/stores/handlers';
@@ -16,6 +16,7 @@ const protocolInstance = new Protocol();
 
 let ws: WebSocket | null = null;
 let hotlistInterval: ReturnType<typeof setInterval> | null = null;
+let reconnectingTimer: ReturnType<typeof setTimeout> | null = null;
 let connectionData: [string, number, string, string, boolean, boolean] | null = null;
 let wasClosingDuringConnect = false;
 let connecting = false;
@@ -145,6 +146,12 @@ export async function connect(host: string, port: number, path: string, password
                     }, 15000);
                 }
 
+                // Reset reconnect attempt counter on successful connection
+                resetReconnectAttempts();
+                if (reconnectingTimer) {
+                    clearTimeout(reconnectingTimer);
+                    reconnectingTimer = null;
+                }
                 resolve();
             } catch (e) {
                 // If onclose already set passwordError, don't overwrite with generic error
@@ -175,6 +182,11 @@ export async function connect(host: string, port: number, path: string, password
             });
 
             connecting = false;
+            // Clear any pending reconnect timer from a previous attempt
+            if (reconnectingTimer) {
+                clearTimeout(reconnectingTimer);
+                reconnectingTimer = null;
+            }
             console.log('Disconnected from relay', evt.code, evt.reason);
             if (hotlistInterval) {
                 clearInterval(hotlistInterval);
@@ -312,12 +324,59 @@ async function initializePBKDF2(password: string, nonce: Uint8Array, iterations:
     await new Promise(r => setTimeout(r, 5));
 }
 
+// Max consecutive reconnection attempts before showing user a toast and stopping
+const maxReconnectAttempts = 8;
+// Minimum delay between reconnect attempts (ms)
+const minReconnectDelay = 10_000;
+// Maximum backoff delay (ms)
+const maxReconnectDelay = 60_000;
+
+// Calculate exponential backoff delay based on attempt number.
+// Starts at minReconnectDelay, increases by 5s per attempt, capped at maxReconnectDelay.
+function reconnectDelay(attempts: number): number {
+    return Math.min(minReconnectDelay + (attempts - 1) * 5000, maxReconnectDelay);
+}
+
 function scheduleReconnect() {
     if (!connectionData) return;
 
+    // Prevent stacking multiple reconnect timers
+    if (reconnectingTimer) {
+        clearTimeout(reconnectingTimer);
+    }
+
+    const attempts = incrementReconnectAttempts();
+
+    if (attempts > maxReconnectAttempts) {
+        // Max retries exhausted — stop auto-reconnecting, show persistent toast
+        addToast(
+            `Connection lost after ${attempts - 1} failed reconnect attempts.`,
+            {
+                type: 'error',
+                duration: 0,
+                buttons: [{
+                    text: 'Retry',
+                    action: () => {
+                        const latest = get(toastStore);
+                        const lastToast = latest[latest.length - 1];
+                        if (lastToast) removeToast(lastToast.id);
+                        resetReconnectAttempts();
+                        const [h, p, path, pw, tls, noComp] = connectionData!;
+                        connect(h, p, path, pw, tls, noComp);
+                    }
+                }]
+            }
+        );
+        return;
+    }
+
+    const delay = reconnectDelay(attempts);
+    console.log(`[reconnect] attempt ${attempts}/${maxReconnectAttempts}, retrying in ${delay / 1000}s`);
+
     const [host, port, path, password, tls, noCompression] = connectionData;
 
-    setTimeout(() => {
+    reconnectingTimer = setTimeout(() => {
+        reconnectingTimer = null;
         setConnectionStatus('reconnecting');
         // Clear buffers
         buffers.set({});
@@ -326,7 +385,7 @@ function scheduleReconnect() {
         connect(host, port, path, password, tls, noCompression).catch(() => {
             scheduleReconnect();
         });
-    }, 3000);
+    }, delay);
 }
 
 async function fetchConfValue(name: string) {
@@ -462,6 +521,10 @@ export function sendMessage(message: string) {
 export function disconnect() {
     disconnectStore();
     if (hotlistInterval) clearInterval(hotlistInterval);
+    if (reconnectingTimer) {
+        clearTimeout(reconnectingTimer);
+        reconnectingTimer = null;
+    }
     connectionData = null;
     if (ws) {
         const quitMsg = Protocol.formatQuit();

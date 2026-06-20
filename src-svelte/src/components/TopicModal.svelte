@@ -15,8 +15,8 @@
 </script>
 
 <BaseDialog id="topic-modal" labelledby="topic-title">
-  <div class="flex flex-col bg-bg">
-    <div class="flex items-center justify-between px-6 py-4 border-b border-border">
+  <div class="topic-modal-content flex flex-col bg-bg">
+    <div class="topic-modal-header flex items-center justify-between px-6 py-4 border-b border-border">
       <h3 id="topic-title" class="text-lg font-bold text-text">
         Channel topic {bufferName}
       </h3>
@@ -31,7 +31,7 @@
         <X size={18} />
       </button>
     </div>
-    <div class="px-6 py-4 max-h-96 overflow-y-auto">
+    <div class="topic-modal-body px-6 py-4 max-h-96 overflow-y-auto">
       {#if topic.length > 0}
         <div class="text-sm leading-relaxed text-text">
           {#each topic as part (part.text)}
@@ -49,7 +49,7 @@
         <p class="text-text-muted text-sm italic">No topic set</p>
       {/if}
     </div>
-    <div class="px-6 py-4 border-t border-border flex justify-end">
+    <div class="topic-modal-footer px-6 py-4 border-t border-border flex justify-end">
       <button
         type="button"
         data-testid="topic-modal-close-button"

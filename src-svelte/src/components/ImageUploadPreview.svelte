@@ -120,9 +120,9 @@ export { dialog };
 </script>
 
 <BaseDialog bind:this={baseDialogRef} id="image-upload-preview" labelledby="preview-title">
-  <div class="flex flex-col max-h-[85vh]">
+  <div class="image-upload-content flex flex-col max-h-[85vh]">
     <!-- Header -->
-    <div class="flex items-center justify-between px-6 py-4 border-b border-border">
+    <div class="image-upload-header flex items-center justify-between px-6 py-4 border-b border-border">
       <h3 id="preview-title" class="text-lg font-bold text-text">
         {phase === 'loading' ? 'Reading files...' : phase === 'preview' ? 'Preview images' : phase === 'uploading' ? 'Uploading...' : 'Upload results'}
       </h3>
@@ -140,28 +140,28 @@ export { dialog };
     </div>
 
     <!-- Content area -->
-    <div class="px-6 py-4 overflow-y-auto flex-1">
+    <div class="image-upload-body px-6 py-4 overflow-y-auto flex-1">
       {#if images.length === 0}
         <p class="text-text-muted text-sm italic">No images to upload</p>
       {:else}
         <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
           {#each images as img (img.id)}
             <div
-              class="rounded-lg border border-border bg-input-bg overflow-hidden"
+              class="preview-item-card rounded-lg border border-border bg-input-bg overflow-hidden"
               data-testid="preview-item"
             >
               <!-- Thumbnail -->
-              <div class="aspect-square bg-bg/50 relative">
+              <div class="preview-thumbnail aspect-square bg-bg/50 relative">
                 {#if img.status === 'loading'}
-                  <div class="absolute inset-0 flex items-center justify-center">
+                  <div class="preview-loading absolute inset-0 flex items-center justify-center">
                     <Loader2 size={24} class="text-text-muted animate-spin" />
                   </div>
                 {:else if img.dataUrl}
-                  <img src={img.dataUrl} alt={img.name} class="w-full h-full object-contain p-2" />
+                  <img src={img.dataUrl} alt={img.name} class="preview-image w-full h-full object-contain p-2" />
                 {/if}
                 {#if img.status === 'uploading'}
                   <!-- Progress overlay -->
-                  <div class="absolute inset-0 bg-black/60 flex items-center justify-center">
+                  <div class="preview-progress-overlay absolute inset-0 bg-black/60 flex items-center justify-center">
                     <div class="text-center text-white px-2">
                       <Loader2 size={24} class="mx-auto mb-2 animate-spin" />
                       <span class="text-sm font-medium">{img.progress}%</span>
@@ -171,9 +171,9 @@ export { dialog };
               </div>
 
               <!-- Meta info -->
-              <div class="px-3 py-2 text-xs space-y-1">
-                <p class="text-text truncate" title={img.name}>{img.name}</p>
-                <p class="text-text-muted">{formatSize(img.size)}</p>
+              <div class="preview-meta px-3 py-2 text-xs space-y-1">
+                <p class="preview-file-name text-text truncate" title={img.name}>{img.name}</p>
+                <p class="preview-file-size text-text-muted">{formatSize(img.size)}</p>
 
                 <!-- Status indicator -->
                 {#if img.status === 'success' && img.result}
@@ -218,8 +218,8 @@ export { dialog };
     </div>
 
     <!-- Footer actions -->
-    <div class="px-6 py-4 border-t border-border flex justify-between items-center">
-      <span class="text-sm text-text-muted">
+    <div class="image-upload-footer px-6 py-4 border-t border-border flex justify-between items-center">
+      <span class="image-upload-summary text-sm text-text-muted">
         {phase === 'loading' ? 'Reading files...' : images.filter(i => i.status === 'success').length + '/' + images.length + ' uploaded'}
       </span>
 
