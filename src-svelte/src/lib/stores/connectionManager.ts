@@ -24,7 +24,6 @@ let connecting = false;
 export async function connect(host: string, port: number, path: string, password: string, tls: boolean, noCompression: boolean) {
     clearErrors();
 
-    const isSecureContext = typeof window !== 'undefined' && window.isSecureContext;
     const proto = tls ? 'wss' : 'ws';
 
     // Handle IPv6
@@ -65,9 +64,9 @@ export async function connect(host: string, port: number, path: string, password
                 Object.keys(callbacks).forEach(k => delete callbacks[parseInt(k, 10)]);
                 currentCallbackId = 0;
 
-                // Handshake
+                // Handshake — always request pbkdf2+sha512; WeeChat responds with what it supports
                 const handshakeMsg = Protocol.formatHandshake({
-                    password_hash_algo: isSecureContext ? 'pbkdf2+sha512' : 'plain',
+                    password_hash_algo: 'pbkdf2+sha512',
                     compression: noCompression ? 'off' : 'zlib'
                 });
 
