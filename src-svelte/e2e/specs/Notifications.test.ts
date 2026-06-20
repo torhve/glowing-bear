@@ -8,6 +8,17 @@ test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
     page = await browser.newPage();
+    // Inject a mock Notification class before any app code runs
+    await page.addInitScript(() => {
+        (window as any).__notificationCalls = [];
+        (window as any).Notification = class MockNotification {
+            static permission = 'granted';
+            static requestPermission = async () => 'granted';
+            constructor(title: string, options?: Record<string, unknown>) {
+                (window as any).__notificationCalls.push({ title, options });
+            }
+        } as any;
+    });
     await page.goto('http://localhost:8001/');
     await waitForAppReady(page);
     await clearSettings(page);
@@ -25,6 +36,7 @@ test.beforeEach(async () => {
     page.on('pageerror', (error) => {
         if (error.message?.includes('effect_orphan')) return;
     });
+    await page.evaluate(() => { (window as any).__notificationCalls = []; });
 });
 
 async function openSettings() {
@@ -220,4 +232,125 @@ test('no notification toast when permission already granted', async () => {
     const toasts = page.getByTestId('toast');
     const notificationToastCount = await toasts.filter({ hasText: /notification/i }).count();
     expect(notificationToastCount).toBe(0);
+});
+
+// ---- Web Notification API interception tests ----
+// Tauri notification path cannot be tested via browser-based Playwright;
+// it relies on unit tests with mocked @tauri-apps/plugin-notification.
+
+test('creates a Web Notification with correct title and body on PM', async () => {
+    await setSettings(page, { notificationPermission: 'granted' });
+    await page.reload();
+    await connectToWeechat(page);
+    await page.waitForTimeout(1000);
+
+    // Switch to channel buffer so PM triggers notification
+    const firstItem = page.getByTestId('buffer-item').first();
+    await firstItem.click();
+    await page.waitForTimeout(500);
+
+    // Send a PM
+    await irc.sendPm('testuser', 'Web Notification API test');
+    await page.waitForTimeout(2000);
+
+    // Verify Notification was called with the right data
+    const calls = await page.evaluate(() => (window as any).__notificationCalls || []);
+    expect(calls.length).toBeGreaterThanOrEqual(1);
+
+    const notif = calls[0];
+    expect(notif.title).toMatch(/^\[.+\]$/);
+    expect(notif.options.body).toContain('Web Notification API test');
+});
+
+test('Web Notification body is truncated to 200 characters', async () => {
+    await setSettings(page, { notificationPermission: 'granted' });
+    await page.reload();
+    await connectToWeechat(page);
+    await page.waitForTimeout(1000);
+
+    const firstItem = page.getByTestId('buffer-item').first();
+    await firstItem.click();
+    await page.waitForTimeout(500);
+
+    const longMsg = 'A'.repeat(500);
+    await irc.sendPm('testuser', longMsg);
+    await page.waitForTimeout(2000);
+
+    const calls = await page.evaluate(() => (window as any).__notificationCalls || []);
+    expect(calls.length).toBeGreaterThanOrEqual(1);
+    expect(calls[0].options.body.length).toBeLessThanOrEqual(200);
+});
+
+test('Web Notification includes buffer ID as tag', async () => {
+    await setSettings(page, { notificationPermission: 'granted' });
+    await page.reload();
+    await connectToWeechat(page);
+    await page.waitForTimeout(1000);
+
+    const firstItem = page.getByTestId('buffer-item').first();
+    await firstItem.click();
+    await page.waitForTimeout(500);
+
+    await irc.sendPm('testuser', 'Tag test message');
+    await page.waitForTimeout(2000);
+
+    const calls = await page.evaluate(() => (window as any).__notificationCalls || []);
+    expect(calls.length).toBeGreaterThanOrEqual(1);
+    // The tag should be a non-empty string (the buffer ID)
+    expect(calls[0].options.tag).toBeTruthy();
+    expect(typeof calls[0].options.tag).toBe('string');
+});
+
+test('does NOT create Web Notification when permission is default', async () => {
+    await setSettings(page, { notificationPermission: 'default' });
+    await page.reload();
+    await connectToWeechat(page);
+    await page.waitForTimeout(1000);
+
+    const firstItem = page.getByTestId('buffer-item').first();
+    await firstItem.click();
+    await page.waitForTimeout(500);
+
+    await irc.sendPm('testuser', 'Should not notify');
+    await page.waitForTimeout(2000);
+
+    const calls = await page.evaluate(() => (window as any).__notificationCalls || []);
+    expect(calls.length).toBe(0);
+});
+
+test('does NOT create Web Notification when permission is denied', async () => {
+    await setSettings(page, { notificationPermission: 'denied' });
+    await page.reload();
+    await connectToWeechat(page);
+    await page.waitForTimeout(1000);
+
+    const firstItem = page.getByTestId('buffer-item').first();
+    await firstItem.click();
+    await page.waitForTimeout(500);
+
+    await irc.sendPm('testuser', 'Should not notify');
+    await page.waitForTimeout(2000);
+
+    const calls = await page.evaluate(() => (window as any).__notificationCalls || []);
+    expect(calls.length).toBe(0);
+});
+
+test('multiple PMs create multiple Web Notifications', async () => {
+    await setSettings(page, { notificationPermission: 'granted' });
+    await page.reload();
+    await connectToWeechat(page);
+    await page.waitForTimeout(1000);
+
+    const firstItem = page.getByTestId('buffer-item').first();
+    await firstItem.click();
+    await page.waitForTimeout(500);
+
+    await irc.sendPm('testuser', 'First notification');
+    await irc.sendPm('testuser', 'Second notification');
+    await page.waitForTimeout(2000);
+
+    const calls = await page.evaluate(() => (window as any).__notificationCalls || []);
+    expect(calls.length).toBeGreaterThanOrEqual(2);
+    expect(calls[0].options.body).toContain('First notification');
+    expect(calls[1].options.body).toContain('Second notification');
 });

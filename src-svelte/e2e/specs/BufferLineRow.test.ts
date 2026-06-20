@@ -86,12 +86,23 @@ test.describe('rendering', () => {
     });
 
     test('scrolls to bottom after new message arrives', async () => {
+        // Clear accumulated unread state from prior serial tests so auto-scroll works correctly
+        await page.evaluate(() => {
+            const container = document.querySelector('[data-testid="chat-messages"]') as HTMLElement;
+            if (container) {
+                container.scrollTop = container.scrollHeight;
+                container.dispatchEvent(new Event('scroll', { bubbles: true }));
+            }
+        });
+        await page.waitForTimeout(200);
         const msg = 'e2e-scroll-' + Date.now();
         const input = page.getByTestId('message-input');
         await input.fill(msg);
         await input.press('Enter');
-        const messageCell = page.locator('[data-testid="chat-messages"] td.message').filter({ hasText: msg });
+        const messageCell = page.locator('[data-testid="bufferline-row"] td.message').filter({ hasText: msg });
         await expect(messageCell).toBeVisible({ timeout: 5000 });
+        // Wait for rAF-based auto-scroll to complete
+        await page.waitForTimeout(100);
         // Verify chat container is scrolled to bottom
         const scrollState = await page.evaluate(() => {
             const container = document.querySelector('[data-testid="chat-messages"]') as HTMLElement;
@@ -135,8 +146,8 @@ test.describe('linkification', () => {
     test('excludes trailing punctuation from URL links', async () => {
         const { botSay } = await import('../helpers/messages');
         await botSay('Visit https://example.com/page.');
-        const lastLink = page.locator('[data-testid="bufferline-row"] td.message a.irc-link').last();
-        await expect(lastLink).toHaveAttribute('href', 'https://example.com/page', { timeout: 10000 });
+        const link = page.locator('[data-testid="bufferline-row"] td.message a.irc-link').filter({ hasText: 'https://example.com/page' }).first();
+        await expect(link).toHaveAttribute('href', 'https://example.com/page', { timeout: 10000 });
     });
 
     test('does NOT linkify email addresses', async () => {
@@ -151,23 +162,25 @@ test.describe('linkification', () => {
     test('handles multiple URLs in one message', async () => {
         const { botSay } = await import('../helpers/messages');
         await botSay('See https://example.com and https://github.com');
-        const lastRow = page.locator('[data-testid="bufferline-row"]').last();
-        const links = lastRow.locator('td.message a.irc-link');
+        const targetRow = page.locator('[data-testid="bufferline-row"]').filter({ hasText: 'https://github.com' }).first();
+        const links = targetRow.locator('td.message a.irc-link');
         await expect(links).toHaveCount(2, { timeout: 10000 });
     });
 
     test('renders FTP URLs as links', async () => {
         const { botSay } = await import('../helpers/messages');
         await botSay('Download from ftp://files.example.com/file.zip');
-        const lastLink = page.locator('[data-testid="bufferline-row"] td.message a.irc-link').last();
-        await expect(lastLink).toHaveAttribute('href', 'ftp://files.example.com/file.zip', { timeout: 10000 });
+        const link = page.locator('[data-testid="bufferline-row"] td.message a.irc-link').filter({ hasText: 'ftp://files.example.com' }).first();
+        await expect(link).toHaveAttribute('href', 'ftp://files.example.com/file.zip', { timeout: 10000 });
     });
 
     test('renders user-sent URLs as links', async () => {
         const { sendMessage } = await import('../helpers/messages');
-        await sendMessage(page, 'Check out https://svelte.dev');
-        const lastLink = page.locator('[data-testid="bufferline-row"] td.message a.irc-link').last();
-        const href = await lastLink.getAttribute('href');
+        const msgText = 'Check out https://svelte.dev';
+        await sendMessage(page, msgText);
+        const targetRow = page.locator('[data-testid="bufferline-row"]').filter({ hasText: msgText }).first();
+        const link = targetRow.locator('td.message a.irc-link').first();
+        const href = await link.getAttribute('href');
         expect(href).toContain('https://svelte.dev');
     });
 
@@ -180,7 +193,8 @@ test.describe('linkification', () => {
     test('has no nested anchor tags in messages', async () => {
         const { botSay } = await import('../helpers/messages');
         await botSay('Link: https://example.com');
-        const links = page.locator('[data-testid="bufferline-row"] td.message a.irc-link');
+        const targetRow = page.locator('[data-testid="bufferline-row"]').filter({ hasText: 'https://example.com' }).first();
+        const links = targetRow.locator('td.message a.irc-link');
         const count = await links.count();
         expect(count).toBeGreaterThanOrEqual(1);
         for (let i = 0; i < count; i++) {
@@ -202,8 +216,8 @@ test.describe('codify', () => {
     test('renders single-backtick inline code in bufferline messages', async () => {
         const { botSay } = await import('../helpers/messages');
         await botSay('Use `hello` for inline code');
-        const lastRow = page.locator('[data-testid="bufferline-row"]').last();
-        const codeEl = lastRow.locator('td.message code').first();
+        const targetRow = page.locator('[data-testid="bufferline-row"]').filter({ hasText: 'inline code' }).first();
+        const codeEl = targetRow.locator('td.message code').first();
         await expect(codeEl).toBeAttached({ timeout: 10000 });
         await expect(codeEl).toContainText('hello');
     });
@@ -211,8 +225,8 @@ test.describe('codify', () => {
     test('renders triple-backtick code block in bufferline messages', async () => {
         const { botSay } = await import('../helpers/messages');
         await botSay('Here is ```code block``` content');
-        const lastRow = page.locator('[data-testid="bufferline-row"]').last();
-        const codeEl = lastRow.locator('td.message code').first();
+        const targetRow = page.locator('[data-testid="bufferline-row"]').filter({ hasText: 'code block' }).first();
+        const codeEl = targetRow.locator('td.message code').first();
         await expect(codeEl).toBeAttached({ timeout: 10000 });
         await expect(codeEl).toContainText('code block');
     });
@@ -220,17 +234,17 @@ test.describe('codify', () => {
     test('does NOT codify backticks without preceding space', async () => {
         const { botSay } = await import('../helpers/messages');
         await botSay('weird`sadsd`stuff');
-        const lastRow = page.locator('[data-testid="bufferline-row"]').last();
-        const codeEls = lastRow.locator('td.message code');
+        const targetRow = page.locator('[data-testid="bufferline-row"]').filter({ hasText: 'weird' }).first();
+        const codeEls = targetRow.locator('td.message code');
         await expect(codeEls).toHaveCount(0);
-        await expect(lastRow.locator('td.message')).toContainText('weird`sadsd`stuff');
+        await expect(targetRow.locator('td.message')).toContainText('weird`sadsd`stuff');
     });
 
     test('renders hidden brackets around code in bufferlines', async () => {
         const { botSay } = await import('../helpers/messages');
         await botSay('test ```mycode``` end');
-        const lastRow = page.locator('[data-testid="bufferline-row"]').last();
-        const hiddenBrackets = lastRow.locator('td.message .hidden-bracket');
+        const targetRow = page.locator('[data-testid="bufferline-row"]').filter({ hasText: 'mycode' }).first();
+        const hiddenBrackets = targetRow.locator('td.message .hidden-bracket');
         await expect(hiddenBrackets).toHaveCount(2, { timeout: 10000 });
         const bracketTexts = await hiddenBrackets.allTextContents();
         expect(bracketTexts).toContain('```');
@@ -239,19 +253,19 @@ test.describe('codify', () => {
     test('handles mixed text and code in bufferline', async () => {
         const { botSay } = await import('../helpers/messages');
         await botSay('this is ```<code>``` more text');
-        const lastRow = page.locator('[data-testid="bufferline-row"]').last();
-        const codeEl = lastRow.locator('td.message code').first();
+        const targetRow = page.locator('[data-testid="bufferline-row"]').filter({ hasText: '<code>' }).first();
+        const codeEl = targetRow.locator('td.message code').first();
         await expect(codeEl).toBeAttached({ timeout: 10000 });
         await expect(codeEl).toContainText('<code>');
-        await expect(lastRow.locator('td.message')).toContainText('this is');
-        await expect(lastRow.locator('td.message')).toContainText('more text');
+        await expect(targetRow.locator('td.message')).toContainText('this is');
+        await expect(targetRow.locator('td.message')).toContainText('more text');
     });
 
     test('nested backticks do not break code block rendering', async () => {
         const { botSay } = await import('../helpers/messages');
         await botSay('outer ```has `inner` backtick``` end');
-        const lastRow = page.locator('[data-testid="bufferline-row"]').last();
-        const codeEl = lastRow.locator('td.message code').first();
+        const targetRow = page.locator('[data-testid="bufferline-row"]').filter({ hasText: 'backtick' }).first();
+        const codeEl = targetRow.locator('td.message code').first();
         await expect(codeEl).toBeAttached({ timeout: 10000 });
         const codeContent = await codeEl.textContent();
         expect(codeContent).toContain('has `inner` backtick');

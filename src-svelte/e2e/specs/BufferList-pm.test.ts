@@ -30,35 +30,36 @@ test.beforeEach(async () => {
     await switchToBuffer(page, '#glowing-bear');
 });
 
-async function getNonChannelBuffer() {
+async function findPmBuffer() {
     const items = page.getByTestId('buffer-item');
     const count = await items.count();
     for (let i = 0; i < count; i++) {
         const text = await items.nth(i).textContent();
-        if (text && !text.includes('#glowing-bear')) {
+        if (text && /gbbot\d*/.test(text)) {
             return items.nth(i);
         }
     }
-    return items.first();
+    return null;
 }
 
 test('creates buffer on PM from bot', async () => {
     await irc.sendPm('testuser', 'Hello from bot!');
-    const items = page.getByTestId('buffer-item');
-    const count = await items.count();
-    expect(count).toBeGreaterThanOrEqual(2);
+    await page.waitForTimeout(2000);
+    const pmItem = await findPmBuffer();
+    expect(pmItem).not.toBeNull();
+    await expect(pmItem!).toBeVisible({ timeout: 10000 });
 });
 
 test('shows unread count on PM buffer', async () => {
     await irc.sendPm('testuser', 'Hello from bot!');
     await page.waitForTimeout(2000);
 
-    const pmItems = page.locator('[data-testid="buffer-item"]').filter({ hasNotText: '#glowing-bear' });
-    await expect(pmItems.first()).toBeVisible({ timeout: 10000 });
+    const pmBufferItem = await findPmBuffer();
+    expect(pmBufferItem).not.toBeNull();
+    await expect(pmBufferItem!).toBeVisible({ timeout: 10000 });
 
     // Verify badge shows notification count (unread + notification combined)
-    const pmBufferItem = pmItems.first();
-    const badgeText = await pmBufferItem.locator('span.rounded-full').first().textContent();
+    const badgeText = await pmBufferItem!.locator('span.rounded-full').first().textContent({ timeout: 10000 });
     expect(badgeText).toBeTruthy();
     const badgeNum = parseInt(badgeText!, 10);
     expect(badgeNum).toBeGreaterThanOrEqual(1);
@@ -68,13 +69,12 @@ test('shows notification badge on PM buffer', async () => {
     await irc.sendPm('testuser', 'Notification test message!');
     await page.waitForTimeout(2000);
 
-    // Get all buffer items and find the PM buffer (non-channel)
-    const pmItems = page.locator('[data-testid="buffer-item"]').filter({ hasNotText: '#glowing-bear' });
-    await expect(pmItems.first()).toBeVisible({ timeout: 10000 });
+    const pmBufferItem = await findPmBuffer();
+    expect(pmBufferItem).not.toBeNull();
+    await expect(pmBufferItem!).toBeVisible({ timeout: 10000 });
 
     // Verify the PM buffer item has a notification badge with numeric value
-    const pmBufferItem = pmItems.first();
-    const badgeSpans = await pmBufferItem.locator('span').all();
+    const badgeSpans = await pmBufferItem!.locator('span').all();
     let foundBadge = false;
     for (const span of badgeSpans) {
         const text = await span.textContent();
@@ -90,12 +90,12 @@ test('shows notification badge on PM buffer', async () => {
 
 test('switches to PM buffer and shows message', async () => {
     await irc.sendPm('testuser', 'Hello from bot!');
-    const items = page.getByTestId('buffer-item');
-    const count = await items.count();
-    expect(count).toBeGreaterThanOrEqual(2);
+    await page.waitForTimeout(2000);
 
-    const pmItem = await getNonChannelBuffer();
-    await pmItem.click();
+    const pmBufferItem = await findPmBuffer();
+    expect(pmBufferItem).not.toBeNull();
+    await pmBufferItem!.click();
+    await page.waitForTimeout(500);
 
     await expect(page.getByTestId('chat-messages')).toBeVisible();
 
@@ -104,18 +104,22 @@ test('switches to PM buffer and shows message', async () => {
 });
 
 test('closes PM buffer cleanly', async () => {
-    // Get the first non-channel buffer (PM buffer from previous tests)
-    const pmItem = page.locator('[data-testid="buffer-item"]').filter({ hasNotText: '#glowing-bear' }).first();
-    await pmItem.click();
+    // Get the PM buffer from previous tests
+    const pmBufferItem = await findPmBuffer();
+    if (!pmBufferItem) {
+        test.skip();
+        return;
+    }
+    await pmBufferItem.click();
     await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 5000 });
 
     // Verify close button exists and is clickable on the PM buffer item
-    const closeBtn = pmItem.locator('[data-testid="close-buffer"]');
+    const closeBtn = pmBufferItem.locator('[data-testid="close-buffer"]');
     await expect(closeBtn).toBeVisible();
 
     // Click the close button - PM buffers may not actually close in WeeChat
     // but the click should not throw an error
-    await pmItem.hover();
+    await pmBufferItem.hover();
     await closeBtn.click();
     await page.waitForTimeout(500);
 

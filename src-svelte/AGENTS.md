@@ -13,23 +13,24 @@ Glowing Bear is a browser-based frontend for WeeChat IRC via WebSockets — **no
 | Testing | Vitest 2.x (unit) + Playwright 1.60.x (E2E) |
 | Protocol | `weechat.ts` (migrated from AngularJS `weechat.js`), `weechat-rest.ts` (unused, planned for future) |
 | Desktop | Tauri 2.x (Rust) in `../../src-tauri/` |
-| Libraries | fflate, DOMPurify |
+| Libraries | fflate, DOMPurify, @lucide/svelte, @vite-pwa/sveltekit, zlibjs |
 
 ## Project Structure
 
 ```
 src-svelte/
 ├── src/
-│   ├── components/          # Svelte components (15 total — ChatView, PluginEmbed, InputBar, BufferList, TopBar, Nicklist, SettingsModal, BaseDialog, ConnectionForm, LinkifiedText, FormInput, Toast, BufferSearchModal, TopicModal, BufferLineRow)
+│   ├── components/          # Svelte components (18 total — ChatView, PluginEmbed, InputBar, BufferList, BufferHotlist, TopBar, Nicklist, SettingsModal, BaseDialog, ConnectionForm, LinkifiedText, FormInput, Toast, BufferSearchModal, TopicModal, BufferLineRow, ImageUploadPreview, Tooltip)
 │   ├── lib/                 # Shared code: types, utils, stores, notifications, filters
 │   │   └── stores/          # connectionManager, models, handlers, settings, theme, bufferResume, connectionStore, inputHistory, nickColors, themeColors
 │   └── routes/              # SvelteKit routes (+page.svelte, +layout.svelte, +layout.server.ts, 404.html, index.html)
-├── public/css/themes/       # 12 theme CSS files
+├── static/css/themes/       # 13 theme CSS files
 ├── test/unit/               # Vitest unit tests
-├── e2e/                     # Playwright E2E tests (specs/, helpers/, fixtures/)
-├── playwright.config.ts
-├── doc/weechat_relay_weechat.en.adoc  # WeeChat Relay API DOC
+├── test/irc-server/         # Local IRC server for testing
+├── e2e/                     # Playwright E2E tests + config (specs/, helpers/, fixtures/, playwright.config.ts)
 ├── vite.config.ts / svelte.config.js / vitest.config.ts
+├── tsconfig.json / tsconfig.app.json
+├── eslint.config.js
 └── package.json
 ```
 
@@ -44,9 +45,18 @@ npm run build            # Production build into build/
 npm run check            # svelte-check
 npm run lint             # eslint src
 npm test                 # Vitest unit tests
+npm run test:watch       # Vitest watch mode
 npm run test:e2e         # Playwright E2E tests (headless)
+npm run test:e2e:watch   # Playwright E2E UI mode
+npm run test:e2e:debug   # Playwright E2E debug mode
 npm run test:e2e:all     # Full pipeline: start WeeChat → run Playwright → stop WeeChat
-npm run irc:start / irc:stop  # Start/stop gbtest environment
+npm run irc:server       # Start local IRC server (npx tsx)
+npm run irc:start        # Start gbtest environment
+npm run irc:stop         # Stop gbtest environment
+npm run generate-icons   # Generate app icons
+npm run preview          # Preview production build
+npm run tauri:dev        # Tauri dev mode
+npm run tauri:build      # Tauri production build
 ```
 
 ## Common Patterns
@@ -103,6 +113,35 @@ Free/open-source IRC web frontend for WeeChat. Users run their own WeeChat insta
    ```
 4. Use `page.getByTestId('...')` selectors + `.first()`/`.last()` for strict mode
 5. Shared state across tests: `test.describe.configure({ mode: 'serial' })`
+
+### E2E Best Practices
+
+**Test user-visible behavior, not implementation details.** E2E tests should verify what the user sees/interacts with. Things like whether `new Audio(src)` or `new Notification(title)` were called are implementation details — those belong in unit tests (`test/unit/`). Keep E2E focused on DOM output, UI state, and user flows. Example: instead of intercepting `Audio` to check `sonar.mp3` was loaded, verify the sound plays via user interaction (or leave that to unit tests).
+
+**Prefer user-facing locators.** Use `getByRole()` and `getByText()` first — they're resilient to DOM changes. Fall back to `data-testid` only when no semantic role or stable text content fits (e.g. icons, generic buttons, list items without distinguishing text). Always pick the most specific locator that still survives minor markup changes:
+  ```ts
+  // 👍 — semantic role
+  await page.getByRole('button', { name: 'Send' }).click();
+  // 👍 — text content when no role works
+  await page.getByText('Connection lost').isVisible();
+  // 👍 — testid as last resort
+  await page.getByTestId('buffer-item').click();
+  ```
+
+**Mock browser APIs with `addInitScript`, not per-test `page.evaluate`.** When you need to spy on a browser API (`Notification`, `Audio`), inject the mock once in `beforeAll` via `addInitScript()` — it runs before any app code and survives navigations/reloads. Reset captured calls in `beforeEach`:
+  ```ts
+  await page.addInitScript(() => {
+      (window as any).__notificationCalls = [];
+      (window as any).Notification = class MockNotification {
+          static permission = 'granted';
+          static requestPermission = async () => 'granted';
+          constructor(title: string, options?: Record<string, unknown>) {
+              (window as any).__notificationCalls.push({ title, options });
+          }
+      } as any;
+  });
+  ```
+  Avoid repeated `page.evaluate()` mock setups in each individual test.
 
 Control API CLI: `test/irc-server/ctrl.sh` to send IRC commands (gbtest must be running).
 
