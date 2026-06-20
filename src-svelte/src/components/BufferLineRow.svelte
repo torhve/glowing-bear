@@ -213,7 +213,7 @@
 <style>
   .bufferline {
     line-height: 1;
-    padding: 2px 0;
+    padding: 2px 0 1px 0;
   }
 
   .bufferline.highlight {
@@ -222,7 +222,7 @@
 
   .time {
     text-align: right;
-    padding: 0 2px 0 4px;
+    padding: 0 2px 0 6px;
     vertical-align: top;
   }
 
@@ -244,6 +244,7 @@
 
     .time {
       margin-right: 2px;
+      padding-left: 4px;
     }
 
     .prefix {
@@ -253,6 +254,7 @@
       overflow: visible;
       text-overflow: clip;
       font-family: inherit;
+      padding: 0 3px 0 1px;
     }
 
     .prefix .compact-prefix {
@@ -263,7 +265,7 @@
       flex: 1;
       min-width: 0;
       flex-wrap: wrap;
-      padding-left: 2px;
+      padding-left: 3px;
     }
   }
 
@@ -282,7 +284,7 @@
 
   .prefix {
     max-width: 120px;
-    padding: 0 3px 0 1px;
+    padding: 0 4px 0 2px;
     vertical-align: top;
     white-space: nowrap;
     text-align: right;
@@ -308,7 +310,7 @@
   }
 
   .message {
-    padding: 1px 2px 0 2px;
+    padding: 1px 2px 1px 4px;
     vertical-align: top;
     white-space: preserve-breaks;
     word-break: break-word;
