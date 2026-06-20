@@ -12,7 +12,7 @@
   import { settings, updateSettings } from '$lib/stores/settings';
   import { initTheme } from '$lib/stores/theme';
   import { get } from 'svelte/store';
-  import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig } from '$lib/stores/models';
+  import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig, checkAndNavigatePendingNotificationBuffer } from '$lib/stores/models';
   import { connectionState, setReconnectAttempts } from '$lib/stores/connectionStore';
   import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer, getWs } from '$lib/stores/connectionManager';
   import { Protocol } from '$lib/weechat';
@@ -88,6 +88,7 @@
     void initNotifications();
     initTouchGestures();
     void tryAutoConnect();
+    checkAndNavigatePendingNotificationBuffer();
     document.body.setAttribute('data-app-ready', 'true');
 
     return () => {
