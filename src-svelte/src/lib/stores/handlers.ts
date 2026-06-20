@@ -313,8 +313,14 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                     const server = get(servers)[serverKey];
                     if (server) server.unread++;
 
+                    // Strip WeeChat formatting codes from message for notification display
+                    const formattedParts = parseRichText(lineMsg.message);
+                    const strippedMessage = formattedParts.map(p => p.text).join('');
+                    const prefixText = (lineMsg.prefix || '').trim();
+                    const notificationBody = prefixText ? `<${prefixText}> ${strippedMessage}` : strippedMessage;
+
                     // Trigger notification subsystem
-                    createHighlight(buffer, lineMsg.message);
+                    createHighlight(buffer, notificationBody);
                     playNotificationSound();
                     updateTitle();
                     updateFavico();
