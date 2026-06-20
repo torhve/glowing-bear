@@ -123,7 +123,7 @@ test('other buffer unread counts preserved when switching active buffer', async 
     const glowItem = page.getByTestId('buffer-item').filter({ hasText: 'glowing-bear' }).first();
     await expect(glowItem).toBeVisible({ timeout: 10000 });
     // Badge is a span with rounded-full class positioned absolutely on the right side of the item
-    // Wait up to 8s for hotlist sync (WeeChat relay syncs every ~5s)
+    // Wait up to 8s for hotlist sync (hotlist polls every 15s)
     await glowItem.locator('span.rounded-full').waitFor({ state: 'visible', timeout: 8000 });
 
     // Read unread badge text for #glowing-bear from the DOM before second switch.
