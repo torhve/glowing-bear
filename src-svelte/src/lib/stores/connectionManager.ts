@@ -70,16 +70,34 @@ export async function connect(host: string, port: number, path: string, password
                 const nonce = hexStringToByte(content?.nonce || '');
                 const iterations = content?.password_hash_iterations || 0;
 
-                // Initialize connection — fallback to plain if pbkdf2 requested but crypto.subtle unavailable
-                if (passwordMethod === 'pbkdf2+sha512' && hasCryptoSubtle) {
-                    await initializePBKDF2(password, nonce, iterations);
-                } else if (passwordMethod === 'plain' || passwordMethod === 'pbkdf2+sha512') {
+                // Initialize connection — handle server's chosen hash algorithm
+                if (passwordMethod === 'pbkdf2+sha512') {
+                    if (hasCryptoSubtle) {
+                        await initializePBKDF2(password, nonce, iterations, 'SHA-512');
+                    } else {
+                        // Server wants pbkdf2 but we lack crypto.subtle → report mismatch
+                        setErrors({ hashAlgorithmDisagree: true });
+                        reject(new Error('Hash algorithm mismatch: server requires pbkdf2+sha512 but crypto.subtle is unavailable'));
+                        if (ws) ws.close(1000, 'Hash algorithm mismatch');
+                        return;
+                    }
+                } else if (passwordMethod === 'pbkdf2+sha256' && hasCryptoSubtle) {
+                    await initializePBKDF2(password, nonce, iterations, 'SHA-256');
+                } else if ((passwordMethod === 'sha256' || passwordMethod === 'sha512') && hasCryptoSubtle) {
+                    await initializeSHA(password, passwordMethod);
+                } else if (passwordMethod === 'plain') {
                     const initMsg = Protocol.formatInit('plain:' + password, null);
                     // Fire-and-forget: WeeChat increments callback IDs so sendAsync would timeout
                     if (ws && ws.readyState === WebSocket.OPEN) {
                         sendWs(initMsg, 'init(plain)');
                     }
                     await new Promise(r => setTimeout(r, 5));
+                } else if (passwordMethod && passwordMethod !== 'plain') {
+                    // Unsupported algorithm — report error and abort
+                    setErrors({ hashAlgorithmDisagree: true });
+                    reject(new Error('Unsupported hash algorithm: ' + passwordMethod));
+                    if (ws) ws.close(1000, 'Unsupported hash algorithm');
+                    return;
                 }
 
                 // Get version
@@ -270,17 +288,19 @@ export async function connect(host: string, port: number, path: string, password
     });
 }
 
-async function initializePBKDF2(password: string, nonce: Uint8Array, iterations: number) {
+// Compute PBKDF2 password hash using the specified SHA variant.
+async function initializePBKDF2(password: string, nonce: Uint8Array, iterations: number, hashAlgo: 'SHA-512' | 'SHA-256' = 'SHA-512') {
     const passwordArray = new TextEncoder().encode(password);
     const key = await crypto.subtle.importKey('raw', passwordArray, { name: 'PBKDF2' }, false, ['deriveBits']);
 
     const clientNonce = crypto.getRandomValues(new Uint8Array(16));
     const salt = concatenateTypedArrays(nonce, new Uint8Array([0x3A]), clientNonce);
 
+    const bitLength = hashAlgo === 'SHA-512' ? 512 : 256;
     const hash = await crypto.subtle.deriveBits(
-        { name: 'PBKDF2', hash: 'SHA-512', salt, iterations },
+        { name: 'PBKDF2', hash: hashAlgo, salt, iterations },
         key,
-        512
+        bitLength
     );
 
     const hashHex = Array.from(new Uint8Array(hash))
@@ -290,13 +310,30 @@ async function initializePBKDF2(password: string, nonce: Uint8Array, iterations:
         .map(b => b.toString(16).padStart(2, '0'))
         .join('');
 
+    // Map Web Crypto algo name to WeeChat's label (remove hyphen: SHA-512 → sha512)
+    const algoLabel = hashAlgo.toLowerCase().replace('-', '');
     const initMsg = Protocol.formatInit(
-        `pbkdf2+sha512:${saltHex}:${iterations}:${hashHex}`,
+        `pbkdf2+${algoLabel}:${saltHex}:${iterations}:${hashHex}`,
         null
     );
     // Fire-and-forget: WeeChat increments callback IDs so sendAsync would timeout
     if (ws && ws.readyState === WebSocket.OPEN) {
-        sendWs(initMsg, 'init(pbkdf2)');
+        sendWs(initMsg, `init(pbkdf2+${algoLabel})`);
+    }
+    await new Promise(r => setTimeout(r, 5));
+}
+
+// Compute SHA-256 or SHA-512 password digest for authentication.
+async function initializeSHA(password: string, method: 'sha256' | 'sha512') {
+    const data = new TextEncoder().encode(password);
+    const hashBuffer = await crypto.subtle.digest(method.toUpperCase(), data);
+    const hashHex = Array.from(new Uint8Array(hashBuffer))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+
+    const initMsg = Protocol.formatInit(`${method}:${hashHex}`, null);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        sendWs(initMsg, `init(${method})`);
     }
     await new Promise(r => setTimeout(r, 5));
 }
