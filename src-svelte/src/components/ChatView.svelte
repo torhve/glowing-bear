@@ -17,6 +17,23 @@
   let messages = $derived($currentBuffer?.lines ?? []);
   let noembed = $derived($settings.noembed);
   let topicText = $derived($currentBuffer?.title?.map(t => t.text).join('') || '');
+  // Bubble mode: enabled when setting is on AND buffer is private/query type.
+  let bubbleMode = $derived(
+    $settings.stylizePrivateChats &&
+    $currentBuffer &&
+    ($currentBuffer.type === 'private' || $currentBuffer.type === 'query')
+  );
+
+  // Other person's nick for self-message detection in bubble mode.
+  // Query buffers: shortName IS the other person's nick.
+  // Private buffers: fullName is like "server.nicks.other_nick" — extract last segment.
+  let otherNick = $derived(
+    $currentBuffer ? (
+      $currentBuffer.type === 'query'
+        ? $currentBuffer.shortName
+        : $currentBuffer.fullName.split('.').pop() ?? ''
+    ) : ''
+  );
 
   let isLoadingMore = $state(false);
   let maxScrollValBeforeFetch = $state(0);
@@ -261,7 +278,72 @@
           <p class="chat-empty-subtitle text-sm">Select a buffer from the buffer list</p>
         </div>
       </div>
+    {:else if bubbleMode}
+      <!-- Bubble mode layout (private/query buffers with stylizePrivateChats enabled) -->
+      <div class="chat-bubble-container">
+        <!-- Fetch more lines -->
+        {#if !$currentBuffer.allLinesFetched && messages.length > 0}
+          <div class="bubble-fetchmore-row">
+            <button type="button" class="fetchmorelines flex items-center gap-1 px-3 py-1 rounded text-xs font-medium text-text-secondary hover:text-text hover:bg-surface-raised transition-colors" onclick={handleFetchMore}>
+              <ChevronUp size={14} class="text-text-muted" />
+              Fetch more lines
+            </button>
+            <span class={['loading-spinner', { hidden: !isLoadingMore }]}>
+              Fetching more lines...
+            </span>
+          </div>
+        {/if}
+
+        {#if readEndIndex >= 0 && readEndIndex < messages.length - 1}
+          <!-- Read lines (up to and including readEndIndex) -->
+          {#each messages.slice(0, readEndIndex + 1) as message, i (i)}
+            <BufferLineRow
+              {message}
+              index={i}
+              {messages}
+              {noembed}
+              bubbleMode={true}
+              {otherNick}
+              onMention={handleMention}
+            />
+          {/each}
+          <!-- Readmarker between read and unread -->
+          <div class="readmarker" data-testid="readmarker">
+            <div class="readmarker-container">
+              <div class="readmarker-line"></div>
+              <span class="readmarker-badge">{unreadCount} new</span>
+              <div class="readmarker-line"></div>
+            </div>
+          </div>
+          <!-- Unread lines (after readEndIndex) -->
+          {#each messages.slice(readEndIndex + 1) as message, i (readEndIndex + 1 + i)}
+            <BufferLineRow
+              {message}
+              index={readEndIndex + 1 + i}
+              {messages}
+              {noembed}
+              bubbleMode={true}
+              {otherNick}
+              onMention={handleMention}
+            />
+          {/each}
+        {:else}
+          <!-- All lines visible (no readmarker needed) -->
+          {#each messages as message, i (i)}
+            <BufferLineRow
+              {message}
+              index={i}
+              {messages}
+              {noembed}
+              bubbleMode={true}
+              {otherNick}
+              onMention={handleMention}
+            />
+          {/each}
+        {/if}
+      </div>
     {:else}
+      <!-- Table layout (channels, servers, free buffers) -->
       <table class="chat-table">
         <tbody class="chat-tbody">
           <!-- Fetch more lines row -->
@@ -324,8 +406,8 @@
           {/if}
         </tbody>
       </table>
-      <span bind:this={endOfBufferRef} data-end-of-buffer></span>
     {/if}
+    <span bind:this={endOfBufferRef} data-end-of-buffer></span>
   </div>
 
 </div>
@@ -400,6 +482,28 @@
     font-weight: 600;
     white-space: nowrap;
     letter-spacing: 0.02em;
+  }
+
+  /* Bubble mode layout styles */
+  .chat-bubble-container {
+    display: flex;
+    flex-direction: column;
+    padding: 8px 12px;
+    gap: 0;
+  }
+
+  .bubble-fetchmore-row {
+    text-align: center;
+    padding: 4px 0;
+  }
+
+  /* Readmarker in bubble mode (div-based instead of table tr/td) */
+  .readmarker:not(.readmarker td):not(tr) {
+    padding: 8px 0;
+  }
+
+  .readmarker:not(tr) .readmarker-container {
+    max-width: 100%;
   }
 
 </style>

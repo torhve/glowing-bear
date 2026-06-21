@@ -29,7 +29,8 @@ export const settings = writable<Settings>({
     showQuickKeys: false,
     highlightWords: '',
     debugBuildMetadata: false,
-    hotlistsync: true
+    hotlistsync: true,
+    stylizePrivateChats: false
 });
 
 // Load from localStorage on init
