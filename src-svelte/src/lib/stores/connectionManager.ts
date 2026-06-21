@@ -513,6 +513,10 @@ export function sendMessage(message: string) {
 export function disconnect() {
     disconnectStore();
     if (hotlistInterval) clearInterval(hotlistInterval);
+    if (hotlistDebounceTimer) {
+        clearTimeout(hotlistDebounceTimer);
+        hotlistDebounceTimer = null;
+    }
     if (reconnectingTimer) {
         clearTimeout(reconnectingTimer);
         reconnectingTimer = null;
@@ -663,8 +667,9 @@ export function sendWeeChatCommand(command: string, bufferId?: string) {
     sendWs(msg, 'cmd:' + command.substring(0, 50));
 }
 
-// Deduplicate hotlist queries: prevent cascading requests during rapid buffer switches.
-let lastHotlistQueryTime = 0;
+// Debounce hotlist queries: coalesce rapid buffer switches into a single request.
+let hotlistDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+const HOTLIST_DEBOUNCE_MS = 2000;
 
 export async function switchBuffer(bufferId: string): Promise<boolean> {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -691,11 +696,18 @@ export async function switchBuffer(bufferId: string): Promise<boolean> {
     requestAnimationFrame(() => {
         sendWeeChatCommand('/buffer set hotlist -1', bufferId);
         sendWeeChatCommand('/input set_unread_current_buffer', bufferId);
-        // Deduplicate: skip hotlist query if one was sent recently (< 300ms apart).
-        // Prevents cascading queries during rapid buffer switches or HMR reloads.
-        const now = Date.now();
-        if (now - lastHotlistQueryTime < 300) return;
-        lastHotlistQueryTime = now;
+        scheduleHotlistQuery(bufferId);
+    });
+    // Nicklist backfill is handled by $effect in +page.svelte (guarded: only fetches if empty).
+    return true;
+}
+
+// Schedule a hotlist query with debounce — resets timer on each call so rapid
+// buffer switches coalesce into a single request after switching settles.
+function scheduleHotlistQuery(_bufferId: string) {
+    if (hotlistDebounceTimer) clearTimeout(hotlistDebounceTimer);
+    hotlistDebounceTimer = setTimeout(() => {
+        hotlistDebounceTimer = null;
         // Request authoritative current hotlist state from WeeChat to ensure
         // stale counts are cleared (e.g., after scroll-to-bottom).
         const hlMsg = Protocol.formatHdata({
@@ -703,9 +715,7 @@ export async function switchBuffer(bufferId: string): Promise<boolean> {
             keys: []
         });
         sendAsync(hlMsg).catch(() => {});
-    });
-    // Nicklist backfill is handled by $effect in +page.svelte (guarded: only fetches if empty).
-    return true;
+    }, HOTLIST_DEBOUNCE_MS);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WeeChat buffer ID is a hex string from protocol
