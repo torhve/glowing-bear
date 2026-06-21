@@ -49,7 +49,7 @@
     const link = document.createElement('a');
     link.href = url;
     link.target = '_blank';
-    link.className = 'embed';
+    // no className on wrapper — .embed class on <img> provides sizing rules
     link.appendChild(img);
     embedRef.innerHTML = '';
     embedRef.appendChild(link);
@@ -316,7 +316,7 @@
 <div class="embed-wrapper" class:shown={visible}>
   <button
     data-testid="show-embed"
-    class="embed-show-btn show-btn m-1 px-3 py-1.5 rounded text-sm font-medium transition-colors {(!plugin.nsfw ? 'text-[oklch(62.3%_0.06_255)] hover:text-[oklch(65%_0.12_255)]' : 'text-warning hover:text-warning/90')}"
+    class="embed-show-btn show-btn m-1 px-3 py-1.5 rounded text-sm font-medium transition-colors {(!plugin.nsfw ? 'text-[oklch(62.3%_0.06_255)] hover:text-[oklch(65%_0.12_255)]' : 'bg-warning/20 text-warning hover:bg-warning/30 hover:text-warning/90')}"
     class:hidden={visible}
     onclick={showContent}
   >
@@ -340,7 +340,7 @@
       <div
         data-testid="plugin-embed"
         bind:this={embedRef}
-        class="embed-container embed rounded overflow-hidden bg-surface border-border my-1"
+        class="embed-container rounded overflow-hidden bg-surface my-1"
       ></div>
     {/if}
   </div>
@@ -351,9 +351,17 @@
     max-width: 728px;
     max-height: 500px;
     overflow: hidden;
+    box-sizing: border-box;
+  }
+
+  .embed-container {
     border: 10px solid var(--gb-border, var(--color-border));
     border-radius: 4px;
     box-sizing: border-box;
+  }
+
+  .embed-container:has(img.embed) {
+    display: inline-block;
   }
 
   .show-btn.hidden {
