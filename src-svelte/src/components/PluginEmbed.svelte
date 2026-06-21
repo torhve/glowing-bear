@@ -316,7 +316,7 @@
 <div class="embed-wrapper" class:shown={visible}>
   <button
     data-testid="show-embed"
-    class="embed-show-btn show-btn m-1 px-3 py-1.5 rounded text-sm font-medium transition-colors {(!plugin.nsfw ? 'bg-accent hover:bg-accent-hover text-white' : 'bg-warning hover:bg-warning/90 text-white')}"
+    class="embed-show-btn show-btn m-1 px-3 py-1.5 rounded text-sm font-medium transition-colors {(!plugin.nsfw ? 'text-[oklch(62.3%_0.06_255)] hover:text-[oklch(65%_0.12_255)]' : 'text-warning hover:text-warning/90')}"
     class:hidden={visible}
     onclick={showContent}
   >
