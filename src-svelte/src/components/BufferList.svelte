@@ -172,13 +172,14 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
                     {/if}
                   </button>
                   <button
-                     onclick={(e) => { e.stopPropagation(); handleCloseBuffer(buffer.id); }}
-                      class="text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100 focus:opacity-100"
-                     class:opacity-100={buffer.id === $activeBufferId}
-                     data-testid="close-buffer"
-                   >
-                     <X size={14} />
-                   </button>
+                      onclick={(e) => { e.stopPropagation(); handleCloseBuffer(buffer.id); }}
+                       class="text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100 focus:opacity-100 invisible"
+                       class:visible={(buffer.notification === 0 && buffer.unread === 0) || buffer.id === $activeBufferId}
+                       class:opacity-100={buffer.id === $activeBufferId}
+                      data-testid="close-buffer"
+                    >
+                      <X size={14} />
+                    </button>
                   </span>
             </div>
         {/each}
