@@ -347,11 +347,6 @@ import Key from '@lucide/svelte/icons/key';
         </div>
       {/if}
 
-      {#if $connectionState.errors.hmrReloadError}
-        <div data-testid="error-message" data-error-type="hmr-reload" class="connection-error bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
-          Connection lost during page reload — click Connect to retry
-        </div>
-      {/if}
       {#if $connectionState.errors.serverUnreachable}
         <div data-testid="error-message" data-error-type="server-unreachable" class="connection-error bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
           Unable to reach WeeChat relay at {hostField}:{port} — check that it is running and reachable
