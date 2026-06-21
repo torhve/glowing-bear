@@ -185,6 +185,7 @@ import Key from '@lucide/svelte/icons/key';
 </script>
 
 <div
+  role="presentation"
   class="connection-page min-h-[100vh] min-h-dvh bg-bg flex flex-col overflow-y-scroll"
   onkeydown={(e) => { if (e.key === 'Enter' && !['INPUT','TEXTAREA','SELECT'].includes((e.target as HTMLElement).tagName)) { e.preventDefault(); handleConnect(); } }}
 >
