@@ -46,10 +46,9 @@ npm run check            # svelte-check
 npm run lint             # eslint src
 npm test                 # Vitest unit tests
 npm run test:watch       # Vitest watch mode
-npm run test:e2e         # Playwright E2E tests (headless)
+npm run test:e2e         # Playwright E2E tests (headless; auto-starts gbtest if needed)
 npm run test:e2e:watch   # Playwright E2E UI mode
 npm run test:e2e:debug   # Playwright E2E debug mode
-npm run test:e2e:all     # Full pipeline: start WeeChat → run Playwright → stop WeeChat
 npm run irc:server       # Start local IRC server (npx tsx)
 npm run irc:start        # Start gbtest environment
 npm run irc:stop         # Stop gbtest environment
@@ -167,8 +166,8 @@ Control API CLI: `test/irc-server/ctrl.sh` to send IRC commands (gbtest must be 
 
 ## Prerequisites
 
-1. **gbtest environment**: IRC localhost:6667, relay ws://localhost:9001 (password: `testpassword123`). Start/stop: `npm run irc:start` / `irc:stop`. Modifying `test/irc-server/` requires restart.
-2. **Dev server** on http://localhost:8001: `npm run dev`
+1. **gbtest environment**: IRC localhost:6667, relay ws://localhost:9001 (password: `testpassword123`). Auto-started by Playwright's `globalSetup` when running `npm run test:e2e`. Manual start/stop: `npm run irc:start` / `irc:stop`. Gbtest persists across test runs and does not need to be stopped between runs. Modifying `test/irc-server/` requires restart.
+2. **Dev server** on http://localhost:8001: auto-started by Playwright's `webServer` config. Manual: `npm run dev`
 
 ## Code Style (CRITICAL)
 

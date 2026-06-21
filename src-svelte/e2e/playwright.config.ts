@@ -1,4 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
+import { fileURLToPath } from 'node:url';
+import path from 'path';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   testDir: './specs',
@@ -10,8 +14,10 @@ export default defineConfig({
   expect: {
     timeout: 10000,
   },
+  globalSetup: path.join(__dirname, 'global-setup.ts'),
+  globalTeardown: path.join(__dirname, 'global-teardown.ts'),
   reporter: [
-    ['html', { outputFolder: 'e2e/playwright-report' }],
+    ['html', { outputFolder: '../playwright-report' }],
     ['list'],
   ],
   use: {
