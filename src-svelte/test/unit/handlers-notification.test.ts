@@ -60,6 +60,7 @@ describe('PM/Highlight Notification Handling', () => {
             requestedLines: 0,
             allLinesFetched: false,
             lastSeen: -1,
+            localUnread: 0,
             unread: 0,
             notification: 0,
             notify: 3,
@@ -115,6 +116,7 @@ describe('PM/Highlight Notification Handling', () => {
             requestedLines: 0,
             allLinesFetched: false,
             lastSeen: -1,
+            localUnread: 0,
             unread: 0,
             notification: 0,
             notify: 3,
@@ -166,6 +168,13 @@ describe('PM/Highlight Notification Handling', () => {
         expect(buf!.unread).toBe(0);
     });
 
+    it('does NOT increment localUnread for backfill (notify_level=0)', () => {
+        handleBufferLineAdded(createLineMessage('0x100', [], 0, 1, 0));
+
+        const buf = get(buffers)['0x100'];
+        expect(buf!.localUnread).toBe(0);
+    });
+
     it('increments only notification (not unread) for highlight (notify_level=3)', () => {
         handleBufferLineAdded(createLineMessage('0x100', [], 1, 1, 3));
 
@@ -202,6 +211,7 @@ describe('PM/Highlight Notification Handling', () => {
             requestedLines: 0,
             allLinesFetched: false,
             lastSeen: -1,
+            localUnread: 0,
             unread: 0,
             notification: 0,
             notify: 3,

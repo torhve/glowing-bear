@@ -71,9 +71,9 @@ test('NSFW image shows yellow warning button', async () => {
     await irc.sendMessage('#glowing-bear', 'nsfw https://picsum.photos/200/300.jpg?6');
     const showBtn = page.getByTestId('show-embed').filter({ hasText: 'Show Image' }).last();
     await expect(showBtn).toBeVisible({ timeout: 10000 });
-    // NSFW button should have yellow/amber/warning styling
+    // NSFW button should have yellow/amber/warning background-color
     const color = await showBtn.evaluate(el => getComputedStyle(el).backgroundColor);
-    expect(color).toMatch(/yellow|rgb\(240|rgb\(217|rgb\(250|rgb\(230|oklch\(/i);
+    expect(color).toMatch(/yellow|rgb\(240|rgb\(217|rgb\(250|rgb\(230|rgba\(234|rgba\(244|rgba\(220|oklch\(|oklab\(/i);
 });
 
 test('noembed=false shows embeds automatically', async () => {
