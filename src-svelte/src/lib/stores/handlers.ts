@@ -577,14 +577,15 @@ export function handleHotlistInfo(message: ProtocolMessage) {
     // Skip the previous buffer — its unread counts were optimistically cleared by
     // setActiveBuffer, and stale hotlist data hasn't been processed by WeeChat yet.
     // Also skip the active buffer since it's managed separately.
-    // Crucially: do NOT reset counts for buffers with localUnread > 0 — those have accurate
-    // real-time data from messages received while the buffer was inactive. Stale hotlist
-    // entries from prior activity would overwrite correct local counts.
+    // Also skip buffers with any non-zero counts (unread, notification, or localUnread) —
+    // these represent real-time messages received since the last sync that may not yet
+    // be reflected in WeeChat's hotlist. Stale hotlist entries from prior activity
+    // should not overwrite correct local counts.
     const hotlistBufferIds = new Set(hotlist.map(e => e.buffer));
     for (const id of hotlistBufferIds) {
         const buf = updatedBuffers[id];
         if (!buf || id === activeId || id === previousId) continue;
-        if ((buf.localUnread || 0) > 0) continue;
+        if ((buf.unread || 0) + (buf.notification || 0) + (buf.localUnread || 0) > 0) continue;
 
         buf.unread = 0;
         buf.notification = 0;
