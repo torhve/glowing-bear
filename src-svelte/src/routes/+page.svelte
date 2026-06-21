@@ -12,12 +12,12 @@
   import { settings, updateSettings } from '$lib/stores/settings';
   import { initTheme } from '$lib/stores/theme';
   import { get } from 'svelte/store';
-  import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig, checkAndNavigatePendingNotificationBuffer } from '$lib/stores/models';
+  import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig, visibleBuffers, sortedVisibleBuffers, checkAndNavigatePendingNotificationBuffer } from '$lib/stores/models';
   import { connectionState, setReconnectAttempts, setErrors } from '$lib/stores/connectionStore';
   import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer, getWs } from '$lib/stores/connectionManager';
   import { Protocol } from '$lib/weechat';
   import { initNotifications, updateTitle, updateFavico, onDisconnect } from '$lib/notifications';
-  import { sortBuffers, parseRelayUrl, isPopoverOpen } from '$lib/utils';
+  import { parseRelayUrl, isPopoverOpen, bufferHasNicklist, modifyTextareaValue } from '$lib/utils';
   import { addToast, toastStore } from '$lib/toast';
 
   /* eslint-disable @typescript-eslint/no-explicit-any -- dev-time debug globals on window */
@@ -196,9 +196,8 @@
   });
 
   function handleQuickKeys(e: KeyboardEvent) {
-    // Use get() to avoid $effect dependency on $settings/$buffers (prevents listener re-registration)
+    // Use get() to avoid $effect dependency on $settings/$sortedVisibleBuffers (prevents listener re-registration)
     const s = get(settings);
-    const b = get(buffers);
     if (e.altKey && !e.ctrlKey && !e.shiftKey && s.enableQuickKeys) {
       // Use e.code to extract digit — this works on all keyboard layouts
       const digitMatch = e.code.match(/^Digit(\d)$/);
@@ -212,7 +211,7 @@
           addToast('Cannot switch buffers — not connected', { type: 'warning', duration: 3000 });
           return;
         }
-        const sorted = sortBuffers(Object.values(b).filter((bu: BufferData) => !bu.hidden), s.orderbyserver);
+        const sorted = get(sortedVisibleBuffers) as BufferData[];
         if (index < sorted.length) {
           const buf = sorted[index];
           if (buf) switchBuffer(buf.id);
@@ -242,10 +241,7 @@
       } else {
         // Second digit -> jump to buffer
         const targetNum = _jumpDecimal * 10 + digit;
-        const allBuffs = get(buffers);
-        const sorted = Object.values(allBuffs)
-          .filter((b: BufferData) => !b.hidden)
-          .sort((a: BufferData, b: BufferData) => a.number - b.number);
+        const sorted = (get(visibleBuffers) as BufferData[]).sort((a: BufferData, b: BufferData) => a.number - b.number);
         const targetIdx = targetNum - 1;
         if (targetIdx >= 0 && targetIdx < sorted.length) {
           const targetBuf = sorted[targetIdx];
@@ -294,10 +290,7 @@
     // Alt+A -> switch to next buffer with activity, following unified sort order
     if (e.altKey && (code === 97 || code === 65) && !e.ctrlKey) {
       e.preventDefault();
-      const sortedBuffs = sortBuffers(
-        Object.values(get(buffers)).filter((b: BufferData) => !b.hidden),
-        get(settings).orderbyserver
-      );
+      const sortedBuffs = get(sortedVisibleBuffers) as BufferData[];
       const currentId = get(activeBufferId);
       let startIndex = sortedBuffs.findIndex((b: BufferData) => b.id === currentId);
       if (startIndex === -1) startIndex = 0;
@@ -316,10 +309,7 @@
     // Alt+Arrow up/down -> switch to adjacent buffer
     if (e.altKey && !e.ctrlKey && (code === 38 || code === 40)) {
       e.preventDefault();
-      const visible = sortBuffers(
-        Object.values(get(buffers)).filter((b: BufferData) => !b.hidden),
-        get(settings).orderbyserver
-      );
+      const visible = get(sortedVisibleBuffers) as BufferData[];
       const curId = get(activeBufferId);
       const curIdx = visible.findIndex((b: BufferData) => b.id === curId);
       if (curIdx === -1) return;
@@ -408,19 +398,15 @@
     const tag = activeEl?.tagName || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
     if ((activeEl as HTMLElement)?.isContentEditable) return;
-    // Don't type-to-focus when a modal/dialog is open
     if (isPopoverOpen()) return;
     const input = document.querySelector<HTMLTextAreaElement>('[data-testid="message-input"]');
     if (!input) return;
     e.preventDefault();
     input.focus();
-    const start = input.selectionStart ?? input.value.length;
-    const end = input.selectionEnd ?? start;
-    const newValue = input.value.substring(0, start) + e.key + input.value.substring(end);
-    input.value = newValue;
-    const newCursor = start + 1;
-    input.setSelectionRange(newCursor, newCursor);
-    input.dispatchEvent(new Event('input', { bubbles: true }));
+    modifyTextareaValue('[data-testid="message-input"]', (value: string, start: number, end: number) => ({
+      value: value.substring(0, start) + e.key + value.substring(end),
+      cursor: start + 1,
+    }));
   }
 
   // Register keyboard event listeners once on mount — no reactive dependencies to avoid listener tear-down/re-add cycles
@@ -451,13 +437,7 @@
   let showBufferList = $state(true);
   let nicklistOpenOnMobile = $state(false);
   // Whether current buffer has nick data to display (used for auto-hiding nicklist)
-  let hasCurrentBufferNicklist = $derived(
-    $currentBuffer?.nicklist
-      ? Object.entries($currentBuffer.nicklist).some(([name, group]) =>
-          name !== 'root' && group.nicks.length > 0
-        )
-      : false
-  );
+  let hasCurrentBufferNicklist = $derived(bufferHasNicklist($currentBuffer));
   let touchStartX = 0;
   let touchStartY = 0;
   let touchStartTime = 0;
@@ -546,16 +526,16 @@
       if (chatContainer && touchStartTarget && chatContainer.contains(touchStartTarget)) {
         return;
       }
-      const allBuffers = Object.values($buffers).filter(b => !b.hidden);
+      const sortedBuffs = $sortedVisibleBuffers;
       const currentBuf = $currentBuffer;
-      const currentIndex = allBuffers.findIndex(b => b.id === currentBuf?.id);
+      const currentIndex = sortedBuffs.findIndex(b => b.id === currentBuf?.id);
 
       if (currentIndex !== -1) {
-        if (deltaY < 0 && currentIndex < allBuffers.length - 1) {
-          const prev = allBuffers[currentIndex - 1];
+        if (deltaY < 0 && currentIndex < sortedBuffs.length - 1) {
+          const prev = sortedBuffs[currentIndex - 1];
           if (prev) switchBuffer(prev.id);
         } else if (deltaY > 0 && currentIndex > 0) {
-          const next = allBuffers[currentIndex + 1];
+          const next = sortedBuffs[currentIndex + 1];
           if (next) switchBuffer(next.id);
         }
       }

@@ -1,8 +1,7 @@
 <script lang="ts">
   import type { BufferData } from '$lib/types';
-  import { buffers } from '$lib/stores/models';
+  import { visibleBuffers, sortBuffers } from '$lib/stores/models';
   import { switchBuffer } from '$lib/stores/connectionManager';
-  import { sortBuffers } from '$lib/utils';
 
   import BaseDialog from '$components/BaseDialog.svelte';
   import FormInput from '$components/FormInput.svelte';
@@ -19,15 +18,14 @@
   let selectedIndex = $state(0);
 
   let filteredBuffers = $derived(
-    Object.values($buffers)
-      .filter((buf: BufferData) => {
-        if (!bufferSearchQuery) return true;
-        const query = bufferSearchQuery.toLowerCase();
-        return buf.shortName.toLowerCase().includes(query) ||
-               buf.fullName.toLowerCase().includes(query) ||
-               (buf.rtitle || '').toLowerCase().includes(query) ||
-               String(buf.number).includes(query);
-      })
+    $visibleBuffers.filter((buf: BufferData) => {
+      if (!bufferSearchQuery) return true;
+      const query = bufferSearchQuery.toLowerCase();
+      return buf.shortName.toLowerCase().includes(query) ||
+             buf.fullName.toLowerCase().includes(query) ||
+             (buf.rtitle || '').toLowerCase().includes(query) ||
+             String(buf.number).includes(query);
+    })
   );
 
   // Group merged buffers by their shared number, sorted by first buffer's priority

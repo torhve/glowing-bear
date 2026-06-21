@@ -4,9 +4,9 @@
   import { connectionState, setConnectionStatus, setErrors, clearErrors } from '$lib/stores/connectionStore';
   import { settings, updateSettings } from '$lib/stores/settings';
   import { addToast } from '$lib/toast';
-  import { isWindowsTauri, isMacOSTauri, minimizeWindow, toggleMaximizeWindow, closeWindow } from '$lib/tauriWindow';
+  import { isWindowsTauri } from '$lib/tauriWindow';
 
-  import { parseRelayUrl } from '$lib/utils';
+  import { parseRelayUrl, makeKeyboardActivatable } from '$lib/utils';
   import Zap from '@lucide/svelte/icons/zap';
   import Settings2 from '@lucide/svelte/icons/settings-2';
   import Rocket from '@lucide/svelte/icons/rocket';
@@ -22,13 +22,8 @@ import Key from '@lucide/svelte/icons/key';
   import List from '@lucide/svelte/icons/list';
   import Save from '@lucide/svelte/icons/save';
   import Loader2 from '@lucide/svelte/icons/loader-2';
-  import Minimize2 from '@lucide/svelte/icons/minimize-2';
-  import Maximize2 from '@lucide/svelte/icons/maximize-2';
-  import X from '@lucide/svelte/icons/x';
   import FormInput from './FormInput.svelte';
-
-  let windowsTauri = $derived(isWindowsTauri());
-  let macosTauri = $derived(isMacOSTauri());
+  import TauriTitlebar from './TauriTitlebar.svelte';
 
   let hostField = $state('');
   let port = $state('443');
@@ -164,51 +159,9 @@ import Key from '@lucide/svelte/icons/key';
 <div
   role="presentation"
   class="connection-page min-h-[100vh] min-h-dvh bg-bg flex flex-col overflow-y-scroll"
-  onkeydown={(e) => { if (e.key === 'Enter' && !['INPUT','TEXTAREA','SELECT'].includes((e.target as HTMLElement).tagName)) { e.preventDefault(); handleConnect(); } }}
+  onkeydown={makeKeyboardActivatable(() => { if (!['INPUT','TEXTAREA','SELECT'].includes((document.activeElement as HTMLElement).tagName)) handleConnect(); })}
 >
-  {#if windowsTauri}
-    <div class="tauri-titlebar h-8 bg-surface-raised border-b border-border flex items-center justify-end px-2 space-x-1 flex-shrink-0" data-tauri-drag-region>
-      <div data-tauri-drag-region="false">
-        <button
-          onclick={() => minimizeWindow()}
-          class="px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-danger rounded"
-          title="Minimize"
-          data-testid="minimize-button"
-        >
-          <Minimize2 size={14} />
-        </button>
-      </div>
-      <div data-tauri-drag-region="false">
-        <button
-          onclick={() => toggleMaximizeWindow()}
-          class="px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-surface-raised rounded"
-          title="Maximize"
-          data-testid="maximize-button"
-        >
-          <Maximize2 size={14} />
-        </button>
-      </div>
-      <div data-tauri-drag-region="false">
-        <button
-          onclick={() => closeWindow()}
-          class="px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-danger rounded"
-          title="Close"
-          data-testid="close-button"
-        >
-          <X size={14} />
-        </button>
-      </div>
-    </div>
-  {/if}
-  {#if macosTauri}
-    <div class="tauri-titlebar h-8 bg-surface-raised border-b border-border flex items-center px-4 flex-shrink-0" data-tauri-drag-region>
-      <div class="flex items-center gap-1.5">
-        <button data-tauri-drag-region="false" onclick={() => closeWindow()} class="w-3 h-3 rounded-full bg-[#ff5f57] border border-[#e54b3f]/30 cursor-pointer" title="Close" data-testid="traffic-light-close"></button>
-        <button data-tauri-drag-region="false" onclick={() => minimizeWindow()} class="w-3 h-3 rounded-full bg-[#febc26] border border-[#dfca1d]/30 cursor-default" title="Minimize" data-testid="traffic-light-minimize"></button>
-        <button data-tauri-drag-region="false" onclick={() => toggleMaximizeWindow()} class="w-3 h-3 rounded-full bg-[#27c93f] border border-[#1aab29]/30 cursor-default" title="Full Screen" data-testid="traffic-light-maximize"></button>
-      </div>
-    </div>
-  {/if}
+  <TauriTitlebar variant="standalone" />
   <div class="connection-content flex-1 flex items-start justify-center px-4 pt-6">
     <div class="connection-card w-full max-w-lg space-y-6">
       <div class="connection-branding text-center mb-6">
@@ -404,7 +357,7 @@ import Key from '@lucide/svelte/icons/key';
           WeeChat 2.9+ is required. Set up an encrypted relay with /relay add tls.weechat 9001
         </div>
       </details>
-      {#if windowsTauri}
+      {#if isWindowsTauri()}
         <details class="info-accordion bg-surface rounded border border-border" data-info-section="flags">
           <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
             <Globe size={14} />Flag emoji rendering on Windows

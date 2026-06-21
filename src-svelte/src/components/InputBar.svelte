@@ -3,7 +3,7 @@
   import { sendMessage, sendWeeChatCommand } from '$lib/stores/connectionManager';
   import { settings } from '$lib/stores/settings';
   import { addToHistory, getHistoryUp, getHistoryDown } from '$lib/stores/inputHistory';
-  import { completeNick, isPopoverOpen } from '$lib/utils';
+  import { completeNick, isPopoverOpen, filterImageFiles, readFileAsDataUrl } from '$lib/utils';
   import Send from '@lucide/svelte/icons/send';
   import { emojifyInput } from '$lib/emojify';
   import Camera from '@lucide/svelte/icons/camera';
@@ -44,6 +44,16 @@
 
   let canSend = $derived($currentBuffer && message.length > 0);
 
+  // Clear all messages from a buffer, resetting lines and requestedLines count.
+  function clearBufferMessages(bufferId: string) {
+    const current = get(buffers);
+    const buf = current[bufferId];
+    if (!buf) return;
+    const updated = { ...current };
+    updated[bufferId] = { ...buf, lines: [], requestedLines: 0 };
+    buffers.set(updated);
+  }
+
   function handleSend() {
     if (!canSend) return;
 
@@ -55,14 +65,7 @@
     // Handle /buffer clear command on first line only
     if (/^\/buffer\s+clear\s*$/i.test(lines[0]!)) {
       if ($currentBuffer) {
-        const currentBuffers = get(buffers);
-        const bufferId = $currentBuffer.id || '';
-        const existing = currentBuffers[bufferId];
-        if (existing) {
-          const updated = { ...currentBuffers };
-          updated[bufferId] = { ...existing, lines: [], requestedLines: 0 };
-          buffers.set(updated);
-        }
+        clearBufferMessages($currentBuffer.id);
         sendWeeChatCommand('/buffer clear');
       }
     }
@@ -85,14 +88,7 @@
     }
 
     if (text === '/c' && $currentBuffer) {
-      const currentBuffers = get(buffers);
-      const bufferId = $currentBuffer.id || '';
-      const existing = currentBuffers[bufferId];
-      if (existing) {
-        const updated = { ...currentBuffers };
-        updated[bufferId] = { ...existing, lines: [], requestedLines: 0 };
-        buffers.set(updated);
-      }
+      clearBufferMessages($currentBuffer.id);
     }
 
     message = '';
@@ -301,7 +297,7 @@
     files: FileList | File[],
     base64Strings?: string[],
   ): Promise<void> {
-    const imageFiles = Array.from(files).filter(f => f.type.match(/image.*/));
+    const imageFiles = filterImageFiles(Array.from(files));
     if (imageFiles.length === 0 && !(base64Strings?.length)) return;
 
     // Phase 1: push placeholder items synchronously to trigger dialog open
@@ -343,12 +339,7 @@
     for (let i = 0; i < imageFiles.length; i++) {
       const file = imageFiles[i]!;
       const placeholder = placeholders[i]!;
-      const dataUrl = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => resolve('');
-        reader.readAsDataURL(file);
-      });
+      const dataUrl = await readFileAsDataUrl(file);
       placeholder.dataUrl = dataUrl;
       placeholder.status = dataUrl ? 'preview' : 'error';
     }
@@ -388,7 +379,7 @@
     // Firefox's clipboard files are ephemeral and get GC'd before FileReader can read them,
     // so we must read their content immediately within this event handler.
     const allFiles = Array.from(data.files);
-    const files = allFiles.filter(f => f.type.match(/image.*/));
+    const files = filterImageFiles(allFiles);
     log('clipboardData.files:', allFiles.length, 'total,', files.length, 'images', allFiles.map(f => ({ name: f.name, type: f.type })));
     if (files.length > 0) {
       e.preventDefault();

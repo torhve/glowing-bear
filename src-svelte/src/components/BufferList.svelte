@@ -1,10 +1,11 @@
 <script lang="ts">
   import type { BufferData } from '$lib/types';
-  import { buffers, activeBufferId } from '$lib/stores/models';
+  import { buffers, activeBufferId, sortedVisibleBuffers } from '$lib/stores/models';
   import { switchBuffer } from '$lib/stores/connectionManager';
   import { closeBufferOnWeeChat, pinBuffer, unpinBuffer } from '$lib/stores/connectionManager';
   import { settings, updateSettings } from '$lib/stores/settings';
-  import { sortBuffers, getBufferIconName, getDisplayName } from '$lib/utils';
+  import { getBufferIconName, getDisplayName } from '$lib/utils';
+  import { get } from 'svelte/store';
   import { tooltipAttachment } from '$lib/utils/bufferTooltip';
   import Pin from '@lucide/svelte/icons/pin';
   import PinOff from '@lucide/svelte/icons/pin-off';
@@ -20,12 +21,7 @@
 let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
 
   let sortedBuffers = $derived(
-    sortBuffers(
-      Object.values($buffers)
-        .filter(buf => !buf.hidden)
-        .filter(buf => !$settings.onlyUnread || buf.unread > 0 || buf.notification > 0 || (buf.localUnread ?? 0) > 0 || buf.id === $activeBufferId || buf.pinned),
-      $settings.orderbyserver
-    )
+    $sortedVisibleBuffers.filter(buf => !$settings.onlyUnread || buf.unread > 0 || buf.notification > 0 || (buf.localUnread ?? 0) > 0 || buf.id === $activeBufferId || buf.pinned)
   );
 
   let groupedBuffers = $derived(
@@ -86,7 +82,7 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
 
    function getQuickKeyIndex(buffer: BufferData): number | null {
       if (!altKeyPressed && (!$settings.showQuickKeys || !$settings.enableQuickKeys)) return null;
-      const sorted = sortBuffers(Object.values($buffers).filter(b => !b.hidden), $settings.orderbyserver);
+       const sorted = get(sortedVisibleBuffers) as BufferData[];
       const idx = sorted.findIndex(b => b.id === buffer.id);
       if (idx === -1 || idx >= 9) return null;
       return idx + 1;
