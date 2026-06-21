@@ -566,7 +566,7 @@
   <ConnectionForm />
 {:else}
   <div class="main-layout h-dvh flex flex-col bg-bg" data-testid="chat-view">
-    <TopBar bufferListVisible={showBufferList || !isMobile()} onBufferSelect={hideBufferListOnMobile} onSearchOpen={showBufferListOnMobile} />
+    <TopBar bufferListVisible={showBufferList || !isMobile()} onBufferSelect={hideBufferListOnMobile} onSearchOpen={showBufferListOnMobile} onNicklistToggle={() => { if (isMobile()) nicklistOpenOnMobile = !nicklistOpenOnMobile; else updateSettings({ showNicklist: !$settings.showNicklist }); }} />
     <div class="main-content flex-1 flex overflow-hidden">
       {#if showBufferList || !isMobile()}
         <BufferList altKeyPressed={_altKeyPressed} onBufferSelect={hideBufferListOnMobile} />
