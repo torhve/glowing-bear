@@ -6,6 +6,9 @@ export async function openSettings(page: Page) {
 }
 
 export async function closeSettings(page: Page) {
-  await page.getByTestId('settings-modal-close').click();
-  await page.getByTestId('settings-modal').waitFor({ state: 'hidden' });
+  const modal = page.getByTestId('settings-modal');
+  if ((await modal.isVisible().catch(() => false))) {
+    await page.getByTestId('settings-modal-close').click();
+    await modal.waitFor({ state: 'hidden', timeout: 5000 });
+  }
 }

@@ -39,12 +39,6 @@ test.beforeEach(async () => {
     page.on('pageerror', (error) => {
         if (error.message?.includes('effect_orphan')) return;
     });
-    // Reset localUnreadBuffers tracking set to prevent serial-mode state pollution.
-    // Prior tests may have added buffer IDs that this test doesn't expect.
-    await page.evaluate(() => {
-        const { localUnreadBuffers } = (window as any).__sveltekit__?.stores?.models ?? {};
-        if (localUnreadBuffers) localUnreadBuffers.set(new Set());
-    });
 });
 
 // When switching to an inactive buffer that received messages while we were away,
@@ -175,11 +169,19 @@ test('other buffer unread counts preserved when switching active buffer', async 
     await waitForBuffer(page, 'gbtest', 10000);
     await switchToBuffer(page, 'gbtest');
 
+    // Wait for debounced hotlist query (2s) to complete after buffer switch,
+    // so that any stale hotlist data from prior serial-mode tests is processed
+    // before we send our test message. This prevents the debounced query from
+    // resetting counts after our message arrives but before _buffer_line_added
+    // has been processed.
+    await page.waitForTimeout(3000);
+
     // Send messages to #glowing-bear (creates unread)
     await irc.sendMessage('#glowing-bear', 'other-buffer-count-test-' + Date.now());
 
-    // Wait for message processing and hotlist sync
-    await page.waitForTimeout(6000);
+    // Wait for message processing - _buffer_line_added must arrive and be
+    // processed before any subsequent hotlist sync can interfere.
+    await page.waitForTimeout(3000);
 
     // Verify console logged unread counts
     const preSwitchLogs = consoleLogs.filter(l => l.includes('#glowing-bear'));
