@@ -84,12 +84,13 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
       return 'text-text-secondary';
     }
 
-   function getQuickKeyIndex(buffer: BufferData): number | null {
+   function getQuickKeyIndex(buffer: BufferData): string | null {
       if (!altKeyPressed && (!$settings.showQuickKeys || !$settings.enableQuickKeys)) return null;
-      const sorted = sortBuffers((Object.values($buffers) as BufferData[]).filter(b => !b.hidden), $settings.orderbyserver);
-      const idx = sorted.findIndex(b => b.id === buffer.id);
+      const idx = sortedBuffers.findIndex(b => b.id === buffer.id);
       if (idx === -1) return null;
-      return idx === 9 ? 0 : idx + 1;
+      if (idx < 9) return String(idx + 1);
+      // Use letters for indices 10+ (A=10, B=11, etc.)
+      return String.fromCharCode(65 + idx - 10);
     }
 
     function getBufferIcon(buffer: BufferData) {
