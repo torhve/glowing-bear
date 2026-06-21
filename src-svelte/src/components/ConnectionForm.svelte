@@ -51,32 +51,9 @@ import Key from '@lucide/svelte/icons/key';
     password = s.password || '';
   });
 
-  // Attempt autoconnect using the form's current values (not saved settings directly)
-  $effect(() => {
-    if ($connectionState.status !== 'disconnected') return;
-    if (!autoconnect || !savepassword || !hostField) return;
-
-    console.log('[ConnectionForm] Autoconnecting with form values');
-    void (async () => {
-      try {
-        const { host: parsedHost, port: parsedPort, path: parsedPath } = parseRelayUrl(hostField, port);
-        await connect(parsedHost, parsedPort, parsedPath, password, tls, false);
-        updateSettings({
-          hostField: parsedHost,
-          port: parsedPort.toString(),
-          tls,
-          savepassword,
-          autoconnect,
-          ...(savepassword ? { password } : {})
-        });
-      } catch (e) {
-        console.warn('[ConnectionForm] Autoconnect failed:', e);
-        setErrors({ errorMessage: true });
-        setConnectionStatus('error');
-        addToast('Connection failed. Check settings and try again.', { type: 'error', duration: 10000 });
-      }
-    })();
-  });
+  // Autoconnect is handled by +page.svelte's tryAutoConnect(). The ConnectionForm
+  // only handles explicit user-initiated connections via handleConnect().
+  // This prevents duplicate connection attempts on page load.
 
   $effect(() => {
     if (!hostField || hostField.trim() === '') {
@@ -380,7 +357,7 @@ import Key from '@lucide/svelte/icons/key';
       {/if}
       {#if $connectionState.errors.hashAlgorithmDisagree}
         <div data-testid="error-message" data-error-type="hash-algorithm" class="connection-error bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
-          Hash algorithm error: Please set relay.network.password_hash_algo to "pbkdf2+sha512" or "plain" in WeeChat
+          Hash algorithm mismatch: server requires an auth method this client cannot use. Set relay.network.password_hash_algo to "pbkdf2+sha512", "pbkdf2+sha256", "sha256", "sha512", or "plain". If using Tauri, enable TLS for secure context access.
         </div>
       {/if}
 

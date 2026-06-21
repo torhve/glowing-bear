@@ -13,7 +13,7 @@
   import { initTheme } from '$lib/stores/theme';
   import { get } from 'svelte/store';
   import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig, checkAndNavigatePendingNotificationBuffer } from '$lib/stores/models';
-  import { connectionState, setReconnectAttempts } from '$lib/stores/connectionStore';
+  import { connectionState, setReconnectAttempts, setErrors } from '$lib/stores/connectionStore';
   import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer, getWs } from '$lib/stores/connectionManager';
   import { Protocol } from '$lib/weechat';
   import { initNotifications, updateTitle, updateFavico, onDisconnect } from '$lib/notifications';
@@ -34,6 +34,7 @@
     (window as any).__showBufferListOnMobile = showBufferListOnMobile;
     (window as any).__addToast = addToast;
     (window as any).__toastStore = toastStore;
+    (window as any).__setConnectionErrors = setErrors;
     $effect(() => {
       (window as any).__wconfig = $wconfig;
       (window as any).__connected = $connected;
