@@ -414,6 +414,7 @@
 
     .prefix .compact-prefix {
       justify-content: flex-start;
+      align-items: baseline;
     }
 
     .message {
@@ -458,6 +459,7 @@
   .prefix .compact-prefix {
     display: flex;
     justify-content: flex-end;
+    align-items: baseline;
   }
 
   .prefix .compact-prefix.repeated-prefix {
