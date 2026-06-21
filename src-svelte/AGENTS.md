@@ -114,7 +114,21 @@ Free/open-source IRC web frontend for WeeChat. Users run their own WeeChat insta
 4. Use `page.getByTestId('...')` selectors + `.first()`/`.last()` for strict mode
 5. Shared state across tests: `test.describe.configure({ mode: 'serial' })`
 
-### E2E Best Practices
+### Running Targeted E2E Tests
+
+Full E2E suite takes ~5 minutes. Run only the relevant tests instead of the full suite:
+
+```bash
+# Run tests matching a pattern (e.g., ReadMarker, BufferList, ChatView)
+npm run test:e2e -- --grep "ReadMarker"
+
+# Run multiple patterns
+npm run test:e2e -- --grep "ReadMarker|unreadBadge"
+
+# Run a single file
+npm run test:e2e e2e/specs/ComponentName.test.ts
+
+```
 
 **Test user-visible behavior, not implementation details.** E2E tests should verify what the user sees/interacts with. Things like whether `new Audio(src)` or `new Notification(title)` were called are implementation details — those belong in unit tests (`test/unit/`). Keep E2E focused on DOM output, UI state, and user flows. Example: instead of intercepting `Audio` to check `sonar.mp3` was loaded, verify the sound plays via user interaction (or leave that to unit tests).
 
