@@ -144,15 +144,16 @@ function handleBufferUpdate(buffer: any, message: BufferMessage) {
     buffer.number = message.number;
     buffer.hidden = !!message.hidden;
 
-    // Reset unread counts
+    // Update server unread totals by removing this buffer's old contribution before
+    // handleHotlistInfo recalculates them authoritatively.
     const serverKey = `${buffer.plugin}.${buffer.server}`;
     const server = get(servers)[serverKey];
     if (server) {
         server.unread -= (buffer.unread + buffer.notification);
     }
-    buffer.notification = 0;
-    buffer.unread = 0;
-    buffer.lastSeen = -1;
+    // Unread/notification/lastSeen counts are managed by handleHotlistInfo (authoritative
+    // WeeChat data) and handleBufferLineAdded (real-time local tracking). This handler
+    // only updates buffer metadata (name, title, type, etc.) — not message counts.
 
     if (message.type !== undefined) {
         buffer.bufferType = message.type;
@@ -295,10 +296,10 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                     } else {
                         buffer.lastSeen++;
                     }
-                } else if (buffer.id !== activeId) {
-                    // Track local unread count for all inactive buffers, even those
-                    // never visited (lastSeen < 0). This ensures readmarker appears
-                    // on first visit when messages arrived while away.
+                } else if (buffer.id !== activeId && lineMsg.notify_level >= 1) {
+                    // Track local unread count for real-time messages (notify_level >= 1)
+                    // on inactive buffers. Backfill data (notify_level=0) is not counted,
+                    // as it will be reconciled by hotlist sync.
                     buffer.localUnread = (buffer.localUnread || 0) + 1;
                     localUnreadBuffers.update((s: Set<string>) => new Set(s).add(buffer.id));
                 }
@@ -573,14 +574,18 @@ export function handleHotlistInfo(message: ProtocolMessage) {
     // Skip the previous buffer — its unread counts were optimistically cleared by
     // setActiveBuffer, and stale hotlist data hasn't been processed by WeeChat yet.
     // Also skip the active buffer since it's managed separately.
-    // localUnread is NOT reset here — it tracks real-time messages WeeChat
-    // hasn't acknowledged yet. Zeroing it would lose unreads between syncs.
-    // It is properly cleared by setActiveBuffer when switching to a buffer.
+    // After resetting, merge back localUnread counts so locally-tracked messages
+    // (received via _buffer_line_added but not yet in WeeChat's hotlist) are preserved.
     for (const id in updatedBuffers) {
         const buf = updatedBuffers[id];
         if (buf && id !== activeId && id !== previousId) {
             buf.unread = 0;
             buf.notification = 0;
+            // Restore locally-tracked unread count from real-time messages.
+            // The hotlist entry loop below will add WeeChat-reported counts on top.
+            if (localUnread.has(id)) {
+                buf.unread = buf.localUnread || 0;
+            }
         }
     }
     // Reset all server unread totals before recalculating from hotlist entries.
@@ -593,22 +598,24 @@ export function handleHotlistInfo(message: ProtocolMessage) {
         const buffer = updatedBuffers[entry.buffer];
         if (!buffer || entry.buffer === activeId || entry.buffer === previousId) continue;
 
-        // Store unread count from WeeChat hotlist.
-        // During initial sync (buffer has no lines), defer lastSeen calculation
-        // until after sync completes, when we know the total line count.
-        buffer.unread = entry.count[1] || 0;
-        buffer.notification = (entry.count[2] || 0) + (entry.count[3] || 0);
+        // Merge WeeChat hotlist counts with locally-tracked counts.
+        // Use Math.max to preserve optimistic local increments that haven't
+        // been acknowledged by WeeChat's hotlist yet.
+        const hotlistUnread = entry.count[1] || 0;
+        const hotlistNotif = (entry.count[2] || 0) + (entry.count[3] || 0);
+        buffer.unread = Math.max(buffer.unread, hotlistUnread);
+        buffer.notification = Math.max(buffer.notification, hotlistNotif);
         // Only calculate lastSeen if buffer has lines and no local unreads tracked.
         // Buffers with localUnread > 0 have more accurate local data than stale WeeChat hotlist.
         if (buffer.lines.length > 0 && !localUnread.has(entry.buffer)) {
-            const unreadSum = entry.count.reduce((sum: number, n: number) => sum + n, 0);
-            buffer.lastSeen = buffer.lines.length - 1 - unreadSum;
+            const totalUnread = buffer.unread + buffer.notification;
+            buffer.lastSeen = buffer.lines.length - 1 - totalUnread;
         }
 
         const serverKey = `${buffer.plugin}.${buffer.server}`;
         const server = updatedServers[serverKey];
-        if (server && entry.count[1] !== undefined && entry.count[2] !== undefined && entry.count[3] !== undefined) {
-            server.unread += entry.count[1] + entry.count[2] + entry.count[3];
+        if (server) {
+            server.unread += buffer.unread + buffer.notification;
         }
     }
 

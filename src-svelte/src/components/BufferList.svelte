@@ -23,7 +23,7 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
     sortBuffers(
       Object.values($buffers)
         .filter(buf => !buf.hidden)
-        .filter(buf => !$settings.onlyUnread || buf.unread > 0 || buf.notification > 0 || buf.id === $activeBufferId || buf.pinned),
+        .filter(buf => !$settings.onlyUnread || buf.unread > 0 || buf.notification > 0 || (buf.localUnread ?? 0) > 0 || buf.id === $activeBufferId || buf.pinned),
       $settings.orderbyserver
     )
   );
@@ -77,11 +77,11 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
     updateSettings({ orderbyserver: !$settings.orderbyserver });
   }
 
- function getNotifyClass(buffer: BufferData): string {
-      if (buffer.id === $activeBufferId) return 'text-accent';
-      if (buffer.notification >= 3) return 'text-white font-bold';
-      if (buffer.unread > 0) return 'text-accent';
-      return 'text-text-secondary';
+    function getNotifyClass(buffer: BufferData): string {
+        if (buffer.id === $activeBufferId) return 'text-accent';
+        if (buffer.notification >= 3) return 'text-white font-bold';
+        if (buffer.unread > 0 || buffer.localUnread > 0) return 'text-accent';
+        return 'text-text-secondary';
     }
 
    function getQuickKeyIndex(buffer: BufferData): number | null {
@@ -145,13 +145,13 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
 <span class="buffer-name text-xs {getNotifyClass(buffer)} min-w-0 ml-0.5 truncate">
                       {getDisplayName(buffer)}
                     </span>
-                   {#if buffer.notification > 0 || buffer.unread > 0}
-                         <span
-                           class="buffer-notification-badge absolute right-1 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] font-semibold rounded-full shadow-sm {buffer.id === $activeBufferId ? (buffer.notification > 0 ? '!bg-red-600 !text-white' : '!bg-warning !text-black') : (buffer.notification > 0 ? 'bg-red-600/15 text-red-600' : 'bg-accent/15 text-accent')}"
-                           data-testid="unread-badge"
-                         >
-                            {buffer.notification + buffer.unread}
-                          </span>
+{#if buffer.notification > 0 || buffer.unread > 0 || (buffer.localUnread ?? 0) > 0}
+                          <span
+                            class="buffer-notification-badge absolute right-1 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] font-semibold rounded-full shadow-sm {buffer.id === $activeBufferId ? (buffer.notification > 0 ? '!bg-red-600 !text-white' : '!bg-warning !text-black') : (buffer.notification > 0 ? 'bg-red-600/15 text-red-600' : 'bg-accent/15 text-accent')}"
+                            data-testid="unread-badge"
+                          >
+                             {buffer.notification + buffer.unread + (buffer.localUnread ?? 0)}
+                           </span>
                         {/if}
                    <span class="ml-auto flex items-center gap-1 flex-shrink-0 z-10">
                         {#if getQuickKeyIndex(buffer) !== null}

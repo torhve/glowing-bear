@@ -8,7 +8,7 @@ test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
     page = await browser.newPage();
-    // Inject a mock Notification class before any app code runs
+    // Inject mocks before any app code runs
     await page.addInitScript(() => {
         (window as any).__notificationCalls = [];
         (window as any).Notification = class MockNotification {
@@ -18,6 +18,22 @@ test.beforeAll(async ({ browser }) => {
                 (window as any).__notificationCalls.push({ title, options });
             }
         } as any;
+
+        // Mock Audio constructor to capture calls for sound tests
+        (window as any).__audioCalls = [];
+        const OrigAudio = window.Audio;
+        (window as any).Audio = function (src: string) {
+            (window as any).__audioCalls.push(src);
+            return new OrigAudio(src);
+        };
+
+    // Force document.hidden = true so playNotificationSound triggers in headless Playwright.
+    // In headless Chromium, document.hidden is always false, which suppresses sounds/notifications.
+    try {
+        Object.defineProperty(document, 'hidden', { value: true, writable: false });
+    } catch {
+        /* property may already be defined; will be re-set by page.evaluate in beforeEach */
+    }
     });
     await page.route('**/cdnjs.cloudflare.com/**', (route) => route.abort());
     await page.goto('http://localhost:8001/');
@@ -37,7 +53,13 @@ test.beforeEach(async () => {
     page.on('pageerror', (error) => {
         if (error.message?.includes('effect_orphan')) return;
     });
-    await page.evaluate(() => { (window as any).__notificationCalls = []; });
+    await page.evaluate(() => {
+        (window as any).__notificationCalls = [];
+        (window as any).__audioCalls = [];
+        // Force document.hidden = true so notification handlers trigger in headless Playwright.
+        // addInitScript may not reliably override this property on all Chromium versions.
+        try { Object.defineProperty(document, 'hidden', { value: true, writable: true }); } catch { /* fallback */ }
+    });
 });
 
 async function openSettings() {
@@ -130,15 +152,8 @@ test('sound plays when soundnotification is enabled', async () => {
     await connectToWeechat(page);
     await page.waitForTimeout(1000);
 
-    // Intercept Audio constructor calls
-    await page.evaluate(() => {
-        (window as any).__audioCalls = [];
-        const OrigAudio = (window as any).Audio;
-        (window as any).Audio = function (src: string) {
-            (window as any).__audioCalls.push(src);
-            return new OrigAudio(src);
-        };
-    });
+    // Reset captured Audio calls (mock injected via addInitScript in beforeAll)
+    await page.evaluate(() => { (window as any).__audioCalls = []; });
 
     // Switch to channel buffer so PM triggers notification
     const firstItem = page.getByTestId('buffer-item').first();
@@ -160,15 +175,8 @@ test('sound does NOT play when soundnotification is disabled', async () => {
     await connectToWeechat(page);
     await page.waitForTimeout(1000);
 
-    // Intercept Audio constructor calls
-    await page.evaluate(() => {
-        (window as any).__audioCalls = [];
-        const OrigAudio = (window as any).Audio;
-        (window as any).Audio = function (src: string) {
-            (window as any).__audioCalls.push(src);
-            return new OrigAudio(src);
-        };
-    });
+    // Reset captured Audio calls (mock injected via addInitScript in beforeAll)
+    await page.evaluate(() => { (window as any).__audioCalls = []; });
 
     // Switch to channel buffer so PM triggers notification
     const firstItem = page.getByTestId('buffer-item').first();
