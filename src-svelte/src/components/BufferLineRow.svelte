@@ -494,25 +494,25 @@
   .bubble-row {
     display: flex;
     flex-direction: column;
-    padding: 1px 0;
+    padding: 2px 0;
   }
 
   /* Meta row (nick + time) above bubble */
   .bubble-meta {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     align-items: baseline;
-    font-size: 0.75em;
+    font-size: 0.7em;
     line-height: 1.2;
-    margin-bottom: 2px;
+    margin-bottom: 3px;
   }
 
   .bubble-meta-other {
-    padding-left: 4px;
+    padding-left: 6px;
   }
 
   .bubble-meta-self {
-    padding-right: 4px;
+    padding-right: 6px;
     justify-content: flex-end;
   }
 
@@ -523,7 +523,7 @@
 
   .bubble-time {
     color: var(--gb-bubble-meta-color, var(--gb-text-muted));
-    opacity: 0.7;
+    opacity: 0.8;
   }
 
   /* Bubble container alignment */
@@ -539,72 +539,45 @@
   .bubble-middle-row {
     display: flex;
     justify-content: center;
-    padding: 2px 0;
+    padding: 4px 0;
   }
 
-  /* Bubble itself */
+  /* Bubble itself — Signal-style rounded, no tails */
   .bubble {
     max-width: 85%;
-    padding: 6px 10px;
-    border-radius: 16px;
-    line-height: 1.4;
+    padding: 8px 14px;
+    border-radius: 20px;
+    line-height: 1.45;
     font-size: 0.95em;
     position: relative;
     word-break: break-word;
   }
 
-  /* Self-sent bubble: accent blue background, white text */
+  /* Self-sent bubble: solid accent background, light text */
   .bubble-self-bg {
     background: var(--gb-bubble-self-bg, #4a90d9);
     color: var(--gb-bubble-self-text, #ffffff);
-    border-bottom-right-radius: 4px;
   }
 
-  /* Other's bubble: surface background, theme text color */
+  /* Other's bubble: solid distinct background, bright text */
   .bubble-other-bg {
     background: var(--gb-bubble-other-bg, var(--gb-surface-raised));
     color: var(--gb-bubble-other-text, var(--gb-text));
-    border-bottom-left-radius: 4px;
   }
 
-  /* Middle-aligned system message bubble: muted, narrower, fully rounded */
+  /* Middle-aligned system message bubble: solid, narrower, fully rounded */
   .bubble-middle-bg {
     background: var(--gb-bubble-middle-bg, var(--gb-border));
     color: var(--gb-bubble-middle-text, var(--gb-text-secondary));
     max-width: 70%;
-    border-radius: 12px;
-    padding: 4px 12px;
+    border-radius: 18px;
+    padding: 6px 14px;
     font-size: 0.85em;
-  }
-
-  /* Tail on first bubble of a group */
-  .bubble-tail.bubble-self-bg::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    right: -8px;
-    width: 0;
-    height: 0;
-    border-top: 8px solid var(--gb-bubble-self-bg, #4a90d9);
-    border-left: 8px solid transparent;
-    border-bottom-right-radius: 2px;
-  }
-
-  .bubble-tail.bubble-other-bg::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: -8px;
-    width: 0;
-    height: 0;
-    border-top: 8px solid var(--gb-bubble-other-bg, var(--gb-surface-raised));
-    border-right: 8px solid transparent;
-    border-bottom-left-radius: 2px;
   }
 
   /* Highlight indicator on bubble */
   .bubble-highlight {
-    border: 2px solid var(--gb-bubble-highlight-border, var(--gb-accent));
+    box-shadow: 0 0 0 2px var(--gb-bubble-highlight-border, var(--gb-accent));
   }
 
   /* Date separator in bubble mode */
@@ -612,8 +585,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 12px 0;
-    gap: 12px;
+    padding: 14px 0;
+    gap: 14px;
   }
 
   .bubble-date-separator::before,
@@ -626,10 +599,10 @@
 
   .bubble-date-text {
     color: var(--gb-text-muted, #666);
-    font-size: 0.75em;
+    font-size: 0.7em;
     white-space: nowrap;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.08em;
   }
 
   /* Adjust links inside bubbles */
@@ -645,10 +618,19 @@
   /* Adjust inline code in bubbles */
   .bubble .irc-code {
     background: var(--gb-bubble-code-bg, rgba(255, 255, 255, 0.2));
+    padding: 1px 4px;
+    border-radius: 4px;
   }
 
   .bubble-other-bg .irc-code {
-    background: var(--gb-bubble-code-bg-other, rgba(0, 0, 0, 0.1));
+    background: var(--gb-bubble-code-bg-other, rgba(0, 0, 0, 0.15));
+  }
+
+  /* Reset WeeChat background color classes inside chat bubbles */
+  .bubble [class*="cwb-"],
+  .bubble [class*="ceb-"],
+  .bubble [class*="cob-"] {
+    background-color: transparent !important;
   }
 
 </style>

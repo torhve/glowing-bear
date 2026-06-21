@@ -57,14 +57,14 @@
 
   --gb-bubble-self-bg: #4a90d9;
   --gb-bubble-self-text: #ffffff;
-  --gb-bubble-other-bg: #2a2a2a;
-  --gb-bubble-other-text: #ddd;
+  --gb-bubble-other-bg: #383838;
+  --gb-bubble-other-text: #f0f0f0;
   --gb-bubble-meta-color: #666;
   --gb-bubble-highlight-border: #4a90d9;
-  --gb-bubble-code-bg: rgba(255, 255, 255, 0.2);
-  --gb-bubble-code-bg-other: rgba(0, 0, 0, 0.15);
-  --gb-bubble-middle-bg: rgba(51, 51, 51, 0.4);
-  --gb-bubble-middle-text: #999;
+  --gb-bubble-code-bg: rgba(255, 255, 255, 0.25);
+  --gb-bubble-code-bg-other: rgba(0, 0, 0, 0.2);
+  --gb-bubble-middle-bg: #2e2e2e;
+  --gb-bubble-middle-text: #bbb;
 }
 
 [data-theme="light"] {
@@ -123,14 +123,14 @@
 
   --gb-bubble-self-bg: #007aff;
   --gb-bubble-self-text: #ffffff;
-  --gb-bubble-other-bg: #eeeeee;
-  --gb-bubble-other-text: #222222;
+  --gb-bubble-other-bg: #e0e0e0;
+  --gb-bubble-other-text: #1a1a1a;
   --gb-bubble-meta-color: #999999;
   --gb-bubble-highlight-border: #4a90d9;
-  --gb-bubble-code-bg: rgba(255, 255, 255, 0.4);
-  --gb-bubble-code-bg-other: rgba(0, 0, 0, 0.08);
-  --gb-bubble-middle-bg: rgba(200, 200, 200, 0.5);
-  --gb-bubble-middle-text: #666;
+  --gb-bubble-code-bg: rgba(255, 255, 255, 0.5);
+  --gb-bubble-code-bg-other: rgba(0, 0, 0, 0.1);
+  --gb-bubble-middle-bg: #d5d5d5;
+  --gb-bubble-middle-text: #444;
 }
 
 [data-theme="black"] {
@@ -189,14 +189,14 @@
 
   --gb-bubble-self-bg: #4a90d9;
   --gb-bubble-self-text: #ffffff;
-  --gb-bubble-other-bg: #141414;
-  --gb-bubble-other-text: #e0e0e0;
+  --gb-bubble-other-bg: #222222;
+  --gb-bubble-other-text: #f0f0f0;
   --gb-bubble-meta-color: #555555;
   --gb-bubble-highlight-border: #4a90d9;
-  --gb-bubble-code-bg: rgba(255, 255, 255, 0.2);
-  --gb-bubble-code-bg-other: rgba(0, 0, 0, 0.3);
-  --gb-bubble-middle-bg: rgba(34, 34, 34, 0.5);
-  --gb-bubble-middle-text: #888;
+  --gb-bubble-code-bg: rgba(255, 255, 255, 0.25);
+  --gb-bubble-code-bg-other: rgba(255, 255, 255, 0.15);
+  --gb-bubble-middle-bg: #1e1e1e;
+  --gb-bubble-middle-text: #aaa;
 }
 
 [data-theme="dark-spacious"] {
@@ -255,14 +255,14 @@
 
   --gb-bubble-self-bg: #4a90d9;
   --gb-bubble-self-text: #ffffff;
-  --gb-bubble-other-bg: #2a2a2a;
-  --gb-bubble-other-text: #ddd;
+  --gb-bubble-other-bg: #383838;
+  --gb-bubble-other-text: #f0f0f0;
   --gb-bubble-meta-color: #666;
   --gb-bubble-highlight-border: #4a90d9;
-  --gb-bubble-code-bg: rgba(255, 255, 255, 0.2);
-  --gb-bubble-code-bg-other: rgba(0, 0, 0, 0.15);
-  --gb-bubble-middle-bg: rgba(42, 42, 42, 0.5);
-  --gb-bubble-middle-text: #999;
+  --gb-bubble-code-bg: rgba(255, 255, 255, 0.25);
+  --gb-bubble-code-bg-other: rgba(0, 0, 0, 0.2);
+  --gb-bubble-middle-bg: #303030;
+  --gb-bubble-middle-text: #bbb;
 }
 
 [data-theme="blue"] {
@@ -321,14 +321,14 @@
 
   --gb-bubble-self-bg: #3498db;
   --gb-bubble-self-text: #ffffff;
-  --gb-bubble-other-bg: #243447;
-  --gb-bubble-other-text: #ddd;
+  --gb-bubble-other-bg: #2d4460;
+  --gb-bubble-other-text: #f0f0f0;
   --gb-bubble-meta-color: #666;
   --gb-bubble-highlight-border: #3498db;
-  --gb-bubble-code-bg: rgba(255, 255, 255, 0.2);
-  --gb-bubble-code-bg-other: rgba(0, 0, 0, 0.15);
-  --gb-bubble-middle-bg: rgba(44, 62, 80, 0.5);
-  --gb-bubble-middle-text: #999;
+  --gb-bubble-code-bg: rgba(255, 255, 255, 0.25);
+  --gb-bubble-code-bg-other: rgba(0, 0, 0, 0.2);
+  --gb-bubble-middle-bg: #2a3c50;
+  --gb-bubble-middle-text: #bbb;
 }
 
 [data-theme="blue-modern"] {
@@ -387,14 +387,14 @@
 
   --gb-bubble-self-bg: oklch(0.55 0.2 255);
   --gb-bubble-self-text: oklch(0.95 0.01 260);
-  --gb-bubble-other-bg: oklch(0.32 0.018 260);
-  --gb-bubble-other-text: oklch(0.82 0.008 260);
+  --gb-bubble-other-bg: oklch(0.38 0.02 260);
+  --gb-bubble-other-text: oklch(0.92 0.005 260);
   --gb-bubble-meta-color: oklch(0.4 0.015 260);
   --gb-bubble-highlight-border: oklch(0.55 0.2 255);
-  --gb-bubble-code-bg: oklch(0.95 0.01 260 / 0.2);
-  --gb-bubble-code-bg-other: oklch(0.1 0.01 260 / 0.15);
-  --gb-bubble-middle-bg: oklch(0.35 0.02 260 / 0.5);
-  --gb-bubble-middle-text: oklch(0.50 0.015 260);
+  --gb-bubble-code-bg: oklch(0.95 0.01 260 / 0.25);
+  --gb-bubble-code-bg-other: oklch(0.1 0.01 260 / 0.2);
+  --gb-bubble-middle-bg: oklch(0.30 0.015 260);
+  --gb-bubble-middle-text: oklch(0.60 0.015 260);
 }
 
 [data-theme="base16-default"] {
@@ -453,14 +453,14 @@
 
   --gb-bubble-self-bg: #8abeb7;
   --gb-bubble-self-text: #181818;
-  --gb-bubble-other-bg: #353535;
-  --gb-bubble-other-text: #b5bd68;
+  --gb-bubble-other-bg: #424242;
+  --gb-bubble-other-text: #d5dbe0;
   --gb-bubble-meta-color: #666666;
   --gb-bubble-highlight-border: #8abeb7;
-  --gb-bubble-code-bg: rgba(255, 255, 255, 0.15);
-  --gb-bubble-code-bg-other: rgba(0, 0, 0, 0.15);
-  --gb-bubble-middle-bg: rgba(53, 53, 53, 0.4);
-  --gb-bubble-middle-text: #969896;
+  --gb-bubble-code-bg: rgba(255, 255, 255, 0.2);
+  --gb-bubble-code-bg-other: rgba(0, 0, 0, 0.2);
+  --gb-bubble-middle-bg: #3a3a3a;
+  --gb-bubble-middle-text: #b0b5ba;
 }
 
 [data-theme="base16-light"] {
@@ -519,14 +519,14 @@
 
   --gb-bubble-self-bg: #008ec7;
   --gb-bubble-self-text: #ffffff;
-  --gb-bubble-other-bg: #d9d9d9;
-  --gb-bubble-other-text: #4d4d4c;
+  --gb-bubble-other-bg: #d5d5d5;
+  --gb-bubble-other-text: #1a1a1a;
   --gb-bubble-meta-color: #969896;
   --gb-bubble-highlight-border: #008ec7;
   --gb-bubble-code-bg: rgba(255, 255, 255, 0.5);
-  --gb-bubble-code-bg-other: rgba(0, 0, 0, 0.08);
-  --gb-bubble-middle-bg: rgba(217, 217, 217, 0.5);
-  --gb-bubble-middle-text: #8e908c;
+  --gb-bubble-code-bg-other: rgba(0, 0, 0, 0.1);
+  --gb-bubble-middle-bg: #cecece;
+  --gb-bubble-middle-text: #444;
 }
 
 [data-theme="base16-mocha"] {
@@ -585,14 +585,14 @@
 
   --gb-bubble-self-bg: #8abeb7;
   --gb-bubble-self-text: #1e1e1e;
-  --gb-bubble-other-bg: #45413e;
-  --gb-bubble-other-text: #d0c8c6;
+  --gb-bubble-other-bg: #524e4b;
+  --gb-bubble-other-text: #e8e0de;
   --gb-bubble-meta-color: #695d5a;
   --gb-bubble-highlight-border: #8abeb7;
-  --gb-bubble-code-bg: rgba(255, 255, 255, 0.15);
-  --gb-bubble-code-bg-other: rgba(0, 0, 0, 0.15);
-  --gb-bubble-middle-bg: rgba(69, 65, 62, 0.4);
-  --gb-bubble-middle-text: #a39897;
+  --gb-bubble-code-bg: rgba(255, 255, 255, 0.2);
+  --gb-bubble-code-bg-other: rgba(0, 0, 0, 0.2);
+  --gb-bubble-middle-bg: #4a4643;
+  --gb-bubble-middle-text: #b5aaa9;
 }
 
 [data-theme="base16-ocean-dark"] {
@@ -651,14 +651,14 @@
 
   --gb-bubble-self-bg: #5faae6;
   --gb-bubble-self-text: #ffffff;
-  --gb-bubble-other-bg: #355060;
-  --gb-bubble-other-text: #d3dae1;
+  --gb-bubble-other-bg: #3d5e72;
+  --gb-bubble-other-text: #e8eff4;
   --gb-bubble-meta-color: #536770;
   --gb-bubble-highlight-border: #5f9ea0;
-  --gb-bubble-code-bg: rgba(255, 255, 255, 0.2);
-  --gb-bubble-code-bg-other: rgba(0, 0, 0, 0.15);
-  --gb-bubble-middle-bg: rgba(69, 65, 62, 0.4);
-  --gb-bubble-middle-text: #a39897;
+  --gb-bubble-code-bg: rgba(255, 255, 255, 0.25);
+  --gb-bubble-code-bg-other: rgba(0, 0, 0, 0.2);
+  --gb-bubble-middle-bg: #3a5a68;
+  --gb-bubble-middle-text: #a0b0ba;
 }
 
 [data-theme="base16-solarized-dark"] {
@@ -717,14 +717,14 @@
 
   --gb-bubble-self-bg: #268bd2;
   --gb-bubble-self-text: #fdf6e3;
-  --gb-bubble-other-bg: #0a4452;
-  --gb-bubble-other-text: #839496;
+  --gb-bubble-other-bg: #0d5568;
+  --gb-bubble-other-text: #c4d1d4;
   --gb-bubble-meta-color: #354f52;
   --gb-bubble-highlight-border: #268bd2;
-  --gb-bubble-code-bg: rgba(253, 246, 227, 0.2);
-  --gb-bubble-code-bg-other: rgba(0, 0, 0, 0.15);
-  --gb-bubble-middle-bg: rgba(10, 68, 82, 0.4);
-  --gb-bubble-middle-text: #586e75;
+  --gb-bubble-code-bg: rgba(253, 246, 227, 0.25);
+  --gb-bubble-code-bg-other: rgba(0, 0, 0, 0.2);
+  --gb-bubble-middle-bg: #0b4a5a;
+  --gb-bubble-middle-text: #7ac2c8;
 }
 
 [data-theme="base16-solarized-light"] {
@@ -783,12 +783,12 @@
 
   --gb-bubble-self-bg: #268bd2;
   --gb-bubble-self-text: #ffffff;
-  --gb-bubble-other-bg: #e4dcc8;
-  --gb-bubble-other-text: #657b83;
+  --gb-bubble-other-bg: #ddd4bc;
+  --gb-bubble-other-text: #3d5052;
   --gb-bubble-meta-color: #9e9e9e;
   --gb-bubble-highlight-border: #268bd2;
   --gb-bubble-code-bg: rgba(255, 255, 255, 0.5);
-  --gb-bubble-code-bg-other: rgba(0, 0, 0, 0.08);
-  --gb-bubble-middle-bg: rgba(228, 220, 200, 0.5);
-  --gb-bubble-middle-text: #93a1a1;
+  --gb-bubble-code-bg-other: rgba(0, 0, 0, 0.1);
+  --gb-bubble-middle-bg: #d6cdb3;
+  --gb-bubble-middle-text: #5a7080;
 }
