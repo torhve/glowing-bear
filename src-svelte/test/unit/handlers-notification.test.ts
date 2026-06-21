@@ -226,6 +226,9 @@ describe('PM/Highlight Notification Handling', () => {
     });
 
     it('strips WeeChat formatting codes from prefix in notification body', () => {
+        // Simulate hidden tab so notifications fire (jsdom has document.hidden=false by default)
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+
         handleBufferLineAdded({
             objects: [{
                 pointer: '0x100',
@@ -251,6 +254,9 @@ describe('PM/Highlight Notification Handling', () => {
     });
 
     it('strips WeeChat formatting codes from message in notification body', () => {
+        // Simulate hidden tab so notifications fire (jsdom has document.hidden=false by default)
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+
         handleBufferLineAdded({
             objects: [{
                 pointer: '0x100',

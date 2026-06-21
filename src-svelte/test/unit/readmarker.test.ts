@@ -403,19 +403,19 @@ describe('Readmarker behavior', () => {
             expect(result!.notification).toBe(0);
         });
 
-        it('increments notification for highlight on active buffer when window unfocused', () => {
+        it('does NOT increment notification for highlight on active buffer even when window unfocused', () => {
             const buf = makeBuffer('0x900', { lines: [] as any, lastSeen: 0, active: true, notify: 3 });
             buffers.set({ '0x900': buf });
             servers.set({ 'irc.server': { id: '0x900', unread: 0 } });
             activeBufferId.set('0x900');
 
-            // The handler uses document.hidden (Page Visibility API) for focus detection, not hasFocus.
+            // Simulate hidden tab - notifications should still be suppressed for active buffer.
             Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
 
             handleBufferLineAdded(createLineMessage('0x900', [], 1, 1, 3));
 
             const result = get(buffers)['0x900'];
-            expect(result!.notification).toBe(1);
+            expect(result!.notification).toBe(0);
         });
 
         it('does NOT increment unread for message on active+focused buffer', () => {
