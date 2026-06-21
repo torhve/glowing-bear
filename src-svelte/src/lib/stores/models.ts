@@ -381,8 +381,17 @@ export function setActiveBuffer(bufferId: string): boolean {
         const buf = currentBuffers[id];
         if (!buf) continue;
         if (id === prevId) {
-            // Set lastSeen to end of visible lines when leaving — marks everything displayed as read.
-            updatedBuffers[id] = { ...buf, active: false, lastSeen: buf.lines.length - 1 };
+            // Optimistically clear unread counts when leaving a buffer.
+            // Prevents stale hotlist responses from overwriting correct local state
+            // before WeeChat's clear commands have been processed.
+            updatedBuffers[id] = {
+                ...buf,
+                active: false,
+                lastSeen: buf.lines.length - 1,
+                unread: 0,
+                notification: 0,
+                localUnread: 0,
+            };
         } else if (id === bufferId) {
             updatedBuffers[id] = {
                 ...buf,
@@ -422,6 +431,10 @@ export function setActiveBuffer(bufferId: string): boolean {
     bufferLineCounts.update(counts => ({ ...counts, [bufferId]: savedLineCount }));
     // Remove target buffer from localUnreadBuffers tracking since localUnread is now cleared.
     localUnreadBuffers.update((s: Set<string>) => { const copy = new Set(s); copy.delete(bufferId); return copy; });
+    // Also remove the previous buffer — its localUnread was zeroed above.
+    if (prevId) {
+        localUnreadBuffers.update((s: Set<string>) => { const copy = new Set(s); copy.delete(prevId); return copy; });
+    }
     // Record the last-viewed buffer for reconnect auto-resume recovery.
     recordBuffer(bufferId);
     return true;
