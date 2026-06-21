@@ -60,42 +60,29 @@ if (import.meta.env.DEV && typeof window !== 'undefined') {
 
             if (get(connectionState).userDisconnect) {
                 connectionData = null;
-            } else if (!get(settings).autoconnect) {
-                if (get(connectionState).wasEverConnected) {
-                    const connInfo = connectionData ? [...connectionData] as [string, number, string, string, boolean, boolean] : null;
-                    connectionData = null;
-                    if (connInfo) {
-                        const [host, port] = connInfo;
-                        addToast(
-                            `Disconnected from ${host}:${port}`,
-                            {
-                                type: 'warning',
-                                duration: 0,
-                                buttons: [{
-                                    text: 'Reconnect',
-                                    action: () => {
-                                        const latest = get(toastStore);
-                                        const lastToast = latest[latest.length - 1];
-                                        if (lastToast) removeToast(lastToast.id);
-                                        const [h, p, path, pw, tls, noComp] = connInfo!;
-                                        connect(h, p, path, pw, tls, noComp);
-                                    }
-                                }]
-                            }
-                        );
-                    }
-                } else {
-                    connectionData = null;
-                }
             } else if (typeof document !== 'undefined' && !document.hasFocus()) {
-                // stay disconnected
+                // User was not focused — stay disconnected, show toast anyway
+                if (get(connectionState).wasEverConnected && connectionData) {
+                    showDisconnectToast(connectionData as [string, number, string, string, boolean, boolean]);
+                }
             } else if (!get(connectionState).wasEverConnected) {
                 // first connection failed — don't reconnect
             } else if (evt.code === 1006 || evt.code === 1011) {
+                // Unexpected disconnect after being connected — show toast and retry
+                if (connectionData) {
+                    showDisconnectToast(connectionData as [string, number, string, string, boolean, boolean]);
+                }
                 scheduleReconnect();
             } else if (evt.code === 403 || evt.code === 401) {
                 setErrors({ passwordError: true });
+                if (connectionData) {
+                    showDisconnectToast(connectionData as [string, number, string, string, boolean, boolean]);
+                }
             } else {
+                // Normal close or other codes — show toast and retry
+                if (connectionData) {
+                    showDisconnectToast(connectionData as [string, number, string, string, boolean, boolean]);
+                }
                 scheduleReconnect();
             }
         };
@@ -314,46 +301,30 @@ export async function connect(host: string, port: number, path: string, password
             if (get(connectionState).userDisconnect) {
                 // User initiated disconnect, don't auto-reconnect
                 connectionData = null;
-            } else if (!get(settings).autoconnect) {
-                // Autoconnect is OFF — stay disconnected, require manual login
-                if (get(connectionState).wasEverConnected) {
-                    const connInfo = connectionData ? [...connectionData] as [string, number, string, string, boolean, boolean] : null;
-                    connectionData = null;
-                    if (connInfo) {
-                        const [host, port] = connInfo;
-                        addToast(
-                            `Disconnected from ${host}:${port}`,
-                            {
-                                type: 'warning',
-                                duration: 0,
-                                buttons: [{
-                                    text: 'Reconnect',
-                                    action: () => {
-                                        const latest = get(toastStore);
-                                        const lastToast = latest[latest.length - 1];
-                                        if (lastToast) removeToast(lastToast.id);
-                                        const [h, p, path, pw, tls, noComp] = connInfo!;
-                                        connect(h, p, path, pw, tls, noComp);
-                                    }
-                                }]
-                            }
-                        );
-                    }
-                } else {
-                    connectionData = null;
-                }
             } else if (typeof document !== 'undefined' && !document.hasFocus()) {
-                // User was not focused — stay disconnected
+                // User was not focused — stay disconnected, show toast anyway
+                if (get(connectionState).wasEverConnected && connectionData) {
+                    showDisconnectToast(connectionData as [string, number, string, string, boolean, boolean]);
+                }
             } else if (!get(connectionState).wasEverConnected) {
                 // First connection failed — don't reconnect (errors already set above)
             } else if (evt.code === 1006 || evt.code === 1011) {
-                // Unexpected disconnect after being connected — retry
+                // Unexpected disconnect after being connected — show toast and retry
+                if (connectionData) {
+                    showDisconnectToast(connectionData as [string, number, string, string, boolean, boolean]);
+                }
                 scheduleReconnect();
             } else if (evt.code === 403 || evt.code === 401) {
-                // Auth failure after reconnect — show password error
+                // Auth failure after reconnect — show password error and toast
                 setErrors({ passwordError: true });
+                if (connectionData) {
+                    showDisconnectToast(connectionData as [string, number, string, string, boolean, boolean]);
+                }
             } else {
-                // Normal close or other codes
+                // Normal close or other codes — show toast and retry
+                if (connectionData) {
+                    showDisconnectToast(connectionData as [string, number, string, string, boolean, boolean]);
+                }
                 scheduleReconnect();
             }
 
@@ -413,6 +384,29 @@ async function initializePBKDF2(password: string, nonce: Uint8Array, iterations:
         sendWs(initMsg, 'init(pbkdf2)');
     }
     await new Promise(r => setTimeout(r, 5));
+}
+
+// Show a persistent disconnect toast with reconnect button.
+// Called from both disconnect handlers (restored WS and normal WS).
+function showDisconnectToast(connInfo: [string, number, string, string, boolean, boolean]) {
+    const [host, port] = connInfo;
+    addToast(
+        `Disconnected from ${host}:${port}`,
+        {
+            type: 'warning',
+            duration: 0,
+            buttons: [{
+                text: 'Reconnect',
+                action: () => {
+                    const latest = get(toastStore);
+                    const lastToast = latest[latest.length - 1];
+                    if (lastToast) removeToast(lastToast.id);
+                    const [h, p, path, pw, tls, noComp] = connInfo!;
+                    connect(h, p, path, pw, tls, noComp);
+                }
+            }]
+        }
+    );
 }
 
 // Max consecutive reconnection attempts before showing user a toast and stopping
