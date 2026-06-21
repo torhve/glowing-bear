@@ -67,7 +67,8 @@ import BaseDialog from '$components/BaseDialog.svelte';
       readlineBindings: false,
       savepassword: false,
       autoconnect: false,
-      showNicklist: true
+      showNicklist: true,
+      stylizePrivateChats: false
     });
     setTheme('dark');
   }
@@ -239,6 +240,18 @@ import BaseDialog from '$components/BaseDialog.svelte';
               onchange={() => updateSettings({ enableQuickKeys: !$settings.enableQuickKeys })}
               class="w-4 h-4"
               data-settings-checkbox="enableQuickKeys"
+            />
+          </label>
+
+          <label class="settings-option flex items-center justify-between py-2" data-settings-option="stylizePrivateChats">
+            <span class="settings-option-label text-sm text-text">Stylize private chats as bubbles</span>
+            <input
+              type="checkbox"
+              checked={$settings.stylizePrivateChats}
+              onchange={() => updateSettings({ stylizePrivateChats: !$settings.stylizePrivateChats })}
+              class="w-4 h-4"
+              data-testid="stylizePrivateChats-checkbox"
+              data-settings-checkbox="stylizePrivateChats"
             />
           </label>
         </div>

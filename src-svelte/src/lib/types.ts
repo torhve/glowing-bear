@@ -224,6 +224,7 @@ export interface Settings {
     highlightWords: string;
     debugBuildMetadata: boolean;
     hotlistsync: boolean;
+    stylizePrivateChats: boolean;
     angularTimeFormat?: string;
     supports_formatting_date?: boolean;
 }

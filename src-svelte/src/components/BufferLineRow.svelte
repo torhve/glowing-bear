@@ -18,12 +18,16 @@
     index,
     messages,
     noembed,
+    bubbleMode = false,
+    otherNick = '',
     onMention
   }: {
     message: BufferLine;
     index: number;
     messages: BufferLine[];
     noembed: boolean;
+    bubbleMode?: boolean;
+    otherNick?: string;
     onMention?: (msg: BufferLine) => void;
   } = $props();
 
@@ -37,6 +41,36 @@
   );
   let isHighlight = $derived(message.highlight);
   let metadata = $derived(buildMetadata());
+
+  // Extract nick from prefix text, stripping angle brackets (e.g. "<gbbot123>" → "gbbot123").
+  function extractNick(prefixText: string): string {
+    const trimmed = prefixText.trim();
+    const match = trimmed.match(/^<(.+)>$/);
+    return match ? match[1]! : trimmed;
+  }
+
+  // Detect if this message was sent by the user.
+  // Uses irc_selfmsg tag when present, falls back to comparing extracted nick against otherNick.
+  let isSelfMessage = $derived(
+    (message.tags && message.tags.includes('irc_selfmsg')) ||
+    (bubbleMode && otherNick && message.prefixtext.trim() && extractNick(message.prefixtext).toLowerCase() !== otherNick.toLowerCase())
+  );
+
+  // Detect system messages without a sender prefix (join/quit/away notices).
+  let isSystemMessage = $derived(!isDateChange && !message.prefixtext.trim());
+
+  // Determine if this message starts a new visual group.
+  // A group starts when: first message, date separator, sender changed, or type changed (self↔other↔system).
+  let prevIsSelf = $derived(previousMessage ? ((previousMessage.tags && previousMessage.tags.includes('irc_selfmsg')) || (bubbleMode && otherNick && previousMessage.prefixtext.trim() && extractNick(previousMessage.prefixtext).toLowerCase() !== otherNick.toLowerCase())) : false);
+  let prevIsSystem = $derived(previousMessage && !previousMessage.prefixtext.trim());
+
+  let isGroupStart = $derived(
+    index === 0 ||
+    (previousMessage && isDateChangeMessage(previousMessage)) ||
+    isSystemMessage ||
+    (previousMessage && isSelfMessage !== prevIsSelf) ||
+    (previousMessage && isSystemMessage !== prevIsSystem)
+  );
 
   const urlRegex = /(?:(?:https?|ftp):\/\/|www\.|ftp\.)\S*[^\s.;,(){}<>[\]]/gi;
 
@@ -122,74 +156,33 @@
 
 </script>
 
-{#if isDateChange}
-  <tr class="bufferline date-change-row" data-testid="bufferline-row">
-    <td colspan="3">
-      {#each tokenGroups as group, gi (gi)}
-        <span class="{group.classes}">
-          {#each group.tokens as token, ti (ti)}
-            {#if token.type === 'link'}
-              <a href={token.value} target="_blank" rel="noopener noreferrer" class="irc-link">{token.value}</a>
-            {:else if token.type === 'code'}
-              <span class="hidden-bracket">{token.delimiter}</span>
-              <code class="irc-code">{token.value}</code>
-              <span class="hidden-bracket">{token.delimiter}</span>
-            {:else}
-              {token.value}
-            {/if}
-          {/each}
-        </span>
-      {/each}
-    </td>
-  </tr>
-{:else}
-  <tr class={['bufferline', { highlight: isHighlight }]} data-testid="bufferline-row">
-    <td class="time">
-      <span class="date compact-time" class:repeated-time={isRepeatedTime}>
-        {#if message.shortTime.includes(':')}
-          {@const parts = message.shortTime.split(':')}
-          {parts[0]}<span class="time-delimiter">:</span>{parts.slice(1).join(':')}
-        {:else}
-          {message.shortTime}
-        {/if}
-      </span>
-    </td>
-    <td class="prefix">
-      <span class="compact-prefix" class:repeated-prefix={isRepeatedPrefix}>
-        <span onclick={handleMention} role="button" tabindex="0" class="mention-link" onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleMention(); } }}>
-          {#if message.showHiddenBrackets}<span class="hidden-bracket">{'<'}</span>{/if}
-          {#each message.prefix as part, pi (pi)}
-            {@const iconType = getIconType(part)}
-            {#if iconType}
-              {#if iconType === 'arrow-right'}
-                <ArrowRight class={(part.classes || []).join(' ')} width={12} height={12} />
-              {:else if iconType === 'arrow-left'}
-                <ArrowLeft class={(part.classes || []).join(' ')} width={12} height={12} />
-              {:else if iconType === 'chevron-left'}
-                <ChevronLeft class={(part.classes || []).join(' ')} width={12} height={12} />
-              {:else if iconType === 'chevron-right'}
-                <ChevronRight class={(part.classes || []).join(' ')} width={12} height={12} />
-              {:else if iconType === 'minus'}
-                <Minus class={(part.classes || []).join(' ')} width={12} height={12} />
+{#if bubbleMode}
+  <!-- Bubble mode layout for private/query buffers -->
+  {#if isDateChange}
+    <!-- Date separator -->
+    <div class="bubble-date-separator" data-testid="bufferline-row">
+      <span class="bubble-date-text">
+        {#each tokenGroups as group, gi (gi)}
+          <span class="{group.classes}">
+            {#each group.tokens as token, ti (ti)}
+              {#if token.type === 'link'}
+                <a href={token.value} target="_blank" rel="noopener noreferrer" class="irc-link">{token.value}</a>
+              {:else if token.type === 'code'}
+                <span class="hidden-bracket">{token.delimiter}</span>
+                <code class="irc-code">{token.value}</code>
+                <span class="hidden-bracket">{token.delimiter}</span>
+              {:else}
+                {token.value}
               {/if}
-            {:else}
-              <span class="prefix-part {(part.classes || []).join(' ')}">{part.text}</span>
-            {/if}
-          {/each}
-          {#if message.showHiddenBrackets}<span class="hidden-bracket">{'>'}</span>{/if}
-        </span>
-      </span>
-    </td>
-    <td class="message" data-message={message.text}>
-      <!-- Plugin embeds -->
-      {#if metadata.length > 0}
-        {#each metadata as meta, i (i)}
-          <PluginEmbed plugin={meta} />
+            {/each}
+          </span>
         {/each}
-      {/if}
-
-      <!-- Message content -->
-      <span dir="auto" class="message-content whitespace-pre-wrap break-words">
+      </span>
+    </div>
+  {:else if isSystemMessage}
+    <!-- System message centered (no prefix: join/quit/away notices) -->
+    <div class="bubble-middle-row" data-testid="bufferline-row">
+      <div class={['bubble', { 'bubble-highlight': isHighlight }, 'bubble-middle-bg']}>
         {#each tokenGroups as group, gi (gi)}
           <span class="token-group {group.classes}">
             {#each group.tokens as token, ti (ti)}
@@ -205,12 +198,174 @@
             {/each}
           </span>
         {/each}
-      </span>
-    </td>
-  </tr>
+      </div>
+    </div>
+  {:else if isSelfMessage}
+    <!-- Outgoing (self) — right-aligned -->
+    <div class="bubble-row bubble-self" data-testid="bufferline-row">
+      {#if isGroupStart}
+        <div class="bubble-meta bubble-meta-self">
+          <span class="bubble-nick">{message.prefixtext}</span>
+          <span class="bubble-time">{message.shortTime}</span>
+        </div>
+      {/if}
+
+      <div class={['bubble', { 'bubble-tail': isGroupStart }, { 'bubble-highlight': isHighlight }, 'bubble-self-bg']}>
+        {#if metadata.length > 0}
+          {#each metadata as meta, i (i)}
+            <PluginEmbed plugin={meta} />
+          {/each}
+        {/if}
+
+        <span dir="auto" class="message-content whitespace-pre-wrap break-words">
+          {#each tokenGroups as group, gi (gi)}
+            <span class="token-group {group.classes}">
+              {#each group.tokens as token, ti (ti)}
+                {#if token.type === 'link'}
+                  <a href={token.value} target="_blank" rel="noopener noreferrer" class="irc-link">{token.value}</a>
+                {:else if token.type === 'code'}
+                  <span class="hidden-bracket">{token.delimiter}</span>
+                  <code class="irc-code">{token.value}</code>
+                  <span class="hidden-bracket">{token.delimiter}</span>
+                {:else}
+                  {token.value}
+                {/if}
+              {/each}
+            </span>
+          {/each}
+        </span>
+      </div>
+    </div>
+  {:else}
+    <!-- Incoming (other user) — left-aligned -->
+    <div class="bubble-row bubble-other" data-testid="bufferline-row">
+      {#if isGroupStart}
+        <div class="bubble-meta bubble-meta-other">
+          <span class="bubble-nick">{message.prefixtext}</span>
+          <span class="bubble-time">{message.shortTime}</span>
+        </div>
+      {/if}
+
+      <div class={['bubble', { 'bubble-tail': isGroupStart }, { 'bubble-highlight': isHighlight }, 'bubble-other-bg']}>
+        {#if metadata.length > 0}
+          {#each metadata as meta, i (i)}
+            <PluginEmbed plugin={meta} />
+          {/each}
+        {/if}
+
+        <span dir="auto" class="message-content whitespace-pre-wrap break-words">
+          {#each tokenGroups as group, gi (gi)}
+            <span class="token-group {group.classes}">
+              {#each group.tokens as token, ti (ti)}
+                {#if token.type === 'link'}
+                  <a href={token.value} target="_blank" rel="noopener noreferrer" class="irc-link">{token.value}</a>
+                {:else if token.type === 'code'}
+                  <span class="hidden-bracket">{token.delimiter}</span>
+                  <code class="irc-code">{token.value}</code>
+                  <span class="hidden-bracket">{token.delimiter}</span>
+                {:else}
+                  {token.value}
+                {/if}
+              {/each}
+            </span>
+          {/each}
+        </span>
+      </div>
+    </div>
+  {/if}
+{:else}
+  <!-- Traditional table layout for channels/servers -->
+  {#if isDateChange}
+    <tr class="bufferline date-change-row" data-testid="bufferline-row">
+      <td colspan="3">
+        {#each tokenGroups as group, gi (gi)}
+          <span class="{group.classes}">
+            {#each group.tokens as token, ti (ti)}
+              {#if token.type === 'link'}
+                <a href={token.value} target="_blank" rel="noopener noreferrer" class="irc-link">{token.value}</a>
+              {:else if token.type === 'code'}
+                <span class="hidden-bracket">{token.delimiter}</span>
+                <code class="irc-code">{token.value}</code>
+                <span class="hidden-bracket">{token.delimiter}</span>
+              {:else}
+                {token.value}
+              {/if}
+            {/each}
+          </span>
+        {/each}
+      </td>
+    </tr>
+  {:else}
+    <tr class={['bufferline', { highlight: isHighlight }]} data-testid="bufferline-row">
+      <td class="time">
+        <span class="date compact-time" class:repeated-time={isRepeatedTime}>
+          {#if message.shortTime.includes(':')}
+            {@const parts = message.shortTime.split(':')}
+            {parts[0]}<span class="time-delimiter">:</span>{parts.slice(1).join(':')}
+          {:else}
+            {message.shortTime}
+          {/if}
+        </span>
+      </td>
+      <td class="prefix">
+        <span class="compact-prefix" class:repeated-prefix={isRepeatedPrefix}>
+          <span onclick={handleMention} role="button" tabindex="0" class="mention-link" onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleMention(); } }}>
+            {#if message.showHiddenBrackets}<span class="hidden-bracket">{'<'}</span>{/if}
+            {#each message.prefix as part, pi (pi)}
+              {@const iconType = getIconType(part)}
+              {#if iconType}
+                {#if iconType === 'arrow-right'}
+                  <ArrowRight class={(part.classes || []).join(' ')} width={12} height={12} />
+                {:else if iconType === 'arrow-left'}
+                  <ArrowLeft class={(part.classes || []).join(' ')} width={12} height={12} />
+                {:else if iconType === 'chevron-left'}
+                  <ChevronLeft class={(part.classes || []).join(' ')} width={12} height={12} />
+                {:else if iconType === 'chevron-right'}
+                  <ChevronRight class={(part.classes || []).join(' ')} width={12} height={12} />
+                {:else if iconType === 'minus'}
+                  <Minus class={(part.classes || []).join(' ')} width={12} height={12} />
+                {/if}
+              {:else}
+                <span class="prefix-part {(part.classes || []).join(' ')}">{part.text}</span>
+              {/if}
+            {/each}
+            {#if message.showHiddenBrackets}<span class="hidden-bracket">{'>'}</span>{/if}
+          </span>
+        </span>
+      </td>
+      <td class="message" data-message={message.text}>
+        <!-- Plugin embeds -->
+        {#if metadata.length > 0}
+          {#each metadata as meta, i (i)}
+            <PluginEmbed plugin={meta} />
+          {/each}
+        {/if}
+
+        <!-- Message content -->
+        <span dir="auto" class="message-content whitespace-pre-wrap break-words">
+          {#each tokenGroups as group, gi (gi)}
+            <span class="token-group {group.classes}">
+              {#each group.tokens as token, ti (ti)}
+                {#if token.type === 'link'}
+                  <a href={token.value} target="_blank" rel="noopener noreferrer" class="irc-link">{token.value}</a>
+                {:else if token.type === 'code'}
+                  <span class="hidden-bracket">{token.delimiter}</span>
+                  <code class="irc-code">{token.value}</code>
+                  <span class="hidden-bracket">{token.delimiter}</span>
+                {:else}
+                  {token.value}
+                {/if}
+              {/each}
+            </span>
+          {/each}
+        </span>
+      </td>
+    </tr>
+  {/if}
 {/if}
 
 <style>
+  /* ===== Traditional table layout styles ===== */
   .bufferline {
     line-height: 1;
     padding: 2px 0 1px 0;
@@ -331,6 +486,167 @@
     background: var(--gb-inline-code-bg, rgba(255, 255, 255, 0.1));
     padding: 0 2px;
     border-radius: 2px;
+  }
+
+  /* ===== Bubble mode styles ===== */
+  .bubble-row {
+    display: flex;
+    flex-direction: column;
+    padding: 1px 0;
+  }
+
+  /* Meta row (nick + time) above bubble */
+  .bubble-meta {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    font-size: 0.75em;
+    line-height: 1.2;
+    margin-bottom: 2px;
+  }
+
+  .bubble-meta-other {
+    padding-left: 4px;
+  }
+
+  .bubble-meta-self {
+    padding-right: 4px;
+    justify-content: flex-end;
+  }
+
+  .bubble-nick {
+    font-weight: 600;
+    color: var(--gb-bubble-meta-color, var(--gb-text-muted));
+  }
+
+  .bubble-time {
+    color: var(--gb-bubble-meta-color, var(--gb-text-muted));
+    opacity: 0.7;
+  }
+
+  /* Bubble container alignment */
+  .bubble-self {
+    align-items: flex-end;
+  }
+
+  .bubble-other {
+    align-items: flex-start;
+  }
+
+  /* Middle-aligned system messages (join/quit/away notices) */
+  .bubble-middle-row {
+    display: flex;
+    justify-content: center;
+    padding: 2px 0;
+  }
+
+  /* Bubble itself */
+  .bubble {
+    max-width: 85%;
+    padding: 6px 10px;
+    border-radius: 16px;
+    line-height: 1.4;
+    font-size: 0.95em;
+    position: relative;
+    word-break: break-word;
+  }
+
+  /* Self-sent bubble: accent blue background, white text */
+  .bubble-self-bg {
+    background: var(--gb-bubble-self-bg, #4a90d9);
+    color: var(--gb-bubble-self-text, #ffffff);
+    border-bottom-right-radius: 4px;
+  }
+
+  /* Other's bubble: surface background, theme text color */
+  .bubble-other-bg {
+    background: var(--gb-bubble-other-bg, var(--gb-surface-raised));
+    color: var(--gb-bubble-other-text, var(--gb-text));
+    border-bottom-left-radius: 4px;
+  }
+
+  /* Middle-aligned system message bubble: muted, narrower, fully rounded */
+  .bubble-middle-bg {
+    background: var(--gb-bubble-middle-bg, var(--gb-border));
+    color: var(--gb-bubble-middle-text, var(--gb-text-secondary));
+    max-width: 70%;
+    border-radius: 12px;
+    padding: 4px 12px;
+    font-size: 0.85em;
+  }
+
+  /* Tail on first bubble of a group */
+  .bubble-tail.bubble-self-bg::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    right: -8px;
+    width: 0;
+    height: 0;
+    border-top: 8px solid var(--gb-bubble-self-bg, #4a90d9);
+    border-left: 8px solid transparent;
+    border-bottom-right-radius: 2px;
+  }
+
+  .bubble-tail.bubble-other-bg::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: -8px;
+    width: 0;
+    height: 0;
+    border-top: 8px solid var(--gb-bubble-other-bg, var(--gb-surface-raised));
+    border-right: 8px solid transparent;
+    border-bottom-left-radius: 2px;
+  }
+
+  /* Highlight indicator on bubble */
+  .bubble-highlight {
+    border: 2px solid var(--gb-bubble-highlight-border, var(--gb-accent));
+  }
+
+  /* Date separator in bubble mode */
+  .bubble-date-separator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 0;
+    gap: 12px;
+  }
+
+  .bubble-date-separator::before,
+  .bubble-date-separator::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--gb-border, #333);
+  }
+
+  .bubble-date-text {
+    color: var(--gb-text-muted, #666);
+    font-size: 0.75em;
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* Adjust links inside bubbles */
+  .bubble .irc-link {
+    color: oklch(75% 0.15 250);
+    text-decoration: underline;
+  }
+
+  .bubble-self-bg .irc-link {
+    color: oklch(85% 0.05 220);
+  }
+
+  /* Adjust inline code in bubbles */
+  .bubble .irc-code {
+    background: var(--gb-bubble-code-bg, rgba(255, 255, 255, 0.2));
+  }
+
+  .bubble-other-bg .irc-code {
+    background: var(--gb-bubble-code-bg-other, rgba(0, 0, 0, 0.1));
   }
 
 </style>
