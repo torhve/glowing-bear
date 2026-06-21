@@ -39,6 +39,12 @@ test.beforeEach(async () => {
     page.on('pageerror', (error) => {
         if (error.message?.includes('effect_orphan')) return;
     });
+    // Reset localUnreadBuffers tracking set to prevent serial-mode state pollution.
+    // Prior tests may have added buffer IDs that this test doesn't expect.
+    await page.evaluate(() => {
+        const { localUnreadBuffers } = (window as any).__sveltekit__?.stores?.models ?? {};
+        if (localUnreadBuffers) localUnreadBuffers.set(new Set());
+    });
 });
 
 // When switching to an inactive buffer that received messages while we were away,
@@ -159,6 +165,11 @@ test('readmarker appears after scroll-to-bottom followed by new unreads', async 
 // are not corrupted by the setActiveBuffer immutable update.
 test('other buffer unread counts preserved when switching active buffer', async () => {
     await waitForBuffer(page, '#glowing-bear', 15000);
+
+    // Ensure #glowing-bear starts with clean unread state by switching to it first.
+    // This clears any leftover unreads from prior serial-mode tests, making this test self-contained.
+    await switchToBuffer(page, '#glowing-bear');
+    await page.waitForTimeout(500);
 
     // Switch to gbtest so #glowing-bear is inactive
     await waitForBuffer(page, 'gbtest', 10000);
