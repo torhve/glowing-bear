@@ -570,24 +570,26 @@ export function handleHotlistInfo(message: ProtocolMessage) {
         }
     }
 
-    // Reset WeeChat-authoritative unread counts on all non-active buffers first.
+    // Only reset unread/notification counts for buffers that appear in the hotlist.
+    // Buffers not in the hotlist keep their existing counts — this preserves locally-tracked
+    // unreads (from handleBufferLineAdded) for buffers where WeeChat hasn't reported activity
+    // since the last sync. Resetting all buffers would wipe valid local state.
     // Skip the previous buffer — its unread counts were optimistically cleared by
     // setActiveBuffer, and stale hotlist data hasn't been processed by WeeChat yet.
     // Also skip the active buffer since it's managed separately.
-    // After resetting, merge back localUnread counts so locally-tracked messages
-    // (received via _buffer_line_added but not yet in WeeChat's hotlist) are preserved.
-    for (const id in updatedBuffers) {
+    // Crucially: do NOT reset counts for buffers with localUnread > 0 — those have accurate
+    // real-time data from messages received while the buffer was inactive. Stale hotlist
+    // entries from prior activity would overwrite correct local counts.
+    const hotlistBufferIds = new Set(hotlist.map(e => e.buffer));
+    for (const id of hotlistBufferIds) {
         const buf = updatedBuffers[id];
-        if (buf && id !== activeId && id !== previousId) {
-            buf.unread = 0;
-            buf.notification = 0;
-            // Restore locally-tracked unread count from real-time messages.
-            // The hotlist entry loop below will add WeeChat-reported counts on top.
-            if (localUnread.has(id)) {
-                buf.unread = buf.localUnread || 0;
-            }
-        }
+        if (!buf || id === activeId || id === previousId) continue;
+        if ((buf.localUnread || 0) > 0) continue;
+
+        buf.unread = 0;
+        buf.notification = 0;
     }
+
     // Reset all server unread totals before recalculating from hotlist entries.
     for (const key in updatedServers) {
         const srv = updatedServers[key];
