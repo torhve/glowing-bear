@@ -3,6 +3,7 @@ import {
     buffers,
     servers,
     activeBufferId,
+    previousBufferId,
     bufferBottom,
     localUnreadBuffers,
     weechatVersion,
@@ -305,8 +306,8 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                 // Increment unread for real-time messages with notify_level=1 (message) only.
                 // PMs/highlights (notify_level>=2) increment notification, not unread.
                 // Only count as unread if the buffer's notify setting allows message-level notifications.
-                // Suppress for the active buffer when window is focused (user is looking at it).
-                if (buffer.notify > 1 && lineMsg.notify_level === 1 && !(buffer.id === activeId && isWindowFocused)) {
+                // Suppress for the active buffer regardless of window focus (user is looking at it).
+                if (buffer.notify > 1 && lineMsg.notify_level === 1 && buffer.id !== activeId) {
                     buffer.unread++;
                     const serverKey = `${buffer.plugin}.${buffer.server}`;
                     const server = get(servers)[serverKey];
@@ -315,9 +316,10 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
             }
 
             // Trigger notification subsystem for highlights/privates with notify_level >= 2.
-            // Only count if the buffer's notify setting isn't "never", and suppress for the
-            // active buffer when window is focused (user is already viewing it).
-            if (lineMsg.notify_level >= 2 && !(buffer.id === activeId && isWindowFocused)) {
+            // Suppress counting and desktop notifications when the buffer is active.
+            // Desktop notifications/sounds are further suppressed when tab is visible
+            // (user is looking at the app, even if scrolled to a different buffer).
+            if (lineMsg.notify_level >= 2 && buffer.id !== activeId) {
                 const isPrivate = buffer.type === 'private';
                 if (buffer.notify !== 0 && (lineMsg.highlight || isPrivate)) {
                     buffer.notification++;
@@ -325,14 +327,18 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                     const server = get(servers)[serverKey];
                     if (server) server.unread++;
 
-                    // Strip WeeChat formatting codes from message/prefix for notification display
-                    const notificationBody = formatNotificationBody(lineMsg);
+                    // Only show desktop notifications and play sounds when tab is hidden.
+                    // When the window is focused, the user can see the message in the UI.
+                    if (!isWindowFocused) {
+                        // Strip WeeChat formatting codes from message/prefix for notification display
+                        const notificationBody = formatNotificationBody(lineMsg);
 
-                    // Trigger notification subsystem
-                    createHighlight(buffer, notificationBody);
-                    playNotificationSound();
-                    updateTitle();
-                    updateFavico();
+                        // Trigger notification subsystem
+                        createHighlight(buffer, notificationBody);
+                        playNotificationSound();
+                        updateTitle();
+                        updateFavico();
+                    }
                 }
             }
         }
@@ -539,6 +545,7 @@ export function handleBufferClosing(message: ProtocolMessage) {
 export function handleHotlistInfo(message: ProtocolMessage) {
     const currentBuffers = get(buffers);
     const activeId = get(activeBufferId);
+    const previousId = get(previousBufferId);
     const currentServers = get(servers);
     const localUnread = get(localUnreadBuffers);
 
@@ -563,14 +570,15 @@ export function handleHotlistInfo(message: ProtocolMessage) {
     }
 
     // Reset WeeChat-authoritative unread counts on all non-active buffers first.
-    // This ensures stale counts are cleared even if WeeChat sends an empty
-    // hotlist (meaning all buffers have been read).
+    // Skip the previous buffer — its unread counts were optimistically cleared by
+    // setActiveBuffer, and stale hotlist data hasn't been processed by WeeChat yet.
+    // Also skip the active buffer since it's managed separately.
     // localUnread is NOT reset here — it tracks real-time messages WeeChat
     // hasn't acknowledged yet. Zeroing it would lose unreads between syncs.
     // It is properly cleared by setActiveBuffer when switching to a buffer.
     for (const id in updatedBuffers) {
         const buf = updatedBuffers[id];
-        if (buf && id !== activeId) {
+        if (buf && id !== activeId && id !== previousId) {
             buf.unread = 0;
             buf.notification = 0;
         }
@@ -583,7 +591,7 @@ export function handleHotlistInfo(message: ProtocolMessage) {
 
     for (const entry of hotlist) {
         const buffer = updatedBuffers[entry.buffer];
-        if (!buffer || entry.buffer === activeId) continue;
+        if (!buffer || entry.buffer === activeId || entry.buffer === previousId) continue;
 
         // Store unread count from WeeChat hotlist.
         // During initial sync (buffer has no lines), defer lastSeen calculation
