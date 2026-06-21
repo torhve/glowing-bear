@@ -562,16 +562,17 @@ export function handleHotlistInfo(message: ProtocolMessage) {
         }
     }
 
-    // Reset unread counts on all non-active buffers first.
+    // Reset WeeChat-authoritative unread counts on all non-active buffers first.
     // This ensures stale counts are cleared even if WeeChat sends an empty
     // hotlist (meaning all buffers have been read).
-    // Use activeId from store instead of buf.active to avoid stale copy issues.
+    // localUnread is NOT reset here — it tracks real-time messages WeeChat
+    // hasn't acknowledged yet. Zeroing it would lose unreads between syncs.
+    // It is properly cleared by setActiveBuffer when switching to a buffer.
     for (const id in updatedBuffers) {
         const buf = updatedBuffers[id];
         if (buf && id !== activeId) {
             buf.unread = 0;
             buf.notification = 0;
-            buf.localUnread = 0;
         }
     }
     // Reset all server unread totals before recalculating from hotlist entries.

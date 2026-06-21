@@ -365,9 +365,9 @@ test.describe('onlyUnread filter', () => {
 
 test.describe('quick keys display', () => {
     test('should show numbered quick key badges on buffer items when enabled', async () => {
-        // Enable quick keys directly via settings API
+        // Reset settings to known state before testing quick keys
         await page.evaluate(() => {
-            (window as any).__setGbSettings?.({ showQuickKeys: true });
+            (window as any).__setGbSettings?.({ showQuickKeys: true, enableQuickKeys: true, onlyUnread: false });
         });
         await page.waitForTimeout(300);
 
@@ -376,10 +376,15 @@ test.describe('quick keys display', () => {
         const badgeCount = await quickKeyBadges.count();
         expect(badgeCount).toBeGreaterThanOrEqual(1);
 
-        // Verify badges contain sequential numbers starting from 1
+        // Verify badges contain sequential keys: 1-9 then A-Z for 10+
         for (let i = 0; i < badgeCount; i++) {
             const text = await quickKeyBadges.nth(i).textContent();
-            expect(parseInt(text!, 10)).toBe(i + 1);
+            if (i < 9) {
+                expect(text).toBe(String(i + 1));
+            } else {
+                const expected = String.fromCharCode(65 + i - 10);
+                expect(text).toBe(expected);
+            }
         }
 
         // Disable quick keys via settings API
