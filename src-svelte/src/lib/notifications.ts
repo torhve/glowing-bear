@@ -8,6 +8,18 @@ import type { BufferData } from './types';
 import { initFavicon, drawBadge, resetBadge } from './faviconBadge';
 import { isTauri } from './tauriWindow';
 
+// Calculate total unread and notification counts across all buffers.
+function getTotalUnread(): { unread: number; notifications: number } {
+    const allBuffers = get(buffers);
+    let unread = 0;
+    let notifications = 0;
+    for (const buf of Object.values(allBuffers) as BufferData[]) {
+        unread += buf.unread;
+        notifications += buf.notification;
+    }
+    return { unread, notifications };
+}
+
 // Notification permission state
 let notificationPermission: 'granted' | 'denied' | 'default' = 'default';
 
@@ -179,11 +191,8 @@ export function updateTitle(): void {
     const topic = activeBuf?.rtitle || '';
 
     // Get total unread count
-    const allBuffers = get(buffers);
-    let totalUnread = 0;
-    for (const buf of Object.values(allBuffers) as BufferData[]) {
-        totalUnread += buf.unread + buf.notification;
-    }
+    const { unread, notifications } = getTotalUnread();
+    const totalUnread = unread + notifications;
 
     let prefix = '';
     if (totalUnread > 0) {
@@ -204,16 +213,9 @@ export function updateFavico(): void {
         return;
     }
 
-    const allBuffers = get(buffers);
-    let totalUnread = 0;
-    let totalNotifications = 0;
+    const { unread: totalUnread, notifications: totalNotifications } = getTotalUnread();
 
-    for (const buf of Object.values(allBuffers) as BufferData[]) {
-        totalUnread += buf.unread;
-        totalNotifications += buf.notification;
-    }
-
-  if (totalNotifications > 0) {
+    if (totalNotifications > 0) {
         drawBadge(totalNotifications, 'notification');
         try { navigator.setAppBadge(totalNotifications); } catch { /* not supported */ }
     } else if (totalUnread > 0) {

@@ -1,16 +1,14 @@
 <script lang="ts">
-import { buffers, activeBufferId } from '$lib/stores/models';
+import { activeBufferId, visibleBuffers, sortBuffers } from '$lib/stores/models';
 import { switchBuffer } from '$lib/stores/connectionManager';
-import { sortBuffers } from '$lib/utils';
 import type { BufferData } from '$lib/types';
 
 let { onBufferSelect = () => {} } = $props();
 
-// Buffers with unread activity, excluding active and hidden buffers.
+// Buffers with unread activity, excluding active buffer.
 let entries = $derived(
     sortBuffers(
-        Object.values($buffers)
-            .filter((b: BufferData) => !b.hidden && b.id !== $activeBufferId && (b.notification > 0 || b.unread > 0)),
+        $visibleBuffers.filter((b: BufferData) => b.id !== $activeBufferId && (b.notification > 0 || b.unread > 0)),
         false
     )
 );

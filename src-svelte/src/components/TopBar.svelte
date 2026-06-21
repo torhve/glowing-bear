@@ -2,9 +2,8 @@
 
   import { connected, weechatVersion } from '$lib/stores/models';
   import { connectionState, connectionStats, formatBytes, timeAgo, formatDuration } from '$lib/stores/connectionStore';
-  import { settings, updateSettings } from '$lib/stores/settings';
+  import { settings } from '$lib/stores/settings';
   import { disconnect } from '$lib/stores/connectionManager';
-  import { isWindowsTauri, isMacOSTauri, minimizeWindow, toggleMaximizeWindow, closeWindow } from '$lib/tauriWindow';
   import SettingsModal from '$components/SettingsModal.svelte';
   import BufferSearchModal from '$components/BufferSearchModal.svelte';
   import BufferHotlist from '$components/BufferHotlist.svelte';
@@ -12,17 +11,12 @@
   import Users from '@lucide/svelte/icons/users';
   import Settings from '@lucide/svelte/icons/settings';
   import Power from '@lucide/svelte/icons/power';
+  import TauriTitlebar from '$components/TauriTitlebar.svelte';
   import ArrowUp from '@lucide/svelte/icons/arrow-up';
   import ArrowDown from '@lucide/svelte/icons/arrow-down';
   import MessageSquare from '@lucide/svelte/icons/message-square';
-  import Minimize2 from '@lucide/svelte/icons/minimize-2';
-  import Maximize2 from '@lucide/svelte/icons/maximize-2';
-  import X from '@lucide/svelte/icons/x';
 
   let { onBufferSelect = () => {}, onSearchOpen = () => {}, onNicklistToggle = () => {}, bufferListVisible = true } = $props();
-
-  let windowsTauri = $derived(isWindowsTauri());
-  let macosTauri = $derived(isMacOSTauri());
 
   function handleDisconnect() {
     disconnect();
@@ -34,13 +28,7 @@
 <div data-testid="top-bar" style="padding-top: env(safe-area-inset-top, 0px);">
   <div class="top-bar-inner h-10 bg-surface-raised border-b border-border flex items-center px-2 space-x-2" data-tauri-drag-region>
     <div class="flex items-center gap-1 flex-1 min-w-0" data-tauri-drag-region>
-      {#if macosTauri}
-        <div class="flex items-center gap-1 mr-1">
-          <button data-tauri-drag-region="false" onclick={() => closeWindow()} class="w-3 h-3 rounded-full bg-[#ff5f57] border border-[#e54b3f]/30 cursor-pointer" title="Close" data-testid="traffic-light-close"></button>
-          <button data-tauri-drag-region="false" onclick={() => minimizeWindow()} class="w-3 h-3 rounded-full bg-[#febc26] border border-[#dfca1d]/30 cursor-default" title="Minimize" data-testid="traffic-light-minimize"></button>
-          <button data-tauri-drag-region="false" onclick={() => toggleMaximizeWindow()} class="w-3 h-3 rounded-full bg-[#27c93f] border border-[#1aab29]/30 cursor-default" title="Full Screen" data-testid="traffic-light-maximize"></button>
-        </div>
-      {/if}
+      <TauriTitlebar variant="inline" />
       <img src="/glowing-bear.svg" alt="logo" class="app-logo w-5 h-5 flex-shrink-0" />
       {#if bufferListVisible}
         <span data-testid="app-title" class="text-sm font-bold text-text">Glowing Bear</span>
@@ -53,36 +41,6 @@
     </div>
 
     <div class="flex items-center space-x-1">
-      {#if windowsTauri}
-        <button
-          data-tauri-drag-region="false"
-          onclick={() => minimizeWindow()}
-          class="px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-danger rounded"
-          title="Minimize"
-          data-testid="minimize-button"
-        >
-          <Minimize2 size={14} />
-        </button>
-        <button
-          data-tauri-drag-region="false"
-          onclick={() => toggleMaximizeWindow()}
-          class="px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-surface-raised rounded"
-          title="Maximize"
-          data-testid="maximize-button"
-        >
-          <Maximize2 size={14} />
-        </button>
-        <button
-          data-tauri-drag-region="false"
-          onclick={() => closeWindow()}
-          class="px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-danger rounded"
-          title="Close"
-          data-testid="close-button"
-        >
-          <X size={14} />
-        </button>
-      {/if}
-
       <div class="relative group">
         <div
           id="connection-stats-popover"

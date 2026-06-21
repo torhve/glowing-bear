@@ -1,5 +1,5 @@
 import { get } from 'svelte/store';
-import { buffers, activeBufferId, wconfig } from '$lib/stores/models';
+import { buffers, activeBufferId, wconfig, sortBuffers } from '$lib/stores/models';
 import type { BufferData, Nick } from '$lib/types';
 
 export interface NickCompletionResult {
@@ -200,35 +200,6 @@ export function getFilteredBuffers(search: string, onlyUnread: boolean, orderByS
 }
 
 /**
- * Sort buffers: pinned first, then highlights, then unreads, then by number.
- * Optionally groups by server when orderByServer is true.
- */
-export function sortBuffers(buffers: BufferData[], orderByServer: boolean): BufferData[] {
-    const sorted = [...buffers];
-    sorted.sort((a, b) => {
-        // Pinned buffers always on top
-        if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-
-        // Highlights (notification > 0) before unreads
-        const aHighlight = a.notification > 0 ? 2 : 0;
-        const bHighlight = b.notification > 0 ? 2 : 0;
-        if (aHighlight !== bHighlight) return bHighlight - aHighlight;
-
-        // Unreads before inactive
-        const aUnread = a.unread > 0 ? 1 : 0;
-        const bUnread = b.unread > 0 ? 1 : 0;
-        if (aUnread !== bUnread) return bUnread - aUnread;
-
-        // By number (or serverSortKey if grouped)
-        if (orderByServer) {
-            return a.serverSortKey.localeCompare(b.serverSortKey) || a.number - b.number;
-        }
-        return a.number - b.number;
-    });
-    return sorted;
-}
-
-/**
  * Parse a relay URL string into host, port, and path.
  */
 export function parseRelayUrl(raw: string, defaultPort: string | number = 443): { host: string; port: number; path: string } {
@@ -355,3 +326,66 @@ export function getDisplayName(buffer: BufferData): string {
 export function isPopoverOpen(): boolean {
     return document.querySelector('dialog[popover]:popover-open') !== null;
 }
+
+/**
+ * Check if a buffer has non-empty nicklist data (excluding root group).
+ */
+export function bufferHasNicklist(buffer: BufferData | null | undefined): boolean {
+    if (!buffer?.nicklist) return false;
+    return Object.entries(buffer.nicklist).some(([name, group]) =>
+        name !== 'root' && group.nicks.length > 0
+    );
+}
+
+/**
+ * Create a keyboard event handler that activates on Enter or Space.
+ * Standard accessibility pattern for role="button" elements.
+ */
+export function makeKeyboardActivatable(handler: () => void): (e: KeyboardEvent) => void {
+    return (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handler();
+        }
+    };
+}
+
+/**
+ * Filter a File array to only image files.
+ */
+export function filterImageFiles(files: File[]): File[] {
+    return files.filter(f => f.type.match(/image.*/));
+}
+
+/**
+ * Read a file as a base64 data URL, returning a Promise.
+ */
+export function readFileAsDataUrl(file: File): Promise<string> {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => resolve('');
+        reader.readAsDataURL(file);
+    });
+}
+
+/**
+ * Modify a textarea's value using a transformer function, then dispatch an input event.
+ * Handles selection range preservation and focus management.
+ */
+export function modifyTextareaValue(
+    selector: string,
+    transformer: (value: string, start: number, end: number) => { value: string; cursor: number }
+): void {
+    const input = document.querySelector<HTMLTextAreaElement>(selector);
+    if (!input) return;
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? start;
+    const result = transformer(input.value, start, end);
+    input.value = result.value;
+    input.focus();
+    input.setSelectionRange(result.cursor, result.cursor);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+

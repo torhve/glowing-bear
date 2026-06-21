@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { bufferMatchesSearch, sortBuffers, completeNick } from '$lib/utils';
-import { buffers, activeBufferId, wconfig } from '$lib/stores/models';
+import { bufferMatchesSearch, completeNick } from '$lib/utils';
+import { buffers, activeBufferId, wconfig, sortBuffers } from '$lib/stores/models';
 import type { BufferData } from '$lib/types';
 
 describe('bufferMatchesSearch', () => {

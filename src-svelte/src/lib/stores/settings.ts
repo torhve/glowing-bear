@@ -34,7 +34,7 @@ export const settings = writable<Settings>({
 });
 
 // Load from localStorage on init
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
     const saved = localStorage.getItem('gb-settings');
     if (saved) {
         try {

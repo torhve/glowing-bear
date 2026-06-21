@@ -2,6 +2,7 @@ import { writable, get, derived } from 'svelte/store';
 
 export const activeBufferChanged = writable(0);
 import { recordBuffer } from '$lib/stores/bufferResume';
+import { settings } from '$lib/stores/settings';
 import type {
     BufferData,
     BufferLine,
@@ -60,6 +61,26 @@ export function parseRichText(text: string | undefined | null): RichTextPart[] {
         attrs: p.attrs,
         classes: buildClasses(p)
     }));
+}
+
+// Sort buffers: pinned first, then highlights, then unreads, then by number.
+// Optionally groups by server when orderByServer is true.
+export function sortBuffers(buffersList: BufferData[], orderByServer: boolean): BufferData[] {
+    const sorted = [...buffersList];
+    sorted.sort((a, b) => {
+        if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+        const aHighlight = a.notification > 0 ? 2 : 0;
+        const bHighlight = b.notification > 0 ? 2 : 0;
+        if (aHighlight !== bHighlight) return bHighlight - aHighlight;
+        const aUnread = a.unread > 0 ? 1 : 0;
+        const bUnread = b.unread > 0 ? 1 : 0;
+        if (aUnread !== bUnread) return bUnread - aUnread;
+        if (orderByServer) {
+            return a.serverSortKey.localeCompare(b.serverSortKey) || a.number - b.number;
+        }
+        return a.number - b.number;
+    });
+    return sorted;
 }
 
 // ---- Buffer creation ----
@@ -322,6 +343,16 @@ export const currentBuffer = derived(
     ([$buffers, $activeBufferId]) => $buffers[$activeBufferId] || null
 );
 
+// Visible buffers: filters out hidden buffers.
+export const visibleBuffers = derived(buffers, ($buffers) =>
+    Object.values($buffers).filter(b => !b.hidden)
+);
+
+// Sorted visible buffers: combines filtering + sorting in a single reactive source.
+export const sortedVisibleBuffers = derived([buffers, settings], ([$buffers, $settings]) =>
+    sortBuffers(Object.values($buffers).filter(b => !b.hidden), $settings.orderbyserver)
+);
+
 // ---- Store helpers ----
 export function addBuffer(buffer: BufferData) {
     const current = get(buffers);
@@ -330,6 +361,31 @@ export function addBuffer(buffer: BufferData) {
 
 export function getBuffer(bufferId: string): BufferData | undefined {
     return get(buffers)[bufferId];
+}
+
+/**
+ * Shallow-copy a single buffer with partial field overrides.
+ * Returns a new BufferData object — caller must apply via `buffers.set()` or merge into updatedBuffers map.
+ */
+/**
+ * Shallow-copy a single buffer with partial field overrides.
+ * Returns a new BufferData object — caller must apply via `buffers.set()` or merge into updatedBuffers map.
+ */
+export function updateBuffer(bufferId: string, overrides: Partial<BufferData>): BufferData | undefined {
+    const buf = get(buffers)[bufferId];
+    if (!buf) return undefined;
+    return { ...buf, ...overrides };
+}
+
+/**
+ * Deep-copy a buffer's mutable nested structures (lines, nicklist) along with field overrides.
+ * Use this when handlers will mutate lines[] or nicklist[] arrays in-place after calling.
+ * Returns a new BufferData object — caller must apply via `buffers.set()` or merge into updatedBuffers map.
+ */
+export function updateBufferDeep(bufferId: string, overrides: Partial<BufferData> = {}): BufferData | undefined {
+    const buf = get(buffers)[bufferId];
+    if (!buf) return undefined;
+    return { ...buf, lines: [...buf.lines], nicklist: { ...buf.nicklist }, ...overrides };
 }
 
 export function getBuffers(): Record<string, BufferData> {

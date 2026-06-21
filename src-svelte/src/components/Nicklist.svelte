@@ -6,7 +6,7 @@
   import { currentBuffer, pendingBufferSwitch } from '$lib/stores/models';
   import { sendBufferCommand } from '$lib/stores/connectionManager';
   import { settings } from '$lib/stores/settings';
-  import { insertNickIntoInput } from '$lib/utils';
+  import { insertNickIntoInput, bufferHasNicklist, makeKeyboardActivatable } from '$lib/utils';
   import { DEBUG_NICKLIST } from '$lib/debug';
   import FormInput from './FormInput.svelte';
 
@@ -17,13 +17,7 @@
   let showNicklist = $derived($settings.showNicklist);
 
   // Whether current buffer actually has nick data to display
-  let hasNicklist = $derived(
-    $currentBuffer?.nicklist
-      ? Object.entries($currentBuffer.nicklist).some(([name, group]) =>
-          name !== 'root' && group.nicks.length > 0
-        )
-      : false
-  );
+  let hasNicklist = $derived(bufferHasNicklist($currentBuffer));
 
   let filteredNickGroups = $derived(
     $currentBuffer?.nicklist
@@ -108,7 +102,7 @@
             }}
             role="button"
             tabindex="0"
-            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); insertNickIntoInput(nick.name); } }}
+            onkeydown={makeKeyboardActivatable(() => insertNickIntoInput(nick.name))}
           >
             <span class="nick-prefix text-xs {getPrefixClass(getPrefix(nick.prefix))} mr-1">
               {getPrefix(nick.prefix)}

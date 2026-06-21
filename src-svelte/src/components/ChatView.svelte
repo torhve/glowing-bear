@@ -4,7 +4,7 @@
   import { currentBuffer, saveScrollPosition, activeBufferId, bufferBottom } from '$lib/stores/models';
   import { settings } from '$lib/stores/settings';
   import { fetchMoreLines } from '$lib/stores/connectionManager';
-  import { buildMentionText, isFreeBuffer } from '$lib/utils';
+  import { buildMentionText, isFreeBuffer, modifyTextareaValue } from '$lib/utils';
   import BufferLineRow from '$components/BufferLineRow.svelte';
   import TopicModal from '$components/TopicModal.svelte';
   import LinkifiedText from '$components/LinkifiedText.svelte';
@@ -214,19 +214,17 @@
     }
   });
 
+  // Handle mention click: extract nick from message prefix, insert into input at cursor.
   function handleMention(message: BufferLine) {
     if (!message.showHiddenBrackets) return;
     const prefixParts = message.prefix || [];
     const lastPart = prefixParts[prefixParts.length - 1];
     const nickName = lastPart?.text?.trim() || message.prefixtext?.trim() || '';
     if (!nickName) return;
-    const textarea = document.querySelector<HTMLTextAreaElement>('[data-testid="message-input"]');
-    if (!textarea) return;
-    const result = buildMentionText(textarea.value, nickName, $currentBuffer?.nicklist?.root?.nicks);
-    textarea.value = result.text;
-    textarea.focus();
-    textarea.setSelectionRange(result.caretPos, result.caretPos);
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    modifyTextareaValue('[data-testid="message-input"]', (value: string, start: number, end: number) => {
+      const result = buildMentionText(value.substring(0, start) + value.substring(end), nickName, $currentBuffer?.nicklist?.root?.nicks);
+      return { value: result.text, cursor: result.caretPos };
+    });
   }
 
   async function handleFetchMore() {

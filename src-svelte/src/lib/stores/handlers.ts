@@ -10,6 +10,8 @@ import {
     wconfig,
     addBuffer,
     getBuffer,
+    updateBuffer,
+    updateBufferDeep,
     setActiveBuffer,
     createBuffer,
     createBufferLine,
@@ -435,50 +437,61 @@ export function handleBufferOpened(message: ProtocolMessage) {
 }
 
 // ---- Buffer title changed ----
+// Update buffer metadata immutably to trigger Svelte reactivity.
 export function handleBufferTitleChanged(message: ProtocolMessage) {
     const obj = message.objects[0]?.content[0];
     if (!obj) return;
-
-    const buffer = getBuffer(obj.pointers[0]);
-    if (!buffer) return;
-
-    buffer.fullName = obj.full_name;
-    buffer.title = obj.title ? parseRichText(obj.title) : buffer.title;
-    buffer.number = obj.number;
+    const bufferId = obj.pointers[0];
+    const updated = updateBuffer(bufferId, {
+        fullName: obj.full_name,
+        title: obj.title ? parseRichText(obj.title) : undefined,
+        number: obj.number,
+    });
+    if (!updated) return;
+    const current = get(buffers);
+    buffers.set({ ...current, [bufferId]: updated });
 }
 
 // ---- Buffer renamed ----
+// Update buffer name fields immutably to trigger Svelte reactivity.
 export function handleBufferRenamed(message: ProtocolMessage) {
     const obj = message.objects[0]?.content[0];
     if (!obj) return;
-
-    const buffer = getBuffer(obj.pointers[0]);
-    if (!buffer) return;
-
-    buffer.fullName = obj.full_name;
-    buffer.shortName = obj.short_name;
-    buffer.trimmedName = obj.short_name.replace(/^[#&+]/, '') || (obj.short_name ? ' ' : null);
-    buffer.prefix = ['#', '&', '+'].includes(obj.short_name.charAt(0)) ? obj.short_name.charAt(0) : '';
+    const bufferId = obj.pointers[0];
+    const updated = updateBuffer(bufferId, {
+        fullName: obj.full_name,
+        shortName: obj.short_name,
+        trimmedName: obj.short_name.replace(/^[#&+]/, '') || (obj.short_name ? ' ' : null),
+        prefix: ['#', '&', '+'].includes(obj.short_name.charAt(0)) ? obj.short_name.charAt(0) : '',
+    });
+    if (!updated) return;
+    const current = get(buffers);
+    buffers.set({ ...current, [bufferId]: updated });
 }
 
 // ---- Buffer hidden/unhidden ----
+// Toggle buffer.hidden immutably to trigger Svelte reactivity.
 export function handleBufferHidden(message: ProtocolMessage) {
     const obj = message.objects[0]?.content[0];
     if (!obj) return;
-    const buffer = getBuffer(obj.pointers[0]);
-    if (buffer) buffer.hidden = true;
+    const updated = updateBuffer(obj.pointers[0], { hidden: true });
+    if (!updated) return;
+    const current = get(buffers);
+    buffers.set({ ...current, [obj.pointers[0]]: updated });
 }
 
 export function handleBufferUnhidden(message: ProtocolMessage) {
     const obj = message.objects[0]?.content[0];
     if (!obj) return;
-    const buffer = getBuffer(obj.pointers[0]);
-    if (buffer) buffer.hidden = false;
+    const updated = updateBuffer(obj.pointers[0], { hidden: false });
+    if (!updated) return;
+    const current = get(buffers);
+    buffers.set({ ...current, [obj.pointers[0]]: updated });
 }
 
 // ---- Buffer moved ----
 // Adjust all buffer numbers when a buffer changes position,
-// shifting intermediate buffers to fill the gap.
+// shifting intermediate buffers to fill the gap, using immutable updates.
 export function handleBufferMoved(message: ProtocolMessage) {
     const obj = message.objects[0]?.content[0];
     if (!obj) return;
@@ -490,46 +503,65 @@ export function handleBufferMoved(message: ProtocolMessage) {
     const newNumber = obj.number;
     if (oldNumber === newNumber) return;
 
-    const currentBuffers = get(buffers);
-    for (const key in currentBuffers) {
-        const buf = currentBuffers[key]!;
-        if (buf.number > oldNumber && buf.number <= newNumber) {
-            buf.number -= 1;
-        } else if (buf.number < oldNumber && buf.number >= newNumber) {
-            buf.number += 1;
+    const current = get(buffers);
+    const updated = { ...current };
+
+    // Shift intermediate buffers to fill the gap left by the moved buffer.
+    for (const id in current) {
+        if (id === bufferId) continue;
+        const buf = current[id];
+        if (!buf) continue;
+        let newNum = buf.number;
+        if (newNumber > oldNumber && buf.number > oldNumber && buf.number <= newNumber) {
+            newNum -= 1;
+        } else if (newNumber < oldNumber && buf.number < oldNumber && buf.number >= newNumber) {
+            newNum += 1;
+        }
+        if (newNum !== buf.number) {
+            const shifted = updateBuffer(id, { number: newNum });
+            if (shifted) updated[id] = shifted;
         }
     }
-    buffer.number = newNumber;
-    buffers.set({ ...currentBuffers });
+
+    // Set the moved buffer's new number.
+    const moved = updateBuffer(bufferId, { number: newNumber });
+    if (moved) updated[bufferId] = moved;
+    buffers.set(updated);
 }
 
 // ---- Buffer local var changed ----
+// Update buffer type/plugin/server/pinned fields immutably to trigger Svelte reactivity.
 export function handleBufferLocalvarChanged(message: ProtocolMessage) {
     const obj = message.objects[0]?.content[0];
     if (!obj) return;
-
-    const buffer = getBuffer(obj.pointers[0]);
+    const bufferId = obj.pointers[0];
+    const buffer = getBuffer(bufferId);
     if (!buffer || !obj.local_variables) return;
 
     const lv = obj.local_variables;
-    buffer.type = lv.type || buffer.type;
-    buffer.indent = ['channel', 'private'].includes(buffer.type);
-    buffer.plugin = lv.plugin || buffer.plugin;
-    buffer.server = lv.server || buffer.server;
-    buffer.serverSortKey = `${buffer.plugin}.${buffer.server}${buffer.type === 'server' ? '' : '.' + buffer.shortName}`.toLowerCase();
-    buffer.pinned = lv.pinned === 'true';
+    const type = lv.type || buffer.type;
+    const plugin = lv.plugin || buffer.plugin;
+    const server = lv.server || buffer.server;
+    const pinned = lv.pinned === 'true';
+    const indent = ['channel', 'private'].includes(type);
+    const serverSortKey = `${plugin}.${server}${type === 'server' ? '' : '.' + buffer.shortName}`.toLowerCase();
+
+    const updated = updateBuffer(bufferId, { type, indent, plugin, server, serverSortKey, pinned });
+    if (!updated) return;
+    const current = get(buffers);
+    buffers.set({ ...current, [bufferId]: updated });
 }
 
 // ---- Buffer cleared ----
+// Clear lines and requestedLines immutably using deep copy for the lines array.
 export function handleBufferCleared(message: ProtocolMessage) {
     const bufferMsg = message.objects[0]?.content[0];
     if (!bufferMsg) return;
     const bufferId = bufferMsg.pointers[0];
-    const buffer = getBuffer(bufferId);
-    if (buffer) {
-        buffer.lines = [];
-        buffer.requestedLines = 0;
-    }
+    const updated = updateBufferDeep(bufferId, { lines: [], requestedLines: 0 });
+    if (!updated) return;
+    const current = get(buffers);
+    buffers.set({ ...current, [bufferId]: updated });
 }
 
 // ---- Buffer closing ----
@@ -697,10 +729,8 @@ export function handleNicklist(message: ProtocolMessage) {
 
     const updated = { ...current };
     for (const id of modifiedBuffers) {
-        const buf = current[id];
-        if (buf) {
-            updated[id] = { ...buf, nicklist: { ...buf.nicklist } };
-        }
+        const deep = updateBufferDeep(id);
+        if (deep) updated[id] = deep;
     }
     if (DEBUG_NICKLIST) console.log('[nicklist] updating buffers store with', modifiedBuffers.size, 'modified buffer(s)');
     buffers.set(updated);
@@ -821,10 +851,8 @@ export function handleNicklistDiff(message: ProtocolMessage) {
 
     const updated = { ...current };
     for (const id of modifiedBuffers) {
-        const buf = current[id];
-        if (buf) {
-            updated[id] = { ...buf, nicklist: { ...buf.nicklist } };
-        }
+        const deep = updateBufferDeep(id);
+        if (deep) updated[id] = deep;
     }
     if (DEBUG_NICKLIST) console.log('[nicklist] updating buffers store with', modifiedBuffers.size, 'modified buffer(s)');
     buffers.set(updated);
