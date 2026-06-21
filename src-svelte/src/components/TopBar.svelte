@@ -19,17 +19,13 @@
   import Maximize2 from '@lucide/svelte/icons/maximize-2';
   import X from '@lucide/svelte/icons/x';
 
-  let { onBufferSelect = () => {}, onSearchOpen = () => {}, bufferListVisible = true } = $props();
+  let { onBufferSelect = () => {}, onSearchOpen = () => {}, onNicklistToggle = () => {}, bufferListVisible = true } = $props();
 
   let windowsTauri = $derived(isWindowsTauri());
   let macosTauri = $derived(isMacOSTauri());
 
   function handleDisconnect() {
     disconnect();
-  }
-
-  function toggleNicklist() {
-    updateSettings({ showNicklist: !$settings.showNicklist });
   }
 
   let showNicklist = $derived($settings.showNicklist);
@@ -156,7 +152,7 @@
 
       <button
         data-tauri-drag-region="false"
-        onclick={toggleNicklist}
+        onclick={() => onNicklistToggle()}
         class="px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-surface-raised rounded"
         title="Toggle nicklist (Alt+n)"
         data-testid="nicklist-button"
