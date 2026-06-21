@@ -488,13 +488,13 @@
   .chat-bubble-container {
     display: flex;
     flex-direction: column;
-    padding: 8px 12px;
-    gap: 0;
+    padding: 10px 14px;
+    gap: 2px;
   }
 
   .bubble-fetchmore-row {
     text-align: center;
-    padding: 4px 0;
+    padding: 6px 0;
   }
 
   /* Readmarker in bubble mode (div-based instead of table tr/td) */
