@@ -177,13 +177,13 @@ test('other buffer unread counts preserved when switching active buffer', async 
     // Wait for the unread badge to actually appear in the buffer list
     const glowItem = page.getByTestId('buffer-item').filter({ hasText: 'glowing-bear' }).first();
     await expect(glowItem).toBeVisible({ timeout: 10000 });
-    // Badge is a span with rounded-full class positioned absolutely on the right side of the item
+    // Badge is positioned absolutely on the right edge of the buffer item
     // Wait up to 8s for hotlist sync (hotlist polls every 15s)
-    await glowItem.locator('span.rounded-full').waitFor({ state: 'visible', timeout: 8000 });
+    await glowItem.getByTestId('unread-badge').waitFor({ state: 'visible', timeout: 8000 });
 
     // Read unread badge text for #glowing-bear from the DOM before second switch.
     const getUnreadBadge = async (name: string) => {
-        return (await page.getByTestId('buffer-item').filter({ hasText: name }).first().locator('span.rounded-full').first().textContent()) || '';
+        return (await page.getByTestId('buffer-item').filter({ hasText: name }).first().getByTestId('unread-badge').textContent()) || '';
     };
 
     const beforeText = await getUnreadBadge('glowing-bear');
