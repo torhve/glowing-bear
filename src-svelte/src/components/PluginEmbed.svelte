@@ -360,7 +360,7 @@
     box-sizing: border-box;
   }
 
-  .embed-container:has(img.embed) {
+  :global(.embed-container:has(img.embed)) {
     display: inline-block;
   }
 
