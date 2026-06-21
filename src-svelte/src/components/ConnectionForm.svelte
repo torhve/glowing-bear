@@ -73,6 +73,7 @@ import Key from '@lucide/svelte/icons/key';
         console.warn('[ConnectionForm] Autoconnect failed:', e);
         setErrors({ errorMessage: true });
         setConnectionStatus('error');
+        addToast('Connection failed. Check settings and try again.', { type: 'error', duration: 10000 });
       }
     })();
   });
@@ -166,6 +167,7 @@ import Key from '@lucide/svelte/icons/key';
       console.error('Connection failed:', e);
       setErrors({ errorMessage: true });
       setConnectionStatus('error');
+      addToast('Connection failed. Check settings and try again.', { type: 'error', duration: 10000 });
     }
   }
 
@@ -182,7 +184,10 @@ import Key from '@lucide/svelte/icons/key';
   }
 </script>
 
-<div class="connection-page min-h-[100vh] min-h-dvh bg-bg flex flex-col overflow-y-scroll">
+<div
+  class="connection-page min-h-[100vh] min-h-dvh bg-bg flex flex-col overflow-y-scroll"
+  onkeydown={(e) => { if (e.key === 'Enter' && !['INPUT','TEXTAREA','SELECT'].includes((e.target as HTMLElement).tagName)) { e.preventDefault(); handleConnect(); } }}
+>
   {#if windowsTauri}
     <div class="tauri-titlebar h-8 bg-surface-raised border-b border-border flex items-center justify-end px-2 space-x-1 flex-shrink-0" data-tauri-drag-region>
       <div data-tauri-drag-region="false">

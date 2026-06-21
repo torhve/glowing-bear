@@ -153,6 +153,10 @@ export async function connect(host: string, port: number, path: string, password
                     return;
                 }
                 console.error('Connection error:', e);
+                // Ensure connected stays false when handshake fails — onclose may not fire
+                if (get(connected) === true) {
+                    connected.set(false);
+                }
                 reject(e);
             }
         };
@@ -248,7 +252,10 @@ export async function connect(host: string, port: number, path: string, password
             console.error('Relay error:', evt);
             setConnectionStatus('error');
             if (!get(connectionState).wasEverConnected && !connecting) {
-                // onclose already ran, check if it was a pre-connect failure
+                // onclose may not have fired — ensure stores are synchronized
+                // (network failures can trigger onerror without onclose)
+                ws = null;
+                connected.set(false);
                 const elapsed = Date.now() - connectStart;
                 if (elapsed < 10000) {
                     setErrors({ serverUnreachable: true });
@@ -511,7 +518,9 @@ export function sendMessage(message: string) {
 }
 
 export function disconnect() {
+    // Always reset stores regardless of ws state — onclose may not fire for failed connections
     disconnectStore();
+    connected.set(false);
     if (hotlistInterval) clearInterval(hotlistInterval);
     if (hotlistDebounceTimer) {
         clearTimeout(hotlistDebounceTimer);
@@ -527,6 +536,9 @@ export function disconnect() {
         sendWs(quitMsg, 'quit');
         ws.close();
         ws = null;
+    } else {
+        // ws is already null — ensure stores are synchronized after failed/stale connection
+        setConnectionStatus('disconnected');
     }
 }
 
