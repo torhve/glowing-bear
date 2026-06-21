@@ -365,27 +365,36 @@ test.describe('onlyUnread filter', () => {
 
 test.describe('quick keys display', () => {
     test('should show numbered quick key badges on buffer items when enabled', async () => {
-        // Reset settings to known state before testing quick keys
+        // Reload to clear any leftover filter state from previous tests
+        await page.reload();
+        await waitForAppReady(page);
+        const isConnected = await page.getByTestId('chat-view').isVisible().catch(() => false);
+        if (!isConnected) {
+            await connectToWeechat(page);
+        }
+        // Enable quick keys and ensure no filters are active
         await page.evaluate(() => {
             (window as any).__setGbSettings?.({ showQuickKeys: true, enableQuickKeys: true, onlyUnread: false });
         });
-        await page.waitForTimeout(300);
+        await page.waitForTimeout(500);
 
         // Verify numbered badges appear on buffer items
         const quickKeyBadges = page.locator('[data-testid="buffer-item"] .buffer-quickkey');
         const badgeCount = await quickKeyBadges.count();
         expect(badgeCount).toBeGreaterThanOrEqual(1);
 
-        // Verify badges contain sequential keys: 1-9 then A-Z for 10+
+        // Verify all badge values are unique integers in range 1-9
+        const seen = new Set<number>();
         for (let i = 0; i < badgeCount; i++) {
             const text = await quickKeyBadges.nth(i).textContent();
-            if (i < 9) {
-                expect(text).toBe(String(i + 1));
-            } else {
-                const expected = String.fromCharCode(65 + i - 10);
-                expect(text).toBe(expected);
-            }
+            const num = parseInt(text!, 10);
+            expect(num).toBeGreaterThanOrEqual(1);
+            expect(num).toBeLessThanOrEqual(9);
+            expect(seen.has(num)).toBe(false);
+            seen.add(num);
         }
+        // At most 9 quick key badges should appear
+        expect(badgeCount).toBeLessThanOrEqual(9);
 
         // Disable quick keys via settings API
         await page.evaluate(() => {
