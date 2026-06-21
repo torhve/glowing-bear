@@ -18,8 +18,6 @@
     "test:e2e": "playwright test --config=e2e/playwright.config.ts",
     "test:e2e:watch": "playwright test --ui --config=e2e/playwright.config.ts",
     "test:e2e:debug": "playwright test --debug --config=e2e/playwright.config.ts",
-    "test:e2e:all": "bash ../test/fixtures/gbtest/start.sh && playwright test --config=e2e/playwright.config.ts && bash ../test/fixtures/gbtest/stop.sh",
-    "test:e2e:all:watch": "bash ../test/fixtures/gbtest/start.sh && playwright test --ui --config=e2e/playwright.config.ts && bash ../test/fixtures/gbtest/stop.sh",
     "irc:server": "npx tsx test/irc-server/index.ts",
     "irc:start": "bash ../test/fixtures/gbtest/start.sh",
     "irc:stop": "bash ../test/fixtures/gbtest/stop.sh",
