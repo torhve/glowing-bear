@@ -350,7 +350,10 @@
     if (e.code === 'Escape') {
       const now = Date.now();
       if (now - lastEscapeTime <= 500) {
-        disconnect();
+        // Only disconnect if actually connected — prevents no-op on stale connections
+        if (get(connected)) {
+          disconnect();
+        }
       }
       lastEscapeTime = now;
       return;
