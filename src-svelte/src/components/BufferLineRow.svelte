@@ -317,7 +317,13 @@
   }
 
   .irc-link {
-    color: #3b82f6;
+    color: oklch(62.3% 0.06 255);
+    text-decoration: none;
+  }
+
+  .irc-link:hover {
+    color: oklch(65% 0.12 255);
+    text-decoration: underline;
   }
 
   .irc-code {
