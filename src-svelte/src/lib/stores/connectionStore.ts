@@ -31,7 +31,6 @@ const initialState: ConnectionState = {
         hashAlgorithmDisagree: false,
         errorMessage: false,
         uploadError: false,
-        hmrReloadError: false,
         serverUnreachable: false
     },
     userDisconnect: false,
