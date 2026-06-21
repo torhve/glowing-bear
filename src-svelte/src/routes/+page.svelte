@@ -207,6 +207,10 @@
         const digit = parseInt(digitStr, 10);
         const index = digit === 0 ? 9 : digit - 1;
         e.preventDefault();
+        if (!$connected) {
+          addToast('Cannot switch buffers — not connected', { type: 'warning', duration: 3000 });
+          return;
+        }
         const sorted = sortBuffers(Object.values(b).filter((bu: BufferData) => !bu.hidden), s.orderbyserver);
         if (index < sorted.length) {
           const buf = sorted[index];

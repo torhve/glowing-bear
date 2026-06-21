@@ -133,7 +133,7 @@
             $connectionState.status === 'error' ? 'bg-danger' :
             'bg-text-muted'
           }"></div>
-          <span class="connection-status-text text-text-secondary hidden sm:inline">
+          <span class="connection-status-text text-text-secondary">
             {$connectionState.status === 'connected' ? '' :
              $connectionState.status === 'connecting' ? 'Connecting...' :
              $connectionState.status === 'reconnecting' ? 'Reconnecting...' :
