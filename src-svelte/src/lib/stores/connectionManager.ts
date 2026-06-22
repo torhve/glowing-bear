@@ -24,6 +24,13 @@ let connecting = false;
 let connectionGeneration = 0;
 
 export async function connect(host: string, port: number, path: string, password: string, tls: boolean, noCompression: boolean) {
+    // Prevent rapid concurrent connect() calls (e.g., from HMR-triggered remounts).
+    // Only one connection attempt should be active at a time.
+    if (connecting) {
+        console.log('[connect] already connecting, skipping duplicate');
+        return;
+    }
+    connecting = true;
     connectionGeneration++;
     clearErrors();
 
@@ -50,12 +57,25 @@ export async function connect(host: string, port: number, path: string, password
 
     return new Promise<void>((resolve, reject) => {
         rejectPromise = reject;
-        ws = new WebSocket(url);
+        try {
+            ws = new WebSocket(url);
+        } catch (e) {
+            connecting = false;
+            reject(e);
+            return;
+        }
         const connectStart = Date.now();
         const genAtConnect = connectionGeneration;
+        const thisWs = ws;
         ws.binaryType = 'arraybuffer';
 
         ws.onopen = async () => {
+            // If connect() was called again while this WebSocket was connecting,
+            // connectionGeneration has changed and this handler is stale.
+            if (genAtConnect !== connectionGeneration) {
+                thisWs.close();
+                return;
+            }
             connecting = true;
             try {
                 // Reset callbacks for new connection
@@ -314,9 +334,10 @@ export async function connect(host: string, port: number, path: string, password
         };
 
         ws.onerror = (evt) => {
+            connecting = false;  // Release lock so reconnect can proceed (matches AngularJS behavior)
             console.error('Relay error:', evt);
             setConnectionStatus('error');
-            if (!get(connectionState).wasEverConnected && !connecting) {
+            if (!get(connectionState).wasEverConnected) {
                 // onclose may not have fired — ensure stores are synchronized
                 // (network failures can trigger onerror without onclose)
                 ws = null;
@@ -328,8 +349,6 @@ export async function connect(host: string, port: number, path: string, password
                     setErrors({ errorMessage: true });
                 }
             }
-            // Don't reject if onclose already handled the close — prevents timeout from overwriting onclose's error state
-            if (!connecting) return;
             reject(new Error('Connection failed'));
         };
     });
