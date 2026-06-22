@@ -17,11 +17,13 @@
   let messages = $derived($currentBuffer?.lines ?? []);
   let noembed = $derived($settings.noembed);
   let topicText = $derived($currentBuffer?.title?.map(t => t.text).join('') || '');
-  // Bubble mode: enabled when setting is on AND buffer is private/query type.
+  // Bubble mode: enabled when setting is on AND buffer is a private chat type.
+  // Only 'private' type buffers (DCC chats and IRC PMs) get bubbles;
+  // server, channel, and other system buffers always use table layout.
   let bubbleMode = $derived(
     $settings.stylizePrivateChats &&
     $currentBuffer &&
-    ($currentBuffer.type === 'private' || $currentBuffer.type === 'query')
+    $currentBuffer.type === 'private'
   );
 
   // Other person's nick for self-message detection in bubble mode.
