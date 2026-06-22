@@ -21,8 +21,10 @@ let hotlistInterval: ReturnType<typeof setInterval> | null = null;
 let reconnectingTimer: ReturnType<typeof setTimeout> | null = null;
 let connectionData: [string, number, string, string, boolean, boolean] | null = null;
 let connecting = false;
+let connectionGeneration = 0;
 
 export async function connect(host: string, port: number, path: string, password: string, tls: boolean, noCompression: boolean) {
+    connectionGeneration++;
     clearErrors();
 
     const hasCryptoSubtle = typeof crypto.subtle !== 'undefined';
@@ -595,8 +597,14 @@ function sendWs(data: string | ArrayBufferLike, label = '') {
 
 // Handle incoming messages
 export async function onMessage(data: ArrayBuffer) {
+    const generation = connectionGeneration;
     recordBytesReceived(data.byteLength);
     const message = await protocolInstance.parse(data);
+
+    // Discard stale messages from previous connection instances (e.g., queued
+    // onmessage events that arrived after disconnect or reconnect).
+    if (generation !== connectionGeneration) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
     if (message.id && callbacks[message.id]) {
         const cb = callbacks[message.id]!;
