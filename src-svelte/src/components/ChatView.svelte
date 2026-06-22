@@ -289,7 +289,7 @@
               Fetch more lines
             </button>
             <span class={['loading-spinner', { hidden: !isLoadingMore }]}>
-              Fetching more lines...
+              Fetching more lines<span class="loading-dots"><span>.</span><span>.</span><span>.</span></span>
             </span>
           </div>
         {/if}
@@ -355,7 +355,7 @@
                     Fetch more lines
                   </button>
                 <span class={['loading-spinner', { hidden: !isLoadingMore }]}>
-                  Fetching more lines...
+                  Fetching more lines<span class="loading-dots"><span>.</span><span>.</span><span>.</span></span>
                 </span>
               </td>
             </tr>

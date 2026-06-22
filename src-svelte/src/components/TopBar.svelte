@@ -78,7 +78,7 @@
           data-tauri-drag-region="false"
           data-testid="connection-status-button"
           popovertarget="connection-stats-popover"
-          class="connection-status-btn flex items-center space-x-1 px-2 py-1 rounded text-xs hover:text-white hover:bg-surface-raised"
+          class="connection-status-btn flex items-center space-x-1 px-2 py-1 rounded text-xs hover:text-white hover:bg-surface-raised transition-colors"
           type="button"
         >
           <div class="connection-dot w-2 h-2 rounded-full {
@@ -100,7 +100,7 @@
       <button
         data-tauri-drag-region="false"
         popovertarget="buffer-search-modal"
-        class="px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-surface-raised rounded"
+        class="px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-surface-raised rounded transition-colors"
         title="Search buffers (Alt+G)"
         data-testid="search-button"
         onclick={() => onSearchOpen()}
@@ -111,7 +111,7 @@
       <button
         data-tauri-drag-region="false"
         onclick={() => onNicklistToggle()}
-        class="px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-surface-raised rounded"
+        class="px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-surface-raised rounded transition-colors"
         title="Toggle nicklist (Alt+n)"
         data-testid="nicklist-button"
         class:bg-surface-raised={showNicklist}
@@ -122,7 +122,7 @@
       <button
         data-tauri-drag-region="false"
         popovertarget="settings-modal"
-        class="px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-surface-raised rounded"
+        class="px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-surface-raised rounded transition-colors"
         title="Settings"
         data-testid="settings-button"
       >
@@ -134,7 +134,7 @@
           data-tauri-drag-region="false"
           data-testid="disconnect-button"
           onclick={handleDisconnect}
-          class="px-2 py-1 text-sm text-danger hover:text-danger hover:bg-surface-raised rounded"
+          class="px-2 py-1 text-sm text-danger hover:text-danger hover:bg-surface-raised rounded transition-colors"
           title="Disconnect"
         >
           <Power size={16} />

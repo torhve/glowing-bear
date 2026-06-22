@@ -12,6 +12,25 @@ import BaseDialog from '$components/BaseDialog.svelte';
   import X from '@lucide/svelte/icons/x';
   import Check from '@lucide/svelte/icons/check';
   import Undo2 from '@lucide/svelte/icons/undo-2';
+  import Type from '@lucide/svelte/icons/type';
+  import Hash from '@lucide/svelte/icons/hash';
+  import Code from '@lucide/svelte/icons/code';
+  import Users from '@lucide/svelte/icons/users';
+  import ListFilter from '@lucide/svelte/icons/list-filter';
+  import ImageOff from '@lucide/svelte/icons/image-off';
+  import FolderTree from '@lucide/svelte/icons/folder-tree';
+  import Keyboard from '@lucide/svelte/icons/keyboard';
+  import ArrowLeftRight from '@lucide/svelte/icons/arrow-left-right';
+  import MessageCircle from '@lucide/svelte/icons/message-circle';
+  import SmilePlus from '@lucide/svelte/icons/smile-plus';
+  import Eye from '@lucide/svelte/icons/eye';
+  import Volume2 from '@lucide/svelte/icons/volume-2';
+  import Sigma from '@lucide/svelte/icons/sigma';
+  import Image from '@lucide/svelte/icons/image';
+  import Lock from '@lucide/svelte/icons/lock';
+  import LogIn from '@lucide/svelte/icons/log-in';
+  import Cog from '@lucide/svelte/icons/cog';
+  import { version as appVersion } from '../../package.json';
   import FormInput from '$components/FormInput.svelte';
 
   let notifSupported = $derived(isNotificationSupported());
@@ -43,8 +62,6 @@ import BaseDialog from '$components/BaseDialog.svelte';
     }
   });
 
-  const appVersion = '0.11.0';
-
   function handleNotificationPermission() {
     requestNotificationPermission();
   }
@@ -68,7 +85,8 @@ import BaseDialog from '$components/BaseDialog.svelte';
       savepassword: false,
       autoconnect: false,
       showNicklist: true,
-      stylizePrivateChats: false
+      stylizePrivateChats: false,
+      enableEmojify: true
     });
     setTheme('dark');
   }
@@ -85,7 +103,7 @@ import BaseDialog from '$components/BaseDialog.svelte';
           data-testid="settings-modal-close"
           popovertarget="settings-modal"
           popovertargetaction="hide"
-          class="text-text-secondary hover:text-white p-1 rounded"
+          class="text-text-secondary hover:text-white p-1 rounded transition-colors"
           aria-label="Close settings"
         ><X size={18} /></button>
       </div>
@@ -93,7 +111,7 @@ import BaseDialog from '$components/BaseDialog.svelte';
 
     <div class="settings-body flex-1 overflow-y-auto p-6 space-y-6">
       <section class="settings-section" data-settings-section="appearance">
-        <h3 class="settings-section-header text-sm font-bold text-text uppercase tracking-wide mb-3 flex items-center gap-2"><Palette size={14} />Appearance</h3>
+        <h3 class="settings-section-header text-base font-bold text-accent uppercase tracking-wide mb-3 flex items-center gap-2"><Palette size={14} />Appearance</h3>
         <div class="space-y-3">
           <div>
             <label for="theme-selector" class="block text-sm text-text-secondary mb-1">Theme</label>
@@ -111,7 +129,7 @@ import BaseDialog from '$components/BaseDialog.svelte';
           </div>
 
           <div>
-            <label for="font-family" class="block text-sm text-text-secondary mb-1">Font Family</label>
+            <label for="font-family" class="block text-sm text-text-secondary mb-1 flex items-center gap-1"><Type size={14} class="shrink-0" />Font Family</label>
             <input
               id="font-family"
               data-testid="font-family-input"
@@ -124,7 +142,7 @@ import BaseDialog from '$components/BaseDialog.svelte';
           </div>
 
           <div>
-            <label for="font-size" class="block text-sm text-text-secondary mb-1">Font Size</label>
+            <label for="font-size" class="block text-sm text-text-secondary mb-1 flex items-center gap-1"><Hash size={14} class="shrink-0" />Font Size</label>
             <div class="flex flex-col gap-1">
               <div class="flex items-center gap-2">
                 <input
@@ -160,7 +178,7 @@ import BaseDialog from '$components/BaseDialog.svelte';
           </div>
 
           <div>
-            <label for="custom-css" class="block text-sm text-text-secondary mb-1">Custom CSS</label>
+            <label for="custom-css" class="block text-sm text-text-secondary mb-1 flex items-center gap-1"><Code size={14} class="shrink-0" />Custom CSS</label>
             <textarea
               id="custom-css"
               data-testid="custom-css-textarea"
@@ -175,10 +193,10 @@ import BaseDialog from '$components/BaseDialog.svelte';
       </section>
 
       <section class="settings-section" data-settings-section="display">
-        <h3 class="settings-section-header text-sm font-bold text-text uppercase tracking-wide mb-3 flex items-center gap-2"><Monitor size={14} />Display</h3>
+        <h3 class="settings-section-header text-base font-bold text-accent uppercase tracking-wide mb-3 flex items-center gap-2"><Monitor size={14} />Display</h3>
         <div class="space-y-2">
           <label class="settings-option flex items-center justify-between py-2" data-settings-option="showNicklist">
-            <span class="settings-option-label text-sm text-text">Show nicklist</span>
+            <span class="settings-option-label text-sm text-text flex items-center gap-2"><Users size={14} class="text-text-secondary shrink-0" />Show nicklist</span>
             <input
               type="checkbox"
               checked={$settings.showNicklist}
@@ -188,19 +206,8 @@ import BaseDialog from '$components/BaseDialog.svelte';
             />
           </label>
 
-          <label class="settings-option flex items-center justify-between py-2" data-settings-option="onlyUnread">
-            <span class="settings-option-label text-sm text-text">Only show buffers with unread messages</span>
-            <input
-              type="checkbox"
-              checked={$settings.onlyUnread}
-              onchange={() => updateSettings({ onlyUnread: !$settings.onlyUnread })}
-              class="w-4 h-4"
-              data-settings-checkbox="onlyUnread"
-            />
-          </label>
-
           <label class="settings-option flex items-center justify-between py-2" data-settings-option="noembed">
-            <span class="settings-option-label text-sm text-text">Hide embedded content by default</span>
+            <span class="settings-option-label text-sm text-text flex items-center gap-2"><ImageOff size={14} class="text-text-secondary shrink-0" />Hide embedded content by default</span>
             <input
               type="checkbox"
               checked={$settings.noembed}
@@ -211,7 +218,7 @@ import BaseDialog from '$components/BaseDialog.svelte';
           </label>
 
           <label class="settings-option flex items-center justify-between py-2" data-settings-option="orderbyserver">
-            <span class="settings-option-label text-sm text-text">Hierarchical buffer view (group by server)</span>
+            <span class="settings-option-label text-sm text-text flex items-center gap-2"><FolderTree size={14} class="text-text-secondary shrink-0" />Hierarchical buffer view (group by server)</span>
             <input
               type="checkbox"
               checked={$settings.orderbyserver}
@@ -221,30 +228,8 @@ import BaseDialog from '$components/BaseDialog.svelte';
             />
           </label>
 
-        <label class="settings-option flex items-center justify-between py-2" data-settings-option="readlineBindings">
-            <span class="settings-option-label text-sm text-text">Enable readline keybindings (Ctrl+A/E/U/W/B/F)</span>
-            <input
-              type="checkbox"
-              checked={$settings.readlineBindings}
-              onchange={() => updateSettings({ readlineBindings: !$settings.readlineBindings })}
-              class="w-4 h-4"
-              data-settings-checkbox="readlineBindings"
-            />
-          </label>
-
-          <label class="settings-option flex items-center justify-between py-2" data-settings-option="enableQuickKeys">
-            <span class="settings-option-label text-sm text-text">Use Alt+[0-9] to switch buffers</span>
-            <input
-              type="checkbox"
-              checked={$settings.enableQuickKeys}
-              onchange={() => updateSettings({ enableQuickKeys: !$settings.enableQuickKeys })}
-              class="w-4 h-4"
-              data-settings-checkbox="enableQuickKeys"
-            />
-          </label>
-
           <label class="settings-option flex items-center justify-between py-2" data-settings-option="stylizePrivateChats">
-            <span class="settings-option-label text-sm text-text">Stylize private chats as bubbles</span>
+            <span class="settings-option-label text-sm text-text flex items-center gap-2"><MessageCircle size={14} class="text-text-secondary shrink-0" />Stylize private chats as bubbles</span>
             <input
               type="checkbox"
               checked={$settings.stylizePrivateChats}
@@ -257,11 +242,61 @@ import BaseDialog from '$components/BaseDialog.svelte';
         </div>
       </section>
 
+      <section class="settings-section" data-settings-section="behaviour">
+        <h3 class="settings-section-header text-base font-bold text-accent uppercase tracking-wide mb-3 flex items-center gap-2"><Cog size={14} />Behaviour</h3>
+        <div class="space-y-2">
+          <label class="settings-option flex items-center justify-between py-2" data-settings-option="onlyUnread">
+            <span class="settings-option-label text-sm text-text flex items-center gap-2"><ListFilter size={14} class="text-text-secondary shrink-0" />Only show buffers with unread messages</span>
+            <input
+              type="checkbox"
+              checked={$settings.onlyUnread}
+              onchange={() => updateSettings({ onlyUnread: !$settings.onlyUnread })}
+              class="w-4 h-4"
+              data-settings-checkbox="onlyUnread"
+            />
+          </label>
+
+          <label class="settings-option flex items-center justify-between py-2" data-settings-option="readlineBindings">
+            <span class="settings-option-label text-sm text-text flex items-center gap-2"><Keyboard size={14} class="text-text-secondary shrink-0" />Enable readline keybindings (Ctrl+A/E/U/W/B/F)</span>
+            <input
+              type="checkbox"
+              checked={$settings.readlineBindings}
+              onchange={() => updateSettings({ readlineBindings: !$settings.readlineBindings })}
+              class="w-4 h-4"
+              data-settings-checkbox="readlineBindings"
+            />
+          </label>
+
+          <label class="settings-option flex items-center justify-between py-2" data-settings-option="enableQuickKeys">
+            <span class="settings-option-label text-sm text-text flex items-center gap-2"><ArrowLeftRight size={14} class="text-text-secondary shrink-0" />Use Alt+[0-9] to switch buffers</span>
+            <input
+              type="checkbox"
+              checked={$settings.enableQuickKeys}
+              onchange={() => updateSettings({ enableQuickKeys: !$settings.enableQuickKeys })}
+              class="w-4 h-4"
+              data-settings-checkbox="enableQuickKeys"
+            />
+          </label>
+
+          <label class="settings-option flex items-center justify-between py-2" data-settings-option="enableEmojify">
+            <span class="settings-option-label text-sm text-text flex items-center gap-2"><SmilePlus size={14} class="text-text-secondary shrink-0" />Replace emoji shortcodes while typing (<code>:beer:</code> → 🍺)</span>
+            <input
+              type="checkbox"
+              checked={$settings.enableEmojify}
+              onchange={() => updateSettings({ enableEmojify: !$settings.enableEmojify })}
+              class="w-4 h-4"
+              data-testid="enableEmojify-checkbox"
+              data-settings-checkbox="enableEmojify"
+            />
+          </label>
+        </div>
+      </section>
+
       <section class="settings-section" data-settings-section="notifications">
-        <h3 class="settings-section-header text-sm font-bold text-text uppercase tracking-wide mb-3 flex items-center gap-2"><Bell size={14} />Notifications</h3>
+        <h3 class="settings-section-header text-base font-bold text-accent uppercase tracking-wide mb-3 flex items-center gap-2"><Bell size={14} />Notifications</h3>
         <div class="space-y-2">
           <label class="settings-option flex items-center justify-between py-2" data-settings-option="useFavico">
-            <span class="settings-option-label text-sm text-text">Display unread count in favicon</span>
+            <span class="settings-option-label text-sm text-text flex items-center gap-2"><Eye size={14} class="text-text-secondary shrink-0" />Display unread count in favicon</span>
             <input
               type="checkbox"
               checked={$settings.useFavico}
@@ -273,7 +308,7 @@ import BaseDialog from '$components/BaseDialog.svelte';
           </label>
 
           <label class="settings-option flex items-center justify-between py-2" data-settings-option="soundnotification">
-            <span class="settings-option-label text-sm text-text">Play sound on notification</span>
+            <span class="settings-option-label text-sm text-text flex items-center gap-2"><Volume2 size={14} class="text-text-secondary shrink-0" />Play sound on notification</span>
             <input
               type="checkbox"
               checked={$settings.soundnotification}
@@ -287,7 +322,7 @@ import BaseDialog from '$components/BaseDialog.svelte';
           {#if notifSupported}
               {#if notifPermissionStatus === 'granted'}
                 <div class="notification-status granted flex items-center gap-2 py-1">
-                  <span class="text-xs text-green-400 font-medium">✓ Granted</span>
+                  <span         class="text-xs text-green-400 font-medium transition-opacity">✓ Granted</span>
                 </div>
               {:else if notifPermissionStatus === 'denied'}
                 <div class="notification-status denied space-y-1">
@@ -312,10 +347,10 @@ import BaseDialog from '$components/BaseDialog.svelte';
       </section>
 
       <section class="settings-section" data-settings-section="advanced">
-        <h3 class="settings-section-header text-sm font-bold text-text uppercase tracking-wide mb-3 flex items-center gap-2"><Sliders size={14} />Advanced</h3>
+        <h3 class="settings-section-header text-base font-bold text-accent uppercase tracking-wide mb-3 flex items-center gap-2"><Sliders size={14} />Advanced</h3>
         <div class="space-y-2">
           <label class="settings-option flex items-center justify-between py-2" data-settings-option="enableMathjax">
-            <span class="settings-option-label text-sm text-text">Enable LaTeX math rendering (KaTeX)</span>
+            <span class="settings-option-label text-sm text-text flex items-center gap-2"><Sigma size={14} class="text-text-secondary shrink-0" />Enable LaTeX math rendering (KaTeX)</span>
             <input
               type="checkbox"
               checked={$settings.enableMathjax}
@@ -326,7 +361,7 @@ import BaseDialog from '$components/BaseDialog.svelte';
           </label>
 
          <div>
-             <label for="imgur-token" class="block text-sm text-text-secondary mb-1">Imgur API Token</label>
+             <label for="imgur-token" class="block text-sm text-text-secondary mb-1 flex items-center gap-1"><Image size={14} class="shrink-0" />Imgur API Token</label>
              <FormInput
                id="imgur-token"
                type="text"
@@ -337,7 +372,7 @@ import BaseDialog from '$components/BaseDialog.svelte';
            </div>
 
            <div>
-             <label for="imgur-album" class="block text-sm text-text-secondary mb-1">Imgur Album Hash</label>
+             <label for="imgur-album" class="block text-sm text-text-secondary mb-1 flex items-center gap-1"><Image size={14} class="shrink-0" />Imgur Album Hash</label>
              <FormInput
                id="imgur-album"
                type="text"
@@ -350,10 +385,10 @@ import BaseDialog from '$components/BaseDialog.svelte';
       </section>
 
       <section class="settings-section" data-settings-section="connection">
-        <h3 class="settings-section-header text-sm font-bold text-text uppercase tracking-wide mb-3 flex items-center gap-2"><Plug size={14} />Connection</h3>
+        <h3 class="settings-section-header text-base font-bold text-accent uppercase tracking-wide mb-3 flex items-center gap-2"><Plug size={14} />Connection</h3>
         <div class="space-y-2">
           <label class="settings-option flex items-center justify-between py-2" data-settings-option="savepassword">
-            <span class="settings-option-label text-sm text-text">Save password in browser</span>
+            <span class="settings-option-label text-sm text-text flex items-center gap-2"><Lock size={14} class="text-text-secondary shrink-0" />Save password in browser</span>
             <input
               type="checkbox"
               checked={$settings.savepassword}
@@ -365,7 +400,7 @@ import BaseDialog from '$components/BaseDialog.svelte';
 
           {#if $settings.savepassword}
             <label class="settings-option flex items-center justify-between py-2" data-settings-option="autoconnect">
-              <span class="settings-option-label text-sm text-text">Automatically connect</span>
+              <span class="settings-option-label text-sm text-text flex items-center gap-2"><LogIn size={14} class="text-text-secondary shrink-0" />Automatically connect</span>
               <input
                 type="checkbox"
                 checked={$settings.autoconnect}
