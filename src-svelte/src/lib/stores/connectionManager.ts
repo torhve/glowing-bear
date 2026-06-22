@@ -52,6 +52,7 @@ export async function connect(host: string, port: number, path: string, password
         rejectPromise = reject;
         ws = new WebSocket(url);
         const connectStart = Date.now();
+        const genAtConnect = connectionGeneration;
         ws.binaryType = 'arraybuffer';
 
         ws.onopen = async () => {
@@ -230,6 +231,8 @@ export async function connect(host: string, port: number, path: string, password
         };
 
         ws.onclose = (evt) => {
+            // If connection generation has changed, connect() replaced this WS — ignore
+            if (genAtConnect !== connectionGeneration) return;
             // Reject all pending callbacks to unblock awaiting sendAsync promises
             Object.keys(callbacks).forEach(k => {
                 const id = parseInt(k, 10);
@@ -294,11 +297,6 @@ export async function connect(host: string, port: number, path: string, password
             } else if (evt.code === 403 || evt.code === 401) {
                 // Auth failure after reconnect — show password error and toast
                 setErrors({ passwordError: true });
-                if (connectionData) {
-                    showDisconnectToast(connectionData as [string, number, string, string, boolean, boolean]);
-                }
-            } else if (evt.code === 1000) {
-                // Normal/close intentionally — show toast but don't auto-reconnect
                 if (connectionData) {
                     showDisconnectToast(connectionData as [string, number, string, string, boolean, boolean]);
                 }

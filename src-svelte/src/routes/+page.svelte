@@ -46,12 +46,13 @@
 
 
   async function tryAutoConnect() {
-    if (!$settings.autoconnect || !$settings.savepassword || !$settings.hostField || !$settings.password) {
+    const s = get(settings);
+    if (!s.autoconnect || !s.savepassword || !s.hostField || !s.password) {
       return;
     }
     try {
-      const { host: parsedHost, port: parsedPort, path: parsedPath } = parseRelayUrl($settings.hostField, $settings.port);
-      await connect(parsedHost, parsedPort, parsedPath, $settings.password, $settings.tls, false);
+      const { host: parsedHost, port: parsedPort, path: parsedPath } = parseRelayUrl(s.hostField, s.port);
+      await connect(parsedHost, parsedPort, parsedPath, s.password, s.tls, false);
       parseHashAndNavigate();
     } catch (e) {
       console.warn('Auto-connect failed:', e);
