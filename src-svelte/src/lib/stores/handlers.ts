@@ -609,10 +609,13 @@ export function handleHotlistInfo(message: ProtocolMessage) {
     const hotlist = message.objects[0]?.content as HotlistEntry[];
     if (!hotlist) return;
 
-    for (const entry of hotlist) {
-        const bufName = currentBuffers[entry.buffer]?.shortName || entry.buffer;
-        console.log(`${bufName}: unread=${entry.count[1]}, highlight=${entry.count[2]}, private=${entry.count[3]}`);
-    }
+    console.table(hotlist.map(entry => ({
+        buffer: entry.buffer,
+        shortName: currentBuffers[entry.buffer]?.shortName || entry.buffer,
+        unread: entry.count[1],
+        highlight: entry.count[2],
+        private: entry.count[3],
+    })));
 
     // Build immutable copies of affected buffers and servers to ensure
     // Svelte reactivity triggers correctly when unread counts change.
@@ -742,13 +745,17 @@ export function handleNicklist(message: ProtocolMessage) {
     const current = get(buffers);
 
     // Log final nicklist structure
-    for (const id of modifiedBuffers) {
-        const buf = current[id];
-        if (buf) {
-            const groups = Object.keys(buf.nicklist || {});
-            const nickCounts = groups.map(g => `${g}:${(buf.nicklist?.[g]?.nicks?.length ?? 0)}`).join(', ');
-            if (DEBUG_NICKLIST) console.log('[nicklist] after processing buffer', buf.shortName, 'groups:', groups.join(', '), '- nicks per group:', nickCounts);
+    if (DEBUG_NICKLIST) {
+        const summary = [];
+        for (const id of modifiedBuffers) {
+            const buf = current[id];
+            if (buf) {
+                const groups = Object.keys(buf.nicklist || {});
+                const nickCounts = groups.map(g => `${g}:${(buf.nicklist?.[g]?.nicks?.length ?? 0)}`).join(', ');
+                summary.push({ buffer: buf.shortName, groups: groups.join(', '), nicks: nickCounts });
+            }
         }
+        console.table(summary);
     }
 
     const updated = { ...current };
@@ -864,13 +871,17 @@ export function handleNicklistDiff(message: ProtocolMessage) {
     const current = get(buffers);
 
     // Log final state
-    for (const id of modifiedBuffers) {
-        const buf = current[id];
-        if (buf) {
-            const groups = Object.keys(buf.nicklist || {});
-            const nickCounts = groups.map(g => `${g}:${(buf.nicklist?.[g]?.nicks?.length ?? 0)}`).join(', ');
-            if (DEBUG_NICKLIST) console.log('[nicklist] after diff buffer', buf.shortName, 'groups:', groups.join(', '), '- nicks per group:', nickCounts);
+    if (DEBUG_NICKLIST) {
+        const summary = [];
+        for (const id of modifiedBuffers) {
+            const buf = current[id];
+            if (buf) {
+                const groups = Object.keys(buf.nicklist || {});
+                const nickCounts = groups.map(g => `${g}:${(buf.nicklist?.[g]?.nicks?.length ?? 0)}`).join(', ');
+                summary.push({ buffer: buf.shortName, groups: groups.join(', '), nicks: nickCounts });
+            }
         }
+        console.table(summary);
     }
 
     const updated = { ...current };
