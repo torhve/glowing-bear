@@ -1292,6 +1292,81 @@
 
   --ease-out-smooth: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-out-normal: cubic-bezier(0.25, 1, 0.5, 1);
+
+  --animate-toast-enter: toast-enter 0.2s ease-out;
+  --animate-toast-exit: toast-exit 0.2s ease-in forwards;
+}
+
+/* Custom animations — must be outside @layer so Tailwind v4 doesn't strip them */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+  20%, 40%, 60%, 80% { transform: translateX(4px); }
+}
+
+.shake {
+  animation: shake 0.5s ease-in-out;
+}
+
+@keyframes dotBlink {
+  0%, 80%, 100% { opacity: 0.2; }
+  40% { opacity: 1; }
+}
+
+.loading-dots span {
+  animation: dotBlink 1.4s infinite both;
+  display: inline-block;
+}
+.loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+.loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes fadeInUp {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-item {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: fadeInUp 0.4s var(--ease-out-smooth) forwards;
+}
+.fade-item:nth-child(1) { animation-delay: 0.05s; }
+.fade-item:nth-child(2) { animation-delay: 0.1s; }
+.fade-item:nth-child(3) { animation-delay: 0.15s; }
+.fade-item:nth-child(4) { animation-delay: 0.2s; }
+.fade-item:nth-child(5) { animation-delay: 0.25s; }
+.fade-item:nth-child(6) { animation-delay: 0.3s; }
+.fade-item:nth-child(7) { animation-delay: 0.35s; }
+
+.buffer-item-enter {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: fadeInUp 0.4s var(--ease-out-smooth) forwards;
+  animation-delay: calc(var(--i, 0) * 30ms);
+}
+
+@keyframes toast-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes toast-exit {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(100%); }
+}
+
+.toast-item {
+  animation: toast-enter 0.2s ease-out;
+}
+
+.toast-removing .toast-item {
+  animation: toast-exit 0.2s ease-in forwards;
+}
+
+.toast-wrapper {
+  position: relative;
 }
 
 @layer base, components, utilities;
@@ -1470,55 +1545,6 @@
   .cwb-gray { background-color: var(--gb-cob-gray); }
   .cwb-brown { background-color: var(--gb-cob-brown); }
   .cwb-default { background-color: var(--gb-bg); }
-
-  @keyframes shake {
-    0%, 100% { transform: translateX(0); }
-    10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
-    20%, 40%, 60%, 80% { transform: translateX(4px); }
-  }
-
-  .shake {
-    animation: shake 0.5s ease-in-out;
-  }
-
-  @keyframes dotBlink {
-    0%, 80%, 100% { opacity: 0.2; }
-    40% { opacity: 1; }
-  }
-
-  .loading-dots span {
-    animation: dotBlink 1.4s infinite both;
-    display: inline-block;
-  }
-  .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
-  .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
-
-  @keyframes fadeInUp {
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .fade-item {
-    opacity: 0;
-    transform: translateY(8px);
-    animation: fadeInUp 0.4s var(--ease-out-smooth) forwards;
-  }
-  .fade-item:nth-child(1) { animation-delay: 0.05s; }
-  .fade-item:nth-child(2) { animation-delay: 0.1s; }
-  .fade-item:nth-child(3) { animation-delay: 0.15s; }
-  .fade-item:nth-child(4) { animation-delay: 0.2s; }
-  .fade-item:nth-child(5) { animation-delay: 0.25s; }
-  .fade-item:nth-child(6) { animation-delay: 0.3s; }
-  .fade-item:nth-child(7) { animation-delay: 0.35s; }
-
-  .buffer-item-enter {
-    opacity: 0;
-    transform: translateY(8px);
-    animation: fadeInUp 0.4s var(--ease-out-smooth) forwards;
-    animation-delay: calc(var(--i, 0) * 30ms);
-  }
 
   .btn-glow {
     transition: box-shadow 0.3s var(--ease-out-smooth), background-color 0.2s ease;
