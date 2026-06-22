@@ -29,7 +29,7 @@ test('does NOT linkify javascript: URLs in messages', async () => {
     await switchToBuffer(page, '#glowing-bear');
     await botSay('Check out javascript:void(document.body.innerHTML="HACKED")');
     // Use filter with hasText to target the specific message row.
-    const msgCell = page.locator('[data-testid="bufferline-row"] td.message').filter({ hasText: 'javascript:void' }).first();
+    const msgCell = page.locator('[data-testid="bufferline-row"] td.message').filter({ hasText: 'document.body' }).first();
     await expect(msgCell).toBeVisible({ timeout: 10000 });
     const messageLinks = msgCell.locator('a');
     await expect(messageLinks).toHaveCount(0);
