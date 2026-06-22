@@ -225,6 +225,7 @@ export interface Settings {
     debugBuildMetadata: boolean;
     hotlistsync: boolean;
     stylizePrivateChats: boolean;
+    enableEmojify: boolean;
     angularTimeFormat?: string;
     supports_formatting_date?: boolean;
 }
