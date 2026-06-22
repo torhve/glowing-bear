@@ -2,7 +2,7 @@ import { get } from 'svelte/store';
 import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, incrementReconnectAttempts } from '$lib/stores/connectionStore';
 import { buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer, clearAllUnread } from '$lib/stores/models';
 import { settings } from '$lib/stores/settings';
-import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist } from '$lib/stores/handlers';
+import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist, setOnUpgrade, setOnUpgradeEnded } from '$lib/stores/handlers';
 import { addToast, removeToast, clearToasts, toastStore } from '$lib/toast';
 import { onDisconnect } from '$lib/notifications';
 // TODO: Re-enable nick color customization when desired
@@ -52,6 +52,19 @@ export async function connect(host: string, port: number, path: string, password
     }
     connectionData = [host, port, path, password, tls, noCompression];
     setConnectionStatus('connecting');
+
+    // Register upgrade callbacks so handlers can trigger disconnect/reconnect.
+    setOnUpgrade(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.close(1000, 'WeeChat upgrading');
+        }
+    });
+    setOnUpgradeEnded(() => {
+        const [h, p, path, pw, tls, noComp] = connectionData || [null, 0, '', '', false, false];
+        if (h !== null) {
+            connect(h, p, path, pw, tls, noComp).catch(() => {});
+        }
+    });
 
     let rejectPromise: ((e: Error) => void) | null = null;
 
