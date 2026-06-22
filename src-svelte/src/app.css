@@ -1297,6 +1297,7 @@
   :root {
     --gb-repeated-time: #444;
     --gb-repeated-prefix: #555;
+    --gb-line-height: 1.2;
   }
 
   body:not([data-app-ready]) {
