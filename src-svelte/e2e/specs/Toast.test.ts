@@ -20,8 +20,9 @@ test.beforeEach(async () => {
     page.on('pageerror', (error) => {
         if (error.message?.includes('effect_orphan')) return;
     });
-    // Clear any leftover toasts before each test
+    // Clear any leftover toasts before each test, then wait for exit animations to complete
     await page.evaluate(() => (window as any).__toastStore?.set([]));
+    await page.waitForTimeout(500);
 });
 
 test('renders info toast with message', async () => {

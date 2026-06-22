@@ -28,48 +28,59 @@ test.beforeEach(async () => {
     });
 });
 
+// Finds the bufferline-row containing a message with the given text
+function rowForMessage(urlPattern: string) {
+    return page.locator('[data-testid="bufferline-row"]').filter({
+        has: page.locator(`td[data-message*="${urlPattern}"]`),
+    }).first();
+}
+
 test('shows "Show Image" button when noembed is enabled', async () => {
     // noembed=true is the default after fix
     await botSay('https://picsum.photos/200/300.jpg?1');
-    const showBtn = page.getByTestId('show-embed').filter({ hasText: 'Show Image' }).first();
-    await expect(showBtn).toBeVisible({ timeout: 10000 });
+    const row = rowForMessage('picsum.photos/200/300.jpg?1');
+    await expect(row.locator('[data-testid="show-embed"]')).toBeVisible({ timeout: 10000 });
 });
 
 test('clicking Show Image reveals the embed', async () => {
     await botSay('https://picsum.photos/200/300.jpg?2');
-    const showBtn = page.getByTestId('show-embed').filter({ hasText: 'Show Image' }).last();
+    const row = rowForMessage('picsum.photos/200/300.jpg?2');
+    const showBtn = row.locator('[data-testid="show-embed"]');
+    await expect(showBtn).toBeVisible({ timeout: 10000 });
     await showBtn.click();
-    const hideBtn = page.getByTestId('hide-embed').filter({ hasText: 'Hide Image' }).last();
-    await expect(hideBtn).toBeVisible({ timeout: 10000 });
-    const embed = page.getByTestId('plugin-embed').last();
-    await expect(embed).toBeVisible();
-    await expect(embed.locator('img')).toBeVisible();
+    // Verify the embed area became visible within the same row
+    await expect(row.locator('.embed-area')).toBeVisible({ timeout: 10000 });
+    await expect(row.locator('[data-testid="plugin-embed"]')).toBeVisible();
+    await expect(row.locator('[data-testid="plugin-embed"] img')).toBeVisible();
 });
 
 test('clicking Hide Image hides the embed again', async () => {
     await botSay('https://picsum.photos/200/300.jpg?3');
-    const showBtn = page.getByTestId('show-embed').filter({ hasText: 'Show Image' }).last();
+    const row = rowForMessage('picsum.photos/200/300.jpg?3');
+    const showBtn = row.locator('[data-testid="show-embed"]');
+    await expect(showBtn).toBeVisible({ timeout: 10000 });
     await showBtn.click();
-    // Wait for a hide button to appear, then click it
-    const hideBtn = page.getByTestId('hide-embed').filter({ hasText: 'Hide Image' }).last();
-    await expect(hideBtn).toBeVisible({ timeout: 10000 });
-    await hideBtn.click();
-    // After hiding, the embed for this message should be hidden (show button reappears)
-    const msgCell = page.locator('td[data-message*="picsum.photos/200/300.jpg?3"]').first();
-    await expect(msgCell.locator('[data-testid="plugin-embed"]')).not.toBeVisible();
-    await expect(msgCell.locator('[data-testid="show-embed"]')).toBeVisible();
+    // Wait for hide button to appear in the same row, then click it
+    await expect(row.locator('[data-testid="hide-embed"]')).toBeVisible({ timeout: 10000 });
+    await row.locator('[data-testid="hide-embed"]').click();
+    // After hiding, the embed should be hidden and show button reappears
+    await expect(row.locator('.embed-area')).not.toBeVisible({ timeout: 5000 });
+    await expect(row.locator('[data-testid="show-embed"]')).toBeVisible();
 });
 
 test('handles multiple images in one message', async () => {
     await irc.sendMessage('#glowing-bear', 'See https://picsum.photos/200/300.jpg?4 and https://picsum.photos/200/300.jpg?5');
-    const showButtons = page.getByTestId('show-embed').filter({ hasText: 'Show Image' });
+    const row = rowForMessage('picsum.photos/200/300.jpg?4');
+    const showButtons = row.locator('[data-testid="show-embed"]');
+    await expect(showButtons).toHaveCount(2, { timeout: 10000 });
     await expect(showButtons.nth(0)).toBeVisible();
-    await expect(showButtons.nth(-1)).toBeVisible();
+    await expect(showButtons.nth(1)).toBeVisible();
 });
 
 test('NSFW image shows yellow warning button', async () => {
     await irc.sendMessage('#glowing-bear', 'nsfw https://picsum.photos/200/300.jpg?6');
-    const showBtn = page.getByTestId('show-embed').filter({ hasText: 'Show Image' }).last();
+    const row = rowForMessage('picsum.photos/200/300.jpg?6');
+    const showBtn = row.locator('[data-testid="show-embed"]');
     await expect(showBtn).toBeVisible({ timeout: 10000 });
     // NSFW button should have yellow/amber/warning background-color
     const color = await showBtn.evaluate(el => getComputedStyle(el).backgroundColor);
@@ -79,9 +90,8 @@ test('NSFW image shows yellow warning button', async () => {
 test('noembed=false shows embeds automatically', async () => {
     await setSettings(page, { noembed: false });
     await botSay('https://picsum.photos/200/300.jpg?7');
-    await expect(page.getByTestId('plugin-embed').last().locator('img')).toBeVisible({ timeout: 10000 });
+    const row = rowForMessage('picsum.photos/200/300.jpg?7');
+    await expect(row.locator('[data-testid="plugin-embed"] img')).toBeVisible({ timeout: 10000 });
     // New messages should have no "Show Image" button when noembed=false
-    const showButtons = page.getByTestId('show-embed');
-    // Only check that the latest message's embed area has no show button
-    await expect(page.locator('td[data-message*="picsum.photos/200/300.jpg?7"]').first().locator('[data-testid="show-embed"]')).not.toBeVisible();
+    await expect(row.locator('[data-testid="show-embed"]')).not.toBeVisible();
 });

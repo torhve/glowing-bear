@@ -15,6 +15,8 @@ test.beforeAll(async ({ browser }) => {
 });
 
 test.afterAll(async () => {
+    // Reset channel topic to prevent cross-test contamination
+    await irc.setTopic('#glowing-bear', '');
     await page.close();
 });
 
