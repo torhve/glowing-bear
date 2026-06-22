@@ -4,7 +4,7 @@
     labelledby,
     noAnimation = false,
     children,
-    ...attrs // eslint-disable-line svelte/valid-compile
+    ...attrs
   }: {
     id: string;
     labelledby?: string;

@@ -214,6 +214,7 @@ const styleMatchers: Array<{ regex: RegExp; fn: StyleMatcherFn }> = [
     },
     // Foreground color: F + optional attributes + STD or EXT
     {
+        // eslint-disable-next-line no-control-regex
         regex: /^F(?:([*!_|]*)(\d{2})|@([\x01\x02\x03\x04*!_|]*)(\d{5}))/,
         fn: (txt, m) => {
             if (m[2]) {
@@ -232,6 +233,7 @@ const styleMatchers: Array<{ regex: RegExp; fn: StyleMatcherFn }> = [
     },
     // Foreground + background with optional attributes (WeeChat 2.6+ uses ~ or ,)
     {
+        // eslint-disable-next-line no-control-regex
         regex: /^\*(?:([\x01\x02\x03\x04*!_|]*)(\d{2})|@([\x01\x02\x03\x04*!_|]*)(\d{5}))[,~](\d{2}|@\d{5})/,
         fn: (txt, m) => {
             let fgColor: ColorInfo;
@@ -248,6 +250,7 @@ const styleMatchers: Array<{ regex: RegExp; fn: StyleMatcherFn }> = [
     },
     // Foreground color with * (+ attributes) - fallback
     {
+        // eslint-disable-next-line no-control-regex
         regex: /^\*([\x01\x02\x03\x04*!_|]*)(\d{2}|@\d{5})/,
         fn: (txt, m) => ({
             fgColor: getColorObj(m[2]!), bgColor: null,

@@ -166,6 +166,7 @@
           <span class="{group.classes}">
             {#each group.tokens as token, ti (ti)}
               {#if token.type === 'link'}
+                <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
                 <a href={token.value} target="_blank" rel="noopener noreferrer" class="irc-link">{token.value}</a>
               {:else if token.type === 'code'}
                 <span class="hidden-bracket">{token.delimiter}</span>
@@ -187,6 +188,7 @@
           <span class="token-group {group.classes}">
             {#each group.tokens as token, ti (ti)}
               {#if token.type === 'link'}
+                <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
                 <a href={token.value} target="_blank" rel="noopener noreferrer" class="irc-link">{token.value}</a>
               {:else if token.type === 'code'}
                 <span class="hidden-bracket">{token.delimiter}</span>
@@ -222,6 +224,7 @@
             <span class="token-group {group.classes}">
               {#each group.tokens as token, ti (ti)}
                 {#if token.type === 'link'}
+                  <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
                   <a href={token.value} target="_blank" rel="noopener noreferrer" class="irc-link">{token.value}</a>
                 {:else if token.type === 'code'}
                   <span class="hidden-bracket">{token.delimiter}</span>
@@ -258,6 +261,7 @@
             <span class="token-group {group.classes}">
               {#each group.tokens as token, ti (ti)}
                 {#if token.type === 'link'}
+                  <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
                   <a href={token.value} target="_blank" rel="noopener noreferrer" class="irc-link">{token.value}</a>
                 {:else if token.type === 'code'}
                   <span class="hidden-bracket">{token.delimiter}</span>
@@ -282,6 +286,7 @@
           <span class="{group.classes}">
             {#each group.tokens as token, ti (ti)}
               {#if token.type === 'link'}
+                <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
                 <a href={token.value} target="_blank" rel="noopener noreferrer" class="irc-link">{token.value}</a>
               {:else if token.type === 'code'}
                 <span class="hidden-bracket">{token.delimiter}</span>
@@ -310,7 +315,7 @@
       <td class="prefix">
         <span class="compact-prefix" class:repeated-prefix={isRepeatedPrefix}>
           <span onclick={handleMention} role="button" tabindex="0" class="mention-link" onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleMention(); } }}>
-            {#if message.showHiddenBrackets}<span class="hidden-bracket">{'<'}</span>{/if}
+            {#if message.showHiddenBrackets}<span class="hidden-bracket">&lt;</span>{/if}
             {#each message.prefix as part, pi (pi)}
               {@const iconType = getIconType(part)}
               {#if iconType}
@@ -329,7 +334,7 @@
                 <span class="prefix-part {(part.classes || []).join(' ')}">{part.text}</span>
               {/if}
             {/each}
-            {#if message.showHiddenBrackets}<span class="hidden-bracket">{'>'}</span>{/if}
+            {#if message.showHiddenBrackets}<span class="hidden-bracket">&gt;</span>{/if}
           </span>
         </span>
       </td>
@@ -347,6 +352,7 @@
             <span class="token-group {group.classes}">
               {#each group.tokens as token, ti (ti)}
                 {#if token.type === 'link'}
+                  <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
                   <a href={token.value} target="_blank" rel="noopener noreferrer" class="irc-link">{token.value}</a>
                 {:else if token.type === 'code'}
                   <span class="hidden-bracket">{token.delimiter}</span>

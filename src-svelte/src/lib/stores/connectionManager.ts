@@ -757,7 +757,7 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
     if (currentCallbackId > 1000) currentCallbackId = 0;
     const cbId = currentCallbackId;
 
-    let message: any;
+    let message: ProtocolMessage;
     try {
         message = await new Promise((resolve, reject) => {
             if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -878,6 +878,7 @@ export async function switchBuffer(bufferId: string): Promise<boolean> {
 
 // Schedule a hotlist query with debounce — resets timer on each call so rapid
 // buffer switches coalesce into a single request after switching settles.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function scheduleHotlistQuery(_bufferId: string) {
     if (hotlistDebounceTimer) clearTimeout(hotlistDebounceTimer);
     hotlistDebounceTimer = setTimeout(() => {
