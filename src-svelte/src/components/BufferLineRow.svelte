@@ -371,10 +371,7 @@
     padding: 2px 0 1px 0;
   }
 
-  .bufferline.highlight {
-    border-left: 3px solid var(--gb-accent, #f0ad4e);
-    padding-left: 4px;
-  }
+
 
   .time {
     text-align: right;
