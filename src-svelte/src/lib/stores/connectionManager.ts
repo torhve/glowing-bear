@@ -297,8 +297,13 @@ export async function connect(host: string, port: number, path: string, password
                 if (connectionData) {
                     showDisconnectToast(connectionData as [string, number, string, string, boolean, boolean]);
                 }
+            } else if (evt.code === 1000) {
+                // Normal/close intentionally — show toast but don't auto-reconnect
+                if (connectionData) {
+                    showDisconnectToast(connectionData as [string, number, string, string, boolean, boolean]);
+                }
             } else {
-                // Normal close or other codes — show toast and retry
+                // Other unexpected codes — show toast and retry
                 if (connectionData) {
                     showDisconnectToast(connectionData as [string, number, string, string, boolean, boolean]);
                 }
