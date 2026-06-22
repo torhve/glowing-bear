@@ -7,6 +7,7 @@ import { addToast, removeToast, toastStore } from '$lib/toast';
 // TODO: Re-enable nick color customization when desired
 // import { IDEAL_NICK_COLORS, IDEAL_COLOR_NICKS_IN_NICKLIST, shouldAutoApply } from '$lib/stores/nickColors';
 import { Protocol } from '$lib/weechat';
+import { sha256, pbkdf2 as nativePbkdf2, toHexString } from '$lib/utils/crypto';
 import type { ProtocolMessage } from '$lib/types';
 import { DEBUG_NICKLIST, DEBUG_WEECHAT_COMMANDS } from '$lib/debug';
 
@@ -57,9 +58,12 @@ export async function connect(host: string, port: number, path: string, password
                 Object.keys(callbacks).forEach(k => delete callbacks[parseInt(k, 10)]);
                 currentCallbackId = 0;
 
-                // Handshake — request pbkdf2+sha512 only if crypto.subtle is available
+                // Handshake — prefer pbkdf2+sha512, fallback to sha256 variants or plain
+                const algoList = hasCryptoSubtle
+                    ? 'pbkdf2+sha512:pbkdf2+sha256:sha512:sha256:plain'
+                    : 'pbkdf2+sha256:sha256:plain';
                 const handshakeMsg = Protocol.formatHandshake({
-                    password_hash_algo: hasCryptoSubtle ? 'pbkdf2+sha512' : 'plain',
+                    password_hash_algo: algoList,
                     compression: noCompression ? 'off' : 'zlib'
                 });
 
@@ -70,21 +74,48 @@ export async function connect(host: string, port: number, path: string, password
                 const nonce = hexStringToByte(content?.nonce || '');
                 const iterations = content?.password_hash_iterations || 0;
 
+                // PBKDF2 algorithms require a nonce from the server
+                const needsNonce: boolean = !passwordMethod || passwordMethod === '' || passwordMethod.startsWith('pbkdf2+');
+                if (nonce.length === 0 && needsNonce) {
+                    setErrors({ hashAlgorithmDisagree: true });
+                    reject(new Error('Server did not provide a nonce for PBKDF2 authentication'));
+                    if (ws) ws.close(1000, 'Missing nonce');
+                    return;
+                }
+
                 // Initialize connection — handle server's chosen hash algorithm
                 if (passwordMethod === 'pbkdf2+sha512') {
                     if (hasCryptoSubtle) {
                         await initializePBKDF2(password, nonce, iterations, 'SHA-512');
                     } else {
-                        // Server wants pbkdf2 but we lack crypto.subtle → report mismatch
+                        // Server wants pbkdf2+sha512 but we only support sha256 variants natively → error
                         setErrors({ hashAlgorithmDisagree: true });
-                        reject(new Error('Hash algorithm mismatch: server requires pbkdf2+sha512 but crypto.subtle is unavailable'));
-                        if (ws) ws.close(1000, 'Hash algorithm mismatch');
+                        reject(new Error('Unsupported hash algorithm: pbkdf2+sha512 (needs crypto.subtle)'));
+                        if (ws) ws.close(1000, 'Unsupported hash algorithm');
                         return;
                     }
-                } else if (passwordMethod === 'pbkdf2+sha256' && hasCryptoSubtle) {
-                    await initializePBKDF2(password, nonce, iterations, 'SHA-256');
-                } else if ((passwordMethod === 'sha256' || passwordMethod === 'sha512') && hasCryptoSubtle) {
-                    await initializeSHA(password, passwordMethod);
+                } else if (passwordMethod === 'pbkdf2+sha256') {
+                    if (hasCryptoSubtle) {
+                        await initializePBKDF2(password, nonce, iterations, 'SHA-256');
+                    } else {
+                        await initializePBKDF2Native(password, nonce, iterations);
+                    }
+                } else if (passwordMethod === 'sha256') {
+                    if (hasCryptoSubtle) {
+                        await initializeSHA(password, 'sha256');
+                    } else {
+                        await initializeSHANative(password);
+                    }
+                } else if (passwordMethod === 'sha512') {
+                    if (hasCryptoSubtle) {
+                        await initializeSHA(password, 'sha512');
+                    } else {
+                        // No native SHA-512 — report error
+                        setErrors({ hashAlgorithmDisagree: true });
+                        reject(new Error('Unsupported hash algorithm: sha512 (needs crypto.subtle)'));
+                        if (ws) ws.close(1000, 'Unsupported hash algorithm');
+                        return;
+                    }
                 } else if (passwordMethod === 'plain') {
                     const initMsg = Protocol.formatInit('plain:' + password, null);
                     // Fire-and-forget: WeeChat increments callback IDs so sendAsync would timeout
@@ -92,6 +123,14 @@ export async function connect(host: string, port: number, path: string, password
                         sendWs(initMsg, 'init(plain)');
                     }
                     await new Promise(r => setTimeout(r, 5));
+                } else if (!passwordMethod || passwordMethod === '') {
+                    // Empty password_hash_algo = WeeChat using non-default algo (pbkdf2+sha256).
+                    // Default to pbkdf2+sha256 when server doesn't explicitly report the algo.
+                    if (hasCryptoSubtle) {
+                        await initializePBKDF2(password, nonce, iterations, 'SHA-256');
+                    } else {
+                        await initializePBKDF2Native(password, nonce, iterations);
+                    }
                 } else if (passwordMethod && passwordMethod !== 'plain') {
                     // Unsupported algorithm — report error and abort
                     setErrors({ hashAlgorithmDisagree: true });
@@ -334,6 +373,38 @@ async function initializeSHA(password: string, method: 'sha256' | 'sha512') {
     const initMsg = Protocol.formatInit(`${method}:${hashHex}`, null);
     if (ws && ws.readyState === WebSocket.OPEN) {
         sendWs(initMsg, `init(${method})`);
+    }
+    await new Promise(r => setTimeout(r, 5));
+}
+
+// Native TypeScript SHA-256 fallback (no crypto.subtle required).
+async function initializeSHANative(password: string) {
+    const data = new TextEncoder().encode(password);
+    const hashHex = toHexString(sha256(data));
+
+    const initMsg = Protocol.formatInit(`sha256:${hashHex}`, null);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        sendWs(initMsg, 'init(sha256-native)');
+    }
+    await new Promise(r => setTimeout(r, 5));
+}
+
+// Native TypeScript PBKDF2-SHA256 fallback (no crypto.subtle required).
+async function initializePBKDF2Native(password: string, nonce: Uint8Array, iterations: number) {
+    const passwordArray = new TextEncoder().encode(password);
+    const clientNonce = crypto.getRandomValues(new Uint8Array(16));
+    const salt = concatenateTypedArrays(nonce, new Uint8Array([0x3A]), clientNonce);
+
+    const hashHexBytes = nativePbkdf2(passwordArray, salt, iterations, 32);
+    const hashHex = toHexString(hashHexBytes);
+    const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, '0')).join('');
+
+    const initMsg = Protocol.formatInit(
+        `pbkdf2+sha256:${saltHex}:${iterations}:${hashHex}`,
+        null
+    );
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        sendWs(initMsg, 'init(pbkdf2+sha256-native)');
     }
     await new Promise(r => setTimeout(r, 5));
 }

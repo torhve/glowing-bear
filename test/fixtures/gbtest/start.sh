@@ -103,8 +103,10 @@ fi
 
 if ! $RELAY_ALREADY_RUNNING; then
 	# Start WeeChat headless with fresh config
+	# Set algo BEFORE password so it gets hashed with pbkdf2+sha256
 	weechat-headless -d "$WEECHAT_HOME" \
 		--daemon \
+		-r "/set relay.network.password_hash_algo pbkdf2+sha256" \
 		-r "/set relay.network.password testpassword123" \
 		-r "/set relay.network.max_connections 32" \
 		-r "/relay add weechat $RELAY_PORT" \
