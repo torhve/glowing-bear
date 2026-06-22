@@ -1,9 +1,10 @@
 import { get } from 'svelte/store';
 import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, incrementReconnectAttempts } from '$lib/stores/connectionStore';
-import { buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer } from '$lib/stores/models';
+import { buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer, clearAllUnread } from '$lib/stores/models';
 import { settings } from '$lib/stores/settings';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist } from '$lib/stores/handlers';
 import { addToast, removeToast, clearToasts, toastStore } from '$lib/toast';
+import { onDisconnect } from '$lib/notifications';
 // TODO: Re-enable nick color customization when desired
 // import { IDEAL_NICK_COLORS, IDEAL_COLOR_NICKS_IN_NICKLIST, shouldAutoApply } from '$lib/stores/nickColors';
 import { Protocol } from '$lib/weechat';
@@ -655,6 +656,9 @@ export function disconnect() {
         // ws is already null — ensure stores are synchronized after failed/stale connection
         setConnectionStatus('disconnected');
     }
+    // Clear unread counts, reset document title, and cancel notifications for all disconnect paths
+    clearAllUnread();
+    onDisconnect();
 }
 
 export async function requestNicklist(bufferId: string) {
