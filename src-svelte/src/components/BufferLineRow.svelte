@@ -367,25 +367,33 @@
 <style>
   /* ===== Traditional table layout styles ===== */
   .bufferline {
-    line-height: 1;
+    line-height: var(--gb-line-height, 1.2);
     padding: 2px 0 1px 0;
   }
 
   .bufferline.highlight {
-    font-weight: bold;
+    border-left: 3px solid var(--gb-accent, #f0ad4e);
+    padding-left: 4px;
   }
 
   .time {
     text-align: right;
     padding: 0 2px 0 6px;
-    vertical-align: top;
+    vertical-align: middle;
+    font-size: var(--font-size, 14px);
+    font-family: var(--font-mono, monospace);
+  }
+
+  .time .compact-time {
+    display: inline-flex;
+    align-items: center;
   }
 
   @media (max-width: 640px) {
     .bufferline {
       display: flex;
       flex-wrap: wrap;
-      align-items: baseline;
+      align-items: center;
     }
 
     .time, .prefix, .message {
@@ -393,8 +401,10 @@
       width: auto;
       max-width: none;
       padding: 0;
-      vertical-align: baseline;
+      vertical-align: middle;
       border: none;
+      font-size: var(--font-size, 14px);
+      font-family: var(--font-mono, monospace);
     }
 
     .time {
@@ -408,13 +418,12 @@
       text-align: left;
       overflow: visible;
       text-overflow: clip;
-      font-family: inherit;
       padding: 0 3px 0 1px;
     }
 
     .prefix .compact-prefix {
       justify-content: flex-start;
-      align-items: baseline;
+      align-items: center;
     }
 
     .message {
@@ -441,25 +450,21 @@
   .prefix {
     max-width: 120px;
     padding: 0 4px 0 2px;
-    vertical-align: top;
+    vertical-align: middle;
     white-space: nowrap;
     text-align: right;
     border-right: 1px solid var(--gb-border, var(--color-border));
     overflow: hidden;
     text-overflow: ellipsis;
     box-sizing: border-box;
-    font-family: monospace;
-    font-size: 0.9em;
-  }
-
-  .bufferline.highlight .prefix {
-    font-weight: normal;
+    font-family: var(--font-mono, monospace);
+    font-size: var(--font-size, 14px);
   }
 
   .prefix .compact-prefix {
     display: flex;
     justify-content: flex-end;
-    align-items: baseline;
+    align-items: center;
   }
 
   .prefix .compact-prefix.repeated-prefix {
@@ -468,9 +473,11 @@
 
   .message {
     padding: 1px 2px 1px 4px;
-    vertical-align: top;
+    vertical-align: middle;
     white-space: preserve-breaks;
     word-break: break-word;
+    font-size: var(--font-size, 14px);
+    font-family: var(--font-mono, monospace);
   }
 
   .irc-link {
