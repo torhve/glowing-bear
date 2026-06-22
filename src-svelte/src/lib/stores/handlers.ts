@@ -959,13 +959,21 @@ export function handleNickMessageForSpeakOnBuffers(lineMsgs: BufferLineMessage[]
 }
 
 // ---- Nicklist diff handler ----
+// Handles incremental nicklist changes from WeeChat (_nicklist_diff event).
+// Operations: _diff=43 (+ add), 45 (- remove), 42 (* update).
+// Same sequential group-tracking pattern as handleNicklist, but resets group
+// when switching buffers to avoid leaking group names across buffers.
 export function handleNicklistDiff(message: ProtocolMessage) {
     const nicklist = message.objects[0]?.content as (NickMessage | NickGroupMessage)[];
     if (DEBUG_NICKLIST) console.log('[nicklist] handleNicklistDiff called, total items:', nicklist?.length ?? 0);
     if (!nicklist) return;
 
+    // Track current group per buffer — WeeChat sends items ordered by buffer then group
+    // Reset to 'root' whenever we switch to a different buffer
+    let currentBufferId: string | null = null;
     let group = 'root';
     const modifiedBuffers = new Set<string>();
+
     for (const n of nicklist) {
         const ptr0 = n.pointers[0];
         if (!ptr0) continue;
@@ -974,55 +982,55 @@ export function handleNicklistDiff(message: ProtocolMessage) {
             if (DEBUG_NICKLIST) console.log('[nicklist] buffer not found for diff:', ptr0);
             continue;
         }
+
+        // Reset group tracking when switching between buffers in the same message
+        if (currentBufferId !== ptr0) {
+            group = 'root';
+            currentBufferId = ptr0;
+        }
+
         if (DEBUG_NICKLIST) console.log('[nicklist] processing diff item for', buffer.shortName || buffer.id, '- pointers:', JSON.stringify(n.pointers));
+
+        // Ensure root group exists (mirrors AngularJS nicklistRequested check)
+        if (!('root' in buffer.nicklist)) {
+            buffer.nicklist.root = { name: '', visible: '', nicks: [] };
+            if (DEBUG_NICKLIST) console.log('[nicklist] created missing root group for', buffer.shortName);
+        }
 
         if ((n as NickGroupMessage).group === 1) {
             const g = createNickGroup(n as NickGroupMessage);
+            // Only create the group if it doesn't already exist (prevents overwrites)
+            if (!(g.name in buffer.nicklist)) {
+                buffer.nicklist[g.name] = g;
+                if (DEBUG_NICKLIST) console.log('[nicklist] diff group:', g.name, 'added to', buffer.shortName);
+            }
             group = g.name;
-            buffer.nicklist[group] = g;
-            if (DEBUG_NICKLIST) console.log('[nicklist] diff group:', group, 'added to', buffer.shortName);
         } else {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- nick object with internal _diff property from WeeChat protocol
-            const d = (n as any)._diff;
-            const nick = createNick(n as NickMessage);
+            const d = n._diff;
             const op = d === 43 ? '+' : d === 45 ? '-' : d === 42 ? '*' : '?';
+            const nick = createNick(n as NickMessage);
             if (DEBUG_NICKLIST) console.log('[nicklist] diff nick:', nick.name, 'prefix:', nick.prefix, 'in group', group, 'op:', op);
             const nickGroup = buffer.nicklist[group];
-            if (d === 43) { // +
-                if (nickGroup) {
-                    nickGroup.nicks.push(nick);
-                }
-            } else if (d === 45) { // -
-                if (nickGroup) {
-                    nickGroup.nicks = nickGroup.nicks.filter(n => n.name !== nick.name);
-                }
-            } else if (d === 42) { // *
-                if (nickGroup) {
-                    const idx = nickGroup.nicks.findIndex(n => n.name === nick.name);
-                    if (idx >= 0) nickGroup.nicks[idx] = nick;
+            if (!nickGroup) {
+                if (DEBUG_NICKLIST) console.log('[nicklist] group', group, 'not found for nick', nick.name);
+                continue;
+            }
+            if (d === 43) { // + add nick
+                nickGroup.nicks.push(nick);
+            } else if (d === 45) { // - remove nick
+                nickGroup.nicks = nickGroup.nicks.filter(nk => nk.name !== nick.name);
+            } else if (d === 42) { // * update nick
+                const idx = nickGroup.nicks.findIndex(nk => nk.name === nick.name);
+                if (idx >= 0) {
+                    nickGroup.nicks[idx] = nick;
                 }
             }
         }
         modifiedBuffers.add(ptr0);
     }
 
-    // Create new references only for affected buffers to trigger reactivity
+    // Immutable update: copy affected buffers and push new reference to trigger reactivity
     const current = get(buffers);
-
-    // Log final state
-    if (DEBUG_NICKLIST) {
-        const summary = [];
-        for (const id of modifiedBuffers) {
-            const buf = current[id];
-            if (buf) {
-                const groups = Object.keys(buf.nicklist || {});
-                const nickCounts = groups.map(g => `${g}:${(buf.nicklist?.[g]?.nicks?.length ?? 0)}`).join(', ');
-                summary.push({ buffer: buf.shortName, groups: groups.join(', '), nicks: nickCounts });
-            }
-        }
-        console.table(summary);
-    }
-
     const updated = { ...current };
     for (const id of modifiedBuffers) {
         const deep = updateBufferDeep(id);

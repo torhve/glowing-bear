@@ -62,6 +62,7 @@ export interface NickMessage {
     name: string;
     color?: string;
     prefix_color?: string;
+    _diff?: number;
 }
 
 // Nicklist group message
