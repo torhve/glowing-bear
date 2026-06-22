@@ -30,14 +30,30 @@ import type { ProtocolMessage, BufferMessage, BufferLineMessage, NickMessage, Ni
 
 // ---- Version handler ----
 export function handleVersionInfo(message: ProtocolMessage) {
-    const content = message.objects[0]?.content;
-    if (!content || !Array.isArray(content)) return;
-    const first = content[0];
-    if (!first) return;
-    const value = first.value;
-    if (typeof value === 'string') {
-        const version = value.split('.').map((c: string) => parseInt(c, 10));
-        weechatVersion.set(version);
+    const obj = message.objects[0];
+    if (!obj) return;
+    const content = obj.content;
+    if (!content) return;
+    // Info responses are of type "inf" with content { key, value }
+    if (typeof content === 'object' && !Array.isArray(content) && 'value' in content) {
+        const value = (content as { key: string; value: string }).value;
+        if (typeof value === 'string' && value.length > 0) {
+            const version = value.split('.').map((c: string) => parseInt(c, 10));
+            console.log('[version] WeeChat version:', value, version);
+            weechatVersion.set(version);
+            return;
+        }
+    }
+    // Fallback for older/alternative response structures
+    if (Array.isArray(content) && content.length > 0) {
+        const first = content[0];
+        if (!first) return;
+        const value = first.value;
+        if (typeof value === 'string' && value.length > 0) {
+            const version = value.split('.').map((c: string) => parseInt(c, 10));
+            console.log('[version] WeeChat version:', value, version);
+            weechatVersion.set(version);
+        }
     }
 }
 
@@ -85,6 +101,14 @@ export function handleBufferInfo(message: ProtocolMessage) {
         if (currentBuffers[bufferId]) {
             // Update existing buffer
             handleBufferUpdate(currentBuffers[bufferId], bufferMsg);
+            // Clear existing lines on reconnect — sync events will repopulate.
+            // Reset lastSeen/localUnread so the sync phase recalculates them
+            // from hotlist counts (handleHotlistInfo runs after handleBufferInfo).
+            currentBuffers[bufferId].lines = [];
+            currentBuffers[bufferId].requestedLines = 0;
+            currentBuffers[bufferId].allLinesFetched = false;
+            currentBuffers[bufferId].lastSeen = -1;
+            currentBuffers[bufferId].localUnread = 0;
         } else {
             // Create new buffer
             const buffer = createBuffer(bufferMsg);
