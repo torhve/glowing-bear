@@ -63,6 +63,18 @@ export function parseRichText(text: string | undefined | null): RichTextPart[] {
     }));
 }
 
+/**
+ * Calculate effective unread count for a buffer without double-counting.
+ * handleBufferLineAdded increments both WeeChat counts (unread/notification)
+ * AND localUnread for inactive buffers, so we must avoid summing all three.
+ * Returns the maximum of (weechat counts + excess local unreads) vs just local.
+ */
+export function getEffectiveUnread(buffer: BufferData): number {
+    const weechatUnread = (buffer.unread || 0) + (buffer.notification || 0);
+    const localUnread = buffer.localUnread || 0;
+    return Math.max(weechatUnread + Math.max(0, localUnread - weechatUnread), localUnread);
+}
+
 // Sort buffers: pinned first, then highlights, then unreads, then by number.
 // Optionally groups by server when orderByServer is true.
 export function sortBuffers(buffersList: BufferData[], orderByServer: boolean): BufferData[] {
@@ -412,12 +424,7 @@ export function setActiveBuffer(bufferId: string): boolean {
     console.log('[setActiveBuffer] target:', buffer.shortName, '| lines:', buffer.lines.length, '| lastSeen:', buffer.lastSeen, '| localUnread:', buffer.localUnread, '| unread:', buffer.unread, '| notification:', buffer.notification);
 
     // Compute effective unread count that avoids double-counting.
-    // handleBufferLineAdded increments both unread AND localUnread for
-    // inactive buffers with notify > 1. Use weechatUnread plus the excess
-    // to account for messages not tracked in the WeeChat hotlist.
-    const weechatUnread = (buffer.unread || 0) + (buffer.notification || 0);
-    const localUnread = (buffer.localUnread || 0);
-    const effectiveUnread = weechatUnread + Math.max(0, localUnread - weechatUnread);
+    const effectiveUnread = getEffectiveUnread(buffer);
 
     // Recalculate lastSeen from effective unread whenever unread exists,
     // to handle stale values set during sync before the hotlist was processed.
