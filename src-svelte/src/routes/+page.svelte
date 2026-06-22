@@ -12,7 +12,7 @@
   import { settings, updateSettings } from '$lib/stores/settings';
   import { initTheme } from '$lib/stores/theme';
   import { get } from 'svelte/store';
-  import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig, visibleBuffers, sortedVisibleBuffers, checkAndNavigatePendingNotificationBuffer } from '$lib/stores/models';
+  import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig, visibleBuffers, sortedVisibleBuffers, checkAndNavigatePendingNotificationBuffer, getEffectiveUnread } from '$lib/stores/models';
   import { connectionState, setReconnectAttempts, setErrors } from '$lib/stores/connectionStore';
   import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer, getWs } from '$lib/stores/connectionManager';
   import { Protocol } from '$lib/weechat';
@@ -299,7 +299,7 @@
       for (let i = 1; i < sortedBuffs.length; i++) {
         const idx = (startIndex + i) % sortedBuffs.length;
         const b = sortedBuffs[idx];
-        if (b && (b.notification > 0 || b.unread > 0)) {
+        if (b && getEffectiveUnread(b) > 0) {
           switchBuffer(b.id);
           return;
         }

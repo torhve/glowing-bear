@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { BufferData } from '$lib/types';
-  import { buffers, activeBufferId, sortedVisibleBuffers } from '$lib/stores/models';
+  import { buffers, activeBufferId, sortedVisibleBuffers, getEffectiveUnread } from '$lib/stores/models';
   import { switchBuffer } from '$lib/stores/connectionManager';
   import { closeBufferOnWeeChat, pinBuffer, unpinBuffer } from '$lib/stores/connectionManager';
   import { settings, updateSettings } from '$lib/stores/settings';
@@ -21,7 +21,7 @@
 let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
 
   let sortedBuffers = $derived(
-    $sortedVisibleBuffers.filter(buf => !$settings.onlyUnread || buf.unread > 0 || buf.notification > 0 || (buf.localUnread ?? 0) > 0 || buf.id === $activeBufferId || buf.pinned)
+    $sortedVisibleBuffers.filter(buf => !$settings.onlyUnread || getEffectiveUnread(buf) > 0 || buf.id === $activeBufferId || buf.pinned)
   );
 
   let groupedBuffers = $derived(
@@ -75,8 +75,9 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
 
     function getNotifyClass(buffer: BufferData): string {
         if (buffer.id === $activeBufferId) return 'text-accent';
+        const eff = getEffectiveUnread(buffer);
         if (buffer.notification >= 3) return 'text-white font-bold';
-        if (buffer.unread > 0 || buffer.localUnread > 0) return 'text-accent';
+        if (eff > 0) return 'text-accent';
         return 'text-text-secondary';
     }
 
@@ -141,12 +142,12 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
 <span class="buffer-name text-xs {getNotifyClass(buffer)} min-w-0 ml-0.5 truncate">
                       {getDisplayName(buffer)}
                     </span>
-{#if buffer.notification > 0 || buffer.unread > 0 || (buffer.localUnread ?? 0) > 0}
+{#if getEffectiveUnread(buffer) > 0}
                           <span
                             class="buffer-notification-badge absolute right-1 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] font-semibold rounded-full shadow-sm {buffer.id === $activeBufferId ? (buffer.notification > 0 ? '!bg-red-600 !text-white' : '!bg-warning !text-black') : (buffer.notification > 0 ? 'bg-red-600/15 text-red-600' : 'bg-accent/15 text-accent')}"
                             data-testid="unread-badge"
                           >
-                             {buffer.notification + buffer.unread + (buffer.localUnread ?? 0)}
+                             {getEffectiveUnread(buffer)}
                            </span>
                         {/if}
                    <span class="ml-auto flex items-center gap-1 flex-shrink-0 z-10">

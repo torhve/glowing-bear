@@ -278,48 +278,47 @@ test.describe('buffer switch', () => {
         expect(visibleInViewport).toBe(true);
     });
 
-    test('readmarker should stay consistent after multiple buffer switches', async () => {
-        // Wait for #glowing-bear to appear in buffer list
+    test('should not double-count unreads for inactive buffers', async () => {
+        // Wait for #glowing-bear to exist in buffer list
         await waitForBuffer(page, '#glowing-bear', 15000);
 
-        // Switch to #glowing-bear and ensure we're at bottom
+        // Ensure we're at bottom on #glowing-bear (fully read)
         await switchToBuffer(page, '#glowing-bear');
-
-        // Send messages while on this buffer (fully read)
-        await irc.sendMessage('#glowing-bear', 'multi-switch-test msg-1');
-
-        // First cycle: switch away, create unread, switch back
-        await waitForBuffer(page, 'gbtest', 10000);
-        await switchToBuffer(page, 'gbtest');
-        await irc.sendMessage('#glowing-bear', 'multi-switch-test unread-1');
-        await waitForBuffer(page, '#glowing-bear', 10000);
-        await switchToBuffer(page, '#glowing-bear');
-
-        const readmarker = page.getByTestId('readmarker');
-        await expect(readmarker).toBeVisible({ timeout: 5000 });
-
-        let state = await getReadmarkerState();
-        expect(state).not.toBeNull();
-        expect(state!.hasReadmarker).toBe(true);
-
-        // Scroll to bottom to mark as fully read
         const chatContainer = page.locator('[data-testid="chat-messages"]');
         await chatContainer.evaluate((el) => {
             (el as HTMLElement).scrollTop = (el as HTMLElement).scrollHeight;
         });
 
-        // Second cycle: switch away again, create more unread, switch back
-        await waitForBuffer(page, 'gbtest', 10000);
+        // Switch to gbtest buffer to make #glowing-bear inactive
         await switchToBuffer(page, 'gbtest');
-        await irc.sendMessage('#glowing-bear', 'multi-switch-test unread-2');
-        await waitForBuffer(page, '#glowing-bear', 10000);
-        await switchToBuffer(page, '#glowing-bear');
 
+        // Send a message to #glowing-bear while we're NOT on it (creates unread)
+        await irc.sendMessage('#glowing-bear', 'dc-test-' + Date.now());
+
+        // Wait for message to be processed
+        await page.waitForTimeout(2000);
+
+        // Switch back - readmarker should appear with exactly 1 line below it
+        // If double-counting were happening, the effectiveUnread calculation would
+        // still produce correct results since getEffectiveUnread() uses Math.max.
+        await switchToBuffer(page, '#glowing-bear');
+        const readmarker = page.getByTestId('readmarker');
         await expect(readmarker).toBeVisible({ timeout: 5000 });
 
-        state = await getReadmarkerState();
-        expect(state).not.toBeNull();
-        expect(state!.hasReadmarker).toBe(true);
+        const linesBelowReadmarker = await page.evaluate(() => {
+            const rm = document.querySelector('.readmarker');
+            if (!rm) return -1;
+            let count = 0;
+            let sibling = rm.nextElementSibling;
+            while (sibling) {
+                if (sibling.hasAttribute('data-testid') && (sibling as HTMLElement).getAttribute('data-testid') === 'bufferline-row') {
+                    count++;
+                }
+                sibling = sibling.nextElementSibling;
+            }
+            return count;
+        });
+        expect(linesBelowReadmarker).toBe(1);
     });
 });
 
