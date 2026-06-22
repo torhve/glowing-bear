@@ -35,9 +35,9 @@ import Key from '@lucide/svelte/icons/key';
   let autoconnect = $state(false);
   let shakePassword = $state(false);
 
-  // Populate form fields from saved settings on mount
+  // Populate form fields from saved settings (reactive to store changes)
   $effect(() => {
-    const s = get(settings);
+    const s = $settings;
     if (s.hostField) hostField = s.hostField;
     if (s.port) port = s.port;
     tls = s.tls || false;

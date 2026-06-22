@@ -9,7 +9,7 @@
   import Nicklist from '$components/Nicklist.svelte';
   import Toast from '$components/Toast.svelte';
   import X from '@lucide/svelte/icons/x';
-  import { settings, updateSettings } from '$lib/stores/settings';
+  import { settings, updateSettings, applyHashParams } from '$lib/stores/settings';
   import { initTheme } from '$lib/stores/theme';
   import { get } from 'svelte/store';
   import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig, visibleBuffers, sortedVisibleBuffers, checkAndNavigatePendingNotificationBuffer, getEffectiveUnread } from '$lib/stores/models';
@@ -53,36 +53,13 @@
     try {
       const { host: parsedHost, port: parsedPort, path: parsedPath } = parseRelayUrl(s.hostField, s.port);
       await connect(parsedHost, parsedPort, parsedPath, s.password, s.tls, false);
-      parseHashAndNavigate();
     } catch (e) {
       console.warn('Auto-connect failed:', e);
     }
   }
 
-  function parseHashAndNavigate() {
-    if (typeof window === 'undefined') return;
-    const hash = window.location.hash.slice(1);
-    if (!hash) return;
-
-    // Parse hash parameters (host, port, path, password, autoconnect)
-    const params: Record<string, string> = {};
-    hash.split('&').forEach(val => {
-      const segs = val.split('=');
-      if (segs.length >= 2 && segs[0]) {
-        params[segs[0]] = decodeURIComponent(segs.slice(1).join('='));
-      }
-    });
-
-    if (params.host) {
-      updateSettings({ hostField: params.host });
-    }
-    if (params.port) {
-      updateSettings({ port: params.port });
-    }
-    if (params.autoconnect) {
-      updateSettings({ autoconnect: params.autoconnect === 'true' });
-    }
-  }
+  // Apply hash params synchronously before any component effects run
+  applyHashParams();
 
   $effect(() => {
     // Initialize theme, notifications, touch gestures, and attempt auto-connect on mount
@@ -93,9 +70,15 @@
     checkAndNavigatePendingNotificationBuffer();
     document.body.setAttribute('data-app-ready', 'true');
 
+    // Re-apply hash params when URL fragment changes (e.g. user modifies bookmark)
+    window.onhashchange = () => {
+      applyHashParams();
+    };
+
     return () => {
       cleanupTouchGestures();
       onDisconnect();
+      window.onhashchange = null;
     };
   });
 
