@@ -26,7 +26,7 @@ import {
 import { shouldResume } from '$lib/stores/bufferResume';
 import { createHighlight, playNotificationSound, updateTitle, updateFavico } from '$lib/notifications';
 import { DEBUG_NICKLIST } from '$lib/debug';
-import type { ProtocolMessage, BufferMessage, BufferLineMessage, NickMessage, NickGroupMessage, HotlistEntry, BufferData } from '$lib/types';
+import type { ProtocolMessage, BufferMessage, BufferLine, BufferLineMessage, NickMessage, NickGroupMessage, HotlistEntry, BufferData } from '$lib/types';
 
 // ---- Version handler ----
 export function handleVersionInfo(message: ProtocolMessage) {
@@ -378,6 +378,145 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- buffer object type from models store
     console.debug('[handler] updating buffers store, total lines:', Object.values(updatedBuffers).reduce((sum: number, b: any) => sum + b.lines.length, 0));
     buffers.set(updatedBuffers);
+}
+
+// ---- Buffer line data changed handler ----
+// WeeChat can edit existing message content (e.g., /nick, /mode changes, plugin edits).
+// Find the matching line by (buffer, date) and replace its prefix/content in place.
+export function handleBufferLineDataChanged(message: ProtocolMessage) {
+    const lineMsg = message.objects?.[0]?.content?.[0] as BufferLineMessage | undefined;
+    if (!lineMsg) {
+        console.debug('[handler] _buffer_line_data_changed: no content');
+        return;
+    }
+
+    const currentBuffers = get(buffers);
+    const buffer = currentBuffers[lineMsg.buffer];
+    if (!buffer) {
+        console.debug('[handler] _buffer_line_data_changed: buffer not found for', lineMsg.buffer);
+        return;
+    }
+
+    // Find matching line by (buffer, date). Multiple lines may share the same timestamp,
+    // so prefer the last match (closest to bottom) since WeeChat processes top-to-bottom.
+    let matchedIndex = -1;
+    const matches: number[] = [];
+    for (let i = 0; i < buffer.lines.length; i++) {
+        const line = buffer.lines[i];
+        if (line && line.buffer === lineMsg.buffer && line.date === lineMsg.date) {
+            matches.push(i);
+        }
+    }
+    if (matches.length === 0) {
+        console.debug('[handler] _buffer_line_data_changed: no matching line for date', lineMsg.date);
+        return;
+    }
+    matchedIndex = matches[matches.length - 1]!;
+
+    // Create new BufferLine from updated data.
+    const date = new Date(lineMsg.date);
+    const prefix = parseRichText(lineMsg.prefix);
+    const content = parseRichText(lineMsg.message);
+    const showHiddenBrackets = lineMsg.tags_array.includes('irc_privmsg') && !lineMsg.tags_array.includes('irc_action');
+
+    const updatedLine: BufferLine = {
+        prefix,
+        content,
+        date: date.getTime(),
+        shortTime: date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+        formattedTime: date.toLocaleTimeString(),
+        buffer: lineMsg.buffer,
+        tags: lineMsg.tags_array,
+        highlight: !!lineMsg.highlight,
+        displayed: !!lineMsg.displayed,
+        prefixtext: prefix.map(p => p.text).join(''),
+        text: content.map(c => c.text).join(''),
+        showHiddenBrackets
+    };
+
+    // Immutable update: clone lines array, replace at index, then update store.
+    const updatedBuffers = { ...currentBuffers };
+    const updatedBuffer = { ...buffer, lines: [...buffer.lines] };
+    updatedBuffer.lines[matchedIndex] = updatedLine;
+    updatedBuffers[lineMsg.buffer] = updatedBuffer;
+    buffers.set(updatedBuffers);
+}
+
+// ---- Buffer merged/unmerged handler ----
+// Both _buffer_merged and _buffer_unmerged update the buffer number when
+// a buffer joins or leaves another buffer's merge group. Shift intermediate
+// buffers to fill the gap, using immutable updates for Svelte reactivity.
+export function handleBufferMergedOrUnmerged(message: ProtocolMessage) {
+    const obj = message.objects[0]?.content[0];
+    if (!obj) return;
+    const bufferId = obj.pointers?.[0];
+    if (!bufferId) return;
+    const buffer = getBuffer(bufferId);
+    if (!buffer) return;
+
+    const oldNumber = buffer.number;
+    const newNumber = obj.number;
+    if (oldNumber === newNumber) return;
+
+    const current = get(buffers);
+    const updated = { ...current };
+
+    // Shift intermediate buffers to fill the gap left by the moved buffer.
+    for (const id in current) {
+        if (id === bufferId) continue;
+        const buf = current[id];
+        if (!buf) continue;
+        let num = buf.number;
+        if (newNumber > oldNumber && buf.number > oldNumber && buf.number <= newNumber) {
+            num -= 1;
+        } else if (newNumber < oldNumber && buf.number < oldNumber && buf.number >= newNumber) {
+            num += 1;
+        }
+        if (num !== buf.number) {
+            const shifted = updateBuffer(id, { number: num });
+            if (shifted) updated[id] = shifted;
+        }
+    }
+
+    // Set the merged/unmerged buffer's new number.
+    const moved = updateBuffer(bufferId, { number: newNumber });
+    if (moved) updated[bufferId] = moved;
+    buffers.set(updated);
+}
+
+// ---- Pong handler ----
+// WeeChat echoes back ping arguments; log for debugging and future latency tracking.
+export function handlePong(message: ProtocolMessage) {
+    const data = message.objects[0]?.content?.[0];
+    console.debug('[handler] _pong:', typeof data === 'string' ? data : JSON.stringify(data));
+}
+
+// ---- Upgrade handler ----
+// WeeChat is starting an upgrade — all internal pointers will change.
+// Calls the registered onUpgrade callback from connectionManager to disconnect cleanly.
+let onUpgradeCallback: (() => void) | null = null;
+export function setOnUpgrade(cb: (() => void) | null) {
+    onUpgradeCallback = cb;
+}
+export function handleUpgrade() {
+    console.log('[handler] _upgrade: WeeChat upgrading, disconnecting');
+    onUpgradeCallback?.();
+}
+
+// ---- Upgrade ended handler ----
+// WeeChat has finished upgrading — attempt to reconnect via the registered callback.
+let onUpgradeEndedCallback: (() => void) | null = null;
+export function setOnUpgradeEnded(cb: (() => void) | null) {
+    onUpgradeEndedCallback = cb;
+}
+let upgradeReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+export function handleUpgradeEnded() {
+    console.log('[handler] _upgrade_ended: WeeChat upgrade complete, reconnecting');
+    if (upgradeReconnectTimer) clearTimeout(upgradeReconnectTimer);
+    upgradeReconnectTimer = setTimeout(() => {
+        upgradeReconnectTimer = null;
+        onUpgradeEndedCallback?.();
+    }, 2000);
 }
 
 // ---- Date change injection ----
@@ -955,10 +1094,13 @@ const eventHandlers: Record<string, (msg: ProtocolMessage) => void> = {
     '_buffer_cleared': handleBufferCleared,
     '_buffer_closing': handleBufferClosing,
     '_buffer_line_added': handleBufferLineAdded,
+    '_buffer_line_data_changed': handleBufferLineDataChanged,
     '_buffer_localvar_added': handleBufferLocalvarChanged,
     '_buffer_localvar_removed': handleBufferLocalvarChanged,
     '_buffer_localvar_changed': handleBufferLocalvarChanged,
+    '_buffer_merged': handleBufferMergedOrUnmerged,
     '_buffer_moved': handleBufferMoved,
+    '_buffer_unmerged': handleBufferMergedOrUnmerged,
     '_buffer_opened': handleBufferOpened,
     '_buffer_title_changed': handleBufferTitleChanged,
     '_buffer_type_changed': (msg) => {
@@ -975,7 +1117,10 @@ const eventHandlers: Record<string, (msg: ProtocolMessage) => void> = {
     '_buffer_hidden': handleBufferHidden,
     '_buffer_unhidden': handleBufferUnhidden,
     '_nicklist': handleNicklist,
-    '_nicklist_diff': handleNicklistDiff
+    '_nicklist_diff': handleNicklistDiff,
+    '_pong': handlePong,
+    '_upgrade': handleUpgrade,
+    '_upgrade_ended': handleUpgradeEnded
 };
 
 export function handleEvent(event: ProtocolMessage) {
