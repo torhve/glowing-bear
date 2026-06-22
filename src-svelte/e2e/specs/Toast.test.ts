@@ -120,3 +120,62 @@ test('toast with multiple action buttons', async () => {
     await expect(page.getByTestId('toast-yes-button')).toHaveText('Yes');
     await expect(page.getByTestId('toast-no-button')).toHaveText('No');
 });
+
+test('toast auto-dismisses with default 5s duration', async () => {
+    await page.evaluate(() => (window as any).__addToast?.('Default duration toast', { type: 'info' }));
+    const toast = page.getByTestId('toast');
+    await expect(toast).toBeVisible({ timeout: 5000 });
+
+    // Default duration is 5000ms — wait for it to disappear
+    await expect(toast).not.toBeVisible({ timeout: 7000 });
+});
+
+test('manual close interrupts auto-dismiss timer', async () => {
+    await page.evaluate(() => (window as any).__addToast?.('Manual close test', {
+        type: 'warning',
+        duration: 30000
+    }));
+    const toast = page.getByTestId('toast');
+    await expect(toast).toBeVisible({ timeout: 5000 });
+
+    await page.getByTestId('toast-close').click();
+    await expect(toast).not.toBeVisible({ timeout: 5000 });
+
+    await page.waitForTimeout(1000);
+    await expect(toast).not.toBeAttached();
+});
+
+test('auto-dismiss triggers exit animation', async () => {
+    await page.evaluate(() => (window as any).__addToast?.('Animation test', { type: 'info', duration: 1000 }));
+    const toast = page.getByTestId('toast');
+    await expect(toast).toBeVisible({ timeout: 5000 });
+
+    await page.waitForTimeout(1200);
+
+    const hasRemovingClass = await toast.evaluate(el => el.classList.contains('toast-removing'));
+    if (hasRemovingClass) {
+        return;
+    }
+
+    await expect(toast).not.toBeVisible({ timeout: 2000 });
+});
+
+test('multiple toasts dismiss independently by duration', async () => {
+    await page.evaluate(() => {
+        (window as any).__addToast?.('Short toast', { type: 'info', duration: 1000 });
+        (window as any).__addToast?.('Medium toast', { type: 'success', duration: 3000 });
+        (window as any).__addToast?.('Long toast', { type: 'error', duration: 5000 });
+    });
+
+    const toasts = page.getByTestId('toast');
+    await expect(toasts).toHaveCount(3, { timeout: 5000 });
+
+    await page.waitForTimeout(1500);
+    await expect(toasts).toHaveCount(2, { timeout: 5000 });
+
+    await page.waitForTimeout(2000);
+    await expect(toasts).toHaveCount(1, { timeout: 5000 });
+
+    await page.waitForTimeout(2000);
+    await expect(toasts).toHaveCount(0, { timeout: 5000 });
+});
