@@ -6,7 +6,7 @@ import { buffers, currentBuffer, setActiveBuffer } from './stores/models';
 import { get } from 'svelte/store';
 import type { BufferData } from './types';
 import { initFavicon, drawBadge, resetBadge } from './faviconBadge';
-import { isTauri } from './tauriWindow';
+import { isTauri, setBadgeCount } from './tauriWindow';
 
 // Calculate total unread and notification counts across all buffers.
 function getTotalUnread(): { unread: number; notifications: number } {
@@ -218,12 +218,15 @@ export function updateFavico(): void {
     if (totalNotifications > 0) {
         drawBadge(totalNotifications, 'notification');
         try { navigator.setAppBadge(totalNotifications); } catch { /* not supported */ }
+        void setBadgeCount(totalNotifications);
     } else if (totalUnread > 0) {
         drawBadge(totalUnread, 'unread');
         try { navigator.setAppBadge(totalUnread); } catch { /* not supported */ }
+        void setBadgeCount(totalUnread);
     } else {
         resetBadge();
         try { navigator.clearAppBadge(); } catch { /* not supported */ }
+        void setBadgeCount(0);
     }
 }
 
@@ -275,6 +278,7 @@ export async function initNotifications(): Promise<void> {
 export function onDisconnect(): void {
     cancelAll();
     resetBadge();
+    void setBadgeCount(0);
     if (typeof document !== 'undefined') {
         document.title = 'Glowing Bear';
     }

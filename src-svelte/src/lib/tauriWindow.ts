@@ -82,4 +82,17 @@ async function closeWindow(): Promise<void> {
     }
 }
 
-export { isTauri, isWindowsTauri, isMacOSTauri, minimizeWindow, toggleMaximizeWindow, closeWindow };
+// Set the OS/taskbar badge count (no-op outside Tauri, no-op on Linux)
+async function setBadgeCount(count: number): Promise<void> {
+    if (!isTauri()) return;
+    await ensureTauriWindow();
+    if (!tauriWindow) return;
+    try {
+        const win = tauriWindow.getCurrentWindow();
+        await win.setBadgeCount(count);
+    } catch (e) {
+        console.warn('Failed to set badge count:', e);
+    }
+}
+
+export { isTauri, isWindowsTauri, isMacOSTauri, minimizeWindow, toggleMaximizeWindow, closeWindow, setBadgeCount };
