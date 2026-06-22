@@ -20,6 +20,7 @@
                 let nextRemoving = _removing;
                 for (const t of externallyRemoved) {
                     if (!nextRemoving.has(t.id)) {
+                        // eslint-disable-next-line svelte/prefer-svelte-reactivity
                         nextRemoving = new Map(nextRemoving);
                         nextRemoving.set(t.id, t);
                         setTimeout(() => scheduleCleanup(t.id), 200);
@@ -32,6 +33,7 @@
     });
 
     function scheduleCleanup(id: number) {
+        // eslint-disable-next-line svelte/prefer-svelte-reactivity
         const next = new Map(_removing);
         next.delete(id);
         _removing = next;
@@ -53,6 +55,7 @@
         const toast = _active.find(t => t.id === id) ?? _removing.get(id);
         if (!toast) return;
         if (!_removing.has(id)) {
+            // eslint-disable-next-line svelte/prefer-svelte-reactivity
             const next = new Map(_removing);
             next.set(id, toast);
             _removing = next;

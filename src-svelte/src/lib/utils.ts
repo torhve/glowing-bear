@@ -192,9 +192,9 @@ export function getFilteredBuffers(search: string, onlyUnread: boolean, orderByS
 
     return sortBuffers(
         Object.values(allBuffers)
-            .filter((b: any) => !b.hidden)
-            .filter((b: any) => bufferMatchesSearch(b, search))
-            .filter((b: any) => !onlyUnread || b.unread > 0 || b.notification > 0 || b.id === activeBufferId || b.pinned),
+            .filter((b: BufferData) => !b.hidden)
+            .filter((b: BufferData) => bufferMatchesSearch(b, search))
+            .filter((b: BufferData) => !onlyUnread || b.unread > 0 || b.notification > 0 || b.id === activeBufferId || b.pinned),
         orderByServer
     );
 }

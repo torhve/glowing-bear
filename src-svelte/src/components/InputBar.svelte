@@ -29,6 +29,7 @@
   } = $props();
 
   // Debug flag — open console and set `window.__debugPaste = true` before pasting
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let debugPaste = $derived(typeof window !== 'undefined' && (window as any).__debugPaste === true);
   function log(...args: unknown[]) { if (debugPaste) console.log('[paste]', ...args); }
 
