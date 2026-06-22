@@ -1289,6 +1289,9 @@
   --text-sm: 0.8125rem;
   --text-base: 0.875rem;
   --text-lg: 1rem;
+
+  --ease-out-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-normal: cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 @layer base, components, utilities;
@@ -1476,6 +1479,94 @@
 
   .shake {
     animation: shake 0.5s ease-in-out;
+  }
+
+  @keyframes dotBlink {
+    0%, 80%, 100% { opacity: 0.2; }
+    40% { opacity: 1; }
+  }
+
+  .loading-dots span {
+    animation: dotBlink 1.4s infinite both;
+    display: inline-block;
+  }
+  .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes fadeInUp {
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .fade-item {
+    opacity: 0;
+    transform: translateY(8px);
+    animation: fadeInUp 0.4s var(--ease-out-smooth) forwards;
+  }
+  .fade-item:nth-child(1) { animation-delay: 0.05s; }
+  .fade-item:nth-child(2) { animation-delay: 0.1s; }
+  .fade-item:nth-child(3) { animation-delay: 0.15s; }
+  .fade-item:nth-child(4) { animation-delay: 0.2s; }
+  .fade-item:nth-child(5) { animation-delay: 0.25s; }
+  .fade-item:nth-child(6) { animation-delay: 0.3s; }
+  .fade-item:nth-child(7) { animation-delay: 0.35s; }
+
+  .buffer-item-enter {
+    opacity: 0;
+    transform: translateY(8px);
+    animation: fadeInUp 0.4s var(--ease-out-smooth) forwards;
+    animation-delay: calc(var(--i, 0) * 30ms);
+  }
+
+  .btn-glow {
+    transition: box-shadow 0.3s var(--ease-out-smooth), background-color 0.2s ease;
+  }
+  .btn-glow:hover:not(:disabled) {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--gb-accent) 60%, transparent), 0 0 16px color-mix(in srgb, var(--gb-accent) 20%, transparent);
+  }
+  .btn-glow:focus-visible {
+    box-shadow: 0 0 0 2px var(--gb-accent), 0 0 0 4px var(--gb-bg);
+    outline: none;
+  }
+
+  .focus-ring {
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  }
+  .focus-ring:focus-visible {
+    box-shadow: 0 0 0 2px var(--gb-accent), 0 0 0 4px var(--gb-bg);
+    outline: none;
+  }
+
+  .info-accordion-summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .info-accordion-summary::-webkit-details-marker {
+    display: none;
+  }
+  .info-accordion-summary::after {
+    content: '▶';
+    margin-left: auto;
+    transition: transform 0.3s var(--ease-out-normal);
+    font-size: 10px;
+    color: var(--gb-text-muted);
+    flex-shrink: 0;
+  }
+  .info-accordion[open] .info-accordion-summary::after {
+    transform: rotate(90deg);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 
   /* Bufferline — compact TUI-style single-row layout (styles in BufferLineRow.svelte) */

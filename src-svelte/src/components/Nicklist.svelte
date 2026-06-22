@@ -58,7 +58,7 @@
       <button
         onclick={onClose}
         data-testid="mobile-nicklist-close"
-        class="px-1 py-0.5 text-sm text-text-secondary hover:text-white hover:bg-surface-raised rounded"
+        class="px-1 py-0.5 text-sm text-text-secondary hover:text-white hover:bg-surface-raised rounded transition-colors"
         title="Close nicklist"
       >
         ✕
@@ -89,7 +89,7 @@
         {#each group.nicks as nick (nick.name)}
           <div
             data-testid="nick-item"
-            class="nick-item px-3 py-0.5 flex items-center hover:bg-surface-raised"
+            class="nick-item px-3 py-0.5 flex items-center hover:bg-surface-raised transition-colors"
             onclick={() => {
               if (DEBUG_NICKLIST) console.log('[nicklist] clicked', nick.name);
               pendingBufferSwitch.set(nick.name);

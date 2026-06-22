@@ -45,7 +45,7 @@
             <span class="toast-message flex-1 text-sm">{toast.message}</span>
             <button
                 onclick={() => handleClose(toast.id)}
-                class="text-text-secondary/60 hover:text-text flex-shrink-0"
+                class="text-text-secondary/60 hover:text-text flex-shrink-0 transition-colors"
                 data-testid="toast-close"
             >
                 <X size={16} />
@@ -55,7 +55,7 @@
                     {#each toast.buttons as btn, i (btn.text + i)}
                     <button
                         onclick={() => btn.action()}
-                        class="px-3 py-1 text-xs font-medium rounded bg-accent text-white hover:bg-accent-hover"
+                        class="px-3 py-1 text-xs font-medium rounded bg-accent text-white hover:bg-accent-hover btn-glow"
                         data-toast-action
                         data-testid={`toast-${btn.text.toLowerCase()}-button`}
                     >

@@ -104,7 +104,7 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
     <div class="flex items-center space-x-1">
       <button
         onclick={toggleServers}
-        class="text-text-muted hover:text-text p-1 rounded"
+        class="text-text-muted hover:text-text p-1 rounded transition-colors"
         title={$settings.orderbyserver ? 'Switch to list view' : 'Group by server'}
         data-testid="toggle-server-groups"
       >
@@ -125,7 +125,7 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
               <Server size={12} />{groupName}
             </div>
          {/if}
-         {#each groupBufs as buffer (buffer.id)}
+         {#each groupBufs as buffer, i (buffer.id)}
                 <div
                     role="button"
                     tabindex="0"
@@ -133,7 +133,8 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleBufferClick(buffer.id); }}
                     data-testid="buffer-item"
                     {@attach tooltipAttachment(buffer)}
-                    class="group relative flex items-center px-2 py-1 cursor-pointer hover:bg-accent/10 {buffer.id === $activeBufferId ? 'border-l-[3px] border-l-accent bg-accent/20' : ''}"
+                    style="--i: {i}"
+                    class="buffer-item-enter group relative flex items-center px-2 py-1 cursor-pointer hover:bg-accent/10 transition-colors duration-150 {buffer.id === $activeBufferId ? 'border-l-[3px] border-l-accent bg-accent/20' : ''}"
                   >
                   {#if getBufferIcon(buffer)}
                     {@const Icon = getBufferIcon(buffer)}
@@ -158,7 +159,7 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
                            {/if}
                  <button
                       onclick={(e) => { e.stopPropagation(); handleTogglePin(buffer.id); }}
-                       class="text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100 focus:opacity-100"
+                        class="text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100 focus:opacity-100 transition-colors"
                       data-testid="pin-buffer"
                      title="{buffer.pinned ? 'Unpin buffer' : 'Pin buffer'}"
                    >
@@ -170,7 +171,7 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
                   </button>
                   <button
                       onclick={(e) => { e.stopPropagation(); handleCloseBuffer(buffer.id); }}
-                       class="text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100 focus:opacity-100 invisible"
+                       class="text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100 focus:opacity-100 transition-colors invisible"
                        class:visible={(buffer.notification === 0 && buffer.unread === 0) || buffer.id === $activeBufferId}
                        class:opacity-100={buffer.id === $activeBufferId}
                       data-testid="close-buffer"

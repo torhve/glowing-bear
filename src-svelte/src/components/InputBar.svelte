@@ -281,11 +281,13 @@
     }
 
     // Emojify :shortcode: patterns as user types, matching AngularJS behavior
-    const caret = inputRef?.selectionStart ?? 0;
-    const result = emojifyInput(message, caret);
-    if (result.text !== message) {
-      message = result.text;
-      setTimeout(() => setCaretPos(result.caretPos), 0);
+    if ($settings.enableEmojify) {
+      const caret = inputRef?.selectionStart ?? 0;
+      const result = emojifyInput(message, caret);
+      if (result.text !== message) {
+        message = result.text;
+        setTimeout(() => setCaretPos(result.caretPos), 0);
+      }
     }
   }
 
@@ -548,7 +550,7 @@
       onclick={handleSend}
       disabled={!canSend}
       data-testid="send-button"
-      class="input-bar-send px-3 py-2 bg-accent hover:bg-accent-hover disabled:bg-border disabled:cursor-not-allowed text-white rounded transition-colors"
+      class="input-bar-send px-3 py-2 bg-accent hover:bg-accent-hover disabled:bg-border disabled:cursor-not-allowed text-white rounded transition-colors btn-glow"
     >
       <Send size={16} />
     </button>

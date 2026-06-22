@@ -318,11 +318,11 @@ import Key from '@lucide/svelte/icons/key';
         data-testid="connect-button"
         type="submit"
         disabled={$connectionState.status === 'connecting' || hostInvalid}
-        class="w-full px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded transition-colors"
+        class="w-full px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded transition-colors btn-glow"
       >
        {#if $connectionState.status === 'connecting'}
            <Loader2 size={16} class="inline-block mr-1 animate-spin" />
-           Connecting...
+           Connecting<span class="loading-dots"><span>.</span><span>.</span><span>.</span></span>
          {:else}
            <Zap size={16} class="inline-block mr-1" />
            Connect
@@ -332,7 +332,7 @@ import Key from '@lucide/svelte/icons/key';
 
 <div class="info-accordion-container space-y-2">
       <details open class="info-accordion bg-surface rounded border border-border" data-info-section="about">
-        <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
+        <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white transition-colors">
           <img src="/glowing-bear.svg" class="w-4 h-4" alt="" />About
         </summary>
         <div class="info-accordion-content px-4 pb-3 text-sm text-text-secondary space-y-2">
@@ -342,7 +342,7 @@ import Key from '@lucide/svelte/icons/key';
         </div>
       </details>
       <details class="info-accordion bg-surface rounded border border-border" data-info-section="connection">
-        <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
+        <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white transition-colors">
           <Settings2 size={14} />Connection settings
         </summary>
         <div class="info-accordion-content px-4 pb-3 text-sm text-text-secondary">
@@ -350,7 +350,7 @@ import Key from '@lucide/svelte/icons/key';
         </div>
       </details>
       <details class="info-accordion bg-surface rounded border border-border" data-info-section="getting-started">
-        <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
+        <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white transition-colors">
           <Rocket size={14} />Getting Started
         </summary>
         <div class="info-accordion-content px-4 pb-3 text-sm text-text-secondary">
@@ -359,16 +359,16 @@ import Key from '@lucide/svelte/icons/key';
       </details>
       {#if isWindowsTauri()}
         <details class="info-accordion bg-surface rounded border border-border" data-info-section="flags">
-          <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
+          <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white transition-colors">
             <Globe size={14} />Flag emoji rendering on Windows
           </summary>
           <div class="info-accordion-content px-4 pb-3 text-sm text-text-secondary">
-            <p>Windows doesn't include a font that renders country flag emojis by default. To see flag emojis properly, install <a href="https://github.com/Chasmical/flag-emojis-for-windows" target="_blank" rel="noopener noreferrer" class="text-accent underline hover:no-underline">Flag Emojis for Windows</a>.</p>
+            <p>Windows doesn't include a font that renders country flag emojis by default. To see flag emojis properly, install <a href="https://github.com/Chasmical/flag-emojis-for-windows" target="_blank" rel="noopener noreferrer" class="text-accent underline hover:no-underline transition-colors">Flag Emojis for Windows</a>.</p>
           </div>
         </details>
       {/if}
       <details class="info-accordion bg-surface rounded border border-border" data-info-section="usage">
-        <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
+        <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white transition-colors">
           <Keyboard size={14} />Usage instructions
         </summary>
         <div class="info-accordion-content px-4 pb-3 text-sm text-text-secondary">
@@ -376,7 +376,7 @@ import Key from '@lucide/svelte/icons/key';
         </div>
       </details>
       <details class="info-accordion bg-surface rounded border border-border" data-info-section="install">
-        <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
+        <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white transition-colors">
           <Download size={14} />Install app
         </summary>
         <div class="info-accordion-content px-4 pb-3 text-sm text-text-secondary">
@@ -384,7 +384,7 @@ import Key from '@lucide/svelte/icons/key';
         </div>
       </details>
       <details class="info-accordion bg-surface rounded border border-border" data-info-section="get-involved">
-        <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white flex items-center gap-2">
+        <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white transition-colors">
           <MessageCircle size={14} />Get involved
         </summary>
         <div class="info-accordion-content px-4 pb-3 text-sm text-text-secondary">
