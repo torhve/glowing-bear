@@ -3,7 +3,7 @@ import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectSt
 import { buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer } from '$lib/stores/models';
 import { settings } from '$lib/stores/settings';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist } from '$lib/stores/handlers';
-import { addToast, removeToast, toastStore } from '$lib/toast';
+import { addToast, removeToast, clearToasts, toastStore } from '$lib/toast';
 // TODO: Re-enable nick color customization when desired
 // import { IDEAL_NICK_COLORS, IDEAL_COLOR_NICKS_IN_NICKLIST, shouldAutoApply } from '$lib/stores/nickColors';
 import { Protocol } from '$lib/weechat';
@@ -201,6 +201,8 @@ export async function connect(host: string, port: number, path: string, password
                     clearTimeout(reconnectingTimer);
                     reconnectingTimer = null;
                 }
+                // Clear stale disconnect toasts from previous connection cycle
+                clearToasts();
                 resolve();
             } catch (e) {
                 // If onclose already set passwordError, don't overwrite with generic error
@@ -240,7 +242,7 @@ export async function connect(host: string, port: number, path: string, password
                 clearTimeout(reconnectingTimer);
                 reconnectingTimer = null;
             }
-            console.log('Disconnected from relay', evt.code, evt.reason);
+            console.log('[connect] WebSocket close code=' + evt.code + ' reason=' + evt.reason);
             if (hotlistInterval) {
                 clearInterval(hotlistInterval);
                 hotlistInterval = null;
@@ -280,7 +282,7 @@ export async function connect(host: string, port: number, path: string, password
                 }
             } else if (!get(connectionState).wasEverConnected) {
                 // First connection failed — don't reconnect (errors already set above)
-            } else if (evt.code === 1006 || evt.code === 1011) {
+            } else if (evt.code === 1005 || evt.code === 1006 || evt.code === 1011) {
                 // Unexpected disconnect after being connected — show toast and retry
                 if (connectionData) {
                     showDisconnectToast(connectionData as [string, number, string, string, boolean, boolean]);
@@ -413,6 +415,11 @@ async function initializePBKDF2Native(password: string, nonce: Uint8Array, itera
 // Called from both disconnect handlers (restored WS and normal WS).
 function showDisconnectToast(connInfo: [string, number, string, string, boolean, boolean]) {
     const [host, port] = connInfo;
+    // Prevent stacking multiple disconnect toasts during reconnect cycles
+    const existing = get(toastStore);
+    if (existing.some(t => t.type === 'warning' && t.message.includes('Disconnected from'))) {
+        return;
+    }
     addToast(
         `Disconnected from ${host}:${port}`,
         {
