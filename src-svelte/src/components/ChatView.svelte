@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { BufferLine } from '$lib/types';
   import { get } from 'svelte/store';
-  import { currentBuffer, saveScrollPosition, activeBufferId, bufferBottom } from '$lib/stores/models';
+  import { currentBuffer, saveScrollPosition, activeBufferId, bufferBottom, buffers } from '$lib/stores/models';
   import { settings } from '$lib/stores/settings';
   import { fetchMoreLines } from '$lib/stores/connectionManager';
   import { buildMentionText, isFreeBuffer, modifyTextareaValue } from '$lib/utils';
@@ -35,6 +35,18 @@
         ? $currentBuffer.shortName
         : $currentBuffer.fullName.split('.').pop() ?? ''
     ) : ''
+  );
+
+  // My nick: prefer buffer's own localVariables.nick; fall back to matching server buffer's nick.
+  let myNick = $derived(
+    $currentBuffer?.localVariables?.nick ??
+    ($currentBuffer ? (
+      Object.values(get(buffers)).find(b =>
+        b.type === 'server' &&
+        b.plugin === $currentBuffer.plugin &&
+        b.server === $currentBuffer.server
+      )?.localVariables?.nick ?? ''
+    ) : '')
   );
 
   let isLoadingMore = $state(false);
@@ -304,6 +316,7 @@
               {noembed}
               bubbleMode={true}
               {otherNick}
+              {myNick}
               onMention={handleMention}
             />
           {/each}
@@ -324,6 +337,7 @@
               {noembed}
               bubbleMode={true}
               {otherNick}
+              {myNick}
               onMention={handleMention}
             />
           {/each}
@@ -337,6 +351,7 @@
               {noembed}
               bubbleMode={true}
               {otherNick}
+              {myNick}
               onMention={handleMention}
             />
           {/each}

@@ -108,12 +108,7 @@ export function createBuffer(message: {
     number?: number;
     type?: number;
     notify?: number;
-    local_variables?: {
-        type?: string;
-        plugin?: string;
-        server?: string;
-        pinned?: string;
-    };
+    local_variables?: Record<string, string>;
 }): BufferData {
     const id = (message.pointers && message.pointers[0]) || '';
     const fullName = message.full_name;
@@ -150,6 +145,7 @@ export function createBuffer(message: {
         notification: 0,
         notify: message.notify ?? 3,
         nicklist: {},
+        localVariables: Object.keys(localVars).length > 0 ? { ...localVars } : undefined,
         serverSortKey,
         indent,
         bufferType: message.type ?? 0,
@@ -403,7 +399,7 @@ export function updateBuffer(bufferId: string, overrides: Partial<BufferData>): 
 export function updateBufferDeep(bufferId: string, overrides: Partial<BufferData> = {}): BufferData | undefined {
     const buf = get(buffers)[bufferId];
     if (!buf) return undefined;
-    return { ...buf, lines: [...buf.lines], nicklist: { ...buf.nicklist }, ...overrides };
+    return { ...buf, lines: [...buf.lines], nicklist: { ...buf.nicklist }, localVariables: buf.localVariables ? { ...buf.localVariables } : undefined, ...overrides };
 }
 
 export function getBuffers(): Record<string, BufferData> {
