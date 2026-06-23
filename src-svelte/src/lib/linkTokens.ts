@@ -23,6 +23,11 @@ export interface CodeSegment {
 
 export type Token = LinkToken | CodeSegment;
 
+export interface TokenGroup {
+    classes: string;
+    tokens: Token[];
+}
+
 /**
  * Common trailing punctuation that should not be part of a URL.
  */
