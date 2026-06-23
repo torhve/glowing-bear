@@ -302,6 +302,11 @@ export const bufferLineCounts = writable<Record<string, number>>({});
 // Used by setActiveBuffer to preserve lastSeen when switching back to buffers with unreads.
 export const localUnreadBuffers = writable<Set<string>>(new Set());
 
+// Tracks buffer IDs whose hotlist was explicitly cleared by setActiveBuffer but
+// WeeChat may not have processed yet. Prevents handleHotlistInfo from restoring
+// stale WeeChat counts during rapid buffer switching.
+export const hotlistClearedBuffers = writable<Set<string>>(new Set());
+
 // Tracks whether the user is scrolled to the bottom of the chat buffer.
 // Used by handlers to avoid marking newly arrived lines as "unread" when
 // the user is at the bottom (similar to AngularJS bufferBottom behavior).
@@ -499,6 +504,11 @@ export function setActiveBuffer(bufferId: string): boolean {
     if (prevId && !currentBuffers[prevId]?.localUnread) {
         localUnreadBuffers.update((s: Set<string>) => { const copy = new Set(s); copy.delete(prevId); return copy; });
     }
+    // Track the previous buffer as having been cleared — prevents handleHotlistInfo
+    // from restoring stale WeeChat counts during rapid buffer switching.
+    if (prevId) {
+        hotlistClearedBuffers.update(s => { const copy = new Set(s); copy.add(prevId); return copy; });
+    }
     // Record the last-viewed buffer for reconnect auto-resume recovery.
     recordBuffer(bufferId);
     return true;
@@ -524,6 +534,7 @@ export function clearAllUnread() {
     }
     buffers.set(updatedBuffers);
     localUnreadBuffers.update(() => new Set());
+    hotlistClearedBuffers.update(() => new Set());
 
     const updatedServers: Record<string, { id: string; unread: number }> = {};
     for (const key in get(servers)) {
