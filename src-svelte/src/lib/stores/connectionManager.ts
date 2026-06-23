@@ -28,6 +28,84 @@ let connecting = false;
 let manualReconnectRequested = false;
 let connectionGeneration = 0;
 
+// Reset connection state after WebSocket close — rejects pending callbacks,
+// clears timers and tracking sets, updates stores. Preserves activeBufferId
+// and previousBufferId for reconnect recovery.
+function resetConnectionState() {
+    Object.keys(callbacks).forEach(k => {
+        const id = parseInt(k, 10);
+        if (callbacks[id]) {
+            callbacks[id].reject(new Error('WebSocket closed'));
+        }
+        delete callbacks[id];
+    });
+    connecting = false;
+    if (reconnectingTimer) {
+        clearTimeout(reconnectingTimer);
+        reconnectingTimer = null;
+    }
+    if (hotlistInterval) {
+        clearInterval(hotlistInterval);
+        hotlistInterval = null;
+    }
+    if (hotlistDebounceTimer) {
+        clearTimeout(hotlistDebounceTimer);
+        hotlistDebounceTimer = null;
+    }
+    pendingFetchBuffers.clear();
+    bufferBottom.set(true);
+    pendingBufferSwitch.set(null);
+    setConnectionStatus('disconnected');
+    connected.set(false);
+    if (get(connectionState).wasEverConnected) {
+        clearAllUnread();
+        onDisconnect();
+    }
+}
+
+// Detect error type from close event for initial connection failures.
+// Uses close codes to distinguish auth errors from server unreachable.
+function detectError(evt: CloseEvent): boolean {
+    if (get(connectionState).wasEverConnected) return false;
+    if (evt.code === 403 || evt.code === 401) {
+        setErrors({ passwordError: true });
+        return true;
+    }
+    if (evt.code === 1006) {
+        if (connecting === false && ws !== null) {
+            setErrors({ passwordError: true });
+            return true;
+        }
+        setErrors({ serverUnreachable: true });
+    }
+    return false;
+}
+
+// Decide whether to auto-reconnect or show a toast after WebSocket close.
+// Handles user disconnect, focus state, first-connection failure, and
+// unexpected close codes. Delegates to scheduleReconnect for auto-retry.
+function handleReconnectDecision(evt: CloseEvent) {
+    const state = get(connectionState);
+    if (state.userDisconnect) {
+        connectionData = null;
+    } else if (typeof document !== 'undefined' && !document.hasFocus()) {
+        if (state.wasEverConnected && connectionData) {
+            showDisconnectToast(connectionData);
+        }
+    } else if (!state.wasEverConnected) {
+        // First connection failed — errors already set by detectError
+    } else if (evt.code === 1005 || evt.code === 1006 || evt.code === 1011) {
+        if (connectionData) showDisconnectToast(connectionData);
+        scheduleReconnect();
+    } else if (evt.code === 403 || evt.code === 401) {
+        setErrors({ passwordError: true });
+        if (connectionData) showDisconnectToast(connectionData);
+    } else {
+        if (connectionData) showDisconnectToast(connectionData);
+        scheduleReconnect();
+    }
+}
+
 export async function connect(host: string, port: number, path: string, password: string, tls: boolean, noCompression: boolean) {
     // If user clicked manual reconnect while auto-reconnect was in progress,
     // abort the existing connection attempt and take over.
@@ -92,7 +170,6 @@ export async function connect(host: string, port: number, path: string, password
             reject(e);
             return;
         }
-        const connectStart = Date.now();
         const genAtConnect = connectionGeneration;
         const thisWs = ws;
         ws.binaryType = 'arraybuffer';
@@ -232,7 +309,7 @@ export async function connect(host: string, port: number, path: string, password
                 setConnectionStatus('connected');
                 connected.set(true);
                 console.log('[connect] connected=true, resolving promise');
-                connectionState.update(current => ({ ...current, wasEverConnected: true }));
+                connectionState.update(current => ({ ...current, wasEverConnected: true, userDisconnect: false }));
 
                 // Start hotlist sync interval — only if user enabled it in settings.
                 // Keeps unread counts in sync with other clients or terminal usage directly.
@@ -283,100 +360,10 @@ export async function connect(host: string, port: number, path: string, password
             webSockets.delete(thisWs);
             // If connection generation has changed, connect() replaced this WS — ignore
             if (genAtConnect !== connectionGeneration) return;
-            // Reject all pending callbacks to unblock awaiting sendAsync promises
-            Object.keys(callbacks).forEach(k => {
-                const id = parseInt(k, 10);
-                if (callbacks[id]) {
-                    callbacks[id].reject(new Error('WebSocket closed'));
-                }
-                delete callbacks[id];
-            });
-
-            connecting = false;
-            // Clear any pending reconnect timer from a previous attempt
-            if (reconnectingTimer) {
-                clearTimeout(reconnectingTimer);
-                reconnectingTimer = null;
-            }
             console.log('[connect] WebSocket close code=' + evt.code + ' reason=' + evt.reason);
-            if (hotlistInterval) {
-                clearInterval(hotlistInterval);
-                hotlistInterval = null;
-            }
-            // Clear timers and tracking sets on unexpected disconnect
-            if (hotlistDebounceTimer) {
-                clearTimeout(hotlistDebounceTimer);
-                hotlistDebounceTimer = null;
-            }
-            pendingFetchBuffers.clear();
-            bufferBottom.set(true);
-            pendingBufferSwitch.set(null);
-            // Preserve activeBufferId/previousBufferId — reconnect will restore buffers
-            // and handleBufferInfo will auto-resume to the last viewed buffer.
-            // Clearing these here would break reconnect recovery.
-
-            setConnectionStatus('disconnected');
-            connected.set(false);
-
-            // Clear unread counts and reset document title on unexpected disconnect
-            // (explicit disconnect in disconnect() handles its own cleanup)
-            if (get(connectionState).wasEverConnected) {
-                clearAllUnread();
-                onDisconnect();
-            }
-
-            let shouldReject = false;
-
-            // Always detect error types for initial connections first,
-            // before autoconnect/focus checks that control reconnection behavior
-            if (!get(connectionState).wasEverConnected) {
-                if (evt.code === 403 || evt.code === 401) {
-                    setErrors({ passwordError: true });
-                    shouldReject = true;
-                } else if (evt.code === 1006) {
-                    // 1006 after handshake succeeded = auth rejected by server, not unreachable
-                    if (connecting === false && ws !== null) {
-                        // onclose already ran, connection was established then closed → bad password
-                        setErrors({ passwordError: true });
-                        shouldReject = true;
-                    } else {
-                        // Never connected at all → truly unreachable
-                        setErrors({ serverUnreachable: true });
-                    }
-                }
-            }
-
-            // Then decide reconnect behavior
-            if (get(connectionState).userDisconnect) {
-                // User initiated disconnect, don't auto-reconnect
-                connectionData = null;
-            } else if (typeof document !== 'undefined' && !document.hasFocus()) {
-                // User was not focused — stay disconnected, show toast anyway
-                if (get(connectionState).wasEverConnected && connectionData) {
-                    showDisconnectToast(connectionData as [string, number, string, string, boolean, boolean]);
-                }
-            } else if (!get(connectionState).wasEverConnected) {
-                // First connection failed — don't reconnect (errors already set above)
-            } else if (evt.code === 1005 || evt.code === 1006 || evt.code === 1011) {
-                // Unexpected disconnect after being connected — show toast and retry
-                if (connectionData) {
-                    showDisconnectToast(connectionData as [string, number, string, string, boolean, boolean]);
-                }
-                scheduleReconnect();
-            } else if (evt.code === 403 || evt.code === 401) {
-                // Auth failure after reconnect — show password error and toast
-                setErrors({ passwordError: true });
-                if (connectionData) {
-                    showDisconnectToast(connectionData as [string, number, string, string, boolean, boolean]);
-                }
-            } else {
-                // Other unexpected codes — show toast and retry
-                if (connectionData) {
-                    showDisconnectToast(connectionData as [string, number, string, string, boolean, boolean]);
-                }
-                scheduleReconnect();
-            }
-
+            resetConnectionState();
+            const shouldReject = detectError(evt);
+            handleReconnectDecision(evt);
             if (shouldReject && rejectPromise) {
                 rejectPromise(new Error('Authentication failed'));
             }
@@ -385,20 +372,6 @@ export async function connect(host: string, port: number, path: string, password
         ws.onerror = (evt) => {
             console.error('Relay error:', evt);
             setConnectionStatus('error');
-            if (!get(connectionState).wasEverConnected) {
-                // onclose may not have fired — ensure stores are synchronized
-                // (network failures can trigger onerror without onclose)
-                webSockets.delete(thisWs);
-                thisWs.close();
-                ws = null;
-                connected.set(false);
-                const elapsed = Date.now() - connectStart;
-                if (elapsed < 10000) {
-                    setErrors({ serverUnreachable: true });
-                } else {
-                    setErrors({ errorMessage: true });
-                }
-            }
             reject(new Error('Connection failed'));
         };
     });
@@ -502,22 +475,25 @@ function showDisconnectToast(connInfo: [string, number, string, string, boolean,
             duration: 0,
             buttons: [{
                 text: 'Reconnect',
-                action: () => {
-                    const latest = get(toastStore);
-                    const lastToast = latest[latest.length - 1];
-                    if (lastToast) removeToast(lastToast.id);
-                    // Clear any pending auto-reconnect timer so only this manual reconnect proceeds
-                    if (reconnectingTimer) {
-                        clearTimeout(reconnectingTimer);
-                        reconnectingTimer = null;
-                    }
-                    manualReconnectRequested = true;
-                    const [h, p, path, pw, tls, noComp] = connInfo!;
-                    connect(h, p, path, pw, tls, noComp);
-                }
+                action: () => triggerManualReconnect(false)
             }]
         }
     );
+}
+
+// Manual reconnect triggered by toast button — shared between disconnect toast and max-attempts error toast.
+function triggerManualReconnect(resetAttempts = false) {
+    const toasts = get(toastStore);
+    const lastToast = toasts[toasts.length - 1];
+    if (lastToast) removeToast(lastToast.id);
+    if (reconnectingTimer) {
+        clearTimeout(reconnectingTimer);
+        reconnectingTimer = null;
+    }
+    if (resetAttempts) resetReconnectAttempts();
+    manualReconnectRequested = true;
+    const [h, p, path, pw, tls, noComp] = connectionData!;
+    connect(h, p, path, pw, tls, noComp);
 }
 
 // Max consecutive reconnection attempts before showing user a toast and stopping
@@ -554,20 +530,7 @@ function scheduleReconnect() {
                 duration: 0,
                 buttons: [{
                     text: 'Retry',
-                    action: () => {
-                        const latest = get(toastStore);
-                        const lastToast = latest[latest.length - 1];
-                        if (lastToast) removeToast(lastToast.id);
-                        // Clear any pending auto-reconnect timer so only this manual reconnect proceeds
-                        if (reconnectingTimer) {
-                            clearTimeout(reconnectingTimer);
-                            reconnectingTimer = null;
-                        }
-                        resetReconnectAttempts();
-                        manualReconnectRequested = true;
-                        const [h, p, path, pw, tls, noComp] = connectionData!;
-                        connect(h, p, path, pw, tls, noComp);
-                    }
+                    action: () => triggerManualReconnect(true)
                 }]
             }
         );
