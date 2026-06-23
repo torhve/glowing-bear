@@ -5,8 +5,6 @@ import { settings } from '$lib/stores/settings';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist, setOnUpgrade, setOnUpgradeEnded } from '$lib/stores/handlers';
 import { addToast, removeToast, clearToasts, toastStore } from '$lib/toast';
 import { onDisconnect } from '$lib/notifications';
-// TODO: Re-enable nick color customization when desired
-// import { IDEAL_NICK_COLORS, IDEAL_COLOR_NICKS_IN_NICKLIST, shouldAutoApply } from '$lib/stores/nickColors';
 import { Protocol } from '$lib/weechat';
 import { sha256, pbkdf2 as nativePbkdf2, toHexString } from '$lib/utils/crypto';
 import type { ProtocolMessage } from '$lib/types';
@@ -294,10 +292,6 @@ export async function connect(host: string, port: number, path: string, password
                 await fetchConfValue('weechat.look.buffer_time_format');
                 await fetchConfValue('weechat.completion.nick_completer');
                 await fetchConfValue('weechat.completion.nick_add_space');
-                await fetchConfValue('weechat.color.chat_nick_colors');
-
-                // TODO: Re-enable auto-apply nick colors when desired
-                // autoApplyNickColors();
 
                 // Request sync (fire-and-forget, like AngularJS code)
                 const syncMsg = Protocol.formatSync({});
@@ -848,20 +842,6 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
         pendingFetchBuffers.delete(bufferIdStr);
     }
 }
-
-// TODO: Re-enable when desired
-// function autoApplyNickColors() {
-//     const cfg = get(wconfig);
-//     if (!shouldAutoApply(cfg['weechat.color.chat_nick_colors'] ?? '')) {
-//         return; // User has customized, leave it alone
-//     }
-//
-//     sendWeeChatCommand(`/set weechat.color.chat_nick_colors "${IDEAL_NICK_COLORS}"`);
-//     sendWeeChatCommand(`/set irc.look.color_nicks_in_nicklist ${IDEAL_COLOR_NICKS_IN_NICKLIST}`);
-//     sendWeeChatCommand('/save');
-//
-//     console.log('[nick-colors] auto-applied ideal nick color palette (175 colors) + saved');
-// }
 
 export function sendWeeChatCommand(command: string, bufferId?: string) {
     if (!ws || ws.readyState !== WebSocket.OPEN) {

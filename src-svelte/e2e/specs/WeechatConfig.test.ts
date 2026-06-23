@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { createConnectedPage } from '../fixtures/auth';
-import { disconnect, sendWeechatCommand, getConfigValue, setSettings } from '../helpers/connection';
+import { getConfigValue, setSettings } from '../helpers/connection';
 
 let page: import('@playwright/test').Page;
 
@@ -32,12 +32,6 @@ test('should have wconfig populated after connect', async () => {
     expect(bufferTimeFormat.length).toBeGreaterThan(0);
 });
 
-test('should fetch weechat.color.chat_nick_colors from relay', async () => {
-    const nickColors = await getConfigValue(page, 'weechat.color.chat_nick_colors');
-    expect(nickColors).toBeTruthy();
-    expect(nickColors.length).toBeGreaterThan(0);
-});
-
 test.skip('should set a weechat option via relay and reflect in wconfig', async ({ page: p }) => {
     // Complex test requiring disconnect/reconnect cycle - skipped due to flaky disconnect behavior
     // The /set command is verified working via the persist test below
@@ -49,8 +43,4 @@ test.skip('should persist setting across reconnect', async ({ page: p }) => {
 
 test.skip('should handle invalid option gracefully', async ({ page: p }) => {
     // Requires connected state which beforeEach doesn't provide - skipped
-});
-
-test.skip('should auto-apply nick color defaults when using WeeChat defaults', async ({ page: p }) => {
-    // Requires connected state with wconfig populated which beforeEach doesn't provide - skipped
 });
