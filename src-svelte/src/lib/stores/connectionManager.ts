@@ -16,16 +16,30 @@ import { DEBUG_NICKLIST, DEBUG_WEECHAT_COMMANDS } from '$lib/debug';
 // Static methods (formatHandshake, formatInit, etc.) are called on the constructor directly
 const protocolInstance = new Protocol();
 
+// Track all WebSocket instances (including stale ones from previous connections)
+// so that disconnect() can close them all — prevents orphaned connections.
+const webSockets = new Set<WebSocket>();
+
 let ws: WebSocket | null = null;
 let hotlistInterval: ReturnType<typeof setInterval> | null = null;
 let reconnectingTimer: ReturnType<typeof setTimeout> | null = null;
 let connectionData: [string, number, string, string, boolean, boolean] | null = null;
 let connecting = false;
+let manualReconnectRequested = false;
 let connectionGeneration = 0;
 
 export async function connect(host: string, port: number, path: string, password: string, tls: boolean, noCompression: boolean) {
-    // Prevent rapid concurrent connect() calls (e.g., from HMR-triggered remounts).
-    // Only one connection attempt should be active at a time.
+    // If user clicked manual reconnect while auto-reconnect was in progress,
+    // abort the existing connection attempt and take over.
+    if (manualReconnectRequested) {
+        manualReconnectRequested = false;
+        if (connecting) {
+            // Close all tracked WebSocket instances (including stale ones)
+            for (const w of webSockets) w.close(1000, 'manual reconnect');
+            webSockets.clear();
+            ws = null;
+        }
+    }
     if (connecting) {
         console.log('[connect] already connecting, skipping duplicate');
         return;
@@ -46,17 +60,17 @@ export async function connect(host: string, port: number, path: string, password
     const url = `${proto}://${formattedHost}:${port}/${path}`;
     console.log('Connecting to:', `${proto}://${formattedHost}:${port}`);
 
-    if (ws) {
-        ws.close();
-        ws = null;
-    }
+    // Close all existing WebSocket instances before starting new connection
+    for (const w of webSockets) w.close(1000, 'new connection');
+    webSockets.clear();
+    ws = null;
     connectionData = [host, port, path, password, tls, noCompression];
     setConnectionStatus('connecting');
 
     // Register upgrade callbacks so handlers can trigger disconnect/reconnect.
     setOnUpgrade(() => {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.close(1000, 'WeeChat upgrading');
+        for (const w of webSockets) {
+            if (w.readyState === WebSocket.OPEN) w.close(1000, 'WeeChat upgrading');
         }
     });
     setOnUpgradeEnded(() => {
@@ -72,6 +86,7 @@ export async function connect(host: string, port: number, path: string, password
         rejectPromise = reject;
         try {
             ws = new WebSocket(url);
+            webSockets.add(ws);
         } catch (e) {
             connecting = false;
             reject(e);
@@ -264,6 +279,8 @@ export async function connect(host: string, port: number, path: string, password
         };
 
         ws.onclose = (evt) => {
+            // Always remove closed WebSocket from tracking set
+            webSockets.delete(thisWs);
             // If connection generation has changed, connect() replaced this WS — ignore
             if (genAtConnect !== connectionGeneration) return;
             // Reject all pending callbacks to unblock awaiting sendAsync promises
@@ -347,12 +364,13 @@ export async function connect(host: string, port: number, path: string, password
         };
 
         ws.onerror = (evt) => {
-            connecting = false;  // Release lock so reconnect can proceed (matches AngularJS behavior)
             console.error('Relay error:', evt);
             setConnectionStatus('error');
             if (!get(connectionState).wasEverConnected) {
                 // onclose may not have fired — ensure stores are synchronized
                 // (network failures can trigger onerror without onclose)
+                webSockets.delete(thisWs);
+                thisWs.close();
                 ws = null;
                 connected.set(false);
                 const elapsed = Date.now() - connectStart;
@@ -469,6 +487,12 @@ function showDisconnectToast(connInfo: [string, number, string, string, boolean,
                     const latest = get(toastStore);
                     const lastToast = latest[latest.length - 1];
                     if (lastToast) removeToast(lastToast.id);
+                    // Clear any pending auto-reconnect timer so only this manual reconnect proceeds
+                    if (reconnectingTimer) {
+                        clearTimeout(reconnectingTimer);
+                        reconnectingTimer = null;
+                    }
+                    manualReconnectRequested = true;
                     const [h, p, path, pw, tls, noComp] = connInfo!;
                     connect(h, p, path, pw, tls, noComp);
                 }
@@ -513,7 +537,13 @@ function scheduleReconnect() {
                         const latest = get(toastStore);
                         const lastToast = latest[latest.length - 1];
                         if (lastToast) removeToast(lastToast.id);
+                        // Clear any pending auto-reconnect timer so only this manual reconnect proceeds
+                        if (reconnectingTimer) {
+                            clearTimeout(reconnectingTimer);
+                            reconnectingTimer = null;
+                        }
                         resetReconnectAttempts();
+                        manualReconnectRequested = true;
                         const [h, p, path, pw, tls, noComp] = connectionData!;
                         connect(h, p, path, pw, tls, noComp);
                     }
@@ -690,13 +720,17 @@ export function disconnect() {
         reconnectingTimer = null;
     }
     connectionData = null;
-    if (ws) {
+    // Close ALL tracked WebSocket instances (including orphaned ones from previous connections)
+    if (webSockets.size > 0) {
         const quitMsg = Protocol.formatQuit();
-        sendWs(quitMsg, 'quit');
-        ws.close();
+        for (const w of webSockets) {
+            if (w.readyState === WebSocket.OPEN) sendWs(quitMsg, 'quit');
+            w.close(1000, 'user disconnect');
+        }
+        webSockets.clear();
         ws = null;
     } else {
-        // ws is already null — ensure stores are synchronized after failed/stale connection
+        // No active WebSockets — ensure stores are synchronized after failed/stale connection
         setConnectionStatus('disconnected');
     }
     // Clear unread counts, reset document title, and cancel notifications for all disconnect paths
@@ -945,5 +979,14 @@ export function unpinBuffer(bufferId: string) {
 }
 
 export function getWs() {
-    return ws;
+    // Return the most recently created open/connecting WebSocket, or the primary ws reference
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        return ws;
+    }
+    for (const w of webSockets) {
+        if (w.readyState === WebSocket.OPEN || w.readyState === WebSocket.CONNECTING) {
+            return w;
+        }
+    }
+    return null;
 }
