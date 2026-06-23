@@ -309,6 +309,21 @@ export const hotlistClearedBuffers = writable<Set<string>>(new Set());
 // the user is at the bottom (similar to AngularJS bufferBottom behavior).
 export const bufferBottom = writable(true);
 
+// Number of visible lines in the chat container, measured from actual DOM dimensions
+// (container height / line height + 10). Default 100 used until first measurement.
+export const linesPerScreen = writable(100);
+
+// Max buffer lines for memory limiting: 2 screenfuls + 10, clamped to [200, 1000].
+// Dynamic — recalculated when viewport/font changes via recalculateLinesPerScreen().
+export const maxBufferLines = derived(linesPerScreen, ($lps) =>
+    Math.min(1000, Math.max(200, 2 * $lps + 10))
+);
+
+// Called by ChatView after measuring DOM dimensions on resize or font change.
+export function recalculateLinesPerScreen(numLines: number) {
+    linesPerScreen.set(Math.max(50, numLines));
+}
+
 // Track whether we're in the initial post-connect sync phase.
 // During this phase, lastSeen is not updated per-line — it's calculated
 // after sync completes using: lastSeen = lines.length - unread - 1.
@@ -474,11 +489,10 @@ export function setActiveBuffer(bufferId: string): boolean {
         }
     }
 
-    // Discard unread lines above 2 screenfuls to keep GB responsive when loading
+    // Discard unread lines above dynamic limit to keep GB responsive when loading
     // buffers which have seen a lot of traffic (see issue #859). Adjust lastSeen
     // so the readmarker stays at the correct position relative to visible content.
-    const linesPerScreen = 100;
-    const maxLines = 2 * linesPerScreen + 10;
+    const maxLines = get(maxBufferLines);
     const targetLinesLength = updatedBuffers[bufferId]!.lines.length;
     if (targetLinesLength > maxLines) {
         const linesToRemove = targetLinesLength - maxLines;
