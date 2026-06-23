@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { BufferLine } from '$lib/types';
   import { get } from 'svelte/store';
-  import { currentBuffer, saveScrollPosition, activeBufferId, bufferBottom, buffers } from '$lib/stores/models';
+  import { currentBuffer, saveScrollPosition, activeBufferId, bufferBottom, buffers, recalculateLinesPerScreen } from '$lib/stores/models';
   import { settings } from '$lib/stores/settings';
   import { fetchMoreLines } from '$lib/stores/connectionManager';
   import { buildMentionText, isFreeBuffer, modifyTextareaValue } from '$lib/utils';
@@ -111,6 +111,54 @@
   $effect(() => {
     // Sync local isAtBottom state to shared bufferBottom store
     bufferBottom.set(isAtBottom);
+  });
+
+  // Measure visible lines from actual DOM dimensions, matching AngularJS's calculateNumLines.
+  // Samples line height from rendered .bufferline elements and divides container height by it.
+  function measureLinesPerScreen() {
+    if (!containerRef) return;
+    const areaHeight = containerRef.clientHeight;
+    const sampleLine = containerRef.querySelector('.bufferline');
+    // Fallback line height of 16px when no rendered lines exist yet
+    const lineHeight = sampleLine?.clientHeight ?? 16;
+    if (lineHeight === 0) return;
+    // Fetch 10 lines more than theoretically needed so scrolling up triggers loading of more lines
+    const numLines = Math.ceil(areaHeight / lineHeight + 10);
+    recalculateLinesPerScreen(numLines);
+  }
+
+  // Measure after first render with content — before this, handlers use default (210)
+  $effect(() => {
+    if (containerRef && messages.length > 0) {
+      // Defer to rAF so DOM has fully rendered
+      requestAnimationFrame(() => measureLinesPerScreen());
+    }
+  });
+
+  // Recalculate on window resize (debounced)
+  let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+  $effect(() => {
+    const onResize = () => {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        resizeTimer = null;
+        measureLinesPerScreen();
+      }, 150);
+    };
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      if (resizeTimer) {
+        clearTimeout(resizeTimer);
+        resizeTimer = null;
+      }
+    };
+  });
+
+  // Recalculate when font size setting changes
+  $effect(() => {
+    void $settings.fontsize;
+    measureLinesPerScreen();
   });
 
   $effect.pre(() => {

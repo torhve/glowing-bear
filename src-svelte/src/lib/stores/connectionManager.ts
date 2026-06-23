@@ -809,21 +809,26 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
         // created a new store copy during the async wait, so our captured reference is stale.
         const freshBuffer = getBuffer(bufferId);
         if (!freshBuffer) return;
-        // Process the fetched lines — clear old lines and refill (matching AngularJS flow).
-        // Preserve readmarker position by subtracting the old line count from lastSeen
-        // after handleLineInfo increments it per-line (including injected date-change lines).
+        // Capture old line count before clearing, to correct lastSeen after handleLineInfo
+        // increments it per-line (including injected date-change lines).
         const oldLength = freshBuffer.lines.length;
-        freshBuffer.lines = [];
-        freshBuffer.requestedLines = 0;
-        handleLineInfo(message, true);
-        // Correct the read marker for the lines that were counted twice (old + new).
-        freshBuffer.lastSeen -= oldLength;
+        // Pass clearLinesBufferId so handleLineInfo clears old lines atomically in its
+        // immutable update, triggering Svelte reactivity for the backfilled content.
+        handleLineInfo(message, true, bufferId);
 
-        // Determine if all lines are fetched
+        // After handleLineInfo's buffers.set(), do an immutable update to correct lastSeen
+        // and set allLinesFetched — freshBuffer reference is now stale.
         const linesReceived = message.objects?.[0]?.content?.length ?? 0;
-        if (linesReceived < numLines && freshBuffer) {
-            freshBuffer.allLinesFetched = true;
-        }
+        buffers.update(current => {
+            const buf = current[bufferId];
+            if (!buf) return current;
+            const updated = { ...buf, lines: [...buf.lines], nicklist: { ...buf.nicklist } };
+            updated.lastSeen -= oldLength;
+            if (linesReceived < numLines) {
+                updated.allLinesFetched = true;
+            }
+            return { ...current, [bufferId]: updated };
+        });
     } catch (err) {
         // Don't mark allLinesFetched=true for connection failures — those are transient.
         // Only give up on actual protocol errors (timeout, parse failure, etc.).
@@ -833,10 +838,11 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
             return;  // finally block handles pendingFetchBuffers cleanup
         }
         console.warn('[fetchMoreLines] fetch failed, marking allLinesFetched:', err);
-        const fallbackBuffer = getBuffer(bufferId);
-        if (fallbackBuffer) {
-            fallbackBuffer.allLinesFetched = true;
-        }
+        buffers.update(current => {
+            const buf = current[bufferId];
+            if (!buf) return current;
+            return { ...current, [bufferId]: { ...buf, lines: [...buf.lines], allLinesFetched: true } };
+        });
     } finally {
         pendingFetchBuffers.delete(bufferIdStr);
     }

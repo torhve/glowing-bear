@@ -22,12 +22,27 @@ import {
     removeBuffer,
     pendingBufferSwitch,
     setSyncing,
-    isSyncing
+    isSyncing,
+    maxBufferLines
 } from '$lib/stores/models';
 import { shouldResume } from '$lib/stores/bufferResume';
 import { createHighlight, playNotificationSound, updateTitle, updateFavico } from '$lib/notifications';
 import { DEBUG_NICKLIST } from '$lib/debug';
 import type { ProtocolMessage, BufferMessage, BufferLine, BufferLineMessage, NickMessage, NickGroupMessage, HotlistEntry, BufferData, BufferType } from '$lib/types';
+
+/**
+ * Trims buffer lines to the given limit, adjusting lastSeen and requestedLines
+ * to preserve readmarker position relative to visible content.
+ */
+function trimBufferLines(buffer: BufferData, limit: number) {
+    if (buffer.lines.length <= limit) return;
+    const linesToRemove = buffer.lines.length - limit;
+    buffer.lines.splice(0, linesToRemove);
+    buffer.requestedLines -= linesToRemove;
+    buffer.lastSeen = Math.max(0, buffer.lastSeen - linesToRemove);
+    buffer.lastSeen = Math.min(buffer.lastSeen, buffer.lines.length - 1);
+    buffer.allLinesFetched = false;
+}
 
 // ---- Version handler ----
 export function handleVersionInfo(message: ProtocolMessage) {
@@ -376,6 +391,13 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
 
     // Update spokeAt timestamps for tab completion on the immutable copies
     handleNickMessageForSpeakOnBuffers(lines, updatedBuffers);
+
+    // Trim lines exceeding memory limit on affected buffers
+    const limit = get(maxBufferLines);
+    for (const id of affectedIds) {
+        const buf = updatedBuffers[id];
+        if (buf) trimBufferLines(buf, limit);
+    }
 
     // Update stores
     console.debug('[handler] updating buffers store, total lines:', Object.values(updatedBuffers).reduce((sum: number, b: BufferData) => sum + b.lines.length, 0));
@@ -1086,8 +1108,10 @@ export function handleNicklistDiff(message: ProtocolMessage) {
     }
 }
 
-// ---- Line info handler (for fetchMoreLines) ----
-export function handleLineInfo(message: ProtocolMessage, manually: boolean = true) {
+// ---- Line info handler (for fetchMoreLines and auto-sync) ----
+// Builds immutable copies of affected buffers, processes all lines on those
+// copies, then does a single buffers.set() to trigger Svelte reactivity.
+export function handleLineInfo(message: ProtocolMessage, manually: boolean = true, clearLinesBufferId?: string) {
     const lines = message.objects[0]?.content as BufferLineMessage[];
     if (!lines) {
         console.debug('[handler] handleLineInfo: no content');
@@ -1103,8 +1127,34 @@ export function handleLineInfo(message: ProtocolMessage, manually: boolean = tru
     const reversed = [...lines].reverse();
     const currentBuffers = get(buffers);
 
+    // Identify all affected buffer IDs
+    const affectedIds = new Set<string>();
     for (const lineMsg of reversed) {
-        const buffer = currentBuffers[lineMsg.buffer];
+        affectedIds.add(lineMsg.buffer);
+    }
+    if (clearLinesBufferId) {
+        affectedIds.add(clearLinesBufferId);
+    }
+
+    // Build immutable copies: deep-copy affected buffers, shallow-copy others
+    const updatedBuffers: Record<string, BufferData> = {};
+    for (const id in currentBuffers) {
+        const buf = currentBuffers[id];
+        if (!buf) continue;
+        if (affectedIds.has(id)) {
+            let linesCopy = [...buf.lines];
+            // Clear lines for the buffer that requested a fresh fetch
+            if (id === clearLinesBufferId) {
+                linesCopy = [];
+            }
+            updatedBuffers[id] = { ...buf, lines: linesCopy, nicklist: { ...buf.nicklist }, localVariables: buf.localVariables ? { ...buf.localVariables } : undefined };
+        } else {
+            updatedBuffers[id] = buf;
+        }
+    }
+
+    for (const lineMsg of reversed) {
+        const buffer = updatedBuffers[lineMsg.buffer];
         if (!buffer) continue;
 
         const line = createBufferLine(lineMsg);
@@ -1131,7 +1181,7 @@ export function handleLineInfo(message: ProtocolMessage, manually: boolean = tru
     // Post-backfill: set lastSeen for buffers with lastSeen < 0 after loading.
     // Account for hotlist-reported unread counts so the readmarker appears at
     // the correct position instead of being hidden at the bottom.
-    for (const buf of Object.values(currentBuffers)) {
+    for (const buf of Object.values(updatedBuffers)) {
         if (buf.lastSeen < 0 && buf.lines.length > 0) {
             const unreadSum = (buf.unread || 0) + (buf.notification || 0);
             buf.lastSeen = unreadSum > 0
@@ -1140,7 +1190,14 @@ export function handleLineInfo(message: ProtocolMessage, manually: boolean = tru
         }
     }
 
-    buffers.set({ ...currentBuffers });
+    // Trim lines exceeding memory limit on affected buffers
+    const limit = get(maxBufferLines);
+    for (const id of affectedIds) {
+        const buf = updatedBuffers[id];
+        if (buf) trimBufferLines(buf, limit);
+    }
+
+    buffers.set(updatedBuffers);
 }
 
 // ---- Event dispatch table ----
