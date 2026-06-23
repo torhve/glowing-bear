@@ -9,7 +9,7 @@
   let { plugin }: { plugin: PluginMetadata } = $props();
 
   let embedRef = $state<HTMLDivElement | null>(null);
-  let visible = $state(plugin.visible);
+  let visible = $state(false);
   let contentInjected = $state(false);
 
   // React only to changes in the plugin.visible prop (settings toggle).
