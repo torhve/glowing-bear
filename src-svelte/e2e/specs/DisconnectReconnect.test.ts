@@ -78,6 +78,14 @@ test('disconnect via TopBar button', async () => {
 });
 
 test('reconnect preserves settings and reconnects successfully', async () => {
+    // Ensure connected state (previous serial test may have disconnected)
+    if (!(await page.getByTestId('disconnect-button').isVisible())) {
+        await page.getByTestId('host-input').fill('localhost');
+        await fillPortInput(page, '9001');
+        await page.getByTestId('password-input').fill('testpassword123');
+        await page.getByTestId('connect-button').click();
+        await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
+    }
     // Disconnect first
     await page.getByTestId('disconnect-button').click();
     await page.waitForTimeout(2000);
@@ -93,12 +101,20 @@ test('reconnect preserves settings and reconnects successfully', async () => {
 });
 
 test('disconnect toast shows reconnect button when autoconnect disabled', async () => {
+    // Ensure connected state (previous serial test may have disconnected)
+    if (!(await page.getByTestId('disconnect-button').isVisible())) {
+        await page.getByTestId('host-input').fill('localhost');
+        await fillPortInput(page, '9001');
+        await page.getByTestId('password-input').fill('testpassword123');
+        await page.getByTestId('connect-button').click();
+        await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
+    }
     await setSettings(page, { autoconnect: false });
 
-    // Simulate WebSocket close via the connectionManager
+    // Simulate WebSocket close directly (not via disconnect(), which suppresses toast for user-initiated disconnects)
     await page.evaluate(() => {
-        const connMgr = (window as unknown as Record<string, unknown>).__connectionManager as { disconnect?: () => void };
-        connMgr?.disconnect?.();
+        const ws = (window as any).__getWs?.();
+        if (ws) ws.close(3000, 'test disconnect');
     });
 
     // Wait for disconnect toast to appear

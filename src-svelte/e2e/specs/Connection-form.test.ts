@@ -314,31 +314,22 @@ test.describe('Disconnect handling', () => {
         await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
     });
 
-    test('should show status dot changes on disconnect', async ({ page }) => {
+    test('should show connection form after unexpected disconnect', async ({ page }) => {
         await connectToWeechat(page);
         await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
 
-        // WebSocket should be open when connected
-        let wsReadyState = await page.evaluate(() => {
-            const ws = (window as any).__getWs?.();
-            return ws ? ws.readyState : null;
-        });
-        expect(wsReadyState).toBe(WebSocket.OPEN);
+        // Verify connected state — chat view visible, host input hidden
+        await expect(page.getByTestId('host-input')).not.toBeVisible();
 
-        // Disable autoconnect and disconnect
+        // Disable autoconnect and simulate WebSocket close
         await setSettings(page, { autoconnect: false });
         await page.evaluate(() => {
             const ws = (window as any).__getWs?.();
             if (ws) ws.close(3000, 'test disconnect');
         });
 
-        // Poll until WebSocket reaches CLOSED state (may briefly be CLOSING)
-        await expect(async () => {
-            wsReadyState = await page.evaluate(() => {
-                const ws = (window as any).__getWs?.();
-                return ws ? ws.readyState : null;
-            });
-            expect(wsReadyState).toBe(WebSocket.CLOSED);
-        }).toPass({ timeout: 5000 });
+        // After disconnect, TopBar is replaced by ConnectionForm — host input becomes visible
+        await expect(page.getByTestId('host-input')).toBeVisible({ timeout: 10000 });
+        await expect(page.getByTestId('chat-view')).not.toBeVisible();
     });
 });
