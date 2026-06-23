@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { buffers, servers, activeBufferId, setActiveBuffer } from '$lib/stores/models';
+import { buffers, servers, activeBufferId, setActiveBuffer, hotlistClearedBuffers } from '$lib/stores/models';
 import type { BufferData, ProtocolMessage, HotlistEntry } from '$lib/types';
 
 // Mock settings store to avoid localStorage access at module load time
@@ -337,6 +337,68 @@ describe('Readmarker behavior', () => {
             // Lines after index 99 (indices 100, 101, 102) are shown as unread
             expect(result!.lastSeen).toBe(99);
             expect(result!.active).toBe(true);
+        });
+
+        it('does NOT restore stale WeeChat counts during rapid A→B→C switching', () => {
+            // Buffer A (glowing-bear): 100 lines, user was viewing it
+            const bufA = makeBuffer('0x100', {
+                lines: Array.from({ length: 100 }, (_, i) => ({ prefix: [], content: [], date: i, shortTime: '', formattedTime: '', buffer: '0x100', tags: [], highlight: false, displayed: true, prefixtext: '', text: `line${i}`, showHiddenBrackets: false }) as any),
+                lastSeen: 99,
+                unread: 0,
+                notification: 0,
+                active: true
+            });
+            // Buffer B (gbtest): exists for switching purposes
+            const bufB = makeBuffer('0x200', {
+                lines: [{ prefix: [], content: [], date: 0, shortTime: '', formattedTime: '', buffer: '0x200', tags: [], highlight: false, displayed: true, prefixtext: '', text: 'hello', showHiddenBrackets: false }] as any,
+                lastSeen: 0,
+                unread: 0,
+                notification: 0,
+                active: false
+            });
+            // Buffer C (weechat): exists for switching purposes
+            const bufC = makeBuffer('0x300', {
+                lines: [{ prefix: [], content: [], date: 0, shortTime: '', formattedTime: '', buffer: '0x300', tags: [], highlight: false, displayed: true, prefixtext: '', text: 'hello', showHiddenBrackets: false }] as any,
+                lastSeen: 0,
+                unread: 0,
+                notification: 0,
+                active: false
+            });
+            buffers.set({ '0x100': bufA, '0x200': bufB, '0x300': bufC });
+            activeBufferId.set('0x100');
+            servers.set({
+                'irc.server': { id: '0x100', unread: 0 },
+                'irc.server2': { id: '0x200', unread: 0 },
+                'irc.server3': { id: '0x300', unread: 0 }
+            });
+
+            // User switches A→B
+            setActiveBuffer('0x200');
+            let resultA = get(buffers)['0x100'];
+            expect(resultA!.unread).toBe(0);
+            expect(resultA!.notification).toBe(0);
+            expect(resultA!.lastSeen).toBe(99);
+
+            // Stale WeeChat hotlist arrives (hasn't processed clear command yet)
+            // This would normally restore A's counts via Math.max(0, staleCount)
+            handleHotlistInfo(createHotlistInfo([{ buffer: '0x100', count: [0, 5, 2, 0] }]));
+            resultA = get(buffers)['0x100'];
+            // Counts should remain zero because A is in hotlistClearedBuffers
+            expect(resultA!.unread).toBe(0);
+            expect(resultA!.notification).toBe(0);
+
+            // User switches B→C
+            setActiveBuffer('0x300');
+            resultA = get(buffers)['0x100'];
+            expect(resultA!.unread).toBe(0);
+            expect(resultA!.notification).toBe(0);
+
+            // Even if another stale hotlist arrives after A is no longer previousId,
+            // counts should stay cleared
+            handleHotlistInfo(createHotlistInfo([{ buffer: '0x100', count: [0, 3, 1, 0] }]));
+            resultA = get(buffers)['0x100'];
+            expect(resultA!.unread).toBe(0);
+            expect(resultA!.notification).toBe(0);
         });
     });
 

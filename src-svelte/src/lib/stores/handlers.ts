@@ -6,6 +6,7 @@ import {
     previousBufferId,
     bufferBottom,
     localUnreadBuffers,
+    hotlistClearedBuffers,
     weechatVersion,
     wconfig,
     addBuffer,
@@ -744,6 +745,7 @@ export function handleHotlistInfo(message: ProtocolMessage) {
     const previousId = get(previousBufferId);
     const currentServers = get(servers);
     const localUnread = get(localUnreadBuffers);
+    const hotlistCleared = get(hotlistClearedBuffers);
 
     const hotlist = message.objects[0]?.content as HotlistEntry[];
     if (!hotlist) return;
@@ -799,6 +801,11 @@ export function handleHotlistInfo(message: ProtocolMessage) {
         const buffer = updatedBuffers[entry.buffer];
         if (!buffer || entry.buffer === activeId || entry.buffer === previousId) continue;
 
+        // Skip merge for buffers whose hotlist was recently cleared by setActiveBuffer.
+        // WeeChat may not have processed the clear command yet, so its data is stale.
+        // This prevents unread counts from reappearing during rapid buffer switching.
+        if (hotlistCleared.has(entry.buffer)) continue;
+
         // Merge WeeChat hotlist counts with locally-tracked counts.
         // Use Math.max to preserve optimistic local increments that haven't
         // been acknowledged by WeeChat's hotlist yet.
@@ -811,6 +818,11 @@ export function handleHotlistInfo(message: ProtocolMessage) {
         if (buffer.lines.length > 0 && !localUnread.has(entry.buffer)) {
             const totalUnread = buffer.unread + buffer.notification;
             buffer.lastSeen = buffer.lines.length - 1 - totalUnread;
+        }
+
+        // Clean up cleared set once WeeChat confirms zero counts for this buffer.
+        if (hotlistUnread === 0 && hotlistNotif === 0) {
+            hotlistClearedBuffers.update(s => { const copy = new Set(s); copy.delete(entry.buffer); return copy; });
         }
 
         const serverKey = `${buffer.plugin}.${buffer.server}`;
