@@ -286,8 +286,9 @@ export const angularTimeFormat = writable<string>('');
 
 export const supportsFormattingDate = writable<boolean>(false);
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- intent: stores the nickname of a user clicked in the nicklist so we can auto-switch to their private buffer once /query creates it; cleared on match or timeout
-export const pendingBufferSwitch: any = writable<string | null>(null);
+// Stores the nickname of a user clicked in the nicklist so we can auto-switch to their private buffer once /query creates it; cleared on match or timeout
+import { type Writable } from 'svelte/store';
+export const pendingBufferSwitch: Writable<string | null> = writable<string | null>(null);
 export const hotlist = writable<HotlistEntry[]>([]);
 
 export const previousBufferId = writable<string>('');

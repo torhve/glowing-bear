@@ -1,7 +1,6 @@
 // Tauri window utilities — lazy-loaded to avoid import errors in browser context
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let tauriWindow: any = null;
+let tauriWindow: typeof import('@tauri-apps/api/window') | null = null;
 
 // Detect whether we are running inside a Tauri webview
 function isTauri(): boolean {
