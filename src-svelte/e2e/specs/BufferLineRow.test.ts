@@ -301,3 +301,48 @@ test.describe('codify', () => {
         await expect(page.getByTestId('topic-modal')).not.toBeVisible({ timeout: 5000 });
     });
 });
+
+// ---- BufferLineRow vertical alignment tests ----
+
+test.describe('vertical alignment', () => {
+    test.beforeEach(async () => {
+        await waitForBuffer(page, '#glowing-bear', 15000);
+        await switchToBuffer(page, '#glowing-bear');
+    });
+
+    test('time and nick align to top on multi-line messages', async () => {
+        const longMsg = 'line1 ' + 'a'.repeat(300) + ' line3';
+        await irc.sendMessage('#glowing-bear', longMsg);
+        const row = page.locator('[data-testid="bufferline-row"] td.message').filter({ hasText: 'line1' }).first();
+        await expect(row).toBeVisible({ timeout: 10000 });
+
+        const timeStyle = await page.evaluate(() => {
+            const td = document.querySelector('td.time');
+            return td ? window.getComputedStyle(td).verticalAlign : null;
+        });
+        const prefixStyle = await page.evaluate(() => {
+            const td = document.querySelector('td.prefix');
+            return td ? window.getComputedStyle(td).verticalAlign : null;
+        });
+        expect(timeStyle).toBe('top');
+        expect(prefixStyle).toBe('top');
+    });
+
+    test('time and nick align to top on single-line messages', async () => {
+        const msg = 'short-msg-' + Date.now();
+        await irc.sendMessage('#glowing-bear', msg);
+        const row = page.locator('[data-testid="bufferline-row"] td.message').filter({ hasText: msg }).first();
+        await expect(row).toBeVisible({ timeout: 10000 });
+
+        const timeStyle = await page.evaluate(() => {
+            const td = document.querySelector('td.time');
+            return td ? window.getComputedStyle(td).verticalAlign : null;
+        });
+        const prefixStyle = await page.evaluate(() => {
+            const td = document.querySelector('td.prefix');
+            return td ? window.getComputedStyle(td).verticalAlign : null;
+        });
+        expect(timeStyle).toBe('top');
+        expect(prefixStyle).toBe('top');
+    });
+});
