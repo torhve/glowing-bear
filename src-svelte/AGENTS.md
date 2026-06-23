@@ -81,11 +81,16 @@ Every non-trivial function needs a brief comment above it explaining intent.
 - **Prefer user-facing locators.** `getByRole()`/`getByText()` first. `data-testid` only when no semantic role or stable text fits.
 - **Mock browser APIs with `addInitScript`** in `beforeAll`, reset in `beforeEach`. Not per-test `page.evaluate()`.
 
+### Deploying and pushing
+
+- NEVER git push to upstream
+- NEVER git push to origin
+
 ## Known Issues
 
 - **Svelte 5 `$effect.pre` orphan error** in dev-mode Playwright — filtered via `page.on('pageerror')`. Does NOT affect production.
 - **Vitest browser mode is NOT used** — incompatible with Svelte 5.
-- **Tauri on Windows uses MSWebView2** — provide fallbacks: `min-h-[100vh] min-h-dvh` instead of bare `h-dvh`.
+- **Tauri on Windows uses MSWebView2**
 
 ## Prerequisites
 

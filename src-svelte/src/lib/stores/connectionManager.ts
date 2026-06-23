@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
 import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, incrementReconnectAttempts } from '$lib/stores/connectionStore';
-import { buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer, clearAllUnread } from '$lib/stores/models';
+import { buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer, clearAllUnread, localUnreadBuffers, hotlistClearedBuffers, bufferBottom, previousBufferId, pendingBufferSwitch } from '$lib/stores/models';
 import { settings } from '$lib/stores/settings';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist, setOnUpgrade, setOnUpgradeEnded } from '$lib/stores/handlers';
 import { addToast, removeToast, clearToasts, toastStore } from '$lib/toast';
@@ -303,8 +303,27 @@ export async function connect(host: string, port: number, path: string, password
                 clearInterval(hotlistInterval);
                 hotlistInterval = null;
             }
+            // Clear timers and tracking sets on unexpected disconnect
+            if (hotlistDebounceTimer) {
+                clearTimeout(hotlistDebounceTimer);
+                hotlistDebounceTimer = null;
+            }
+            pendingFetchBuffers.clear();
+            bufferBottom.set(true);
+            pendingBufferSwitch.set(null);
+            // Preserve activeBufferId/previousBufferId — reconnect will restore buffers
+            // and handleBufferInfo will auto-resume to the last viewed buffer.
+            // Clearing these here would break reconnect recovery.
+
             setConnectionStatus('disconnected');
             connected.set(false);
+
+            // Clear unread counts and reset document title on unexpected disconnect
+            // (explicit disconnect in disconnect() handles its own cleanup)
+            if (get(connectionState).wasEverConnected) {
+                clearAllUnread();
+                onDisconnect();
+            }
 
             let shouldReject = false;
 
@@ -516,6 +535,8 @@ function reconnectDelay(attempts: number): number {
 
 function scheduleReconnect() {
     if (!connectionData) return;
+    // Don't auto-reconnect if user has disabled autoconnect in settings
+    if (!get(settings).autoconnect) return;
 
     // Prevent stacking multiple reconnect timers
     if (reconnectingTimer) {
@@ -561,9 +582,11 @@ function scheduleReconnect() {
     reconnectingTimer = setTimeout(() => {
         reconnectingTimer = null;
         setConnectionStatus('reconnecting');
-        // Clear buffers
+        // Clear buffers and unread tracking sets so hotlist can't restore stale unreads for cleared buffers
         buffers.set({});
         servers.set({});
+        localUnreadBuffers.update(() => new Set());
+        hotlistClearedBuffers.update(() => new Set());
 
         connect(host, port, path, password, tls, noCompression);
     }, delay);
@@ -711,6 +734,7 @@ export function disconnect() {
     disconnectStore();
     connected.set(false);
     if (hotlistInterval) clearInterval(hotlistInterval);
+    hotlistInterval = null;
     if (hotlistDebounceTimer) {
         clearTimeout(hotlistDebounceTimer);
         hotlistDebounceTimer = null;
@@ -719,6 +743,13 @@ export function disconnect() {
         clearTimeout(reconnectingTimer);
         reconnectingTimer = null;
     }
+    // Clear tracking sets and reset buffer state on disconnect
+    pendingFetchBuffers.clear();
+    bufferBottom.set(true);
+    activeBufferId.set('');
+    previousBufferId.set('');
+    pendingBufferSwitch.set(null);
+
     connectionData = null;
     // Close ALL tracked WebSocket instances (including orphaned ones from previous connections)
     if (webSockets.size > 0) {
@@ -838,6 +869,13 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
             freshBuffer.allLinesFetched = true;
         }
     } catch (err) {
+        // Don't mark allLinesFetched=true for connection failures — those are transient.
+        // Only give up on actual protocol errors (timeout, parse failure, etc.).
+        const msg = String(err);
+        if (msg.includes('WebSocket not open') || msg.includes('Connection closed')) {
+            console.warn('[fetchMoreLines] connection lost during fetch, aborting');
+            return;  // finally block handles pendingFetchBuffers cleanup
+        }
         console.warn('[fetchMoreLines] fetch failed, marking allLinesFetched:', err);
         const fallbackBuffer = getBuffer(bufferId);
         if (fallbackBuffer) {
