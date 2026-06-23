@@ -837,25 +837,31 @@ export function handleHotlistInfo(message: ProtocolMessage) {
 }
 
 // ---- Nicklist handler ----
-function initNicklistIfFresh(nicklist: (NickMessage | NickGroupMessage)[]) {
-    if (nicklist.length !== 1) return;
-    const firstItem = nicklist[0];
-    if (!firstItem) return;
-    const bufferId = firstItem.pointers[0];
-    if (!bufferId) return;
+// Clear nicklist for a buffer, preserving only root group.
+function clearBufferNicklist(bufferId: string) {
     const buffer = getBuffer(bufferId);
-    if (DEBUG_NICKLIST) console.log('[nicklist] clearing nicklist for buffer:', bufferId);
     if (buffer) {
+        if (DEBUG_NICKLIST) console.log('[nicklist] clearing nicklist for buffer:', bufferId);
         buffer.nicklist = { root: buffer.nicklist.root || { name: '', visible: '', nicks: [] } };
     }
 }
 
-export function handleNicklist(message: ProtocolMessage) {
+export function handleNicklist(message: ProtocolMessage, fresh?: boolean) {
     const nicklist = message.objects[0]?.content as (NickMessage | NickGroupMessage)[];
-    if (DEBUG_NICKLIST) console.log('[nicklist] handleNicklist called, total items:', nicklist?.length ?? 0);
+    if (DEBUG_NICKLIST) console.log('[nicklist] handleNicklist called, total items:', nicklist?.length ?? 0, 'fresh:', !!fresh);
     if (!nicklist) return;
 
-    initNicklistIfFresh(nicklist);
+    // For explicit fetches or WeeChat-sent clears, reset before populating
+    if (fresh || nicklist.length === 1) {
+        const affected = new Set<string>();
+        for (const item of nicklist) {
+            const ptr = item.pointers?.[0];
+            if (ptr) affected.add(ptr);
+        }
+        for (const bid of affected) {
+            clearBufferNicklist(bid);
+        }
+    }
 
     let group = 'root';
     const modifiedBuffers = new Set<string>();
@@ -980,6 +986,21 @@ export function handleNicklistDiff(message: ProtocolMessage) {
     if (DEBUG_NICKLIST) console.log('[nicklist] handleNicklistDiff called, total items:', nicklist?.length ?? 0);
     if (!nicklist) return;
 
+    // Log nick count per affected buffer before applying diff
+    if (DEBUG_NICKLIST) {
+        const affectedBufferIds = new Set<string>();
+        for (const item of nicklist) {
+            const ptr = item.pointers?.[0];
+            if (ptr) affectedBufferIds.add(ptr);
+        }
+        const store = get(buffers);
+        for (const bid of affectedBufferIds) {
+            const buf = store[bid];
+            const count = buf ? Object.values(buf.nicklist).reduce((s, g) => s + g.nicks.length, 0) : -1;
+            console.log('[nicklist] BEFORE diff:', buf?.shortName || bid, '- nicks:', count);
+        }
+    }
+
     // Track current group per buffer — WeeChat sends items ordered by buffer then group
     // Reset to 'root' whenever we switch to a different buffer
     let currentBufferId: string | null = null;
@@ -1001,13 +1022,14 @@ export function handleNicklistDiff(message: ProtocolMessage) {
             currentBufferId = ptr0;
         }
 
-        if (DEBUG_NICKLIST) console.log('[nicklist] processing diff item for', buffer.shortName || buffer.id, '- pointers:', JSON.stringify(n.pointers));
-
-        // Ensure root group exists (mirrors AngularJS nicklistRequested check)
+        // Skip diffs for buffers that haven't had their nicklist requested yet.
+        // Mirrors AngularJS's addNick/delNick/updateNick guard on nicklistRequested().
         if (!('root' in buffer.nicklist)) {
-            buffer.nicklist.root = { name: '', visible: '', nicks: [] };
-            if (DEBUG_NICKLIST) console.log('[nicklist] created missing root group for', buffer.shortName);
+            if (DEBUG_NICKLIST) console.log('[nicklist] skipping diff for', buffer.shortName || buffer.id, '- nicklist not requested');
+            continue;
         }
+
+        if (DEBUG_NICKLIST) console.log('[nicklist] processing diff item for', buffer.shortName || buffer.id, '- pointers:', JSON.stringify(n.pointers));
 
         if ((n as NickGroupMessage).group === 1) {
             const g = createNickGroup(n as NickGroupMessage);
@@ -1050,6 +1072,15 @@ export function handleNicklistDiff(message: ProtocolMessage) {
     }
     if (DEBUG_NICKLIST) console.log('[nicklist] updating buffers store with', modifiedBuffers.size, 'modified buffer(s)');
     buffers.set(updated);
+
+    // Log nick count per affected buffer after applying diff
+    if (DEBUG_NICKLIST) {
+        for (const id of modifiedBuffers) {
+            const buf = updated[id];
+            const count = buf ? Object.values(buf.nicklist).reduce((s, g) => s + g.nicks.length, 0) : -1;
+            console.log('[nicklist] AFTER diff:', buf?.shortName || id, '- nicks:', count);
+        }
+    }
 }
 
 // ---- Line info handler (for fetchMoreLines) ----
