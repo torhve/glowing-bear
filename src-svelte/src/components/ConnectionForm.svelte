@@ -180,30 +180,32 @@ import Key from '@lucide/svelte/icons/key';
             <div class="relative">
               <Monitor size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
               <FormInput
-                 id="host"
-                 data-testid="host-input"
-                 type="text"
-                 value={hostField}
-                 oninput={(e: Event) => { hostField = (e.target as HTMLInputElement).value; validateHost(); handleHostChange(); }}
-                 placeholder="Address"
-                 extraClass={`pl-9 pr-3 ${hostInvalid ? 'border-danger' : ''}`}
-                 autocapitalize="off"
-               />
+                  id="host"
+                  data-testid="host-input"
+                  type="text"
+                  value={hostField}
+                  oninput={(e: Event) => { hostField = (e.target as HTMLInputElement).value; validateHost(); handleHostChange(); }}
+                  onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') { e.preventDefault(); handleConnect(); } }}
+                  placeholder="Address"
+                  extraClass={`pl-9 pr-3 ${hostInvalid ? 'border-danger' : ''}`}
+                  autocapitalize="off"
+                />
              </div>
         </div>
         <div class="connection-port-field min-w-[5rem]">
           <label for="port" class="block text-xs text-text-secondary mb-1">Port</label>
             <div class="relative">
               <List size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
-              <FormInput
-                id="port"
-                data-testid="port-input"
-                type="text"
-                value={port}
-                oninput={(e: Event) => { port = (e.target as HTMLInputElement).value; handlePortChange(); }}
-                placeholder="443"
-                extraClass="pl-9 pr-3"
-              />
+               <FormInput
+                 id="port"
+                 data-testid="port-input"
+                 type="text"
+                 value={port}
+                 oninput={(e: Event) => { port = (e.target as HTMLInputElement).value; handlePortChange(); }}
+                 onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') { e.preventDefault(); handleConnect(); } }}
+                 placeholder="443"
+                 extraClass="pl-9 pr-3"
+               />
             </div>
         </div>
       </div>
@@ -212,15 +214,16 @@ import Key from '@lucide/svelte/icons/key';
         <label for="password" class="block text-xs text-text-secondary mb-1">WeeChat relay password</label>
         <div class="relative">
           <Key size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
-          <FormInput
-            id="password"
-            data-testid="password-input"
-            type={showPassword ? 'text' : 'password'}
-            value={password}
-            oninput={(e: Event) => { password = (e.target as HTMLInputElement).value; }}
-            placeholder="Password"
-            extraClass={`pl-9 pr-10 ${shakePassword ? 'shake' : ''}`}
-          />
+           <FormInput
+             id="password"
+             data-testid="password-input"
+             type={showPassword ? 'text' : 'password'}
+             value={password}
+             oninput={(e: Event) => { password = (e.target as HTMLInputElement).value; }}
+             onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') { e.preventDefault(); handleConnect(); } }}
+             placeholder="Password"
+             extraClass={`pl-9 pr-10 ${shakePassword ? 'shake' : ''}`}
+           />
           <button
             type="button"
             data-testid="toggle-password-visibility"

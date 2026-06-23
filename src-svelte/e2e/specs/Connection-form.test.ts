@@ -129,6 +129,28 @@ test.describe('Connection Form', () => {
         await page.waitForTimeout(300);
         await expect(page.getByTestId('autoconnect-checkbox')).toBeAttached();
     });
+
+    test('should connect when pressing Enter with focus off the form', async ({ page }) => {
+        await page.getByTestId('host-input').fill('localhost');
+        await fillPortInput(page, '9001');
+        await page.getByTestId('password-input').fill('testpassword123');
+        // Move focus off the form by clicking an accordion summary outside the form
+        await page.locator('summary').nth(1).click();
+        await page.keyboard.press('Enter');
+        await expect(page.getByTestId('connect-button')).toBeDisabled({ timeout: 5000 });
+        await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
+    });
+
+    test('should connect when pressing Enter while password field is focused', async ({ page }) => {
+        await page.getByTestId('host-input').fill('localhost');
+        await fillPortInput(page, '9001');
+        await page.getByTestId('password-input').fill('testpassword123');
+        // Focus the password input, then press Enter
+        await page.getByTestId('password-input').focus();
+        await page.keyboard.press('Enter');
+        await expect(page.getByTestId('connect-button')).toBeDisabled({ timeout: 5000 });
+        await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
+    });
 });
 
 test.describe.configure({ mode: 'serial' });

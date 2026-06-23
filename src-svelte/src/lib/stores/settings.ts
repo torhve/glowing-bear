@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 import type { Settings } from '$lib/types';
 
 export const settings = writable<Settings>({
@@ -45,8 +45,6 @@ if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
         }
     }
 }
-
-import { get } from 'svelte/store';
 
 export function updateSettings(partial: Partial<Settings>) {
     const current = get(settings);
