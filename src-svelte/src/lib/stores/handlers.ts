@@ -186,6 +186,10 @@ function handleBufferUpdate(buffer: BufferData, message: BufferMessage) {
         buffer.hideBufferLineTimes = buffer.bufferType === 1;
     }
 
+    // Store full local_variables map for downstream consumers (e.g., myNick lookup).
+    if (message.local_variables) {
+        buffer.localVariables = { ...message.local_variables };
+    }
     if (message.local_variables?.type !== undefined) {
         buffer.type = message.local_variables.type as BufferType;
         buffer.indent = ['channel', 'private'].includes(buffer.type);
@@ -248,7 +252,7 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
         const buf = currentBuffers[id];
         if (!buf) continue;
         if (affectedIds.has(id)) {
-            updatedBuffers[id] = { ...buf, lines: [...buf.lines], nicklist: { ...buf.nicklist } };
+            updatedBuffers[id] = { ...buf, lines: [...buf.lines], nicklist: { ...buf.nicklist }, localVariables: buf.localVariables ? { ...buf.localVariables } : undefined };
         } else {
             updatedBuffers[id] = buf;
         }
@@ -273,8 +277,7 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                 full_name: inferredNick,
                 short_name: inferredNick,
                 type: 2,
-                notify: 3,
-                local_variables: { type: 'private', plugin: 'irc' }
+                notify: 3
             });
             updatedBuffers[lineMsg.buffer] = buffer;
         }
@@ -707,7 +710,10 @@ export function handleBufferLocalvarChanged(message: ProtocolMessage) {
     const indent = ['channel', 'private'].includes(type);
     const serverSortKey = `${plugin}.${server}${type === 'server' ? '' : '.' + buffer.shortName}`.toLowerCase();
 
-    const updated = updateBuffer(bufferId, { type, indent, plugin, server, serverSortKey, pinned });
+    // Merge new local vars into existing map, preserving existing entries not in this message.
+    const mergedLocalVars = { ...(buffer.localVariables || {}), ...lv };
+
+    const updated = updateBuffer(bufferId, { type, indent, plugin, server, serverSortKey, pinned, localVariables: mergedLocalVars });
     if (!updated) return;
     const current = get(buffers);
     buffers.set({ ...current, [bufferId]: updated });

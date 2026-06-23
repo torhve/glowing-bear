@@ -33,12 +33,7 @@ export interface BufferMessage {
     number: number;
     type: number;
     notify?: number;
-    local_variables: {
-        type?: string;
-        plugin?: string;
-        server?: string;
-        pinned?: string;
-    };
+    local_variables?: Record<string, string>;
 }
 
 // Buffer line message from protocol
@@ -159,6 +154,7 @@ export interface BufferData {
     notification: number;
     notify: number;
     nicklist: Record<string, NickGroup>;
+    localVariables?: Record<string, string>;
     serverSortKey: string;
     indent: boolean;
     bufferType: number;

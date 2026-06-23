@@ -21,6 +21,7 @@
     noembed,
     bubbleMode = false,
     otherNick = '',
+    myNick = '',
     onMention
   }: {
     message: BufferLine;
@@ -29,6 +30,7 @@
     noembed: boolean;
     bubbleMode?: boolean;
     otherNick?: string;
+    myNick?: string;
     onMention?: (msg: BufferLine) => void;
   } = $props();
 
@@ -50,27 +52,46 @@
     return match ? match[1]! : trimmed;
   }
 
-  // Detect if this message was sent by the user.
-  // Uses irc_selfmsg tag when present, falls back to comparing extracted nick against otherNick.
+  // Nick of the message sender extracted from prefix.
+  let msgNick = $derived(extractNick(message.prefixtext).toLowerCase());
+
+  // Self message: prefix matches my nick or has irc_selfmsg tag.
   let isSelfMessage = $derived(
     (message.tags && message.tags.includes('irc_selfmsg')) ||
-    (bubbleMode && otherNick && message.prefixtext.trim() && extractNick(message.prefixtext).toLowerCase() !== otherNick.toLowerCase())
+    (bubbleMode && myNick && msgNick === myNick.toLowerCase())
   );
 
-  // Detect system messages without a sender prefix (join/quit/away notices).
-  let isSystemMessage = $derived(!isDateChange && !message.prefixtext.trim());
+  // Other message: prefix matches the other participant's nick.
+  let isOtherMessage = $derived(
+    bubbleMode && otherNick && msgNick === otherNick.toLowerCase()
+  );
+
+  // Middle (server/status) message: anything that isn't self, other, or a date separator.
+  // Catches quit notices, join/part events, disconnect messages, etc.
+  let isMiddle = $derived(
+    !isDateChange && !isSelfMessage && !isOtherMessage
+  );
+
+  // Previous message classification for grouping logic.
+  let prevIsSelf = $derived(previousMessage ? (
+    (previousMessage.tags && previousMessage.tags.includes('irc_selfmsg')) ||
+    (bubbleMode && myNick && extractNick(previousMessage.prefixtext).toLowerCase() === myNick.toLowerCase())
+  ) : false);
+  let prevIsMiddle = $derived(previousMessage ? (
+    !isDateChangeMessage(previousMessage) &&
+    !(previousMessage.tags && previousMessage.tags.includes('irc_selfmsg')) &&
+    !(bubbleMode && myNick && extractNick(previousMessage.prefixtext).toLowerCase() === myNick.toLowerCase()) &&
+    !(bubbleMode && otherNick && extractNick(previousMessage.prefixtext).toLowerCase() === otherNick.toLowerCase())
+  ) : false);
 
   // Determine if this message starts a new visual group.
-  // A group starts when: first message, date separator, sender changed, or type changed (self↔other↔system).
-  let prevIsSelf = $derived(previousMessage ? ((previousMessage.tags && previousMessage.tags.includes('irc_selfmsg')) || (bubbleMode && otherNick && previousMessage.prefixtext.trim() && extractNick(previousMessage.prefixtext).toLowerCase() !== otherNick.toLowerCase())) : false);
-  let prevIsSystem = $derived(previousMessage && !previousMessage.prefixtext.trim());
-
+  // A group starts when: first message, date separator, or type changed (self↔other↔middle).
   let isGroupStart = $derived(
     index === 0 ||
     (previousMessage && isDateChangeMessage(previousMessage)) ||
-    isSystemMessage ||
+    isMiddle ||
     (previousMessage && isSelfMessage !== prevIsSelf) ||
-    (previousMessage && isSystemMessage !== prevIsSystem)
+    (previousMessage && isMiddle !== prevIsMiddle)
   );
 
   const urlRegex = /(?:(?:https?|ftp):\/\/|www\.|ftp\.)\S*[^\s.;,(){}<>[\]]/gi;
@@ -124,7 +145,13 @@
   }
 
   function isDateChangeMessage(msg: BufferLine): boolean {
-    return msg.text.startsWith('\u001943\u2500') || msg.text.startsWith('\u00194\u2500') || msg.text.startsWith('\u0019');
+    // Detect by WeeChat formatting codes in prefix or text.
+    if (msg.prefixtext.startsWith('\u0019') || msg.text.startsWith('\u0019')) return true;
+    // Detect by common date separator patterns: "DayName (Month DD[, YYYY])" or "---".
+    const t = msg.text.trim();
+    if (/^(?:Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday)\s*\(/i.test(t)) return true;
+    if (/^[\u2500]+$/u.test(t)) return true;
+    return false;
   }
 
   // Build token groups from message content for rendering.
@@ -162,8 +189,8 @@
         <TokenGroupRenderer groups={tokenGroups} />
       </span>
     </div>
-  {:else if isSystemMessage}
-    <!-- System message centered (no prefix: join/quit/away notices) -->
+  {:else if isMiddle}
+    <!-- Server/status message centered (not from either participant) -->
     <div class="bubble-middle-row" data-testid="bufferline-row">
       <div class={['bubble', { 'bubble-highlight': isHighlight }, 'bubble-middle-bg']}>
         <TokenGroupRenderer groups={tokenGroups} />
