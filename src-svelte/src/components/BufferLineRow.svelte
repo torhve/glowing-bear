@@ -382,7 +382,7 @@
   .time {
     text-align: right;
     padding: 0 2px 0 6px;
-    vertical-align: middle;
+    vertical-align: top;
     font-size: var(--font-size, 14px);
     font-family: var(--font-mono, monospace);
   }
@@ -404,7 +404,7 @@
       width: auto;
       max-width: none;
       padding: 0;
-      vertical-align: middle;
+      vertical-align: top;
       border: none;
       font-size: var(--font-size, 14px);
       font-family: var(--font-mono, monospace);
@@ -453,7 +453,7 @@
   .prefix {
     max-width: 120px;
     padding: 0 4px 0 2px;
-    vertical-align: middle;
+    vertical-align: top;
     white-space: nowrap;
     text-align: right;
     border-right: 1px solid var(--gb-border, var(--color-border));
