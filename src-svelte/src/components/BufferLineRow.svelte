@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { BufferLine, PluginMetadata } from '$lib/types';
-  import { tokenizeAndCodify, type Token } from '$lib/linkTokens';
+  import { tokenizeAndCodify, type TokenGroup } from '$lib/linkTokens';
+  import TokenGroupRenderer from '$components/TokenGroupRenderer.svelte';
   import PluginEmbed from '$components/PluginEmbed.svelte';
   import ArrowRight from '@lucide/svelte/icons/arrow-right';
   import ArrowLeft from '@lucide/svelte/icons/arrow-left';
@@ -126,11 +127,7 @@
     return msg.text.startsWith('\u001943\u2500') || msg.text.startsWith('\u00194\u2500') || msg.text.startsWith('\u0019');
   }
 
-  interface TokenGroup {
-      classes: string;
-      tokens: Token[];
-  }
-
+  // Build token groups from message content for rendering.
   function getMessageTokenGroups(): TokenGroup[] {
       if (!message.content || message.content.length === 0) {
           const text = message.text || '';
@@ -162,44 +159,14 @@
     <!-- Date separator -->
     <div class="bubble-date-separator" data-testid="bufferline-row">
       <span class="bubble-date-text">
-        {#each tokenGroups as group, gi (gi)}
-          <span class="{group.classes}">
-            {#each group.tokens as token, ti (ti)}
-              {#if token.type === 'link'}
-                <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-                <a href={token.value} target="_blank" rel="noopener noreferrer" class="irc-link">{token.value}</a>
-              {:else if token.type === 'code'}
-                <span class="hidden-bracket">{token.delimiter}</span>
-                <code class="irc-code">{token.value}</code>
-                <span class="hidden-bracket">{token.delimiter}</span>
-              {:else}
-                {token.value}
-              {/if}
-            {/each}
-          </span>
-        {/each}
+        <TokenGroupRenderer groups={tokenGroups} />
       </span>
     </div>
   {:else if isSystemMessage}
     <!-- System message centered (no prefix: join/quit/away notices) -->
     <div class="bubble-middle-row" data-testid="bufferline-row">
       <div class={['bubble', { 'bubble-highlight': isHighlight }, 'bubble-middle-bg']}>
-        {#each tokenGroups as group, gi (gi)}
-          <span class="token-group {group.classes}">
-            {#each group.tokens as token, ti (ti)}
-              {#if token.type === 'link'}
-                <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-                <a href={token.value} target="_blank" rel="noopener noreferrer" class="irc-link">{token.value}</a>
-              {:else if token.type === 'code'}
-                <span class="hidden-bracket">{token.delimiter}</span>
-                <code class="irc-code">{token.value}</code>
-                <span class="hidden-bracket">{token.delimiter}</span>
-              {:else}
-                {token.value}
-              {/if}
-            {/each}
-          </span>
-        {/each}
+        <TokenGroupRenderer groups={tokenGroups} />
       </div>
     </div>
   {:else if isSelfMessage}
@@ -220,22 +187,7 @@
         {/if}
 
         <span dir="auto" class="message-content whitespace-pre-wrap break-words">
-          {#each tokenGroups as group, gi (gi)}
-            <span class="token-group {group.classes}">
-              {#each group.tokens as token, ti (ti)}
-                {#if token.type === 'link'}
-                  <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-                  <a href={token.value} target="_blank" rel="noopener noreferrer" class="irc-link">{token.value}</a>
-                {:else if token.type === 'code'}
-                  <span class="hidden-bracket">{token.delimiter}</span>
-                  <code class="irc-code">{token.value}</code>
-                  <span class="hidden-bracket">{token.delimiter}</span>
-                {:else}
-                  {token.value}
-                {/if}
-              {/each}
-            </span>
-          {/each}
+          <TokenGroupRenderer groups={tokenGroups} />
         </span>
       </div>
     </div>
@@ -257,22 +209,7 @@
         {/if}
 
         <span dir="auto" class="message-content whitespace-pre-wrap break-words">
-          {#each tokenGroups as group, gi (gi)}
-            <span class="token-group {group.classes}">
-              {#each group.tokens as token, ti (ti)}
-                {#if token.type === 'link'}
-                  <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-                  <a href={token.value} target="_blank" rel="noopener noreferrer" class="irc-link">{token.value}</a>
-                {:else if token.type === 'code'}
-                  <span class="hidden-bracket">{token.delimiter}</span>
-                  <code class="irc-code">{token.value}</code>
-                  <span class="hidden-bracket">{token.delimiter}</span>
-                {:else}
-                  {token.value}
-                {/if}
-              {/each}
-            </span>
-          {/each}
+          <TokenGroupRenderer groups={tokenGroups} />
         </span>
       </div>
     </div>
@@ -282,22 +219,7 @@
   {#if isDateChange}
     <tr class="bufferline date-change-row" data-testid="bufferline-row">
       <td colspan="3">
-        {#each tokenGroups as group, gi (gi)}
-          <span class="{group.classes}">
-            {#each group.tokens as token, ti (ti)}
-              {#if token.type === 'link'}
-                <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-                <a href={token.value} target="_blank" rel="noopener noreferrer" class="irc-link">{token.value}</a>
-              {:else if token.type === 'code'}
-                <span class="hidden-bracket">{token.delimiter}</span>
-                <code class="irc-code">{token.value}</code>
-                <span class="hidden-bracket">{token.delimiter}</span>
-              {:else}
-                {token.value}
-              {/if}
-            {/each}
-          </span>
-        {/each}
+        <TokenGroupRenderer groups={tokenGroups} />
       </td>
     </tr>
   {:else}
@@ -348,22 +270,7 @@
 
         <!-- Message content -->
         <span dir="auto" class="message-content whitespace-pre-wrap break-words">
-          {#each tokenGroups as group, gi (gi)}
-            <span class="token-group {group.classes}">
-              {#each group.tokens as token, ti (ti)}
-                {#if token.type === 'link'}
-                  <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-                  <a href={token.value} target="_blank" rel="noopener noreferrer" class="irc-link">{token.value}</a>
-                {:else if token.type === 'code'}
-                  <span class="hidden-bracket">{token.delimiter}</span>
-                  <code class="irc-code">{token.value}</code>
-                  <span class="hidden-bracket">{token.delimiter}</span>
-                {:else}
-                  {token.value}
-                {/if}
-              {/each}
-            </span>
-          {/each}
+          <TokenGroupRenderer groups={tokenGroups} />
         </span>
       </td>
     </tr>
@@ -615,31 +522,31 @@
     letter-spacing: 0.08em;
   }
 
-  /* Adjust links inside bubbles */
-  .bubble .irc-link {
+  /* Adjust links inside bubbles (global to reach into TokenGroupRenderer) */
+  :global(.bubble .irc-link) {
     color: oklch(75% 0.15 250);
     text-decoration: underline;
   }
 
-  .bubble-self-bg .irc-link {
+  :global(.bubble-self-bg .irc-link) {
     color: oklch(85% 0.05 220);
   }
 
-  /* Adjust inline code in bubbles */
-  .bubble .irc-code {
+  /* Adjust inline code in bubbles (global to reach into TokenGroupRenderer) */
+  :global(.bubble .irc-code) {
     background: var(--gb-bubble-code-bg, rgba(255, 255, 255, 0.2));
     padding: 1px 4px;
     border-radius: 4px;
   }
 
-  .bubble-other-bg .irc-code {
+  :global(.bubble-other-bg .irc-code) {
     background: var(--gb-bubble-code-bg-other, rgba(0, 0, 0, 0.15));
   }
 
-  /* Reset WeeChat background color classes inside chat bubbles */
-  .bubble [class*="cwb-"],
-  .bubble [class*="ceb-"],
-  .bubble [class*="cob-"] {
+  /* Reset WeeChat background color classes inside chat bubbles (global to reach into TokenGroupRenderer) */
+  :global(.bubble [class*="cwb-"]),
+  :global(.bubble [class*="ceb-"]),
+  :global(.bubble [class*="cob-"]) {
     background-color: transparent !important;
   }
 
