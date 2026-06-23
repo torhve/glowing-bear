@@ -782,7 +782,7 @@ export async function requestNicklist(bufferId: string) {
         // Call handleNicklist directly since callback responses don't have event IDs
         const nicklist = response.objects[0]?.content;
         if (nicklist) {
-            handleNicklist(response);
+            handleNicklist(response, true);
         }
     } catch (err) {
         if (DEBUG_NICKLIST) console.error('[nicklist] request failed:', err);
