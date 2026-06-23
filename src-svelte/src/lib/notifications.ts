@@ -27,8 +27,7 @@ let notificationPermission: 'granted' | 'denied' | 'default' = 'default';
 const activeNotifications: Map<string, Notification> = new Map();
 
 // Tauri notification module (lazily loaded)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let tauriNotif: any = null;
+let tauriNotif: typeof import('@tauri-apps/plugin-notification') | null = null;
 
 async function ensureTauriNotification(): Promise<void> {
     if (tauriNotif !== null || !isTauri()) return;

@@ -195,11 +195,11 @@ export async function connect(host: string, port: number, path: string, password
                 });
 
                 const handshakeResponse = await sendAsync(handshakeMsg);
-                const content = handshakeResponse.objects[0]?.content;
+                const content = handshakeResponse.objects[0]?.content as Record<string, unknown> | undefined;
 
-                const passwordMethod = content?.password_hash_algo;
-                const nonce = hexStringToByte(content?.nonce || '');
-                const iterations = content?.password_hash_iterations || 0;
+                const passwordMethod = content?.password_hash_algo as string | undefined;
+                const nonce = hexStringToByte(content?.nonce as string || '');
+                const iterations = (content?.password_hash_iterations as number) || 0;
 
                 // PBKDF2 algorithms require a nonce from the server
                 const needsNonce: boolean = !passwordMethod || passwordMethod === '' || passwordMethod.startsWith('pbkdf2+');
@@ -559,9 +559,9 @@ async function fetchConfValue(name: string) {
     handleConfValue(resp);
 }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- async callback pattern with complex WeeChat protocol response
-    function sendAsync(message: string): Promise<any> {
-    return new Promise((resolve, reject) => {
+    // Send a formatted message and await its response via callback
+    function sendAsync(message: string): Promise<ProtocolMessage> {
+    return new Promise<unknown>((resolve, reject) => {
         if (!ws || ws.readyState !== WebSocket.OPEN) {
             reject(new Error('WebSocket not open'));
             return;
@@ -590,11 +590,10 @@ async function fetchConfValue(name: string) {
                 reject(new Error('Request timeout'));
             }
         }, 10000);
-    });
+    }) as Promise<ProtocolMessage>;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic callback resolution/rejection types
-const callbacks: Record<string, { resolve: (v: any) => void; reject: (e: any) => void }> = {};
+const callbacks: Record<string, { resolve: (v: unknown) => void; reject: (e: Error) => void }> = {};
 let currentCallbackId = 0;
 const pendingFetchBuffers = new Set<string>();
 
@@ -746,8 +745,7 @@ export async function requestNicklist(bufferId: string) {
     }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- async fetch returns protocol response
-export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: string): Promise<any> {
+export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: string): Promise<void> {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         throw new Error('WebSocket not open');
     }
@@ -781,7 +779,7 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
 
     let message: ProtocolMessage;
     try {
-        message = await new Promise((resolve, reject) => {
+        const rawResponse = await new Promise<unknown>((resolve, reject) => {
             if (!ws || ws.readyState !== WebSocket.OPEN) {
                 delete callbacks[cbId];
                 return reject(new Error('WebSocket not open'));
@@ -806,6 +804,7 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
                 }
             }, 30000);
         });
+        message = rawResponse as ProtocolMessage;
         // Re-read the buffer from the store after await. handleBufferLineAdded may have
         // created a new store copy during the async wait, so our captured reference is stale.
         const freshBuffer = getBuffer(bufferId);
@@ -908,8 +907,7 @@ function scheduleHotlistQuery(_bufferId: string) {
     }, HOTLIST_DEBOUNCE_MS);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- WeeChat buffer ID is a hex string from protocol
-export function sendBufferCommand(bufferId: any, command: string) {
+export function sendBufferCommand(bufferId: string, command: string) {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         console.warn('[sendBufferCommand] WebSocket not open');
         return;

@@ -27,7 +27,7 @@ import {
 import { shouldResume } from '$lib/stores/bufferResume';
 import { createHighlight, playNotificationSound, updateTitle, updateFavico } from '$lib/notifications';
 import { DEBUG_NICKLIST } from '$lib/debug';
-import type { ProtocolMessage, BufferMessage, BufferLine, BufferLineMessage, NickMessage, NickGroupMessage, HotlistEntry, BufferData } from '$lib/types';
+import type { ProtocolMessage, BufferMessage, BufferLine, BufferLineMessage, NickMessage, NickGroupMessage, HotlistEntry, BufferData, BufferType } from '$lib/types';
 
 // ---- Version handler ----
 export function handleVersionInfo(message: ProtocolMessage) {
@@ -160,8 +160,7 @@ export function handleBufferInfo(message: ProtocolMessage) {
 }
 
 // ---- Buffer update handler ----
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- WeeChat buffer object from protocol
-function handleBufferUpdate(buffer: any, message: BufferMessage) {
+function handleBufferUpdate(buffer: BufferData, message: BufferMessage) {
     if (message.pointers[0] !== buffer.id) return;
 
     buffer.shortName = message.short_name;
@@ -188,7 +187,7 @@ function handleBufferUpdate(buffer: any, message: BufferMessage) {
     }
 
     if (message.local_variables?.type !== undefined) {
-        buffer.type = message.local_variables.type;
+        buffer.type = message.local_variables.type as BufferType;
         buffer.indent = ['channel', 'private'].includes(buffer.type);
     }
     if (message.local_variables?.plugin !== undefined) {
@@ -376,8 +375,7 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
     handleNickMessageForSpeakOnBuffers(lines, updatedBuffers);
 
     // Update stores
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- buffer object type from models store
-    console.debug('[handler] updating buffers store, total lines:', Object.values(updatedBuffers).reduce((sum: number, b: any) => sum + b.lines.length, 0));
+    console.debug('[handler] updating buffers store, total lines:', Object.values(updatedBuffers).reduce((sum: number, b: BufferData) => sum + b.lines.length, 0));
     buffers.set(updatedBuffers);
 }
 
@@ -521,8 +519,7 @@ export function handleUpgradeEnded() {
 }
 
 // ---- Date change injection ----
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- buffer type from protocol
-export function injectDateChangeMessageIfNeeded(buffer: any, manually: boolean, oldDate: Date, newDate: Date) {
+export function injectDateChangeMessageIfNeeded(buffer: BufferData, manually: boolean, oldDate: Date, newDate: Date) {
     if (buffer.bufferType === 1) return; // Free buffers
 
     oldDate.setHours(0, 0, 0, 0);

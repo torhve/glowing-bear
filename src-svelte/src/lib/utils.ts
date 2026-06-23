@@ -160,22 +160,20 @@ export function completeNick(text: string, caretPos: number, iterCandidate: stri
     return null;
 }
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- nick/group types from WeeChat protocol */
-function getNicklistByTime(buffer: any): any[] {
-    const newlist: any[] = [];
+function getNicklistByTime(buffer: BufferData): Nick[] {
+    const newlist: Nick[] = [];
     for (const groupIdx in buffer.nicklist) {
-        if (groupIdx === 'root' || buffer.nicklist[groupIdx]?.nicks) {
-            newlist.push(...buffer.nicklist[groupIdx].nicks);
-        }
+        const group = buffer.nicklist[groupIdx];
+        if (!group || !group.nicks) continue;
+        newlist.push(...group.nicks);
     }
     newlist.sort((a, b) => (b.spokeAt || 0) - (a.spokeAt || 0));
     return newlist;
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
+
 
 // Check if buffer matches search
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- buffer type from WeeChat protocol
-export function bufferMatchesSearch(buffer: any, search: string): boolean {
+export function bufferMatchesSearch(buffer: BufferData, search: string): boolean {
     if (!search) return true;
     const searchLower = search.toLowerCase();
     return (
@@ -186,8 +184,7 @@ export function bufferMatchesSearch(buffer: any, search: string): boolean {
 }
 
 // Get filtered buffers
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- buffer array return type
-export function getFilteredBuffers(search: string, onlyUnread: boolean, orderByServer: boolean, activeBufferId: string): any[] {
+export function getFilteredBuffers(search: string, onlyUnread: boolean, orderByServer: boolean, activeBufferId: string): BufferData[] {
     const allBuffers = get(buffers);
 
     return sortBuffers(
