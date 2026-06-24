@@ -142,17 +142,20 @@ const colorsOptionsNames = [
     'chat_nick_prefix',
     'chat_nick_suffix',
     'emphasis',
-    'chat_day_change'
+    'chat_day_change',
+    'chat_value_null',
+    'chat_status_disabled',
+    'chat_status_enabled'
 ];
 
 const attrNameChars: Record<string, string> = {
-    '*': 'b', '!': 'r', '/': 'i', '_': 'u',
-    '\x01': 'b', '\x02': 'r', '\x03': 'i', '\x04': 'u'
+    '*': 'b', '!': 'r', '/': 'i', '_': 'u', '%': 'k', '.': 'd',
+    '\x01': 'b', '\x02': 'r', '\x03': 'i', '\x04': 'u', '\x05': 'k', '\x06': 'd'
 };
 
-// Reverse lookup: attribute value -> char (avoids Object.entries().find in richText2Str loop)
+// Reverse lookup: attribute key -> char (avoids Object.entries().find in richText2Str loop)
 const attrValueToChar: Record<string, string> = {
-    'b': '*', 'r': '!', 'i': '/', 'u': '_'
+    'b': '*', 'r': '!', 'i': '/', 'u': '_', 'k': '%', 'd': '.'
 };
 
 function getDefaultColor(): ColorInfo {
@@ -160,7 +163,7 @@ function getDefaultColor(): ColorInfo {
 }
 
 function getDefaultAttributes(): TextAttrs {
-    return { name: null, override: { bold: false, reverse: false, italic: false, underline: false } };
+    return { name: null, override: { b: false, r: false, i: false, u: false, k: false, d: false } };
 }
 
 function getColorObj(str: string): ColorInfo {
@@ -171,7 +174,8 @@ function getColorObj(str: string): ColorInfo {
         }
         return { type: 'weechat', name: weeChatColorsNames[code]! };
     }
-    const codeStr = str.substring(1);
+    // Extended color code: strip leading @ and convert to numeric string
+    const codeStr = str.startsWith('@') ? str.substring(1) : str;
     return { type: 'ext', name: parseInt(codeStr, 10).toString() };
 }
 
@@ -186,27 +190,33 @@ type StyleMatcherFn = (txt: string, m: RegExpMatchArray) => StyleResult;
 
 // Pre-built style matchers to avoid per-call array allocation in getStyle().
 const styleMatchers: Array<{ regex: RegExp; fn: StyleMatcherFn }> = [
-    // STD color codes: 2 digits (00-43) → option colors (foreground only)
-    // Codes > 16 are out of range per WeeChat spec, return default color.
+    // STD color codes: 2 digits → option colors (bare STD codes set both fg and bg)
+    // Old JS treats all bare STD codes as option type with bgColor = fgColor.
+    // Codes > 46 are out of range, return default color.
     {
         regex: /^(\d{2})/,
         fn: (txt, m) => {
             const code = parseInt(m[1]!, 10);
-            if (code > 16) {
+            if (code > 46) {
                 return { fgColor: getDefaultColor(), bgColor: null, attrs: null, text: txt.substring(m[0].length) };
             }
-            const optionName = colorsOptionsNames[code]!;
+            const optionName = colorsOptionsNames[code];
+            if (!optionName || optionName === 'invalid') {
+                return { fgColor: getDefaultColor(), bgColor: null, attrs: null, text: txt.substring(m[0].length) };
+            }
+            const fgColor: ColorInfo = { type: 'option' as const, name: optionName };
             return {
-                fgColor: { type: 'option' as const, name: optionName },
-                bgColor: null,
+                fgColor,
+                bgColor: { ...fgColor },
                 attrs: { name: optionName, override: {} },
                 text: txt.substring(m[0].length)
             };
         }
     },
-    // Extended color codes: @ followed by 5 digits (unimplemented — colors ignored but text stripped)
+    // Extended color codes: bare @NNNNN is unimplemented in old JS (returns null)
+    // F/B prefixed EXT colors are handled by their respective matchers below
     {
-        regex: /^@(\d{5})/,
+        regex: /^@\d{5}/,
         fn: (txt, m) => ({
             fgColor: null, bgColor: null, attrs: null,
             text: txt.substring(m[0].length)
@@ -215,12 +225,12 @@ const styleMatchers: Array<{ regex: RegExp; fn: StyleMatcherFn }> = [
     // Foreground color: F + optional attributes + STD or EXT
     {
         // eslint-disable-next-line no-control-regex
-        regex: /^F(?:([*!_|]*)(\d{2})|@([\x01\x02\x03\x04*!_|]*)(\d{5}))/,
+        regex: /^F(?:([*!_/.%|]*)(\d{2})|@([\x01-\x06*!_/.%|]*)(\d{5}))/,
         fn: (txt, m) => {
             if (m[2]) {
                 return { fgColor: getColorObj(m[2]), bgColor: null, attrs: attrsFromStr(m[1] ?? ''), text: txt.substring(m[0].length) };
             }
-            return { fgColor: getColorObj(m[4]!), bgColor: null, attrs: attrsFromStr(m[3] ?? ''), text: txt.substring(m[0].length) };
+            return { fgColor: getColorObj('@' + m[4]), bgColor: null, attrs: attrsFromStr(m[3] ?? ''), text: txt.substring(m[0].length) };
         }
     },
     // Background color: B + STD or EXT
@@ -232,9 +242,10 @@ const styleMatchers: Array<{ regex: RegExp; fn: StyleMatcherFn }> = [
         })
     },
     // Foreground + background with optional attributes (WeeChat 2.6+ uses ~ or ,)
+    // Leading * is the FG+BG marker, not bold - old JS doesn't add bold from it
     {
         // eslint-disable-next-line no-control-regex
-        regex: /^\*(?:([\x01\x02\x03\x04*!_|]*)(\d{2})|@([\x01\x02\x03\x04*!_|]*)(\d{5}))[,~](\d{2}|@\d{5})/,
+        regex: /^\*(?:([\x01-\x06*!_/.%|]*)(\d{2})|@([\x01-\x06*!_/.%|]*)(\d{5}))[,~](\d{2}|@\d{5})/,
         fn: (txt, m) => {
             let fgColor: ColorInfo;
             let attrs: TextAttrs | null;
@@ -243,18 +254,39 @@ const styleMatchers: Array<{ regex: RegExp; fn: StyleMatcherFn }> = [
                 fgColor = getColorObj(m[2]);
             } else {
                 attrs = attrsFromStr(m[3] ?? '');
-                fgColor = getColorObj(m[4]!);
+                fgColor = getColorObj('@' + m[4]);
             }
             return { fgColor, bgColor: getColorObj(m[5]!), attrs, text: txt.substring(m[0].length) };
         }
     },
-    // Foreground color with * (+ attributes) - fallback
+    // Foreground color with * prefix (+ attributes)
+    // Leading * is just the pattern marker, not bold - old JS doesn't add bold from it
     {
         // eslint-disable-next-line no-control-regex
-        regex: /^\*([\x01\x02\x03\x04*!_|]*)(\d{2}|@\d{5})/,
+        regex: /^\*([\x01-\x06*!_/.%|]*)(\d{2}|@\d{5})/,
         fn: (txt, m) => ({
             fgColor: getColorObj(m[2]!), bgColor: null,
             attrs: attrsFromStr(m[1] ?? ''),
+            text: txt.substring(m[0].length)
+        })
+    },
+    // Foreground color with % prefix (+ attributes) - includes blink
+    {
+        // eslint-disable-next-line no-control-regex
+        regex: /^%([\x01-\x06*!_/.%|]*)(\d{2}|@\d{5})/,
+        fn: (txt, m) => ({
+            fgColor: getColorObj(m[2]!), bgColor: null,
+            attrs: attrsFromStr('%' + (m[1] ?? '')),
+            text: txt.substring(m[0].length)
+        })
+    },
+    // Foreground color with . prefix (+ attributes) - includes dim
+    {
+        // eslint-disable-next-line no-control-regex
+        regex: /^\.([\x01-\x06*!_/.%|]*)(\d{2}|@\d{5})/,
+        fn: (txt, m) => ({
+            fgColor: getColorObj(m[2]!), bgColor: null,
+            attrs: attrsFromStr('.' + (m[1] ?? '')),
             text: txt.substring(m[0].length)
         })
     },
@@ -284,7 +316,7 @@ function getStyle(txt: string): StyleResult {
 function attrsFromStr(str: string): TextAttrs | null {
     // Matches old JS behavior: '|' anywhere means "keep attributes" (null);
     // an empty string returns a reset (all-false) attributes object.
-    const attrs: TextAttrs = { name: null, override: { bold: false, reverse: false, italic: false, underline: false } };
+    const attrs: TextAttrs = { name: null, override: { b: false, r: false, i: false, u: false, k: false, d: false } };
     for (const ch of str) {
         if (ch === '|') {
             return null;
@@ -300,16 +332,52 @@ export function convertIrcCodes(text: string): string {
     // Manual single-pass conversion avoids V8 .replace() bug where multi-char
     // replacement strings ending with a digit matching the next source char
     // cause that character to be duplicated.
+    // State machine tracks whether we're inside a WeeChat style code (\x19...),
+    // so attribute chars like \x02 inside patterns like \x19F@\x0212345 are
+    // preserved as-is rather than being converted.
+    // Style code ends when we hit a non-style character (printable text).
     let result = '';
+    let insideWeechatStyleCode = false;
     for (let i = 0; i < text.length; i++) {
         const ch = text[i]!;
         switch (ch) {
-            case '\x02': result += '\x1a*'; break;   // bold
-            case '\x1d': result += '\x1a/'; break;   // italic
-            case '\x1f': result += '\x1a_'; break;   // underline
-            case '\x16': result += '\x1a!'; break;   // reverse
-            case '\x0f': result += '\x1c'; break;    // reset all
+            case '\x19':
+                // Start of a WeeChat style code — subsequent bytes are part of it
+                result += ch;
+                insideWeechatStyleCode = true;
+                break;
+            case '\x1c':
+                // Reset — if inside WeeChat style code, keep as-is and end the style code
+                result += ch;
+                insideWeechatStyleCode = false;
+                break;
+            case '\x1a': case '\x1b':
+                // WeeChat attribute delimiters — pass through unchanged
+                result += ch;
+                break;
+            case '\x02':
+                result += insideWeechatStyleCode ? ch : '\x1a*';
+                break;   // mIRC bold → WeeChat *
+            case '\x1d':
+                result += insideWeechatStyleCode ? ch : '\x1a/';
+                break;   // mIRC italic → WeeChat /
+            case '\x1f':
+                result += insideWeechatStyleCode ? ch : '\x1a_';
+                break;   // mIRC underline → WeeChat _
+            case '\x16':
+                result += insideWeechatStyleCode ? ch : '\x1a!';
+                break;   // mIRC reverse → WeeChat !
+            case '\x0f':
+                result += insideWeechatStyleCode ? ch : '\x1c';
+                break;   // mIRC reset → WeeChat \x1c
             case '\x03': {
+                if (insideWeechatStyleCode) {
+                    // Inside a WeeChat style code, \x03 is not a valid prefix.
+                    // End the style code and convert as bare mIRC reset.
+                    result += '\x1c';
+                    insideWeechatStyleCode = false;
+                    break;
+                }
                 let j = i + 1;
                 let rest = '';
                 // Parse fg color digits
@@ -336,7 +404,16 @@ export function convertIrcCodes(text: string): string {
                 i = j - 1;
                 break;
             }
-            default: result += ch;
+            case '\x01': case '\x04': case '\x05': case '\x06':
+                // mIRC-style attribute bytes — preserve inside style codes
+                result += ch;
+                break;
+            default:
+                result += ch;
+                // Printable chars end the WeeChat style code context
+                if (insideWeechatStyleCode && !'(FB*%.)'.includes(ch) && ch !== '@' && !',~|'.includes(ch)) {
+                    insideWeechatStyleCode = false;
+                }
         }
     }
     return result;
@@ -385,6 +462,7 @@ export function rawText2Rich(rawText: string): RichPart[] {
                 if (curSpecialToken !== 0x19) {
                     // Also reset attributes
                     curAttrs = getDefaultAttributes();
+                    curAttrsOnlyFalseOverrides = true;
                 }
             }
             curSpecialToken = firstCharCode;
@@ -402,7 +480,10 @@ export function rawText2Rich(rawText: string): RichPart[] {
                 curBgColor = style.bgColor;
             }
             if (style.attrs !== null) {
+                // Old JS replaces curAttrs with style.attrs unconditionally (\x19 resets attrs)
                 curAttrs = style.attrs;
+                const ov = curAttrs.override;
+                curAttrsOnlyFalseOverrides = Object.values(ov).every(v => v === false);
             }
             text = style.text;
         } else if (curSpecialToken === 0x1a || curSpecialToken === 0x1b) {
@@ -413,6 +494,9 @@ export function rawText2Rich(rawText: string): RichPart[] {
                 if (orideName) {
                     curAttrs.override[orideName] = orideVal;
                     text = p.substring(1);
+                    // Update tracking flag after in-place modification
+                    const ov = curAttrs.override;
+                    curAttrsOnlyFalseOverrides = !ov.b && !ov.r && !ov.i && !ov.u && !ov.k && !ov.d;
                 }
             }
         }
@@ -421,15 +505,6 @@ export function rawText2Rich(rawText: string): RichPart[] {
 
         if (text.length === 0) {
             continue;
-        }
-
-        // Remove false overrides when name is null and all are false (avoids Object.values() allocation)
-        if (curAttrsOnlyFalseOverrides && curAttrs.name === null) {
-            if (!curAttrs.override.b && !curAttrs.override.r && !curAttrs.override.i && !curAttrs.override.u) {
-                curAttrs.override = {};
-            } else {
-                curAttrsOnlyFalseOverrides = false;
-            }
         }
 
         result.push({

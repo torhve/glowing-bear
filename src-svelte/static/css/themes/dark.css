@@ -128,6 +128,12 @@ tr.bufferline:hover {
 .cof-chat_day_change {
     color: #77dfd8;
 }
+.cof-chat_value_null {
+}
+.cof-chat_status_disabled {
+}
+.cof-chat_status_enabled {
+}
 
 /* style options, background */
 .cob-separator {
@@ -204,6 +210,12 @@ tr.bufferline:hover {
 }
 .cob-chat_day_change {
 }
+.cob-chat_value_null {
+}
+.cob-chat_status_disabled {
+}
+.cob-chat_status_enabled {
+}
 
 /* style options, attributes */
 .coa-separator {
@@ -275,6 +287,12 @@ tr.bufferline:hover {
 .coa-emphasis {
 }
 .coa-chat_day_change {
+}
+.coa-chat_value_null {
+}
+.coa-chat_status_disabled {
+}
+.coa-chat_status_enabled {
 }
 
 /* WeeChat colors, foreground */
@@ -1944,6 +1962,18 @@ tr.bufferline:hover {
 }
 .a-no-u {
     text-decoration: none;
+}
+.a-r {
+}
+.a-no-r {
+}
+.a-k {
+}
+.a-no-k {
+}
+.a-d {
+}
+.a-no-d {
 }
 .a-reset {
     font-weight: normal;

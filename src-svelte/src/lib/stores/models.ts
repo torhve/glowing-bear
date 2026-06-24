@@ -6,12 +6,26 @@ import { settings } from '$lib/stores/settings';
 import type {
     BufferData,
     BufferLine,
-    HotlistEntry,
     Nick,
     NickGroup,
     RichTextPart
 } from '$lib/types';
 import { Protocol } from '$lib/weechat';
+
+/**
+ * Deep clone a BufferLine so that nested arrays (prefix, content) and their
+ * classes sub-arrays are not shared with the original. Svelte 5 skips
+ * re-rendering when array identity hasn't changed, so shallow clones break
+ * reactivity for color classes.
+ */
+export function deepCloneBufferLine(l: BufferLine): BufferLine {
+    return {
+        ...l,
+        prefix: l.prefix.map(p => ({ ...p, classes: p.classes ? [...p.classes] : undefined })),
+        content: l.content.map(p => ({ ...p, classes: p.classes ? [...p.classes] : undefined })),
+        metadata: l.metadata ? [...l.metadata] : undefined
+    };
+}
 
 // ---- Utility: convert rich text parts to HTML ----
 export function richTextToHtml(parts: RichTextPart[]): string {
@@ -179,11 +193,11 @@ export function createBufferLine(message: {
 
     const prefixtext = prefix.map(p => p.text).join('');
 
-    // Add highlight class to prefix
+    // Add highlight class to prefix parts without mutating shared classes from parseRichText.
+    // Each BufferLine must own its own classes array to avoid cross-line corruption.
     if (message.highlight) {
         prefix.forEach(p => {
-            if (!p.classes) p.classes = [];
-            p.classes.push('highlight');
+            p.classes = [...(p.classes || []), 'highlight'];
         });
     }
 
@@ -278,22 +292,14 @@ export const reconnecting = writable<boolean>(false);
 
 export const lastError = writable<number>(0);
 
-export const angularTimeFormat = writable<string>('');
-
-export const supportsFormattingDate = writable<boolean>(false);
-
 // Stores the nickname of a user clicked in the nicklist so we can auto-switch to their private buffer once /query creates it; cleared on match or timeout
 import { type Writable } from 'svelte/store';
 export const pendingBufferSwitch: Writable<string | null> = writable<string | null>(null);
-export const hotlist = writable<HotlistEntry[]>([]);
 
 export const previousBufferId = writable<string>('');
 
 // Tracks scroll Y position per buffer for read marker restoration
 export const bufferScrollPositions = writable<Record<string, number>>({});
-
-// Tracks buffer line count at last visit.
-export const bufferLineCounts = writable<Record<string, number>>({});
 
 // Tracks which buffers have local-only unread messages (not reported by WeeChat).
 // Used by setActiveBuffer to preserve lastSeen when switching back to buffers with unreads.
@@ -357,10 +363,6 @@ export function saveScrollPosition(bufferId: string, scrollTop: number) {
 // Line count is captured at this moment to know how far the user had read.
 export function saveBufferState(bufferId: string, scrollTop: number) {
     bufferScrollPositions.update(pos => ({ ...pos, [bufferId]: scrollTop }));
-    const buf = get(buffers)[bufferId];
-    if (buf) {
-        bufferLineCounts.update(counts => ({ ...counts, [bufferId]: buf.lines.length }));
-    }
 }
 
 export function getScrollPosition(bufferId: string): number | undefined {
@@ -414,7 +416,7 @@ export function updateBuffer(bufferId: string, overrides: Partial<BufferData>): 
 export function updateBufferDeep(bufferId: string, overrides: Partial<BufferData> = {}): BufferData | undefined {
     const buf = get(buffers)[bufferId];
     if (!buf) return undefined;
-    return { ...buf, lines: [...buf.lines], nicklist: { ...buf.nicklist }, localVariables: buf.localVariables ? { ...buf.localVariables } : undefined, ...overrides };
+    return { ...buf, lines: buf.lines.map(deepCloneBufferLine), nicklist: { ...buf.nicklist }, localVariables: buf.localVariables ? { ...buf.localVariables } : undefined, ...overrides };
 }
 
 export function getBuffers(): Record<string, BufferData> {
@@ -430,13 +432,10 @@ export function setActiveBuffer(bufferId: string): boolean {
     if (prevId && currentBuffers[prevId]) {
         const prev = currentBuffers[prevId];
         console.log('[buffer switch]', prev.shortName || prev.fullName, '→', buffer.shortName || buffer.fullName);
-        bufferLineCounts.update(counts => ({ ...counts, [prevId]: prev.lines.length }));
         previousBufferId.set(prevId);
     } else if (prevId) {
         console.log('[buffer switch]', '(none)', '→', buffer.shortName || buffer.fullName);
     }
-
-    const savedLineCount = buffer.lines.length;
 
     console.log('[setActiveBuffer] target:', buffer.shortName, '| lines:', buffer.lines.length, '| lastSeen:', buffer.lastSeen, '| localUnread:', buffer.localUnread, '| unread:', buffer.unread, '| notification:', buffer.notification);
 
@@ -476,7 +475,7 @@ export function setActiveBuffer(bufferId: string): boolean {
         } else if (id === bufferId) {
             updatedBuffers[id] = {
                 ...buf,
-                lines: [...buf.lines],
+                lines: buf.lines.map(deepCloneBufferLine),
                 nicklist: { ...buf.nicklist },
                 active: true,
                 lastSeen: targetLastSeen,
@@ -508,7 +507,6 @@ export function setActiveBuffer(bufferId: string): boolean {
     activeBufferId.set(bufferId);
     activeBufferChanged.update(n => n + 1);
     buffers.set(updatedBuffers);
-    bufferLineCounts.update(counts => ({ ...counts, [bufferId]: savedLineCount }));
     // Remove target buffer from localUnreadBuffers tracking since localUnread is now cleared.
     localUnreadBuffers.update((s: Set<string>) => { const copy = new Set(s); copy.delete(bufferId); return copy; });
     // Also remove the previous buffer from tracking — its localUnread was zeroed above.
@@ -567,11 +565,12 @@ export function closeBuffer(bufferId: string) {
 
 export function removeBuffer(bufferId: string, wasActive: boolean) {
     const current = get(buffers);
-    delete current[bufferId];
-    buffers.set({ ...current });
+    const rest = { ...current };
+    delete rest[bufferId];
+    buffers.set(rest);
 
     if (wasActive) {
-        const remaining = Object.keys(current);
+        const remaining = Object.keys(rest);
         if (remaining.length === 0) {
             activeBufferId.set('');
         } else {
