@@ -89,16 +89,22 @@ test('no badge drawn when favico setting is disabled', async () => {
     await waitForBuffer(page, '#glowing-bear', 10000);
     await switchToBuffer(page, 'gbtest');
 
-    await irc.sendMessage('#glowing-bear', 'favico-disabled-test');
+    await irc.sendMessage('#glowing-bear', 'favico-disabled-test-' + Date.now());
 
-    // Wait for message to arrive, then check favicon stayed at default
-    await expect(page.getByTestId('bufferline-row').filter({ hasText: 'favico-disabled-test' }).first()).toBeVisible({ timeout: 10000 });
+    // Wait for message to be processed (don't check DOM since we're on gbtest buffer)
+    await page.waitForTimeout(2000);
 
     const faviconHref = await getFaviconHref(page);
     expect(faviconHref).toBe('/favicon.png');
 });
 
 test('favico setting toggle persists', async () => {
+    // Re-enable favico (was disabled by previous test)
+    await setSettings(page, { useFavico: true });
+    await reconnect(page);
+    await waitForBuffer(page, '#glowing-bear', 10000);
+    await switchToBuffer(page, '#glowing-bear');
+
     await page.getByTestId('settings-button').click();
     await expect(page.getByTestId('settings-modal')).toBeVisible({ timeout: 5000 });
 

@@ -334,12 +334,12 @@
           }
           return true;
         }
-        // Ctrl-b: move back one character
-        if (code === 66) {
-          e.preventDefault();
-          setCaretPos(Math.max(0, caretPos - 1));
-          return true;
-        }
+        // Ctrl-b: disabled — Ctrl+B is used for bold formatting
+        // if (code === 66) {
+        //   e.preventDefault();
+        //   setCaretPos(Math.max(0, caretPos - 1));
+        //   return true;
+        // }
         // Ctrl-f: move forward one character
         if (code === 70) {
           e.preventDefault();
@@ -734,6 +734,7 @@
       ondragover={handleDragOver}
       ondragleave={handleDragEnd}
       ondragend={handleDragEnd}
+      onblur={() => { isHovered = false; }}
       data-testid="message-input"
       placeholder={$currentBuffer ? `Message ${$currentBuffer.shortName}` : 'Select a buffer to start chatting...'}
       rows={1}

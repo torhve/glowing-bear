@@ -148,12 +148,14 @@ test('Reset button inserts reset code', async () => {
 
     // Insert bold via button, type text, then reset
     await page.getByTestId('input-bar').hover();
-    await page.waitForTimeout(100);
-    await page.getByTestId('format-bold').click({ force: true });
+    await page.waitForTimeout(200);
+    await page.getByTestId('format-bold').click();
     await page.waitForTimeout(50);
     await input.pressSequentially('bold and reset');
     await page.waitForTimeout(30);
-    await page.getByTestId('format-reset').click({ force: true });
+    await page.getByTestId('input-bar').hover();
+    await page.waitForTimeout(200);
+    await page.getByTestId('format-reset').click();
     await page.waitForTimeout(50);
 
     const value = await getRawInputValue();
@@ -241,19 +243,11 @@ test('Clicking a color inserts IRC color code (no reset)', async () => {
 // Toolbar visibility tests
 
 test('Format toolbar is hidden by default', async () => {
-    // Move mouse to top-center of viewport (away from bottom input bar) and wait for transition
-    const width = await page.evaluate(() => window.innerWidth);
-    await page.mouse.move(width / 2, 100);
-    await page.waitForTimeout(500);
-
-    // Also dispatch a manual mouseleave on the input-bar to ensure state clears
-    await page.evaluate(() => {
-        const el = document.querySelector('[data-testid="input-bar"]');
-        if (el) {
-            el.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
-        }
-    });
+    // Blur any focused input and move mouse away from input bar
+    await page.mouse.click(10, 10);
     await page.waitForTimeout(200);
+    await page.mouse.move(100, 100);
+    await page.waitForTimeout(300);
 
     await expect(page.locator('.format-toolbar')).not.toBeVisible();
 });

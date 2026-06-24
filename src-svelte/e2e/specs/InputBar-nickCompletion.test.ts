@@ -52,17 +52,26 @@ test('nick-complete button completes nick', async () => {
     await switchToBuffer(page, '#glowing-bear');
     await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 5000 });
 
-    const input = page.getByTestId('message-input');
-    await input.focus();
-    await input.fill('ro');
-    await page.evaluate(() => new Promise(r => requestAnimationFrame(r)));
+    // Wait for nicks to be loaded in the channel
+    await page.getByTestId('nicklist').locator('[data-testid="nick-item"]').first().waitFor({ state: 'visible', timeout: 5000 });
+
+    // Use evaluate to set value and dispatch input event — Playwright's fill()
+    // does not properly sync with Svelte 5 bind:value on textarea.
+    await page.getByTestId('message-input').focus();
+    await page.evaluate(() => {
+        const input = document.querySelector('[data-testid="message-input"]') as HTMLTextAreaElement;
+        if (input) {
+            input.value = 'te';
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    });
 
     await page.getByTestId('nick-complete-button').click();
 
     await expect(async () => {
-        const val = await input.inputValue();
+        const val = await page.getByTestId('message-input').inputValue();
         expect(val.length).toBeGreaterThan(2);
-        expect(val).toContain('ro');
+        expect(val).toContain('te');
     }).toPass({ timeout: 5000 });
 });
 

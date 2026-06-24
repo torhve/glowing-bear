@@ -76,17 +76,29 @@ test('no conversion when emojify is disabled', async () => {
 });
 
 test('multiple emoji shortcodes in one message all convert', async () => {
+    // Re-enable emojify (was disabled by previous test)
+    await setSettings(page, { enableEmojify: true });
+    await reconnect(page);
+    await waitForBuffer(page, '#glowing-bear', 10000);
+    await switchToBuffer(page, '#glowing-bear');
+
     const input = page.getByTestId('message-input');
     await input.focus();
-    await input.pressSequentially('Hello :smile: world :rocket:');
+    // Use evaluate to set value and dispatch input event to trigger emojify
+    await page.evaluate(() => {
+        const el = document.querySelector('[data-testid="message-input"]') as HTMLTextAreaElement;
+        if (el) {
+            el.value = 'Hello :smile: world :rocket:';
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    });
+    await page.waitForTimeout(200);
 
-    await expect(async () => {
-        const val = await input.inputValue();
-        expect(val).toContain('\u{1F604}');
-        expect(val).toContain('\u{1F680}');
-        expect(val).not.toContain(':smile:');
-        expect(val).not.toContain(':rocket:');
-    }).toPass({ timeout: 3000, intervals: [100] });
+    const val = await input.inputValue();
+    expect(val).toContain('\u{1F604}');
+    expect(val).toContain('\u{1F680}');
+    expect(val).not.toContain(':smile:');
+    expect(val).not.toContain(':rocket:');
 });
 
 test('emojify setting toggle persists', async () => {
