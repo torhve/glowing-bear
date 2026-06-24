@@ -159,8 +159,8 @@ test.describe('linkification', () => {
     test('handles multiple URLs in one message', async () => {
         const { botSay } = await import('../helpers/messages');
         await botSay('See https://example.com and https://github.com');
-        const targetRow = page.locator('[data-testid="bufferline-row"]').filter({ hasText: 'https://github.com' }).first();
-        const links = targetRow.locator('td.message a.irc-link');
+        const targetRow = page.locator('[data-testid="bufferline-row"]').filter({ hasText: 'https://example.com' }).last();
+        const links = targetRow.locator('a.irc-link');
         await expect(links).toHaveCount(2, { timeout: 10000 });
     });
 

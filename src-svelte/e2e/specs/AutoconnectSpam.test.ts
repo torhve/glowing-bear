@@ -3,28 +3,6 @@ import { connectToWeechat, waitForAppReady } from '../helpers/connection';
 
 test.describe.configure({ mode: 'serial' });
 
-// Instrument WebSocket constructor to count connection attempts.
-async function instrumentWs(page: import('@playwright/test').Page) {
-    await page.evaluate(() => {
-        (window as any).__wsConnectionCount = 0;
-        const origWebSocket = window.WebSocket;
-        (window as any).WebSocket = function (
-            this: WebSocket,
-            url: string | URL,
-            protocols?: string | string[]
-        ) {
-            (window as any).__wsConnectionCount++;
-            return new origWebSocket(url, protocols);
-        };
-        const orig = window.WebSocket;
-        (window as any).WebSocket.CONNECTING = orig.CONNECTING;
-        (window as any).WebSocket.OPEN = orig.OPEN;
-        (window as any).WebSocket.CLOSING = orig.CLOSING;
-        (window as any).WebSocket.CLOSED = orig.CLOSED;
-        (window as any).WebSocket.prototype = orig.prototype;
-    });
-}
-
 test.describe('Autoconnect spam guard', () => {
     test.beforeEach(async ({ page }) => {
         page.on('pageerror', (error) => {
@@ -34,7 +12,25 @@ test.describe('Autoconnect spam guard', () => {
     });
 
     test('should not retry autoconnect rapidly when connection fails', async ({ page }) => {
-        await instrumentWs(page);
+        // Instrument WebSocket before any page scripts run — persists across navigation/reload
+        await page.addInitScript(() => {
+            (window as any).__wsConnectionCount = 0;
+            const origWebSocket = window.WebSocket;
+            (window as any).WebSocket = function (
+                this: WebSocket,
+                url: string | URL,
+                protocols?: string | string[]
+            ) {
+                (window as any).__wsConnectionCount++;
+                return new origWebSocket(url, protocols);
+            };
+            const orig = window.WebSocket;
+            (window as any).WebSocket.CONNECTING = orig.CONNECTING;
+            (window as any).WebSocket.OPEN = orig.OPEN;
+            (window as any).WebSocket.CLOSING = orig.CLOSING;
+            (window as any).WebSocket.CLOSED = orig.CLOSED;
+            (window as any).WebSocket.prototype = orig.prototype;
+        });
 
         // Set up autoconnect with bad password
         await page.goto('http://localhost:8001/');
