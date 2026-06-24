@@ -324,7 +324,7 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
         const line = createBufferLine(lineMsg);
         buffer.requestedLines++;
 
-         console.debug('[handler] line displayed=', line.displayed, 'buffer=', buffer.fullName, 'text=', line.text?.substring(0, 30), 'tags=', JSON.stringify(lineMsg.tags_array), 'notify=', buffer.notify);
+          console.debug('[handler] line displayed=', line.displayed, 'buffer=', buffer.fullName, 'text=', line.text?.substring(0, 30), 'tags=', JSON.stringify(lineMsg.tags_array), 'notify=', buffer.notify);
         if (line.displayed) {
             // Check for date change and inject date change message
             if (buffer.lines.length > 0) {
@@ -339,7 +339,7 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
             // During initial sync, don't increment lastSeen per-line.
             // Instead, calculate it once after sync completes using the
             // unread count from the hotlist that arrived before sync.
-            if (isSyncing()) {
+            if (isSyncing() && buffer.lastSeen < 0) {
                 // Check if we've received enough lines to cover all unread.
                 // unreadSum = message unread + private + highlights.
                 // unread is index 1, notification is indices 2+3 combined.
@@ -348,12 +348,28 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                     buffer.lastSeen = buffer.lines.length - unreadSum - 1;
                     setSyncing(false);
                 }
-            } else {
-                // After sync: for active buffers at bottom, set lastSeen to the
+            }
+            // For buffers with lastSeen already set (already synced), apply post-sync logic
+            // even during syncing phase. Also applies when not syncing (normal operation).
+            if (buffer.lastSeen >= 0 || !isSyncing()) {
+                // For active buffers at bottom, set lastSeen to the
                 // last line so there are no phantom unread messages. For active
                 // buffers scrolled up, increment as before. For inactive buffers,
                 // track local unread count regardless of whether lastSeen is set.
                 if (buffer.id === activeId && buffer.lastSeen >= 0) {
+                    // Refresh bufferBottom from actual DOM scroll position before checking.
+                    // The $effect that syncs isAtBottom → bufferBottom hasn't fired yet
+                    // (it runs after buffers.set triggers reactivity), so check DOM directly.
+                    if (typeof document !== 'undefined') {
+                        const container = document.querySelector('[data-testid="chat-messages"]') as HTMLElement | null;
+                        if (container) {
+                            // Wide tolerance (200px) accounts for cumulative scroll lag when
+                            // multiple lines arrive before DOM re-renders and rAF scrolls.
+                            // A typical line is ~20px, so this covers up to 10 lines of lag.
+                            const atBottom = container.scrollTop >= container.scrollHeight - container.clientHeight - 200;
+                            bufferBottom.set(atBottom);
+                        }
+                    }
                     if (get(bufferBottom)) {
                         buffer.lastSeen = buffer.lines.length - 1;
                     } else {

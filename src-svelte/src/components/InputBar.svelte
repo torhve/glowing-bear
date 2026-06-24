@@ -28,8 +28,6 @@
     onInsertUrls?: (urls: string[]) => void;
   } = $props();
 
-  let ctrlKeyPressed = $state(false);
-
   // Debug flag — open console and set `window.__debugPaste = true` before pasting
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let debugPaste = $derived(typeof window !== 'undefined' && (window as any).__debugPaste === true);
@@ -641,12 +639,11 @@
   });
 </script>
 
-<div data-testid="input-bar" class="input-bar-container flex-shrink-0"
-     onmouseenter={() => { isHovered = true; }}
-     onmouseleave={() => { if (!showColorPicker) isHovered = false; }}
->
+<div data-testid="input-bar" class="input-bar-container flex-shrink-0">
   <div class="input-bar-inner bg-surface border-t border-border px-3 py-2"
-        role="group"
+       role="group"
+       onmouseenter={() => { isHovered = true; }}
+       onmouseleave={() => { if (!showColorPicker) isHovered = false; }}
   >
 
     <!-- Format toolbar — visible when Ctrl key is held, color picker is open, or input bar is hovered/focused -->
