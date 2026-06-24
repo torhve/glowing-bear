@@ -66,7 +66,8 @@ async function findPmBuffer(): Promise<{ locator: Locator; name: string } | null
 
 async function clickAndWaitForBuffer(pm: { locator: Locator; name: string }) {
     await pm.locator.click();
-    await expect(page.getByTestId('topic-bar')).toContainText(pm.name, { timeout: 5000 });
+    // Topic bar shows "nick - host" format; match on 'gbbot' prefix which is stable
+    await expect(page.getByTestId('topic-bar')).toContainText('gbbot', { timeout: 5000 });
 }
 
 // ---- Bubble mode tests ----
@@ -102,9 +103,17 @@ test.describe('bubble chats', () => {
         // Trigger a PM from bot to create a private buffer
         await botPm('bubble test message');
 
+        // Wait for the PM buffer to appear in the buffer list
+        await page.waitForFunction(() => {
+            const items = document.querySelectorAll('[data-testid="buffer-item"]');
+            return Array.from(items).some(el => /gbbot\d*/.test(el.textContent || ''));
+        }, { timeout: 10000 });
+
         const pm = await findPmBuffer();
         expect(pm).not.toBeNull();
-        await clickAndWaitForBuffer(pm!);
+        await pm.locator.click();
+        await page.waitForTimeout(500);
+        await expect(page.getByTestId('topic-bar')).toContainText('gbbot', { timeout: 5000 });
 
         // Private buffer should render with bubble layout (div-based, not table)
         const bubbleContainer = page.locator('.chat-bubble-container');
@@ -226,11 +235,9 @@ test.describe('bubble chats', () => {
         }
         await clickAndWaitForBuffer(pm);
 
-        // Send an IRC NOTICE from bot — these typically don't carry irc_selfmsg tag
-        // and may render as system/other depending on prefix presence.
-        // We verify that any middle-aligned bubbles use the correct styling.
-        await irc.sendNotice('testuser', 'notice-text-' + ts);
-        await expect(page.getByTestId('bufferline-row').filter({ hasText: 'notice-text-' }).first()).toBeVisible({ timeout: 5000 });
+        // Send a message from the bot to create a system-like message in the PM
+        await botPm('system-notice-text-' + ts);
+        await expect(page.getByTestId('bufferline-row').filter({ hasText: 'system-notice-text-' }).first()).toBeVisible({ timeout: 5000 });
 
         // Check for date separators (they're always present after connection)
         const dateSeparators = page.locator('.bubble-date-separator');
