@@ -39,25 +39,36 @@ async function openBufferSearch(p: import('@playwright/test').Page) {
     await expect(p.locator('#buffer-search')).toBeVisible({ timeout: 5000 });
 }
 
+async function waitForSelectedIndex(expectedFn: (idx: number) => boolean, timeout = 5000) {
+    await expect(async () => {
+        const idx = await findSelectedIndex(page);
+        expect(expectedFn(idx)).toBe(true);
+    }).toPass({ timeout });
+}
+
+async function waitForSearchResults(appear = true, timeout = 5000) {
+    await expect(async () => {
+        const count = await page.locator('[data-search-index]').count();
+        if (appear) {
+            expect(count).toBeGreaterThan(0);
+        } else {
+            expect(count).toBe(0);
+        }
+    }).toPass({ timeout });
+}
+
 test('ArrowDown cycles through filtered results', async () => {
     await openBufferSearch(page);
 
     const searchInput = page.locator('#buffer-search');
     await searchInput.fill('gbtest');
-    await page.waitForTimeout(300);
+    await waitForSearchResults(true);
 
-    const selectedIdx = await findSelectedIndex(page);
-    expect(selectedIdx).toBe(0);
+    await waitForSelectedIndex((idx) => idx === 0);
 
     await searchInput.press('ArrowDown');
-    await page.waitForTimeout(200);
 
-    const newIdx = await findSelectedIndex(page);
-    if (newIdx >= 1) {
-        // cycled to next item
-    } else {
-        expect(newIdx).toBe(0);
-    }
+    await waitForSelectedIndex((idx) => idx >= 1 || idx === 0);
 });
 
 test('ArrowUp cycles backwards through results', async () => {
@@ -65,22 +76,19 @@ test('ArrowUp cycles backwards through results', async () => {
 
     const searchInput = page.locator('#buffer-search');
     await searchInput.fill('gbtest');
-    await page.waitForTimeout(300);
+    await waitForSearchResults(true);
 
     // Navigate down a few times first
     await searchInput.press('ArrowDown');
     await searchInput.press('ArrowDown');
-    await page.waitForTimeout(200);
+    await waitForSelectedIndex((idx) => idx >= 0);
 
     const selectedIdx = await findSelectedIndex(page);
-    expect(selectedIdx).toBeGreaterThanOrEqual(0);
 
     // Press ArrowUp once
     await searchInput.press('ArrowUp');
-    await page.waitForTimeout(200);
 
-    const newIdx = await findSelectedIndex(page);
-    expect(newIdx).toBeLessThanOrEqual(selectedIdx);
+    await waitForSelectedIndex((idx) => idx <= selectedIdx);
 });
 
 test('ArrowDown wraps around to first result', async () => {
@@ -88,17 +96,14 @@ test('ArrowDown wraps around to first result', async () => {
 
     const searchInput = page.locator('#buffer-search');
     await searchInput.fill('');
-    await page.waitForTimeout(300);
+    await waitForSearchResults(true);
 
     // Navigate past all items to reach end and wrap
     for (let i = 0; i < 20; i++) {
         await searchInput.press('ArrowDown');
-        await page.waitForTimeout(150);
     }
 
-    const selectedIdx = await findSelectedIndex(page);
-    // After cycling through all items, should have wrapped or be at a valid index
-    expect(selectedIdx).toBeGreaterThanOrEqual(0);
+    await waitForSelectedIndex((idx) => idx >= 0);
 });
 
 test('selected item scrolls into view', async () => {
@@ -106,7 +111,7 @@ test('selected item scrolls into view', async () => {
 
     const searchInput = page.locator('#buffer-search');
     await searchInput.fill('');
-    await page.waitForTimeout(300);
+    await waitForSearchResults(true);
 
     const scrollTop = await page.evaluate(() => {
         const container = document.querySelector('.buffer-search-results');
@@ -116,16 +121,16 @@ test('selected item scrolls into view', async () => {
     // Navigate down many items
     for (let i = 0; i < 15; i++) {
         await searchInput.press('ArrowDown');
-        await page.waitForTimeout(150);
     }
 
-    const newScrollTop = await page.evaluate(() => {
-        const container = document.querySelector('.buffer-search-results');
-        return container ? (container as HTMLElement).scrollTop : -1;
-    });
-
-    // Scroll position should have changed or stayed the same (if all items fit)
-    expect(newScrollTop).toBeGreaterThanOrEqual(scrollTop);
+    await expect(async () => {
+        const newScrollTop = await page.evaluate(() => {
+            const container = document.querySelector('.buffer-search-results');
+            return container ? (container as HTMLElement).scrollTop : -1;
+        });
+        // Scroll position should have changed or stayed the same (if all items fit)
+        expect(newScrollTop).toBeGreaterThanOrEqual(scrollTop);
+    }).toPass({ timeout: 5000 });
 });
 
 test('arrow keys are no-op when no results match', async () => {
@@ -133,12 +138,11 @@ test('arrow keys are no-op when no results match', async () => {
 
     const searchInput = page.locator('#buffer-search');
     await searchInput.fill('zzzzz_no_match_zzzzz');
-    await page.waitForTimeout(300);
+    await waitForSearchResults(false);
 
     await searchInput.press('ArrowDown');
     await searchInput.press('ArrowUp');
     await searchInput.press('ArrowDown');
-    await page.waitForTimeout(200);
 
     await expect(page.getByText('No buffers found')).toBeVisible();
 });

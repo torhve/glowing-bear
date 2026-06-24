@@ -59,8 +59,8 @@ test('chat container handles scroll event at top without throwing', async () => 
         el.dispatchEvent(new Event('scroll', { bubbles: true }));
     });
 
-    // Wait for any potential fetch attempt to resolve/reject
-    await page.waitForTimeout(500);
+    // Wait for fetch to resolve (next tick)
+    await page.evaluate(() => new Promise(r => requestAnimationFrame(r)));
 
     // Verify no console errors from the scroll handler
     await expect(pageErrors).toHaveLength(0);
@@ -75,6 +75,7 @@ test('repeated scroll events at top do not cause cascading errors', async () => 
             el.scrollTop = 0;
             el.dispatchEvent(new Event('scroll', { bubbles: true }));
         });
-        await page.waitForTimeout(50);
+        // Yield to let scroll handler process
+        await page.evaluate(() => new Promise(r => setTimeout(r, 0)));
     }
 });

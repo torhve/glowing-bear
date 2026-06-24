@@ -76,7 +76,6 @@ test('should scroll to bottom when switching to a buffer with many lines', async
     for (let i = 0; i < 10; i++) {
         await irc.sendMessage('#glowing-bear', `scroll-init-${Date.now()}-${i}`);
     }
-    await page.waitForTimeout(3000);
 
     // Switch to the buffer and wait for data to load
     await switchToBuffer(page, '#glowing-bear');
@@ -114,7 +113,6 @@ test('should scroll to readmarker when switching to buffer with unread messages'
     // Send messages to #glowing-bear while we're NOT on it (creates unread)
     await irc.sendMessage('#glowing-bear', 'scroll test message 1');
     await irc.sendMessage('#glowing-bear', 'scroll test message 2');
-    await page.waitForTimeout(2000);
 
     // Switch back to #glowing-bear — should scroll to readmarker, not bottom
     await switchToBuffer(page, '#glowing-bear');
@@ -135,7 +133,6 @@ test('should scroll to bottom when switching to fresh buffer with no unread', as
 
     // Send a message to #glowing-bear from bot while we're on gbtest
     await irc.sendMessage('#glowing-bear', 'fresh scroll test ' + Date.now());
-    await page.waitForTimeout(2000);
 
     // Switch back — since we were away, this is a "switch" and should show readmarker
     // But if there are NO unread (lastSeen was already set), it should scroll to bottom

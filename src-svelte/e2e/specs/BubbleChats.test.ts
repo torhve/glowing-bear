@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator } from '@playwright/test';
 import { createConnectedPage } from '../fixtures/auth';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
@@ -36,7 +36,6 @@ async function enableBubbleMode() {
         await checkbox.click();
     }
     await closeSettings(page);
-    await page.waitForTimeout(200);
 }
 
 // Disable bubble mode by toggling the checkbox in the Settings modal.
@@ -47,21 +46,27 @@ async function disableBubbleMode() {
         await checkbox.click();
     }
     await closeSettings(page);
-    await page.waitForTimeout(200);
 }
 
 // Find the most recently created PM buffer (last matching gbbot entry).
-async function findPmBuffer() {
+async function findPmBuffer(): Promise<{ locator: Locator; name: string } | null> {
     const items = page.getByTestId('buffer-item');
     const count = await items.count();
-    let lastMatch = null;
+    let lastMatch: Locator | null = null;
+    let lastName = '';
     for (let i = 0; i < count; i++) {
         const text = await items.nth(i).textContent();
         if (text && /gbbot\d*/.test(text)) {
             lastMatch = items.nth(i);
+            lastName = text.trim();
         }
     }
-    return lastMatch;
+    return lastMatch ? { locator: lastMatch, name: lastName } : null;
+}
+
+async function clickAndWaitForBuffer(pm: { locator: Locator; name: string }) {
+    await pm.locator.click();
+    await expect(page.getByTestId('topic-bar')).toContainText(pm.name, { timeout: 5000 });
 }
 
 // ---- Bubble mode tests ----
@@ -97,10 +102,9 @@ test.describe('bubble chats', () => {
         // Trigger a PM from bot to create a private buffer
         await botPm('bubble test message');
 
-        const pmItem = await findPmBuffer();
-        expect(pmItem).not.toBeNull();
-        await pmItem!.click();
-        await page.waitForTimeout(1000);
+        const pm = await findPmBuffer();
+        expect(pm).not.toBeNull();
+        await clickAndWaitForBuffer(pm!);
 
         // Private buffer should render with bubble layout (div-based, not table)
         const bubbleContainer = page.locator('.chat-bubble-container');
@@ -120,14 +124,13 @@ test.describe('bubble chats', () => {
         const msgText = 'bubble-other-test-' + Date.now();
         await botPm(msgText);
 
-        const pmItem = await findPmBuffer();
-        if (!pmItem) {
+        const pm = await findPmBuffer();
+        if (!pm) {
             // If no new PM buffer appeared, try switching to existing one
             await switchToBuffer(page, '#glowing-bear');
             return;
         }
-        await pmItem.click();
-        await page.waitForTimeout(1000);
+        await clickAndWaitForBuffer(pm);
 
         // Verify the incoming message renders as a bubble-other element
         const otherBubbles = page.locator('.bubble-other-bg');
@@ -146,20 +149,19 @@ test.describe('bubble chats', () => {
 
         // Access/create a PM buffer
         await botPm('initiate pm for self-test-' + Date.now());
-        const pmItem = await findPmBuffer();
-        if (!pmItem) {
+        const pm = await findPmBuffer();
+        if (!pm) {
             test.skip();
             return;
         }
-        await pmItem.click();
-        await page.waitForTimeout(500);
+        await clickAndWaitForBuffer(pm);
 
         // Send a message from ourselves
         const selfMsg = 'my-bubble-msg-' + Date.now();
         const input = page.getByTestId('message-input');
         await input.fill(selfMsg);
         await input.press('Enter');
-        await page.waitForTimeout(1000);
+        await expect(page.locator('.bubble-self-bg').filter({ hasText: selfMsg }).first()).toBeVisible({ timeout: 5000 });
 
         // Verify at least one self-aligned bubble exists
         const selfBubbles = page.locator('.bubble-self-bg');
@@ -178,13 +180,12 @@ test.describe('bubble chats', () => {
         // Access/create a PM buffer
         const ts = Date.now();
         await botPm('group-test-init-' + ts);
-        const pmItem = await findPmBuffer();
-        if (!pmItem) {
+        const pm = await findPmBuffer();
+        if (!pm) {
             test.skip();
             return;
         }
-        await pmItem.click();
-        await page.waitForTimeout(500);
+        await clickAndWaitForBuffer(pm);
 
         // Send two consecutive self messages
         const msg1 = 'group-msg-1-' + ts;
@@ -192,11 +193,11 @@ test.describe('bubble chats', () => {
 
         await page.getByTestId('message-input').fill(msg1);
         await page.getByTestId('message-input').press('Enter');
-        await page.waitForTimeout(300);
+        await expect(page.locator('.bubble-self-bg').filter({ hasText: msg1 }).first()).toBeVisible({ timeout: 5000 });
 
         await page.getByTestId('message-input').fill(msg2);
         await page.getByTestId('message-input').press('Enter');
-        await page.waitForTimeout(1000);
+        await expect(page.locator('.bubble-self-bg').filter({ hasText: msg2 }).first()).toBeVisible({ timeout: 5000 });
 
         // Both messages should be visible as self-aligned bubbles
         const row1 = page.locator('.bubble-self-bg').filter({ hasText: msg1 }).first();
@@ -218,19 +219,18 @@ test.describe('bubble chats', () => {
         // Create a PM buffer first
         const ts = Date.now();
         await botPm('init-for-system-test-' + ts);
-        const pmItem = await findPmBuffer();
-        if (!pmItem) {
+        const pm = await findPmBuffer();
+        if (!pm) {
             test.skip();
             return;
         }
-        await pmItem.click();
-        await page.waitForTimeout(500);
+        await clickAndWaitForBuffer(pm);
 
         // Send an IRC NOTICE from bot — these typically don't carry irc_selfmsg tag
         // and may render as system/other depending on prefix presence.
         // We verify that any middle-aligned bubbles use the correct styling.
         await irc.sendNotice('testuser', 'notice-text-' + ts);
-        await page.waitForTimeout(1500);
+        await expect(page.getByTestId('bufferline-row').filter({ hasText: 'notice-text-' }).first()).toBeVisible({ timeout: 5000 });
 
         // Check for date separators (they're always present after connection)
         const dateSeparators = page.locator('.bubble-date-separator');
@@ -251,25 +251,22 @@ test.describe('bubble chats', () => {
         const ts = Date.now();
         // Bot sends first (incoming/left)
         await botPm('other-msg-a-' + ts);
-        await page.waitForTimeout(300);
 
-        const pmItem = await findPmBuffer();
-        if (!pmItem) {
+        const pm = await findPmBuffer();
+        if (!pm) {
             test.skip();
             return;
         }
-        await pmItem.click();
-        await page.waitForTimeout(500);
+        await clickAndWaitForBuffer(pm);
 
         // User replies (outgoing/right)
         const selfMsg = 'self-msg-b-' + ts;
         await page.getByTestId('message-input').fill(selfMsg);
         await page.getByTestId('message-input').press('Enter');
-        await page.waitForTimeout(500);
+        await expect(page.locator('.bubble-self-bg').filter({ hasText: selfMsg }).first()).toBeVisible({ timeout: 5000 });
 
         // Bot responds again (incoming/left)
         await botPm('other-msg-c-' + ts);
-        await page.waitForTimeout(1000);
 
         // Count each alignment type
         const otherCount = await page.locator('.bubble-other-bg').count();
@@ -279,9 +276,9 @@ test.describe('bubble chats', () => {
         expect(selfCount).toBeGreaterThanOrEqual(1);  // our reply (right)
 
         // Verify both message types are visible
-        await expect(page.locator('.bubble-row').filter({ hasText: 'other-msg-a-' }).first()).toBeVisible();
-        await expect(page.locator('.bubble-row').filter({ hasText: selfMsg }).first()).toBeVisible();
-        await expect(page.locator('.bubble-row').filter({ hasText: 'other-msg-c-' }).first()).toBeVisible();
+        await expect(page.locator('.bubble-row').filter({ hasText: 'other-msg-a-' }).first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.bubble-row').filter({ hasText: selfMsg }).first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.bubble-row').filter({ hasText: 'other-msg-c-' }).first()).toBeVisible({ timeout: 5000 });
 
         await disableBubbleMode();
     });
@@ -289,20 +286,19 @@ test.describe('bubble chats', () => {
     test('date separators render with centered divider', async () => {
         await enableBubbleMode();
 
-        const pmItem = await findPmBuffer();
-        if (!pmItem) {
+        const pm = await findPmBuffer();
+        if (!pm) {
             // Create one first
             await botPm('date-sep-test');
-            const newPmItem = await findPmBuffer();
-            if (!newPmItem) {
+            const newPm = await findPmBuffer();
+            if (!newPm) {
                 test.skip();
                 return;
             }
-            await newPmItem.click();
+            await clickAndWaitForBuffer(newPm);
         } else {
-            await pmItem.click();
+            await clickAndWaitForBuffer(pm);
         }
-        await page.waitForTimeout(500);
 
         // Date separators should have the correct structure
         const dateSep = page.locator('.bubble-date-separator');

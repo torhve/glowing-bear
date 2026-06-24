@@ -293,10 +293,14 @@ test.describe('buffer switch', () => {
         await switchToBuffer(page, 'gbtest');
 
         // Send a message to #glowing-bear while we're NOT on it (creates unread)
-        await irc.sendMessage('#glowing-bear', 'dc-test-' + Date.now());
+        const uniqueMsg = 'dc-test-' + Date.now();
+        await irc.sendMessage('#glowing-bear', uniqueMsg);
 
         // Wait for message to be processed
-        await page.waitForTimeout(2000);
+        await page.waitForFunction((msg) => {
+            const rows = document.querySelectorAll('[data-testid="bufferline-row"] td.message');
+            return Array.from(rows).some(r => r.textContent?.includes(msg));
+        }, uniqueMsg, { timeout: 5000 });
 
         // Switch back - readmarker should appear with exactly 1 line below it
         // If double-counting were happening, the effectiveUnread calculation would

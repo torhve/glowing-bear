@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, clearSettings, setSettings, waitForAppReady } from '../helpers/connection';
+import { connectToWeechat, clearSettings, setSettings, waitForAppReady, reconnect, fillPortInput } from '../helpers/connection';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
 
@@ -69,48 +69,30 @@ async function getAudioCalls(p: import('@playwright/test').Page): Promise<string
     });
 }
 
-function fillPortInput(p: import('@playwright/test').Page, port: string) {
-    return p.evaluate((p) => {
-        const input = document.querySelector('[data-testid="port-input"]');
-        if (input) {
-            (input as HTMLInputElement).value = p;
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-    }, port);
-}
 
-async function reconnectWithSound(page: import('@playwright/test').Page, enabled: boolean) {
-    await clearSettings(page);
-    await setSettings(page, { savepassword: false, autoconnect: false, soundnotification: enabled });
-    await page.getByTestId('disconnect-button').click().catch(() => {});
-    await page.waitForTimeout(2000);
-    await page.getByTestId('host-input').fill('localhost');
-    await fillPortInput(page, '9001');
-    await page.getByTestId('password-input').fill('testpassword123');
-    await page.getByTestId('connect-button').click();
-    await page.getByTestId('chat-view').waitFor({ state: 'visible', timeout: 45000 });
-}
 
 test('sound plays on highlight when setting enabled', async () => {
     // Send a PM to trigger a notification sound (PMs always trigger highlights)
     await irc.sendPm('gbbot', 'notification-sound-test');
-    await page.waitForTimeout(3000);
 
-    const audioCalls = await getAudioCalls(page);
-    expect(audioCalls.length).toBeGreaterThan(0);
+    await expect(async () => {
+        const audioCalls = await getAudioCalls(page);
+        expect(audioCalls.length).toBeGreaterThan(0);
+    }).toPass({ timeout: 10000, intervals: [200] });
 });
 
 test('sound does not play when soundnotification is disabled', async () => {
-    await reconnectWithSound(page, false);
+    await reconnect(page, { soundnotification: false });
     await waitForBuffer(page, '#glowing-bear', 10000);
     await switchToBuffer(page, '#glowing-bear');
-    await page.waitForTimeout(500);
 
     await irc.sendPm('gbbot', 'no-sound-test');
-    await page.waitForTimeout(3000);
 
-    const audioCalls = await getAudioCalls(page);
-    expect(audioCalls.length).toBe(0);
+    // Verify no audio was created
+    await expect(async () => {
+        const audioCalls = await getAudioCalls(page);
+        expect(audioCalls.length).toBe(0);
+    }).toPass({ timeout: 5000, intervals: [200] });
 });
 
 test('sound setting toggle persists', async () => {

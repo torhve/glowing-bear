@@ -67,25 +67,21 @@ test('should toggle server grouping in buffer list', async () => {
     await page.evaluate(() => {
         (window as any).__setGbSettings?.({ orderbyserver: false });
     });
-    await page.waitForTimeout(200);
-    await expect(toggleBtn).toHaveAttribute('title', 'Group by server');
+    await expect(toggleBtn).toHaveAttribute('title', 'Group by server', { timeout: 5000 });
     await toggleBtn.click();
-    await page.waitForTimeout(300);
-    await expect(toggleBtn).toHaveAttribute('title', 'Switch to list view');
+    await expect(toggleBtn).toHaveAttribute('title', 'Switch to list view', { timeout: 5000 });
 });
 
 test('should show buffer search input in topbar', async () => {
     await page.getByTestId('search-button').click();
-    await page.waitForTimeout(200);
-    await expect(page.locator('#buffer-search')).toBeVisible();
+    await expect(page.locator('#buffer-search')).toBeVisible({ timeout: 5000 });
     // Close modal for subsequent tests
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(200);
+    await expect(page.locator('#buffer-search')).not.toBeVisible({ timeout: 5000 }).catch(() => {});
 });
 
 test('should filter buffers when searching', async () => {
     await page.getByTestId('search-button').click();
-    await page.waitForTimeout(200);
     const searchInput = page.locator('#buffer-search');
     await expect(searchInput).toBeVisible({ timeout: 5000 });
     // Count all search results before filtering
@@ -94,19 +90,21 @@ test('should filter buffers when searching', async () => {
     expect(countBefore).toBeGreaterThanOrEqual(1);
     // Fill with a query that matches #glowing-bear
     await searchInput.fill('#glowing-bear');
-    await page.waitForTimeout(300);
-    // Only matching buffers should be visible in search results
-    const filteredResults = page.locator('[data-search-index]');
-    const filteredCount = await filteredResults.count();
-    expect(filteredCount).toBeGreaterThanOrEqual(1);
+    // Wait for filter to apply
+    await expect(async () => {
+        const n = await allResultsBefore.count();
+        expect(n).toBeLessThanOrEqual(countBefore);
+        expect(n).toBeGreaterThanOrEqual(1);
+    }).toPass({ timeout: 5000 });
     // All visible search results should contain the search query text
+    const filteredCount = await allResultsBefore.count();
     for (let i = 0; i < filteredCount; i++) {
-        const text = await filteredResults.nth(i).textContent();
+        const text = await allResultsBefore.nth(i).textContent();
         expect(text?.toLowerCase()).toContain('#glowing-bear'.toLowerCase());
     }
     // Close modal for subsequent tests
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(200);
+    await expect(searchInput).not.toBeVisible({ timeout: 5000 }).catch(() => {});
 });
 
 test('should close buffer search with Escape key', async () => {
@@ -114,14 +112,12 @@ test('should close buffer search with Escape key', async () => {
     const modal = page.locator('#buffer-search-modal');
     if (await modal.isVisible().catch(() => false)) {
         await page.keyboard.press('Escape');
-        await page.waitForTimeout(300);
+        await expect(modal).not.toBeVisible({ timeout: 5000 });
     }
     await page.getByTestId('search-button').click();
-    await page.waitForTimeout(200);
     const searchInput = page.locator('#buffer-search');
     await expect(searchInput).toBeVisible({ timeout: 5000 });
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(300);
     await expect(modal).not.toBeVisible({ timeout: 5000 });
 });
 
@@ -147,12 +143,11 @@ test.describe('buffer search arrow navigation', () => {
         const modal = page.locator('#buffer-search-modal');
         if (await modal.isVisible()) {
             await page.keyboard.press('Escape');
-            await page.waitForTimeout(200);
+            await expect(modal).not.toBeVisible({ timeout: 5000 });
         }
         // Open search modal
         const searchBtn = page.getByTitle('Search buffers (Alt+G)');
         await searchBtn.click({ timeout: 10000 });
-        await page.waitForTimeout(300);
         const searchInput = page.locator('#buffer-search');
         await expect(searchInput).toBeVisible({ timeout: 5000 });
         await searchInput.fill('');
@@ -162,8 +157,7 @@ test.describe('buffer search arrow navigation', () => {
         const searchInput = page.locator('#buffer-search');
         await searchInput.fill('#');
         const results = page.locator('[data-search-index]');
-        const count = await results.count();
-        expect(count).toBeGreaterThanOrEqual(1);
+        await expect(results).not.toHaveCount(0, { timeout: 5000 });
     });
 
     test('should highlight first result by default', async () => {
@@ -262,26 +256,31 @@ test.describe('buffer search arrow navigation', () => {
 });
 
 test.describe('onlyUnread filter', () => {
+    async function toggleOnlyUnread() {
+        await page.getByTestId('settings-button').click();
+        await expect(page.getByTestId('settings-modal')).toBeVisible({ timeout: 5000 });
+        await page.locator('label:has-text("Only show buffers with unread messages")').click();
+        await page.getByTestId('settings-modal-close').click();
+        await expect(page.getByTestId('settings-modal')).not.toBeVisible({ timeout: 5000 });
+    }
+
     test('should hide non-unread buffers when onlyUnread is enabled', async () => {
         // Close any open modals from previous tests
         const modalVisible = await page.getByTestId('settings-modal').isVisible().catch(() => false);
         if (modalVisible) {
             await page.getByTestId('settings-modal-close').click();
-            await page.waitForTimeout(200);
+            await expect(page.getByTestId('settings-modal')).not.toBeVisible({ timeout: 5000 });
         }
 
         // Send a message to #glowing-bear to ensure it has unread count
-        await irc.sendMessage('#glowing-bear', 'for unread filter test');
-        await page.waitForTimeout(1000);
+        const uniqueMsg = 'for unread filter test ' + Date.now();
+        await irc.sendMessage('#glowing-bear', uniqueMsg);
 
-        // Switch back to #glowing-bear so it becomes active (match both # and no # prefix)
+        // Switch to #glowing-bear so it becomes active
         const gbItem = page.getByTestId('buffer-item').filter({ hasText: 'glowing-bear' }).first();
-        const gbVisible = await gbItem.isVisible().catch(() => false);
-        if (!gbVisible) {
-            throw new Error('#glowing-bear buffer not found');
-        }
+        await expect(gbItem).toBeVisible({ timeout: 5000 });
         await gbItem.click();
-        await page.waitForTimeout(500);
+        await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 5000 });
 
         // Count all buffers (filter is off by default)
         const allItemsBefore = page.getByTestId('buffer-item');
@@ -289,31 +288,19 @@ test.describe('onlyUnread filter', () => {
         expect(countBefore).toBeGreaterThanOrEqual(1);
 
         // Open settings and enable "Only show buffers with unread messages"
-        await page.getByTestId('settings-button').click();
-        await page.waitForTimeout(200);
-        await page.locator('label:has-text("Only show buffers with unread messages")').click();
-        await page.waitForTimeout(200);
-        await page.getByTestId('settings-modal-close').click();
-        await page.waitForTimeout(200);
+        await toggleOnlyUnread();
 
-        // With filter on, only buffers with unread/notification/active/pinned should show
-        // Since #glowing-bear is active AND has unread, at least it should still be visible
+        // With filter on, the active buffer should still be visible
         const filteredItems = page.getByTestId('buffer-item');
         const filteredCount = await filteredItems.count();
         expect(filteredCount).toBeGreaterThanOrEqual(1);
 
-        // Verify the buffer list re-renders with different visibility
-        // (the active buffer should always remain visible regardless of unread state)
+        // The active buffer should remain visible
         const activeBufferVisible = page.getByTestId('buffer-item').filter({ hasText: 'glowing-bear' });
         await expect(activeBufferVisible).toBeVisible({ timeout: 5000 });
 
         // Re-open settings and disable the filter
-        await page.getByTestId('settings-button').click();
-        await page.waitForTimeout(200);
-        await page.locator('label:has-text("Only show buffers with unread messages")').click();
-        await page.waitForTimeout(200);
-        await page.getByTestId('settings-modal-close').click();
-        await page.waitForTimeout(200);
+        await toggleOnlyUnread();
 
         // All buffers should be visible again
         const allItemsAfter = page.getByTestId('buffer-item');
@@ -326,20 +313,15 @@ test.describe('onlyUnread filter', () => {
         const modalVisible = await page.getByTestId('settings-modal').isVisible().catch(() => false);
         if (modalVisible) {
             await page.getByTestId('settings-modal-close').click();
-            await page.waitForTimeout(200);
+            await expect(page.getByTestId('settings-modal')).not.toBeVisible({ timeout: 5000 });
         }
 
         // Ensure we are on #glowing-bear buffer
         await switchToBuffer(page, '#glowing-bear');
-        await page.waitForTimeout(500);
+        await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 5000 });
 
         // Enable onlyUnread filter
-        await page.getByTestId('settings-button').click();
-        await page.waitForTimeout(200);
-        await page.locator('label:has-text("Only show buffers with unread messages")').click();
-        await page.waitForTimeout(200);
-        await page.getByTestId('settings-modal-close').click();
-        await page.waitForTimeout(500);
+        await toggleOnlyUnread();
 
         // Verify #glowing-bear is visible as the active buffer
         const gbItem = page.getByTestId('buffer-item').filter({ hasText: 'glowing-bear' }).first();
@@ -347,19 +329,14 @@ test.describe('onlyUnread filter', () => {
 
         // Click the same buffer again - this triggers switchBuffer which zeroes unread counts
         await gbItem.click();
-        await page.waitForTimeout(1000);
+        await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 5000 });
 
         // The buffer should STILL be visible because it's the active buffer
         const gbItemAfter = page.getByTestId('buffer-item').filter({ hasText: 'glowing-bear' }).first();
         await expect(gbItemAfter).toBeVisible({ timeout: 5000 });
 
         // Disable onlyUnread filter for subsequent tests
-        await page.getByTestId('settings-button').click();
-        await page.waitForTimeout(200);
-        await page.locator('label:has-text("Only show buffers with unread messages")').click();
-        await page.waitForTimeout(200);
-        await page.getByTestId('settings-modal-close').click();
-        await page.waitForTimeout(200);
+        await toggleOnlyUnread();
     });
 });
 
@@ -376,12 +353,15 @@ test.describe('quick keys display', () => {
         await page.evaluate(() => {
             (window as any).__setGbSettings?.({ showQuickKeys: true, enableQuickKeys: true, onlyUnread: false });
         });
-        await page.waitForTimeout(500);
 
         // Verify numbered badges appear on buffer items
+        await expect(async () => {
+            const quickKeyBadges = page.locator('[data-testid="buffer-item"] .buffer-quickkey');
+            const badgeCount = await quickKeyBadges.count();
+            expect(badgeCount).toBeGreaterThanOrEqual(1);
+        }).toPass({ timeout: 5000 });
         const quickKeyBadges = page.locator('[data-testid="buffer-item"] .buffer-quickkey');
         const badgeCount = await quickKeyBadges.count();
-        expect(badgeCount).toBeGreaterThanOrEqual(1);
 
         // Verify all badge values are unique integers in range 1-9
         const seen = new Set<number>();
@@ -400,11 +380,11 @@ test.describe('quick keys display', () => {
         await page.evaluate(() => {
             (window as any).__setGbSettings?.({ showQuickKeys: false });
         });
-        await page.waitForTimeout(300);
 
         // Badges should no longer be visible
-        const quickKeyBadgesOff = page.locator('[data-testid="buffer-item"] .buffer-quickkey');
-        const badgeCountOff = await quickKeyBadgesOff.count();
-        expect(badgeCountOff).toBe(0);
+        await expect(async () => {
+            const n = await page.locator('[data-testid="buffer-item"] .buffer-quickkey').count();
+            expect(n).toBe(0);
+        }).toPass({ timeout: 5000 });
     });
 });

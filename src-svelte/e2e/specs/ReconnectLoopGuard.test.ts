@@ -11,7 +11,6 @@ test.describe('Reconnect loop guard', () => {
         });
         await page.goto('http://localhost:8001/');
         await page.evaluate(() => localStorage.removeItem('gb-settings'));
-        await page.waitForTimeout(500);
         await page.reload();
         await waitForAppReady(page);
     });
@@ -111,17 +110,15 @@ test.describe('Reconnect loop guard', () => {
         });
 
         // Wait for onclose handler to process
-        await page.waitForTimeout(500);
-
-        const state = await page.evaluate(() => {
-            const store = (window as any).__connectionState;
-            if (!store) return null;
-            if (typeof store.get === 'function') return store.get();
-            return store;
-        });
-
-        // Counter should be incremented to 8 (not yet exceeded max)
-        expect(state?.reconnectAttempts).toBe(8);
+        await expect(async () => {
+            const state = await page.evaluate(() => {
+                const store = (window as any).__connectionState;
+                if (!store) return null;
+                if (typeof store.get === 'function') return store.get();
+                return store;
+            });
+            expect(state?.reconnectAttempts).toBe(8);
+        }).toPass({ timeout: 5000, intervals: [200] });
 
         // Error toast about exhausted attempts should NOT appear
         await expect(page.getByText(/Connection lost after.*failed reconnect attempts/)).not.toBeVisible({ timeout: 2000 });

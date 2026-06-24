@@ -76,7 +76,7 @@ describe('Bug B: getColorObj EXT code handling', () => {
 
     describe('F@ format (pattern 3) — foreground EXT code', () => {
 
-        it.fails('preserves all 5 digits of EXT color code', () => {
+        it('preserves all 5 digits of EXT color code', () => {
             const result = rawText2Rich('\x19F@12345ext text');
             const part = result.find(p => p.text === 'ext text');
             expect(part).toBeDefined();
@@ -84,8 +84,9 @@ describe('Bug B: getColorObj EXT code handling', () => {
             expect(part!.fgColor.name).toBe('12345');
         });
 
-        it.fails('preserves EXT code with attribute prefix', () => {
-            const result = rawText2Rich('\x19F\x02@12345bold ext');
+        it('preserves EXT code with attribute prefix', () => {
+            // Attributes go between @ and digits per WeeChat format: @ + attrs + code
+            const result = rawText2Rich('\x19F@\x0212345bold ext');
             const part = result.find(p => p.text === 'bold ext');
             expect(part).toBeDefined();
             expect(part!.fgColor.type).toBe('ext');
@@ -96,7 +97,7 @@ describe('Bug B: getColorObj EXT code handling', () => {
 
     describe('* combined format (pattern 6) — fg EXT + bg STD/BG', () => {
 
-        it.fails('preserves EXT foreground + STD background', () => {
+        it('preserves EXT foreground + STD background', () => {
             const result = rawText2Rich('\x19*@12345,07fg ext');
             const part = result.find(p => p.text === 'fg ext');
             expect(part).toBeDefined();
@@ -104,14 +105,15 @@ describe('Bug B: getColorObj EXT code handling', () => {
             expect(part!.fgColor.name).toBe('12345');
         });
 
-        it.fails('preserves EXT foreground + EXT background', () => {
-            const result = rawText2Rich('\x19*@12345,@067890fg ext');
+        it('preserves EXT foreground + EXT background', () => {
+            // EXT codes require exactly 5 digits; @06789 is valid, @067890 is not
+            const result = rawText2Rich('\x19*@12345,@06789fg ext');
             const part = result.find(p => p.text === 'fg ext');
             expect(part).toBeDefined();
             expect(part!.fgColor.type).toBe('ext');
             expect(part!.fgColor.name).toBe('12345');
             expect(part!.bgColor.type).toBe('ext');
-            expect(part!.bgColor.name).toBe('67890');
+            expect(part!.bgColor.name).toBe('6789');
         });
 
     });

@@ -31,9 +31,20 @@ export async function connectToWeechat(page: Page) {
   await page.getByTestId('chat-view').waitFor({ state: 'visible', timeout: 45000 });
 }
 
+export async function reconnect(page: Page, extraSettings?: Record<string, unknown>) {
+  await clearSettings(page);
+  await setSettings(page, { savepassword: false, autoconnect: false, ...extraSettings });
+  await page.getByTestId('disconnect-button').click().catch(() => {});
+  await page.getByTestId('host-input').waitFor({ state: 'visible', timeout: 10000 });
+  await page.getByTestId('host-input').fill('localhost');
+  await fillPortInput(page, '9001');
+  await page.getByTestId('password-input').fill('testpassword123');
+  await page.getByTestId('connect-button').click();
+  await page.getByTestId('chat-view').waitFor({ state: 'visible', timeout: 45000 });
+}
+
 export async function disconnect(page: Page) {
   await page.getByTestId('disconnect-button').click();
-  await page.waitForTimeout(4000);
   await page.getByTestId('host-input').waitFor({ state: 'visible', timeout: 15000 });
 }
 

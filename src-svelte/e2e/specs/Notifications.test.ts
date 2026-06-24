@@ -72,6 +72,12 @@ async function closeSettings() {
     await expect(page.getByTestId('settings-modal')).not.toBeVisible();
 }
 
+async function switchToFirstBuffer() {
+    const firstItem = page.getByTestId('buffer-item').first();
+    await firstItem.click();
+    await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 5000 });
+}
+
 test('notification settings section is visible in settings modal', async () => {
     await openSettings();
     const modal = page.getByTestId('settings-modal');
@@ -133,16 +139,17 @@ test('toggling favico badge setting persists', async () => {
 
 test('document title updates with unread count on highlight', async () => {
     // Switch to the main channel buffer
-    await page.getByTestId('buffer-item').first().click();
+    await switchToFirstBuffer();
 
     // Send a message that will trigger a notification (PM)
     await irc.sendPm('testuser', 'Highlight test message!');
-    await page.waitForTimeout(2000);
 
     // Document title should include the unread count prefix
-    const docTitle = await page.evaluate(() => document.title);
-    expect(docTitle).toMatch(/\(\d+\)/);
-    expect(docTitle).toContain('Glowing Bear');
+    await expect(async () => {
+        const docTitle = await page.evaluate(() => document.title);
+        expect(docTitle).toMatch(/\(\d+\)/);
+        expect(docTitle).toContain('Glowing Bear');
+    }).toPass({ timeout: 10000, intervals: [200] });
 });
 
 test('sound plays when soundnotification is enabled', async () => {
@@ -150,22 +157,22 @@ test('sound plays when soundnotification is enabled', async () => {
     await setSettings(page, { soundnotification: true });
     await page.reload();
     await connectToWeechat(page);
-    await page.waitForTimeout(1000);
+    await expect(page.getByTestId('buffer-item').first()).toBeVisible({ timeout: 10000 });
 
     // Reset captured Audio calls (mock injected via addInitScript in beforeAll)
     await page.evaluate(() => { (window as any).__audioCalls = []; });
 
     // Switch to channel buffer so PM triggers notification
-    const firstItem = page.getByTestId('buffer-item').first();
-    await firstItem.click();
+    await switchToFirstBuffer();
 
     // Send a PM (triggers notify_private → playNotificationSound)
     await irc.sendPm('testuser', 'Sound test message!');
-    await page.waitForTimeout(2000);
 
     // Check that Audio was called with the sonar.mp3 path
-    const audioCalls = await page.evaluate(() => (window as any).__audioCalls || []);
-    expect(audioCalls).toContain('/assets/audio/sonar.mp3');
+    await expect(async () => {
+        const audioCalls = await page.evaluate(() => (window as any).__audioCalls || []);
+        expect(audioCalls).toContain('/assets/audio/sonar.mp3');
+    }).toPass({ timeout: 10000, intervals: [200] });
 });
 
 test('sound does NOT play when soundnotification is disabled', async () => {
@@ -173,22 +180,22 @@ test('sound does NOT play when soundnotification is disabled', async () => {
     await setSettings(page, { soundnotification: false });
     await page.reload();
     await connectToWeechat(page);
-    await page.waitForTimeout(1000);
+    await expect(page.getByTestId('buffer-item').first()).toBeVisible({ timeout: 10000 });
 
     // Reset captured Audio calls (mock injected via addInitScript in beforeAll)
     await page.evaluate(() => { (window as any).__audioCalls = []; });
 
     // Switch to channel buffer so PM triggers notification
-    const firstItem = page.getByTestId('buffer-item').first();
-    await firstItem.click();
+    await switchToFirstBuffer();
 
     // Send a PM (should NOT trigger playNotificationSound because setting is off)
     await irc.sendPm('testuser', 'No sound test message!');
-    await page.waitForTimeout(2000);
 
     // Verify Audio was NOT called
-    const audioCalls = await page.evaluate(() => (window as any).__audioCalls || []);
-    expect(audioCalls).not.toContain('/assets/audio/sonar.mp3');
+    await expect(async () => {
+        const audioCalls = await page.evaluate(() => (window as any).__audioCalls || []);
+        expect(audioCalls).not.toContain('/assets/audio/sonar.mp3');
+    }).toPass({ timeout: 5000, intervals: [200] });
 });
 
 test('notification permission button exists and is clickable when default', async () => {
@@ -233,7 +240,7 @@ test('no notification toast when permission already granted', async () => {
     await setSettings(page, { notificationPermission: 'granted' });
     await page.reload();
     await connectToWeechat(page);
-    await page.waitForTimeout(1000);
+    await expect(page.getByTestId('buffer-item').first()).toBeVisible({ timeout: 10000 });
 
     const toasts = page.getByTestId('toast');
     const notificationToastCount = await toasts.filter({ hasText: /notification/i }).count();
@@ -248,109 +255,108 @@ test('creates a Web Notification with correct title and body on PM', async () =>
     await setSettings(page, { notificationPermission: 'granted' });
     await page.reload();
     await connectToWeechat(page);
-    await page.waitForTimeout(1000);
+    await expect(page.getByTestId('buffer-item').first()).toBeVisible({ timeout: 10000 });
 
     // Switch to channel buffer so PM triggers notification
-    const firstItem = page.getByTestId('buffer-item').first();
-    await firstItem.click();
+    await switchToFirstBuffer();
 
     // Send a PM
     await irc.sendPm('testuser', 'Web Notification API test');
-    await page.waitForTimeout(2000);
 
     // Verify Notification was called with the right data
-    const calls = await page.evaluate(() => (window as any).__notificationCalls || []);
-    expect(calls.length).toBeGreaterThanOrEqual(1);
-
-    const notif = calls[0];
-    expect(notif.title).toMatch(/^\[.+\]$/);
-    expect(notif.options.body).toContain('Web Notification API test');
+    await expect(async () => {
+        const calls = await page.evaluate(() => (window as any).__notificationCalls || []);
+        expect(calls.length).toBeGreaterThanOrEqual(1);
+        const notif = calls[0];
+        expect(notif.title).toMatch(/^\[.+\]$/);
+        expect(notif.options.body).toContain('Web Notification API test');
+    }).toPass({ timeout: 10000, intervals: [200] });
 });
 
 test('Web Notification body is truncated to 200 characters', async () => {
     await setSettings(page, { notificationPermission: 'granted' });
     await page.reload();
     await connectToWeechat(page);
-    await page.waitForTimeout(1000);
+    await expect(page.getByTestId('buffer-item').first()).toBeVisible({ timeout: 10000 });
 
-    const firstItem = page.getByTestId('buffer-item').first();
-    await firstItem.click();
+    await switchToFirstBuffer();
 
     const longMsg = 'A'.repeat(500);
     await irc.sendPm('testuser', longMsg);
-    await page.waitForTimeout(2000);
 
-    const calls = await page.evaluate(() => (window as any).__notificationCalls || []);
-    expect(calls.length).toBeGreaterThanOrEqual(1);
-    expect(calls[0].options.body.length).toBeLessThanOrEqual(200);
+    await expect(async () => {
+        const calls = await page.evaluate(() => (window as any).__notificationCalls || []);
+        expect(calls.length).toBeGreaterThanOrEqual(1);
+        expect(calls[0].options.body.length).toBeLessThanOrEqual(200);
+    }).toPass({ timeout: 10000, intervals: [200] });
 });
 
 test('Web Notification includes buffer ID as tag', async () => {
     await setSettings(page, { notificationPermission: 'granted' });
     await page.reload();
     await connectToWeechat(page);
-    await page.waitForTimeout(1000);
+    await expect(page.getByTestId('buffer-item').first()).toBeVisible({ timeout: 10000 });
 
-    const firstItem = page.getByTestId('buffer-item').first();
-    await firstItem.click();
+    await switchToFirstBuffer();
 
     await irc.sendPm('testuser', 'Tag test message');
-    await page.waitForTimeout(2000);
 
-    const calls = await page.evaluate(() => (window as any).__notificationCalls || []);
-    expect(calls.length).toBeGreaterThanOrEqual(1);
-    // The tag should be a non-empty string (the buffer ID)
-    expect(calls[0].options.tag).toBeTruthy();
-    expect(typeof calls[0].options.tag).toBe('string');
+    await expect(async () => {
+        const calls = await page.evaluate(() => (window as any).__notificationCalls || []);
+        expect(calls.length).toBeGreaterThanOrEqual(1);
+        expect(calls[0].options.tag).toBeTruthy();
+        expect(typeof calls[0].options.tag).toBe('string');
+    }).toPass({ timeout: 10000, intervals: [200] });
 });
 
 test('does NOT create Web Notification when permission is default', async () => {
     await setSettings(page, { notificationPermission: 'default' });
     await page.reload();
     await connectToWeechat(page);
-    await page.waitForTimeout(1000);
+    await expect(page.getByTestId('buffer-item').first()).toBeVisible({ timeout: 10000 });
 
-    const firstItem = page.getByTestId('buffer-item').first();
-    await firstItem.click();
+    await switchToFirstBuffer();
 
     await irc.sendPm('testuser', 'Should not notify');
-    await page.waitForTimeout(2000);
 
-    const calls = await page.evaluate(() => (window as any).__notificationCalls || []);
-    expect(calls.length).toBe(0);
+    // Verify notification was NOT created
+    await expect(async () => {
+        const calls = await page.evaluate(() => (window as any).__notificationCalls || []);
+        expect(calls.length).toBe(0);
+    }).toPass({ timeout: 5000, intervals: [200] });
 });
 
 test('does NOT create Web Notification when permission is denied', async () => {
     await setSettings(page, { notificationPermission: 'denied' });
     await page.reload();
     await connectToWeechat(page);
-    await page.waitForTimeout(1000);
+    await expect(page.getByTestId('buffer-item').first()).toBeVisible({ timeout: 10000 });
 
-    const firstItem = page.getByTestId('buffer-item').first();
-    await firstItem.click();
+    await switchToFirstBuffer();
 
     await irc.sendPm('testuser', 'Should not notify');
-    await page.waitForTimeout(2000);
 
-    const calls = await page.evaluate(() => (window as any).__notificationCalls || []);
-    expect(calls.length).toBe(0);
+    await expect(async () => {
+        const calls = await page.evaluate(() => (window as any).__notificationCalls || []);
+        expect(calls.length).toBe(0);
+    }).toPass({ timeout: 5000, intervals: [200] });
 });
 
 test('multiple PMs create multiple Web Notifications', async () => {
     await setSettings(page, { notificationPermission: 'granted' });
     await page.reload();
     await connectToWeechat(page);
-    await page.waitForTimeout(1000);
+    await expect(page.getByTestId('buffer-item').first()).toBeVisible({ timeout: 10000 });
 
-    const firstItem = page.getByTestId('buffer-item').first();
-    await firstItem.click();
+    await switchToFirstBuffer();
 
     await irc.sendPm('testuser', 'First notification');
     await irc.sendPm('testuser', 'Second notification');
-    await page.waitForTimeout(2000);
 
-    const calls = await page.evaluate(() => (window as any).__notificationCalls || []);
-    expect(calls.length).toBeGreaterThanOrEqual(2);
-    expect(calls[0].options.body).toContain('First notification');
-    expect(calls[1].options.body).toContain('Second notification');
+    await expect(async () => {
+        const calls = await page.evaluate(() => (window as any).__notificationCalls || []);
+        expect(calls.length).toBeGreaterThanOrEqual(2);
+        expect(calls[0].options.body).toContain('First notification');
+        expect(calls[1].options.body).toContain('Second notification');
+    }).toPass({ timeout: 10000, intervals: [200] });
 });

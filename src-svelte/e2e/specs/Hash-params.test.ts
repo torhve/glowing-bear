@@ -12,7 +12,6 @@ test.describe('Hash params', () => {
             try { localStorage.removeItem('gb-settings'); } catch {}
             try { localStorage.removeItem('gb-last-buffer'); } catch {}
         });
-        await page.waitForTimeout(300);
     });
 
     test('should prefill host from hash parameter', async ({ page }) => {
@@ -84,8 +83,7 @@ test.describe('Hash params', () => {
 
         // Change the hash - this triggers onhashchange listener
         await page.evaluate(() => { window.location.hash = '#host=new.host'; });
-        await page.waitForTimeout(500);
-        await expect(page.getByTestId('host-input')).toHaveValue('new.host');
+        await expect(page.getByTestId('host-input')).toHaveValue('new.host', { timeout: 5000 });
     });
 
     test('should handle autoconnect=false', async ({ page }) => {
@@ -97,8 +95,7 @@ test.describe('Hash params', () => {
 
         // Now set autoconnect=false via hash change
         await page.evaluate(() => { window.location.hash = '#autoconnect=false'; });
-        await page.waitForTimeout(500);
-        await expect(page.getByTestId('autoconnect-checkbox')).not.toBeChecked();
+        await expect(page.getByTestId('autoconnect-checkbox')).not.toBeChecked({ timeout: 5000 });
     });
 
     test('should handle empty hash gracefully', async ({ page }) => {

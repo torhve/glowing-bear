@@ -37,7 +37,7 @@ test.beforeEach(async () => {
 test('close button is present on buffer items', async () => {
     await waitForBuffer(page, '#glowing-bear', 10000);
     await switchToBuffer(page, '#glowing-bear');
-    await page.waitForTimeout(500);
+    await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 5000 });
 
     const bufferItems = page.getByTestId('buffer-item');
     const count = await bufferItems.count();
@@ -52,11 +52,13 @@ test('close button is present on buffer items', async () => {
 test('close button hidden on active buffer', async () => {
     await waitForBuffer(page, '#glowing-bear', 10000);
     await switchToBuffer(page, '#glowing-bear');
-    await page.waitForTimeout(500);
+    await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 5000 });
+    await page.evaluate(() => new Promise(r => requestAnimationFrame(r)));
 
     const activeItem = page.getByTestId('buffer-item').filter({ hasText: 'glowing-bear' }).first();
     await activeItem.hover();
-    await page.waitForTimeout(200);
+    // Let hover state propagate through CSS
+    await page.evaluate(() => new Promise(r => requestAnimationFrame(r)));
 
     const closeBtn = activeItem.getByTestId('close-buffer');
     const isVisible = await closeBtn.isVisible().catch(() => false);
@@ -66,7 +68,7 @@ test('close button hidden on active buffer', async () => {
 test('clicking close button removes buffer from list', async () => {
     await waitForBuffer(page, '#glowing-bear', 10000);
     await switchToBuffer(page, '#glowing-bear');
-    await page.waitForTimeout(500);
+    await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 5000 });
 
     const beforeItems = page.getByTestId('buffer-item');
     const beforeCount = await beforeItems.count();
@@ -80,14 +82,16 @@ test('clicking close button removes buffer from list', async () => {
     const nonActiveCount = await nonActiveBuffers.count();
     if (nonActiveCount > 0) {
         await nonActiveBuffers.first().hover();
-        await page.waitForTimeout(300);
+        // Let hover state propagate through CSS
+        await page.evaluate(() => new Promise(r => requestAnimationFrame(r)));
 
         const closeBtn = nonActiveBuffers.first().getByTestId('close-buffer');
         await closeBtn.click();
-        await page.waitForTimeout(1000);
 
-        const afterItems = page.getByTestId('buffer-item');
-        const afterCount = await afterItems.count();
-        expect(afterCount).toBeLessThanOrEqual(beforeCount);
+        // Wait for buffer to be removed from list
+        await expect(async () => {
+            const n = await page.getByTestId('buffer-item').count();
+            expect(n).toBeLessThanOrEqual(beforeCount);
+        }).toPass({ timeout: 5000 });
     }
 });

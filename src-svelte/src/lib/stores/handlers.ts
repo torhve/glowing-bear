@@ -23,12 +23,13 @@ import {
     pendingBufferSwitch,
     setSyncing,
     isSyncing,
-    maxBufferLines
+    maxBufferLines,
+    deepCloneBufferLine
 } from '$lib/stores/models';
 import { shouldResume } from '$lib/stores/bufferResume';
 import { createHighlight, playNotificationSound, updateTitle, updateFavico } from '$lib/notifications';
 import { DEBUG_NICKLIST } from '$lib/debug';
-import type { ProtocolMessage, BufferMessage, BufferLine, BufferLineMessage, NickMessage, NickGroupMessage, HotlistEntry, BufferData, BufferType } from '$lib/types';
+import type { ProtocolMessage, BufferMessage, BufferLineMessage, NickMessage, NickGroupMessage, HotlistEntry, BufferData, BufferType } from '$lib/types';
 
 /**
  * Trims buffer lines to the given limit, adjusting lastSeen and requestedLines
@@ -102,10 +103,21 @@ export function handleBufferInfo(message: ProtocolMessage) {
 
     const currentBuffers = get(buffers);
 
-     // Mark that we're in initial sync phase — hotlist has arrived with unread
+    // Build immutable copies so mutations in the loop don't affect the store reference
+    // before buffers.set() is called at the end.
+    const updatedBuffers: Record<string, BufferData> = {};
+    for (const id in currentBuffers) {
+        const buf = currentBuffers[id];
+        if (buf) updatedBuffers[id] = { ...buf };
+    }
+
+    // Mark that we're in initial sync phase — hotlist has arrived with unread
     // counts but lines haven't been synced yet. During sync, don't increment
     // lastSeen per-line; instead calculate it once after sync completes.
     setSyncing(true);
+
+    // Track pending server unread adjustments for batch update.
+    const serverDeltas: Record<string, number> = {};
 
     // Track whether any buffer was auto-resumed during this loop.
     // If so, skip the fallback (weechat core / first buffer) below.
@@ -114,17 +126,21 @@ export function handleBufferInfo(message: ProtocolMessage) {
     for (const bufferMsg of bufferInfos) {
         const bufferId = bufferMsg.pointers[0];
         if (!bufferId) continue;
-        if (currentBuffers[bufferId]) {
-            // Update existing buffer
-            handleBufferUpdate(currentBuffers[bufferId], bufferMsg);
+        if (updatedBuffers[bufferId]) {
+            // Update existing buffer — handleBufferUpdate returns partial data without mutating
+            const updates = handleBufferUpdate(updatedBuffers[bufferId], bufferMsg);
             // Clear existing lines on reconnect — sync events will repopulate.
             // Reset lastSeen/localUnread so the sync phase recalculates them
             // from hotlist counts (handleHotlistInfo runs after handleBufferInfo).
-            currentBuffers[bufferId].lines = [];
-            currentBuffers[bufferId].requestedLines = 0;
-            currentBuffers[bufferId].allLinesFetched = false;
-            currentBuffers[bufferId].lastSeen = -1;
-            currentBuffers[bufferId].localUnread = 0;
+            updatedBuffers[bufferId] = {
+                ...updatedBuffers[bufferId],
+                ...updates,
+                lines: [],
+                requestedLines: 0,
+                allLinesFetched: false,
+                lastSeen: -1,
+                localUnread: 0,
+            };
         } else {
             // Create new buffer
             const buffer = createBuffer(bufferMsg);
@@ -136,13 +152,11 @@ export function handleBufferInfo(message: ProtocolMessage) {
                     [key]: { id: buffer.id, unread: 0 }
                 }));
             } else {
+                // Track server unread delta for batch apply after the loop.
                 const serverKey = `${buffer.plugin}.${buffer.server}`;
-                const server = get(servers)[serverKey];
-                if (server) {
-                    server.unread += buffer.unread + buffer.notification;
-                }
+                serverDeltas[serverKey] = (serverDeltas[serverKey] || 0) + buffer.unread + buffer.notification;
             }
-            addBuffer(buffer);
+            updatedBuffers[bufferId] = buffer;
             console.debug('[handler]   created buffer:', buffer.id, buffer.shortName, 'lines=' + buffer.lines.length);
 
             // Auto-resume
@@ -153,6 +167,21 @@ export function handleBufferInfo(message: ProtocolMessage) {
             }
         }
     }
+
+    // Apply pending server unread deltas immutably.
+    if (Object.keys(serverDeltas).length > 0) {
+        servers.update(current => {
+            const next = { ...current };
+            for (const [key, delta] of Object.entries(serverDeltas)) {
+                const srv = next[key];
+                if (srv) next[key] = { ...srv, unread: srv.unread + delta };
+            }
+            return next;
+        });
+    }
+
+    // Publish updated buffers to the store.
+    buffers.set(updatedBuffers);
 
     // If no buffer was auto-resumed, prefer weechat.core before falling back to first buffer.
     if (resumed) return;
@@ -175,57 +204,44 @@ export function handleBufferInfo(message: ProtocolMessage) {
 }
 
 // ---- Buffer update handler ----
-function handleBufferUpdate(buffer: BufferData, message: BufferMessage) {
-    if (message.pointers[0] !== buffer.id) return;
+// Returns updated partial buffer data without mutating the original.
+function handleBufferUpdate(buffer: BufferData, message: BufferMessage): Partial<BufferData> {
+    if (message.pointers[0] !== buffer.id) return {};
 
-    buffer.shortName = message.short_name;
-    buffer.trimmedName = buffer.shortName.replace(/^[#&+]/, '') || (buffer.shortName ? ' ' : null);
-    buffer.prefix = ['#', '&', '+'].includes(buffer.shortName.charAt(0)) ? buffer.shortName.charAt(0) : '';
-    buffer.title = message.title && typeof message.title === 'string' ? parseRichText(message.title) : buffer.title;
-    buffer.number = message.number;
-    buffer.hidden = !!message.hidden;
+    const shortName = message.short_name ?? buffer.shortName;
+    const trimmedName = shortName.replace(/^[#&+]/, '') || (shortName ? ' ' : null);
+    const prefix = ['#', '&', '+'].includes(shortName.charAt(0)) ? shortName.charAt(0) : '';
+    const title = message.title && typeof message.title === 'string' ? parseRichText(message.title) : buffer.title;
+    const number = message.number ?? buffer.number;
+    const hidden = message.hidden !== undefined ? !!message.hidden : buffer.hidden;
 
-    // Update server unread totals by removing this buffer's old contribution before
-    // handleHotlistInfo recalculates them authoritatively.
-    const serverKey = `${buffer.plugin}.${buffer.server}`;
-    const server = get(servers)[serverKey];
-    if (server) {
-        server.unread -= (buffer.unread + buffer.notification);
-    }
-    // Unread/notification/lastSeen counts are managed by handleHotlistInfo (authoritative
-    // WeeChat data) and handleBufferLineAdded (real-time local tracking). This handler
-    // only updates buffer metadata (name, title, type, etc.) — not message counts.
+    const bufferType = message.type !== undefined ? message.type : buffer.bufferType;
+    const hideBufferLineTimes = bufferType === 1;
 
-    if (message.type !== undefined) {
-        buffer.bufferType = message.type;
-        buffer.hideBufferLineTimes = buffer.bufferType === 1;
-    }
+    // Merge local_variables map preserving existing entries not in this message.
+    const localVariables = message.local_variables
+        ? { ...(buffer.localVariables || {}), ...message.local_variables }
+        : buffer.localVariables;
+    const type = localVariables?.type as BufferType ?? buffer.type;
+    const indent = ['channel', 'private'].includes(type);
+    const plugin = localVariables?.plugin ?? buffer.plugin;
+    const server = localVariables?.server ?? buffer.server;
+    const pinned = localVariables?.pinned === 'true';
+    const serverSortKey = `${plugin}.${server}${type === 'server' ? '' : '.' + shortName}`.toLowerCase();
 
-    // Store full local_variables map for downstream consumers (e.g., myNick lookup).
-    if (message.local_variables) {
-        buffer.localVariables = { ...message.local_variables };
-    }
-    if (message.local_variables?.type !== undefined) {
-        buffer.type = message.local_variables.type as BufferType;
-        buffer.indent = ['channel', 'private'].includes(buffer.type);
-    }
-    if (message.local_variables?.plugin !== undefined) {
-        buffer.plugin = message.local_variables.plugin;
-    }
-    if (message.local_variables?.server !== undefined) {
-        buffer.server = message.local_variables.server;
-    }
-    if (message.local_variables?.pinned !== undefined) {
-        buffer.pinned = message.local_variables.pinned === 'true';
-    }
-    buffer.serverSortKey = `${buffer.plugin}.${buffer.server}${buffer.type === 'server' ? '' : '.' + buffer.shortName}`.toLowerCase();
+    const notify = message.notify !== undefined ? message.notify : buffer.notify;
 
-    if (message.notify !== undefined) {
-        buffer.notify = message.notify;
-    }
+    return { shortName, trimmedName, prefix, title, number, hidden, bufferType, hideBufferLineTimes, localVariables, type, indent, plugin, server, pinned, serverSortKey, notify };
 }
 
 // ---- Buffer line added handler ----
+/**
+ * Strips remaining control codes (mIRC/WeeChat) that may leak through parsing
+ * when input contains mixed-format codes (e.g., mIRC \x03 inside WeeChat \x19).
+ */
+// eslint-disable-next-line no-control-regex -- strips mIRC/WeeChat control bytes from parsed text
+const stripControlCodes = (text: string) => text.replace(/[\x01-\x06\x0f\x16\x19-\x1f]/g, '');
+
 /**
  * Strips WeeChat formatting codes from prefix and message for notification display.
  * Returns a plain-text body suitable for desktop notifications.
@@ -233,8 +249,8 @@ function handleBufferUpdate(buffer: BufferData, message: BufferMessage) {
 function formatNotificationBody(lineMsg: BufferLineMessage): string {
     const prefixParts = parseRichText(lineMsg.prefix);
     const messageParts = parseRichText(lineMsg.message);
-    const prefixText = prefixParts.map(p => p.text).join('').trim();
-    const msgText = messageParts.map(p => p.text).join('');
+    const prefixText = stripControlCodes(prefixParts.map(p => p.text).join('')).trim();
+    const msgText = stripControlCodes(messageParts.map(p => p.text).join(''));
     return prefixText ? `<${prefixText}> ${msgText}` : msgText;
 }
 
@@ -254,6 +270,9 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
     // document.hidden is more reliable than hasFocus() for detecting tab-inactive periods.
     const isWindowFocused = typeof document !== 'undefined' && !document.hidden;
 
+    // Accumulate server unread deltas for batch-apply at the end.
+    const serverDeltas: Record<string, number> = {};
+
     // First pass: identify all affected buffer IDs
     const affectedIds = new Set<string>();
     for (const lineMsg of lines) {
@@ -267,7 +286,7 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
         const buf = currentBuffers[id];
         if (!buf) continue;
         if (affectedIds.has(id)) {
-            updatedBuffers[id] = { ...buf, lines: [...buf.lines], nicklist: { ...buf.nicklist }, localVariables: buf.localVariables ? { ...buf.localVariables } : undefined };
+            updatedBuffers[id] = { ...buf, lines: buf.lines.map(deepCloneBufferLine), nicklist: { ...buf.nicklist }, localVariables: buf.localVariables ? { ...buf.localVariables } : undefined };
         } else {
             updatedBuffers[id] = buf;
         }
@@ -355,8 +374,7 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                 if (buffer.notify > 1 && lineMsg.notify_level === 1 && buffer.id !== activeId) {
                     buffer.unread++;
                     const serverKey = `${buffer.plugin}.${buffer.server}`;
-                    const server = get(servers)[serverKey];
-                    if (server) server.unread++;
+                    serverDeltas[serverKey] = (serverDeltas[serverKey] || 0) + 1;
                 }
             }
 
@@ -369,8 +387,7 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                 if (buffer.notify !== 0 && (lineMsg.highlight || isPrivate)) {
                     buffer.notification++;
                     const serverKey = `${buffer.plugin}.${buffer.server}`;
-                    const server = get(servers)[serverKey];
-                    if (server) server.unread++;
+                    serverDeltas[serverKey] = (serverDeltas[serverKey] || 0) + 1;
 
                     // Only show desktop notifications and play sounds when tab is hidden.
                     // When the window is focused, the user can see the message in the UI.
@@ -397,6 +414,18 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
     for (const id of affectedIds) {
         const buf = updatedBuffers[id];
         if (buf) trimBufferLines(buf, limit);
+    }
+
+    // Apply server unread deltas immutably.
+    if (Object.keys(serverDeltas).length > 0) {
+        servers.update(current => {
+            const next = { ...current };
+            for (const [key, delta] of Object.entries(serverDeltas)) {
+                const srv = next[key];
+                if (srv) next[key] = { ...srv, unread: srv.unread + delta };
+            }
+            return next;
+        });
     }
 
     // Update stores
@@ -437,30 +466,13 @@ export function handleBufferLineDataChanged(message: ProtocolMessage) {
     }
     matchedIndex = matches[matches.length - 1]!;
 
-    // Create new BufferLine from updated data.
-    const date = new Date(lineMsg.date);
-    const prefix = parseRichText(lineMsg.prefix);
-    const content = parseRichText(lineMsg.message);
-    const showHiddenBrackets = lineMsg.tags_array.includes('irc_privmsg') && !lineMsg.tags_array.includes('irc_action');
-
-    const updatedLine: BufferLine = {
-        prefix,
-        content,
-        date: date.getTime(),
-        shortTime: date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
-        formattedTime: date.toLocaleTimeString(),
-        buffer: lineMsg.buffer,
-        tags: lineMsg.tags_array,
-        highlight: !!lineMsg.highlight,
-        displayed: !!lineMsg.displayed,
-        prefixtext: prefix.map(p => p.text).join(''),
-        text: content.map(c => c.text).join(''),
-        showHiddenBrackets
-    };
+    // Create new BufferLine from updated data using createBufferLine for consistent
+    // highlight class handling and RichTextPart processing.
+    const updatedLine = createBufferLine(lineMsg);
 
     // Immutable update: clone lines array, replace at index, then update store.
     const updatedBuffers = { ...currentBuffers };
-    const updatedBuffer = { ...buffer, lines: [...buffer.lines] };
+    const updatedBuffer = { ...buffer, lines: buffer.lines.map(deepCloneBufferLine) };
     updatedBuffer.lines[matchedIndex] = updatedLine;
     updatedBuffers[lineMsg.buffer] = updatedBuffer;
     buffers.set(updatedBuffers);
@@ -608,8 +620,14 @@ export function handleBufferOpened(message: ProtocolMessage) {
         }));
     } else {
         const serverKey = `${buffer.plugin}.${buffer.server}`;
-        const server = get(servers)[serverKey];
-        if (server) server.unread += buffer.unread + buffer.notification;
+        const delta = buffer.unread + buffer.notification;
+        if (delta > 0) {
+            servers.update(current => {
+                const server = current[serverKey];
+                if (!server) return current;
+                return { ...current, [serverKey]: { ...server, unread: server.unread + delta } };
+            });
+        }
     }
     addBuffer(buffer);
 
@@ -1142,7 +1160,7 @@ export function handleLineInfo(message: ProtocolMessage, manually: boolean = tru
         const buf = currentBuffers[id];
         if (!buf) continue;
         if (affectedIds.has(id)) {
-            let linesCopy = [...buf.lines];
+            let linesCopy = buf.lines.map(deepCloneBufferLine);
             // Clear lines for the buffer that requested a fresh fetch
             if (id === clearLinesBufferId) {
                 linesCopy = [];
@@ -1217,12 +1235,15 @@ const eventHandlers: Record<string, (msg: ProtocolMessage) => void> = {
     '_buffer_type_changed': (msg) => {
         const obj = msg.objects[0]?.content[0];
         if (!obj) return;
-        const currentBuffers = get(buffers);
-        const buffer = currentBuffers[obj.pointers[0]];
+        const bufferId = obj.pointers[0];
+        const buffer = getBuffer(bufferId);
         if (!buffer) return;
-        buffer.bufferType = obj.type;
-        buffer.hideBufferLineTimes = buffer.bufferType === 1;
-        buffers.set({ ...currentBuffers });
+        const bufferType = obj.type;
+        const hideBufferLineTimes = bufferType === 1;
+        const updated = updateBuffer(bufferId, { bufferType, hideBufferLineTimes });
+        if (!updated) return;
+        const current = get(buffers);
+        buffers.set({ ...current, [bufferId]: updated });
     },
     '_buffer_renamed': handleBufferRenamed,
     '_buffer_hidden': handleBufferHidden,

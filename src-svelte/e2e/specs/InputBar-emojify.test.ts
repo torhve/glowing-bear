@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, clearSettings, setSettings, waitForAppReady } from '../helpers/connection';
+import { connectToWeechat, clearSettings, setSettings, waitForAppReady, reconnect, fillPortInput } from '../helpers/connection';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 
 let page: import('@playwright/test').Page;
@@ -35,27 +35,7 @@ test.beforeEach(async () => {
     });
 });
 
-function fillPortInput(p: import('@playwright/test').Page, port: string) {
-    return p.evaluate((p) => {
-        const input = document.querySelector('[data-testid="port-input"]');
-        if (input) {
-            (input as HTMLInputElement).value = p;
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-    }, port);
-}
 
-async function reconnect(page: import('@playwright/test').Page) {
-    await clearSettings(page);
-    await setSettings(page, { savepassword: false, autoconnect: false });
-    await page.getByTestId('disconnect-button').click().catch(() => {});
-    await page.waitForTimeout(2000);
-    await page.getByTestId('host-input').fill('localhost');
-    await fillPortInput(page, '9001');
-    await page.getByTestId('password-input').fill('testpassword123');
-    await page.getByTestId('connect-button').click();
-    await page.getByTestId('chat-view').waitFor({ state: 'visible', timeout: 45000 });
-}
 
 test('emoji shortcode converts to unicode while typing', async () => {
     const input = page.getByTestId('message-input');
@@ -63,7 +43,7 @@ test('emoji shortcode converts to unicode while typing', async () => {
 
     // Type emoji shortcode character by character to trigger incremental conversion
     await input.pressSequentially(':smi');
-    await page.waitForTimeout(200);
+    await page.evaluate(() => new Promise(requestAnimationFrame));
 
     // Partial should not convert yet (must be complete :shortcode:)
     let value = await input.inputValue();
@@ -71,12 +51,12 @@ test('emoji shortcode converts to unicode while typing', async () => {
 
     // Complete the shortcode
     await input.pressSequentially('le:');
-    await page.waitForTimeout(300);
 
-    value = await input.inputValue();
-    // Should have been converted to Unicode emoji
-    expect(value).not.toContain(':smile:');
-    expect(value).toContain('\u{1F604}');
+    await expect(async () => {
+        const val = await input.inputValue();
+        expect(val).not.toContain(':smile:');
+        expect(val).toContain('\u{1F604}');
+    }).toPass({ timeout: 2000, intervals: [50] });
 });
 
 test('no conversion when emojify is disabled', async () => {
@@ -85,12 +65,11 @@ test('no conversion when emojify is disabled', async () => {
 
     await waitForBuffer(page, '#glowing-bear', 10000);
     await switchToBuffer(page, '#glowing-bear');
-    await page.waitForTimeout(500);
 
     const input = page.getByTestId('message-input');
     await input.focus();
     await input.fill(':heart:');
-    await page.waitForTimeout(300);
+    await page.evaluate(() => new Promise(requestAnimationFrame));
 
     const value = await input.inputValue();
     expect(value).toBe(':heart:');
@@ -100,13 +79,14 @@ test('multiple emoji shortcodes in one message all convert', async () => {
     const input = page.getByTestId('message-input');
     await input.focus();
     await input.pressSequentially('Hello :smile: world :rocket:');
-    await page.waitForTimeout(400);
 
-    const value = await input.inputValue();
-    expect(value).toContain('\u{1F604}');
-    expect(value).toContain('\u{1F680}');
-    expect(value).not.toContain(':smile:');
-    expect(value).not.toContain(':rocket:');
+    await expect(async () => {
+        const val = await input.inputValue();
+        expect(val).toContain('\u{1F604}');
+        expect(val).toContain('\u{1F680}');
+        expect(val).not.toContain(':smile:');
+        expect(val).not.toContain(':rocket:');
+    }).toPass({ timeout: 3000, intervals: [100] });
 });
 
 test('emojify setting toggle persists', async () => {

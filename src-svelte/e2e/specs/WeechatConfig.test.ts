@@ -25,11 +25,12 @@ test.beforeEach(async () => {
 });
 
 test('should have wconfig populated after connect', async () => {
-    // Wait for config fetches to complete (they happen asynchronously after connect)
-    await page.waitForTimeout(3000);
-    const bufferTimeFormat = await getConfigValue(page, 'weechat.look.buffer_time_format');
-    expect(bufferTimeFormat).toBeTruthy();
-    expect(bufferTimeFormat.length).toBeGreaterThan(0);
+    // Config fetches happen asynchronously after connect — poll until populated
+    await expect(async () => {
+        const val = await getConfigValue(page, 'weechat.look.buffer_time_format');
+        expect(val).toBeTruthy();
+        expect(val.length).toBeGreaterThan(0);
+    }).toPass({ timeout: 10000, intervals: [500] });
 });
 
 test.skip('should set a weechat option via relay and reflect in wconfig', async ({ page: p }) => {

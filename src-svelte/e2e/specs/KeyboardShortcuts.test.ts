@@ -14,6 +14,13 @@ async function connect(page: import('@playwright/test').Page) {
     await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 15000 });
 }
 
+async function getCaretPosition(page: import('@playwright/test').Page): Promise<number> {
+    return await page.evaluate(() => {
+        const el = document.querySelector<HTMLTextAreaElement>('[data-testid="message-input"]');
+        return el ? el.selectionStart : -1;
+    });
+}
+
 test.describe('Keyboard Shortcuts', () => {
     test.beforeEach(async ({ page }) => {
         page.on('pageerror', (error) => {
@@ -85,19 +92,23 @@ test.describe('Keyboard Shortcuts', () => {
             await page.evaluate(() => {
                 (window as any).__setGbSettings?.({ readlineBindings: true });
             });
-            await page.waitForTimeout(100);
+            await page.evaluate(() => new Promise(requestAnimationFrame));
             const input = page.getByTestId('message-input');
             await input.focus();
             await input.fill('hello world');
-            await page.waitForTimeout(100);
+            await page.evaluate(() => new Promise(requestAnimationFrame));
             await page.keyboard.press('Control+f');
-            await page.waitForTimeout(50);
+            await expect(async () => {
+                const pos = await getCaretPosition(page);
+                expect(pos).toBe('hello world'.length);
+            }).toPass({ timeout: 2000, intervals: [50] });
             await page.keyboard.press('Control+b');
-            await page.waitForTimeout(50);
-            const caretPos = await page.evaluate(() => {
-                const el = document.querySelector<HTMLTextAreaElement>('[data-testid="message-input"]');
-                return el ? el.selectionStart : -1;
-            });
+            await expect(async () => {
+                const pos = await getCaretPosition(page);
+                expect(pos).toBeLessThan('hello world'.length);
+                expect(pos).toBeGreaterThanOrEqual(0);
+            }).toPass({ timeout: 2000, intervals: [50] });
+            const caretPos = await getCaretPosition(page);
             expect(caretPos).toBeGreaterThan(0);
             expect(caretPos).toBeLessThanOrEqual(11);
         });
@@ -106,21 +117,17 @@ test.describe('Keyboard Shortcuts', () => {
             // Switch to #glowing-bear which has nicks (required for nicklist to render)
             await waitForBuffer(page, '#glowing-bear', 10000);
             await switchToBuffer(page, '#glowing-bear');
-            await page.waitForTimeout(500);
             // Verify nicklist is visible initially
             await expect(page.getByTestId('nicklist')).toBeVisible({ timeout: 5000 });
             // Toggle nicklist off via settings (simulates Alt+n handler)
             await page.evaluate(() => {
                 (window as any).__setGbSettings?.({ showNicklist: false });
             });
-            await page.waitForTimeout(200);
-            // Nicklist should now be hidden
             await expect(page.getByTestId('nicklist')).not.toBeVisible({ timeout: 5000 });
             // Toggle it back on
             await page.evaluate(() => {
                 (window as any).__setGbSettings?.({ showNicklist: true });
             });
-            await page.waitForTimeout(200);
             await expect(page.getByTestId('nicklist')).toBeVisible({ timeout: 5000 });
         });
 
@@ -132,7 +139,6 @@ test.describe('Keyboard Shortcuts', () => {
 
             // Simulate Alt+ArrowDown by switching to next buffer (gbtest)
             await switchToBuffer(page, 'gbtest');
-            await page.waitForTimeout(500);
 
             // Verify the active buffer has changed
             const newBuffer = await page.getByTestId('topic-bar').textContent();
@@ -147,7 +153,6 @@ test.describe('Keyboard Shortcuts', () => {
 
             // Simulate Alt+ArrowUp by switching to previous buffer (#glowing-bear)
             await switchToBuffer(page, '#glowing-bear');
-            await page.waitForTimeout(500);
 
             // Verify the active buffer has changed
             const newBuffer = await page.getByTestId('topic-bar').textContent();
@@ -163,10 +168,7 @@ test.describe('Keyboard Shortcuts', () => {
 
         test('should switch buffer with Alt+1', async ({ page }) => {
             await waitForBuffer(page, '#glowing-bear', 10000);
-            const currentBuffer = await page.getByTestId('topic-bar').textContent();
-            // Simulate Alt+1 by switching to first buffer via click
             await switchToBuffer(page, '#glowing-bear');
-            await page.waitForTimeout(500);
             // Verify the active buffer is set
             const newBuffer = await page.getByTestId('topic-bar').textContent();
             expect(newBuffer).toBeTruthy();
@@ -174,10 +176,7 @@ test.describe('Keyboard Shortcuts', () => {
 
         test('should switch buffer with Alt+2 (2nd buffer)', async ({ page }) => {
             await waitForBuffer(page, 'gbtest', 10000);
-            const currentBuffer = await page.getByTestId('topic-bar').textContent();
-            // Simulate Alt+2 by switching to second buffer via click
             await switchToBuffer(page, 'gbtest');
-            await page.waitForTimeout(500);
             // Verify the active buffer is set
             const newBuffer = await page.getByTestId('topic-bar').textContent();
             expect(newBuffer).toBeTruthy();
@@ -185,10 +184,7 @@ test.describe('Keyboard Shortcuts', () => {
 
         test('should use e.code not e.key (works on non-US layouts)', async ({ page }) => {
             await waitForBuffer(page, '#glowing-bear', 10000);
-            const currentBuffer = await page.getByTestId('topic-bar').textContent();
-            // Simulate Alt+3 by switching to another buffer via click
             await switchToBuffer(page, '#glowing-bear');
-            await page.waitForTimeout(500);
             // Verify the active buffer is set
             const newBuffer = await page.getByTestId('topic-bar').textContent();
             expect(newBuffer).toBeTruthy();
@@ -206,12 +202,9 @@ test.describe('Keyboard Shortcuts', () => {
             await page.evaluate(() => {
                 (window as any).__setGbSettings?.({ enableQuickKeys: false });
             });
-            await page.waitForTimeout(200);
-            // Get current buffer before quick key press
-            const currentBuffer = await page.getByTestId('topic-bar').textContent();
-            // Simulate Alt+1 by switching via click — should still work since we're clicking, not using keyboard
+            await page.evaluate(() => new Promise(requestAnimationFrame));
+            // Simulate Alt+1 by switching via click
             await switchToBuffer(page, '#glowing-bear');
-            await page.waitForTimeout(500);
             // Verify buffer is set
             const newBuffer = await page.getByTestId('topic-bar').textContent();
             expect(newBuffer).toBeTruthy();
@@ -226,26 +219,21 @@ test.describe('Keyboard Shortcuts', () => {
             await page.evaluate(() => {
                 (window as any).__setGbSettings?.({ readlineBindings: true });
             });
-            await page.waitForTimeout(200);
+            await page.evaluate(() => new Promise(requestAnimationFrame));
             const input = page.getByTestId('message-input');
             await input.focus();
             await input.fill('hello world test');
-            await page.waitForTimeout(100);
+            await page.evaluate(() => new Promise(requestAnimationFrame));
             // Get initial cursor position (should be at end of text)
-            const initialCaret = await page.evaluate(() => {
-                const el = document.querySelector<HTMLTextAreaElement>('[data-testid="message-input"]');
-                return el ? el.selectionStart : -1;
-            });
+            const initialCaret = await getCaretPosition(page);
             expect(initialCaret).toBeGreaterThan(0);
             // Dispatch Ctrl+A — should move cursor to start of line
             await page.keyboard.press('Control+a');
-            await page.waitForTimeout(100);
             // Verify cursor moved to position 0
-            const finalCaret = await page.evaluate(() => {
-                const el = document.querySelector<HTMLTextAreaElement>('[data-testid="message-input"]');
-                return el ? el.selectionStart : -1;
-            });
-            expect(finalCaret).toBe(0);
+            await expect(async () => {
+                const pos = await getCaretPosition(page);
+                expect(pos).toBe(0);
+            }).toPass({ timeout: 2000, intervals: [50] });
         });
     });
 
@@ -268,7 +256,7 @@ test.describe('Keyboard Shortcuts', () => {
             await expect(page.locator('#buffer-search')).toBeAttached({ timeout: 5000 });
         });
 
- 
+
     });
 
     test.describe('Buffer Search Enter', () => {
@@ -290,7 +278,7 @@ test.describe('Keyboard Shortcuts', () => {
             const searchInput = page.locator('#buffer-search');
             await expect(searchInput).toBeVisible({ timeout: 5000 });
             await searchInput.fill('#');
-            await page.waitForTimeout(300);
+            await page.evaluate(() => new Promise(requestAnimationFrame));
             await searchInput.press('Enter');
             await expect(page.getByTestId('topic-bar')).toContainText('#', { timeout: 5000 });
             await expect(searchInput).not.toBeVisible({ timeout: 5000 });

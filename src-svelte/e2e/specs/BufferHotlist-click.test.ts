@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, clearSettings, setSettings, waitForAppReady } from '../helpers/connection';
+import { connectToWeechat, clearSettings, setSettings, waitForAppReady, reconnect, fillPortInput } from '../helpers/connection';
 import { switchToBuffer } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
 
@@ -33,41 +33,21 @@ test.beforeEach(async () => {
     });
 });
 
-function fillPortInput(p: import('@playwright/test').Page, port: string) {
-    return p.evaluate((p) => {
-        const input = document.querySelector('[data-testid="port-input"]');
-        if (input) {
-            (input as HTMLInputElement).value = p;
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-    }, port);
-}
 
-async function reconnect(p: import('@playwright/test').Page) {
-    await clearSettings(p);
-    await setSettings(p, { savepassword: false, autoconnect: false });
-    await p.getByTestId('disconnect-button').click().catch(() => {});
-    await p.waitForTimeout(2000);
-    await p.getByTestId('host-input').fill('localhost');
-    await fillPortInput(p, '9001');
-    await p.getByTestId('password-input').fill('testpassword123');
-    await p.getByTestId('connect-button').click();
-    await p.getByTestId('chat-view').waitFor({ state: 'visible', timeout: 45000 });
-}
 
 test('clicking hotlist item switches buffer', async () => {
     await page.setViewportSize({ width: 375, height: 667 });
     await page.evaluate(() => window.dispatchEvent(new Event('resize')));
-    await page.waitForTimeout(500);
+    await page.getByTestId('buffer-item').first().waitFor({ state: 'visible', timeout: 5000 });
 
     // Reconnect to get fresh state at mobile viewport
     await reconnect(page);
     await switchToBuffer(page, 'gbtest');
-    await page.waitForTimeout(500);
 
     // Send a message to another buffer to create hotlist entry
-    await irc.sendMessage('#glowing-bear', 'hotlist-click-test-' + Date.now());
-    await page.waitForTimeout(3000);
+    const msg = 'hotlist-click-test-' + Date.now();
+    await irc.sendMessage('#glowing-bear', msg);
+    await expect(page.getByTestId('hotlist-buffer-item').first()).toBeVisible({ timeout: 10000 });
 
     const items = page.getByTestId('hotlist-buffer-item');
     const count = await items.count();
@@ -75,7 +55,6 @@ test('clicking hotlist item switches buffer', async () => {
 
     // Click the first hotlist item
     await items.first().click();
-    await page.waitForTimeout(500);
 
     // Verify topic bar updated
     const topicBar = page.getByTestId('topic-bar');
@@ -87,17 +66,16 @@ test('clicking hotlist item switches buffer', async () => {
 test('hotlist item shows unread count badge', async () => {
     await page.setViewportSize({ width: 375, height: 667 });
     await page.evaluate(() => window.dispatchEvent(new Event('resize')));
-    await page.waitForTimeout(500);
+    await page.getByTestId('buffer-item').first().waitFor({ state: 'visible', timeout: 5000 });
 
     await switchToBuffer(page, 'gbtest');
-    await page.waitForTimeout(1000);
 
     await irc.sendMessage('#glowing-bear', 'count-test-1');
     await irc.sendMessage('#glowing-bear', 'count-test-2');
     await irc.sendMessage('#glowing-bear', 'count-test-3');
-    await page.waitForTimeout(3000);
 
     const badges = page.getByTestId('hotlist-count');
+    await expect(badges.first()).toBeVisible({ timeout: 10000 });
     const badgeCount = await badges.count();
     expect(badgeCount).toBeGreaterThanOrEqual(1);
 });
@@ -105,7 +83,7 @@ test('hotlist item shows unread count badge', async () => {
 test('hotlist hidden on desktop viewport', async () => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.evaluate(() => window.dispatchEvent(new Event('resize')));
-    await page.waitForTimeout(500);
+    await page.getByTestId('app-title').waitFor({ state: 'visible', timeout: 5000 });
 
     await expect(page.getByTestId('buffer-hotlist')).not.toBeAttached();
     await expect(page.getByTestId('app-title')).toBeVisible();

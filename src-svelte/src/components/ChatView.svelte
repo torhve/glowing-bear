@@ -161,7 +161,7 @@
     measureLinesPerScreen();
   });
 
-  $effect.pre(() => {
+  $effect(() => {
     // Auto-scroll when buffer changes or new lines arrive
     // Skip if loading more lines or was scrolled up during fetch
     if (!$currentBuffer || isLoadingMore || messages.length === 0 || !containerRef) {
