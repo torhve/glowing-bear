@@ -4,30 +4,17 @@ Browser frontend for WeeChat IRC via WebSockets — **no backend**. Client-side 
 
 ## Project Structure
 
-```
-src-svelte/src/
-├── components/   # 18 Svelte components
-├── lib/          # types, utils, stores, notifications, filters
-│   └── stores/   # connectionManager, models, handlers, settings, theme, bufferResume, connectionStore, inputHistory, nickColors, themeColors
-└── routes/       # SvelteKit routes (+page.svelte, +layout.svelte, etc.)
-e2e/              # Playwright tests: specs/, helpers/, fixtures/, playwright.config.ts, global-setup.ts, global-teardown.ts
-test/unit/        # Vitest unit tests
-test/irc-server/  # Local IRC server for testing
-static/css/themes/ # 13 theme CSS files
-```
-
-Key files: `weechat.ts` (binary relay protocol), `connectionManager.ts` (WS lifecycle), `handlers.ts` (dispatches → models), `models.ts` (writable stores), `settings.ts` (localStorage), `theme.ts` (CSS vars), `notifications.ts`, `faviconBadge.ts`, `linkTokens.ts`, `filters.ts`, `toast.ts`.
+`src/` has `components/`, `lib/` (stores, utils, filters), `routes/`. Test suites in `e2e/` and `test/unit/`. IRC server fixture in `test/irc-server/`. Key modules: `weechat.ts`, `connectionManager.ts`, `handlers.ts`, `models.ts`, `settings.ts`, `theme.ts`, `filters.ts`, `notifications.ts`.
 
 ## Commands
 
 ```bash
-npm run dev                    # Vite dev server on localhost:8001
+npm run dev                    # Dev server (localhost:8001)
 npm run check                  # svelte-check
 npm run lint                   # eslint src
 npm test                       # Vitest unit tests
 npm run test:e2e -- --grep "X" # Targeted E2E tests
-npm run test:e2e e2e/specs/Component.test.ts  # Single file
-npm run irc:start / irc:stop   # Manual gbtest start/stop
+npm run irc:start / irc:stop   # Manual gbtest IRC server
 ```
 
 ## Code Style (CRITICAL)
@@ -48,7 +35,7 @@ Immutable updates only. Spread copies: `buffers.set({ ...get(buffers) })`. Read 
 - `$props()` for props, `$state`/`$derived` for mutable/computed state
 - Import icons per-icon: `import X from '@lucide/svelte/icons/x'` — never barrel
 - Add `data-testid` on interactive elements for E2E tests
-- Use Tailwind semantic colors: `bg-bg`, `text-text`, `border-border`, `bg-surface`, `bg-surface-raised`, `bg-input-bg`, `text-text-secondary`, `text-danger`, `text-text-muted`, `accent`
+- Use Tailwind semantic colors (`bg-bg`, `text-text`, `bg-surface`, etc.)
 
 ### Security
 Always use `sanitizeHtml()` from `$lib/filters` for HTML injection. For messages/topics, prefer `tokenizeLinks()` + Svelte native escaping over `{@html}`.
@@ -63,27 +50,8 @@ Every non-trivial function needs a brief comment above it explaining intent.
 **E2E tests (`e2e/specs/*.test.ts`)** — UI components, user flows. gbtest auto-started by Playwright's `globalSetup` (port check). Gbtest persists across runs, no teardown needed. Dev server auto-started by Playwright's `webServer` config.
 
 ### Writing E2E Tests
-1. Add `data-testid` attributes to tested components
-2. Create `e2e/specs/Component.test.ts`
-3. Include error filter in `beforeEach`: `page.on('pageerror', (e) => { if (e.message?.includes('effect_orphan')) return; });`
-4. `page.goto('http://localhost:8001/')` then `await waitForAppReady(page)`
-5. Shared state: `test.describe.configure({ mode: 'serial' })`
+Add `data-testid` attributes, include `effect_orphan` pageerror filter, use `waitForAppReady(page)` after `goto`. Serial tests need `configure({ mode: 'serial' })`.
 
 ### Test Rules
 - **Test user-visible behavior, not implementation details.** DOM output, UI state, user flows.
 - **Prefer user-facing locators.** `getByRole()`/`getByText()` first. `data-testid` only when no semantic role or stable text fits.
-
-### Deploying and pushing
-
-- NEVER git push to upstream
-- NEVER git push to origin
-
-## Known Issues
-
-- **Svelte 5 `$effect.pre` orphan error** in dev-mode Playwright — filtered via `page.on('pageerror')`. Does NOT affect production.
-- **Vitest browser mode is NOT used** — incompatible with Svelte 5.
-
-## Prerequisites
-
-1. **gbtest environment**: IRC localhost:6667, relay ws://localhost:9001 (password: `testpassword123`). Auto-started by Playwright's `globalSetup`. Manual: `npm run irc:start` / `irc:stop`. Persists across runs. Modifying `test/irc-server/` requires restart.
-2. **Dev server**: localhost:8001. Auto-started by Playwright's `webServer`. Manual: `npm run dev`
