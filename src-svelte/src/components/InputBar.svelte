@@ -171,6 +171,13 @@
 
     const code = e.keyCode || e.which;
 
+    // Escape -> blur input
+    if (e.code === 'Escape' || code === 27) {
+      e.preventDefault();
+      inputRef?.blur();
+      return true;
+    }
+
     // AltGraph detection — skip all handling
     if (e.getModifierState && e.getModifierState('AltGraph')) {
       return false;
