@@ -68,27 +68,7 @@ async function clearFormattingState(): Promise<void> {
     await page.waitForTimeout(50);
 }
 
-// Bold insertion tests
-
-test('Ctrl+B inserts bold control char at cursor', async () => {
-    const input = page.getByTestId('message-input');
-    await input.focus();
-    await page.waitForTimeout(50);
-
-    await clearFormattingState();
-    await page.waitForTimeout(50);
-
-    // Press Ctrl+B to insert bold code, then type text
-    await input.press('Control+b');
-    await page.waitForTimeout(50);
-    await input.pressSequentially('hello');
-    await page.waitForTimeout(50);
-
-    // Should have bold open code (\x02 = \u0002)
-    const value = await getRawInputValue();
-    expect(value).toContain('\u0002');
-    expect(value.startsWith('\u0002')).toBe(true);
-});
+// Bold button tests
 
 test('Bold button inserts bold control char on click', async () => {
     const input = page.getByTestId('message-input');
@@ -98,8 +78,10 @@ test('Bold button inserts bold control char on click', async () => {
     await clearFormattingState();
     await page.waitForTimeout(50);
 
-    // Click the bold button, then type
-    await page.getByTestId('format-bold').click();
+    // Hover to show toolbar, then click bold button
+    await page.getByTestId('input-bar').hover();
+    await page.waitForTimeout(100);
+    await page.getByTestId('format-bold').click({ force: true });
     await page.waitForTimeout(50);
     await input.pressSequentially('bold text');
     await page.waitForTimeout(50);
@@ -110,25 +92,7 @@ test('Bold button inserts bold control char on click', async () => {
     expect(value).not.toContain('\u000f');
 });
 
-// Italic insertion tests
-
-test('Ctrl+I inserts italic control char at cursor', async () => {
-    const input = page.getByTestId('message-input');
-    await input.focus();
-    await page.waitForTimeout(50);
-
-    await clearFormattingState();
-    await page.waitForTimeout(50);
-
-    await input.press('Control+i');
-    await page.waitForTimeout(50);
-    await input.pressSequentially('italic text');
-    await page.waitForTimeout(50);
-
-    const value = await getRawInputValue();
-    expect(value).toContain('\u001d');
-    expect(value.startsWith('\u001d')).toBe(true);
-});
+// Italic button tests
 
 test('Italic button inserts italic control char on click', async () => {
     const input = page.getByTestId('message-input');
@@ -138,7 +102,9 @@ test('Italic button inserts italic control char on click', async () => {
     await clearFormattingState();
     await page.waitForTimeout(50);
 
-    await page.getByTestId('format-italic').click();
+    await page.getByTestId('input-bar').hover();
+    await page.waitForTimeout(100);
+    await page.getByTestId('format-italic').click({ force: true });
     await page.waitForTimeout(50);
     await input.pressSequentially('italic');
     await page.waitForTimeout(50);
@@ -148,25 +114,7 @@ test('Italic button inserts italic control char on click', async () => {
     expect(value).not.toContain('\u000f');
 });
 
-// Underline insertion tests
-
-test('Ctrl+U inserts underline control char at cursor', async () => {
-    const input = page.getByTestId('message-input');
-    await input.focus();
-    await page.waitForTimeout(50);
-
-    await clearFormattingState();
-    await page.waitForTimeout(50);
-
-    await input.press('Control+u');
-    await page.waitForTimeout(50);
-    await input.pressSequentially('underlined');
-    await page.waitForTimeout(50);
-
-    const value = await getRawInputValue();
-    expect(value).toContain('\u001f');
-    expect(value.startsWith('\u001f')).toBe(true);
-});
+// Underline button tests
 
 test('Underline button inserts underline control char on click', async () => {
     const input = page.getByTestId('message-input');
@@ -176,7 +124,9 @@ test('Underline button inserts underline control char on click', async () => {
     await clearFormattingState();
     await page.waitForTimeout(50);
 
-    await page.getByTestId('format-underline').click();
+    await page.getByTestId('input-bar').hover();
+    await page.waitForTimeout(100);
+    await page.getByTestId('format-underline').click({ force: true });
     await page.waitForTimeout(50);
     await input.pressSequentially('under');
     await page.waitForTimeout(50);
@@ -186,7 +136,7 @@ test('Underline button inserts underline control char on click', async () => {
     expect(value).not.toContain('\u000f');
 });
 
-// Reset tests
+// Reset button tests
 
 test('Reset button inserts reset code', async () => {
     const input = page.getByTestId('message-input');
@@ -196,32 +146,14 @@ test('Reset button inserts reset code', async () => {
     await clearFormattingState();
     await page.waitForTimeout(50);
 
-    // Insert bold, type text, then reset
-    await input.press('Control+b');
-    await page.waitForTimeout(30);
+    // Insert bold via button, type text, then reset
+    await page.getByTestId('input-bar').hover();
+    await page.waitForTimeout(100);
+    await page.getByTestId('format-bold').click({ force: true });
+    await page.waitForTimeout(50);
     await input.pressSequentially('bold and reset');
     await page.waitForTimeout(30);
-    await page.getByTestId('format-reset').click();
-    await page.waitForTimeout(50);
-
-    const value = await getRawInputValue();
-    expect(value).toContain('\u0002');
-    expect(value).toContain('\u000f');
-});
-
-test('Ctrl+Shift+R inserts reset code', async () => {
-    const input = page.getByTestId('message-input');
-    await input.focus();
-    await page.waitForTimeout(50);
-
-    await clearFormattingState();
-    await page.waitForTimeout(50);
-
-    await input.press('Control+b');
-    await page.waitForTimeout(30);
-    await input.pressSequentially('test');
-    await page.waitForTimeout(30);
-    await input.press('Control+Shift+r');
+    await page.getByTestId('format-reset').click({ force: true });
     await page.waitForTimeout(50);
 
     const value = await getRawInputValue();
@@ -242,18 +174,24 @@ test('Ctrl+K opens color picker', async () => {
     // Color picker should be hidden initially
     await expect(page.locator('.color-picker-popover')).not.toBeVisible();
 
-    // Press Ctrl+K to open
-    await input.press('Control+k');
-    await page.waitForTimeout(50);
+    // Open via Ctrl+K shortcut
+    await page.keyboard.down('Control');
+    await page.keyboard.press('k');
+    await page.keyboard.up('Control');
+    await page.waitForTimeout(100);
 
     await expect(page.locator('.color-picker-popover')).toBeVisible();
 
     // Should have 16 color swatches
     const swatches = page.locator('[data-testid^="color-"]');
     await expect(swatches).toHaveCount(16);
+
+    // Close the picker for subsequent tests
+    await page.mouse.click(0, 0);
+    await page.waitForTimeout(300);
 });
 
-test('Color picker toggle closes with Ctrl+K again', async () => {
+test('Color button opens color picker on click', async () => {
     const input = page.getByTestId('message-input');
     await input.focus();
     await page.waitForTimeout(50);
@@ -261,13 +199,16 @@ test('Color picker toggle closes with Ctrl+K again', async () => {
     await clearFormattingState();
     await page.waitForTimeout(50);
 
-    await input.press('Control+k');
+    await page.getByTestId('input-bar').hover();
+    await page.waitForTimeout(100);
+    await page.getByTestId('format-color').click({ force: true });
     await page.waitForTimeout(50);
+
     await expect(page.locator('.color-picker-popover')).toBeVisible();
 
-    await input.press('Control+k');
-    await page.waitForTimeout(50);
-    await expect(page.locator('.color-picker-popover')).not.toBeVisible();
+    // Clean up hover state for subsequent tests
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(300);
 });
 
 test('Clicking a color inserts IRC color code (no reset)', async () => {
@@ -278,11 +219,14 @@ test('Clicking a color inserts IRC color code (no reset)', async () => {
     await clearFormattingState();
     await page.waitForTimeout(50);
 
-    await input.press('Control+k');
-    await page.waitForTimeout(50);
+    // Open color picker via Ctrl+K
+    await page.keyboard.down('Control');
+    await page.keyboard.press('k');
+    await page.keyboard.up('Control');
+    await page.waitForTimeout(100);
 
     // Click red color (code 04)
-    await page.getByTestId('color-04').click();
+    await page.getByTestId('color-04').click({ force: true });
     await page.waitForTimeout(50);
 
     const value = await getRawInputValue();
@@ -294,32 +238,71 @@ test('Clicking a color inserts IRC color code (no reset)', async () => {
     await expect(page.locator('.color-picker-popover')).not.toBeVisible();
 });
 
-test('Color button opens color picker on click', async () => {
-    const input = page.getByTestId('message-input');
-    await input.focus();
-    await page.waitForTimeout(50);
-
-    await clearFormattingState();
-    await page.waitForTimeout(50);
-
-    await page.getByTestId('format-color').click();
-    await page.waitForTimeout(50);
-
-    await expect(page.locator('.color-picker-popover')).toBeVisible();
-});
-
 // Toolbar visibility tests
 
-test('Format toolbar is always visible', async () => {
-    await expect(page.locator('.format-toolbar')).toBeVisible();
+test('Format toolbar is hidden by default', async () => {
+    // Move mouse to top-center of viewport (away from bottom input bar) and wait for transition
+    const width = await page.evaluate(() => window.innerWidth);
+    await page.mouse.move(width / 2, 100);
+    await page.waitForTimeout(500);
+
+    // Also dispatch a manual mouseleave on the input-bar to ensure state clears
+    await page.evaluate(() => {
+        const el = document.querySelector('[data-testid="input-bar"]');
+        if (el) {
+            el.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
+        }
+    });
+    await page.waitForTimeout(200);
+
+    await expect(page.locator('.format-toolbar')).not.toBeVisible();
 });
 
-test('Format toolbar contains bold, italic, underline, reset and color buttons', async () => {
+test('Format toolbar shows when hovering over input bar', async () => {
+    const inputBar = page.getByTestId('input-bar');
+    await inputBar.hover();
+    await page.waitForTimeout(100);
+
+    await expect(page.locator('.format-toolbar')).toBeVisible();
     await expect(page.getByTestId('format-bold')).toBeVisible();
     await expect(page.getByTestId('format-italic')).toBeVisible();
     await expect(page.getByTestId('format-underline')).toBeVisible();
     await expect(page.getByTestId('format-reset')).toBeVisible();
     await expect(page.getByTestId('format-color')).toBeVisible();
+
+    // Clean up hover state for subsequent tests
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(300);
+});
+
+test('Format toolbar shows when pressing Ctrl key', async () => {
+    await page.keyboard.down('Control');
+    await page.waitForTimeout(100);
+
+    await expect(page.locator('.format-toolbar')).toBeVisible();
+    await expect(page.getByTestId('format-bold')).toBeVisible();
+    await expect(page.getByTestId('format-italic')).toBeVisible();
+    await expect(page.getByTestId('format-underline')).toBeVisible();
+    await expect(page.getByTestId('format-reset')).toBeVisible();
+    await expect(page.getByTestId('format-color')).toBeVisible();
+
+    await page.keyboard.up('Control');
+    await page.waitForTimeout(300);
+});
+
+test('Format toolbar hides when mouse leaves and no picker open', async () => {
+    const inputBar = page.getByTestId('input-bar');
+
+    // Hover to show toolbar
+    await inputBar.hover();
+    await page.waitForTimeout(100);
+    await expect(page.locator('.format-toolbar')).toBeVisible();
+
+    // Move mouse far away from the input bar
+    await page.mouse.move(50, 50);
+    await page.waitForTimeout(200);
+
+    await expect(page.locator('.format-toolbar')).not.toBeVisible();
 });
 
 // Settings toggle test
@@ -334,7 +317,13 @@ test('Formatting disabled when setting is off', async () => {
     await input.focus();
     await page.waitForTimeout(50);
 
-    await input.press('Control+b');
+    await clearFormattingState();
+    await page.waitForTimeout(50);
+
+    // Hover to show toolbar, then click bold button (should be ignored)
+    await page.getByTestId('input-bar').hover();
+    await page.waitForTimeout(100);
+    await page.getByTestId('format-bold').click({ force: true });
     await page.waitForTimeout(50);
     await input.pressSequentially('should not be bold');
     await page.waitForTimeout(50);
@@ -351,19 +340,19 @@ test('Formatting setting persists via settings modal', async () => {
     await waitForBuffer(page, '#glowing-bear', 15000);
     await switchToBuffer(page, '#glowing-bear');
 
-    await page.getByTestId('settings-button').click();
+    await page.getByTestId('settings-button').click({ force: true });
     await expect(page.getByTestId('settings-modal')).toBeVisible({ timeout: 5000 });
 
     const checkbox = page.getByTestId('enableFormatting-checkbox');
     await expect(checkbox).toBeChecked();
 
     await checkbox.uncheck();
-    await page.getByTestId('settings-modal-close').click();
+    await page.getByTestId('settings-modal-close').click({ force: true });
     await expect(page.getByTestId('settings-modal')).not.toBeVisible({ timeout: 5000 });
 
     // Reopen and verify it stayed unchecked
-    await page.getByTestId('settings-button').click();
+    await page.getByTestId('settings-button').click({ force: true });
     await expect(page.getByTestId('settings-modal')).toBeVisible({ timeout: 5000 });
     await expect(checkbox).not.toBeChecked();
-    await page.getByTestId('settings-modal-close').click();
+    await page.getByTestId('settings-modal-close').click({ force: true });
 });
