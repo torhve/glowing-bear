@@ -611,11 +611,12 @@
   });
 
   // Track Ctrl key state globally to show/hide the formatting toolbar
+  // Only shows when input bar is focused — user can't use the keybindings otherwise.
   // Listens on window (not document) because Playwright dispatches keyboard events at page level,
   // which may not bubble correctly through document on macOS.
   $effect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Control' || e.ctrlKey) {
+      if ((e.key === 'Control' || e.ctrlKey) && document.activeElement === inputRef) {
         _ctrlDown = true;
       }
     }

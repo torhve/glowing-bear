@@ -275,7 +275,11 @@ test('Format toolbar shows when hovering over input bar', async () => {
     await page.waitForTimeout(300);
 });
 
-test('Format toolbar shows when pressing Ctrl key', async () => {
+test('Format toolbar shows when pressing Ctrl key (input focused)', async () => {
+    const input = page.getByTestId('message-input');
+    await input.focus();
+    await page.waitForTimeout(50);
+
     await page.keyboard.down('Control');
     await page.waitForTimeout(100);
 
@@ -288,6 +292,23 @@ test('Format toolbar shows when pressing Ctrl key', async () => {
 
     await page.keyboard.up('Control');
     await page.waitForTimeout(300);
+});
+
+test('Format toolbar does not show when Ctrl is pressed without focus', async () => {
+    const input = page.getByTestId('message-input');
+    // Ensure input is blurred
+    await input.blur();
+    await page.waitForTimeout(100);
+
+    await expect(page.locator('.format-toolbar')).not.toBeVisible();
+
+    await page.keyboard.down('Control');
+    await page.waitForTimeout(100);
+
+    await expect(page.locator('.format-toolbar')).not.toBeVisible();
+
+    await page.keyboard.up('Control');
+    await page.waitForTimeout(200);
 });
 
 test('Format toolbar hides when mouse leaves and no picker open', async () => {
