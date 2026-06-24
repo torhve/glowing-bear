@@ -1,7 +1,6 @@
 <script lang="ts">
   /* eslint-disable svelte/no-dom-manipulating */
   import type { PluginMetadata } from '$lib/types';
-  import { sanitizeHtml } from '$lib/filters';
   import { imageExts, videoExts, audioExts } from '$lib/utils/mediaExtensions';
   import Play from '@lucide/svelte/icons/play';
   import X from '@lucide/svelte/icons/x';
@@ -248,28 +247,6 @@
       embedRef.appendChild(iframe);
       return;
     }
-
-      const tiktokMatch = url.match(/tiktok\.com\/@([^/]+)\/video\/[^/]+|vm\.tiktok\.com\/([^/]+)/);
-      if (tiktokMatch) {
-        const tiktokUrl = url.includes('vm.tiktok.com')
-          ? `https://www.tiktok.com/@${url.split('/').pop()}`
-          : url;
-        void (async () => {
-          try {
-            const r = await fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(tiktokUrl)}`);
-            const data = await r.json();
-            if (!embedRef) return;
-            const content = data.html?.substring(0, data.html?.indexOf('<script') ?? 0);
-            embedRef.innerHTML = sanitizeHtml(content || '', { allowEmbeds: true });
-            const script = document.createElement('script');
-            script.src = 'https://www.tiktok.com/embed.js';
-            embedRef.appendChild(script);
-          } catch (e) {
-            console.error('TikTok embed error:', e);
-          }
-        })();
-        return;
-      }
 
     const allocineMatch = url.match(/allocine\.fr\/videokast\/video-([a-zA-Z0-9]+)/);
     if (allocineMatch) {

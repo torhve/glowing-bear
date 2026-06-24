@@ -23,7 +23,6 @@ const embedMatchers: UrlMatcher[] = [
     { name: 'Meteogram', test: (url) => /yr\.no\/place\/[^/]+\/[^/]+\/[^/]+\/#/.test(url) },
     { name: 'GitHub Gist', test: (url) => /gist\.github\.com\/([^/]+)\/([a-zA-Z0-9]+)/.test(url) },
     { name: 'Pastebin', test: (url) => /pastebin\.com\/([a-zA-Z0-9]+)/.test(url) },
-    { name: 'TikTok', test: (url) => /tiktok\.com\/@([^/]+)\/video\/[^/]+|vm\.tiktok\.com\/([^/]+)/.test(url) },
     { name: 'AlloCine video', test: (url) => /allocine\.fr\/videokast\/video-([a-zA-Z0-9]+)/.test(url) },
 ];
 
