@@ -461,7 +461,6 @@ export function rawText2Rich(rawText: string): RichPart[] {
                 if (curSpecialToken !== 0x19) {
                     // Also reset attributes
                     curAttrs = getDefaultAttributes();
-                    curAttrsOnlyFalseOverrides = true;
                 }
             }
             curSpecialToken = firstCharCode;
@@ -481,8 +480,6 @@ export function rawText2Rich(rawText: string): RichPart[] {
             if (style.attrs !== null) {
                 // Old JS replaces curAttrs with style.attrs unconditionally (\x19 resets attrs)
                 curAttrs = style.attrs;
-                const ov = curAttrs.override;
-                curAttrsOnlyFalseOverrides = Object.values(ov).every(v => v === false);
             }
             text = style.text;
         } else if (curSpecialToken === 0x1a || curSpecialToken === 0x1b) {
@@ -493,9 +490,6 @@ export function rawText2Rich(rawText: string): RichPart[] {
                 if (orideName) {
                     curAttrs.override[orideName] = orideVal;
                     text = p.substring(1);
-                    // Update tracking flag after in-place modification
-                    const ov = curAttrs.override;
-                    curAttrsOnlyFalseOverrides = !ov.b && !ov.r && !ov.i && !ov.u && !ov.k && !ov.d;
                 }
             }
         }
