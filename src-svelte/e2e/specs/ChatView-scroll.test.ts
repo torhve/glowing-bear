@@ -68,6 +68,21 @@ async function waitForScrollSettled(timeout = 10000) {
     );
 }
 
+// Wait for scroll effect to settle (scroll position stops changing) regardless of position
+async function waitForScrollStable(timeout = 5000) {
+    await page.waitForFunction(
+        () => {
+            const el = document.querySelector('[data-testid="chat-messages"]') as HTMLElement;
+            if (!el) return false;
+            const currentScrollTop = el.scrollTop;
+            return currentScrollTop !== undefined && currentScrollTop >= 0;
+        },
+        { timeout }
+    );
+    // Give a brief pause for any final scroll adjustments
+    await page.waitForTimeout(300);
+}
+
 test('should scroll to bottom when switching to a buffer with many lines', async () => {
     // Wait for #glowing-bear to appear in buffer list
     await waitForBuffer(page, '#glowing-bear', 15000);
@@ -176,4 +191,78 @@ test('debug logging captures scroll state for all buffer switches', async () => 
     expect(firstLog).toContain('totalLines');
     expect(firstLog).toContain('scrollHeight');
     expect(firstLog).toContain('isAtBottom');
+});
+
+test('should scroll to bottom when readmarker + unread fit in viewport', async () => {
+    // When there are only a few unread messages, the readmarker and all unread
+    // content should fit within the viewport — app should scroll to bottom.
+    await waitForBuffer(page, '#glowing-bear', 15000);
+    await switchToBuffer(page, '#glowing-bear');
+    await waitForScrollSettled();
+
+    // Switch away to create an inactive buffer scenario
+    await switchToBuffer(page, 'gbtest');
+    await waitForScrollSettled();
+
+    // Send just 2 messages (few enough to fit in viewport)
+    await irc.sendMessage('#glowing-bear', 'fit test message 1');
+    await irc.sendMessage('#glowing-bear', 'fit test message 2');
+
+    // Switch back — readmarker + 2 unread should fit, so scroll to bottom
+    await switchToBuffer(page, '#glowing-bear');
+    await waitForScrollSettled();
+
+    const state = await getChatScrollState();
+    expect(state).not.toBeNull();
+    expect(state!.atBottom).toBe(true);
+    expect(state!.scrollDiffFromBottom).toBeLessThanOrEqual(3);
+});
+
+test('should position readmarker at ~45% when unread count is large', async () => {
+    // When there are many unread messages that don't fit in the viewport,
+    // the readmarker should be positioned at ~45% of the viewport height.
+    await waitForBuffer(page, '#glowing-bear', 15000);
+    await switchToBuffer(page, '#glowing-bear');
+    await waitForScrollSettled();
+
+    // Switch away to create an inactive buffer scenario
+    await switchToBuffer(page, 'gbtest');
+    await waitForScrollSettled();
+
+    // Send many messages (50+) to ensure they don't fit in viewport
+    for (let i = 0; i < 60; i++) {
+        await irc.sendMessage('#glowing-bear', `large unread test ${i}`);
+    }
+
+    // Wait a moment for all messages to arrive
+    await page.waitForTimeout(2000);
+
+    // Switch back — should scroll to readmarker at ~45%, not bottom
+    await switchToBuffer(page, '#glowing-bear');
+    await waitForScrollStable();
+
+    const state = await getChatScrollState();
+    expect(state).not.toBeNull();
+
+    // Should NOT be at bottom since there are many unread messages
+    expect(state!.atBottom).toBe(false);
+
+    // Readmarker should be visible and positioned roughly in the upper half of viewport
+    const readmarker = page.getByTestId('readmarker');
+    await expect(readmarker).toBeVisible();
+
+    // Verify readmarker is above the middle of the viewport
+    const rmPosition = await page.evaluate(() => {
+        const container = document.querySelector('[data-testid="chat-messages"]') as HTMLElement;
+        const rm = document.querySelector('.readmarker') as HTMLElement;
+        if (!container || !rm) return null;
+        const rmRect = rm.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        const rmRelativeY = (rmRect.top - containerRect.top) / containerRect.height;
+        return rmRelativeY;
+    });
+    expect(rmPosition).not.toBeNull();
+    // Readmarker should be between 20% and 70% of viewport height
+    expect(rmPosition!).toBeGreaterThan(0.2);
+    expect(rmPosition!).toBeLessThan(0.7);
 });
