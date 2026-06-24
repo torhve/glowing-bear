@@ -180,6 +180,12 @@
   });
 
   function handleQuickKeys(e: KeyboardEvent) {
+    // Skip when focus is in an input field so Alt-combinations like Alt+7 (pipe on Norwegian layout) work for typing
+    const activeEl = document.activeElement;
+    const tag = activeEl?.tagName || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if ((activeEl as HTMLElement)?.isContentEditable) return;
+
     // Use get() to avoid $effect dependency on $settings/$sortedVisibleBuffers (prevents listener re-registration)
     const s = get(settings);
     if (e.altKey && !e.ctrlKey && !e.shiftKey && s.enableQuickKeys) {
@@ -207,6 +213,12 @@
   let _jumpDecimal: number | null = $state(null);
 
   function handleJumpToBuffer(e: KeyboardEvent) {
+    // Skip when focus is in an input field so user can type normally
+    const activeEl = document.activeElement;
+    const tag = activeEl?.tagName || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if ((activeEl as HTMLElement)?.isContentEditable) return;
+
     const code = e.keyCode || e.which;
     const digit = code - 48;
 
@@ -245,6 +257,12 @@
   let lastEscapeTime = 0;
 
   function handleGlobalKeyboard(e: KeyboardEvent) {
+    // Skip when focus is in an input field so user can type normally
+    const activeEl = document.activeElement;
+    const tag = activeEl?.tagName || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if ((activeEl as HTMLElement)?.isContentEditable) return;
+
     const code = e.keyCode || e.which;
 
     // Alt+< -> previous buffer
@@ -323,6 +341,11 @@
 
     // Escape -> double-tap -> disconnect (let native popover handle closing modals)
     if (e.code === 'Escape') {
+      // Always blur the input so subsequent Alt shortcuts (e.g. Alt+1 quick key) work
+      const input = document.querySelector<HTMLTextAreaElement>('[data-testid="message-input"]');
+      if (document.activeElement === input) {
+        input?.blur();
+      }
       const now = Date.now();
       if (now - lastEscapeTime <= 500) {
         // Only disconnect if actually connected — prevents no-op on stale connections
@@ -361,6 +384,7 @@
   }
 
   let _altKeyPressed = $state(false);
+  let _ctrlKeyPressed = $state(false);
 
   function handleAltKeyDown(e: KeyboardEvent) {
     if (e.key === 'Alt' || e.key === 'AltRight' || e.key === 'AltLeft') {
@@ -370,6 +394,16 @@
 
   function handleAltKeyUp() {
     _altKeyPressed = false;
+  }
+
+  function handleCtrlKeyDown(e: KeyboardEvent) {
+    if (e.key === 'Control') {
+      _ctrlKeyPressed = true;
+    }
+  }
+
+  function handleCtrlKeyUp() {
+    _ctrlKeyPressed = false;
   }
 
   function handleTypeToFocus(e: KeyboardEvent) {
@@ -402,6 +436,8 @@
       document.addEventListener('keyup', handleGlobalKeyUp);
       document.addEventListener('keydown', handleAltKeyDown);
       document.addEventListener('keyup', handleAltKeyUp);
+      document.addEventListener('keydown', handleCtrlKeyDown);
+      document.addEventListener('keyup', handleCtrlKeyUp);
       document.addEventListener('keydown', handleTypeToFocus);
     }
 
@@ -413,6 +449,8 @@
         document.removeEventListener('keyup', handleGlobalKeyUp);
         document.removeEventListener('keydown', handleAltKeyDown);
         document.removeEventListener('keyup', handleAltKeyUp);
+        document.removeEventListener('keydown', handleCtrlKeyDown);
+        document.removeEventListener('keyup', handleCtrlKeyUp);
         document.removeEventListener('keydown', handleTypeToFocus);
       }
     };
@@ -538,7 +576,7 @@
       {/if}
       <div class="chat-area flex-1 flex flex-col min-w-0">
         <ChatView />
-        <InputBar />
+        <InputBar ctrlKeyPressed={_ctrlKeyPressed} />
       </div>
       {#if $settings.showNicklist && !isMobile() && hasCurrentBufferNicklist}
         <Nicklist />

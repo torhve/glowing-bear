@@ -223,6 +223,7 @@ export interface Settings {
     hotlistsync: boolean;
     stylizePrivateChats: boolean;
     enableEmojify: boolean;
+    enableFormatting: boolean;
     angularTimeFormat?: string;
     supports_formatting_date?: boolean;
 }

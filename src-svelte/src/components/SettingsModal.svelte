@@ -86,7 +86,8 @@ import BaseDialog from '$components/BaseDialog.svelte';
       autoconnect: false,
       showNicklist: true,
       stylizePrivateChats: false,
-      enableEmojify: true
+      enableEmojify: true,
+      enableFormatting: true
     });
     setTheme('dark');
   }
@@ -264,6 +265,18 @@ import BaseDialog from '$components/BaseDialog.svelte';
               onchange={() => updateSettings({ readlineBindings: !$settings.readlineBindings })}
               class="w-4 h-4"
               data-settings-checkbox="readlineBindings"
+            />
+          </label>
+
+          <label class="settings-option flex items-center justify-between py-2" data-settings-option="enableFormatting">
+            <span class="settings-option-label text-sm text-text flex items-center gap-2"><Type size={14} class="text-text-secondary shrink-0" />Enable text formatting (Ctrl+B/I/U/K)</span>
+            <input
+              type="checkbox"
+              checked={$settings.enableFormatting}
+              onchange={() => updateSettings({ enableFormatting: !$settings.enableFormatting })}
+              class="w-4 h-4"
+              data-testid="enableFormatting-checkbox"
+              data-settings-checkbox="enableFormatting"
             />
           </label>
 

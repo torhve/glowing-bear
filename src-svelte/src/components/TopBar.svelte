@@ -84,7 +84,7 @@
           <div class="connection-dot w-2 h-2 rounded-full {
             $connectionState.status === 'connected' ? 'bg-success' :
             $connectionState.status === 'connecting' || $connectionState.status === 'reconnecting' ? 'bg-warning animate-pulse' :
-            $connectionState.status === 'error' ? 'bg-danger' :
+            $connectionState.status === 'error' || $connectionState.status === 'disconnected' ? 'bg-danger' :
             'bg-text-muted'
           }"></div>
           <span class="connection-status-text text-text-secondary">
