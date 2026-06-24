@@ -256,14 +256,25 @@
           const containerRect = containerRef!.getBoundingClientRect();
 
           if (containerRef!.scrollHeight > containerRef!.clientHeight) {
-            // Position readmarker near middle of viewport (~45%) so it's visible with unread context below.
-            // targetY = container top + 0.45 * viewport height
-            const targetY = containerRect.top + containerRef!.clientHeight * 0.45;
-            // diff = how far to scroll: positive means scroll down, negative means scroll up
-            const diff = rmRect.top - targetY;
-            containerRef!.scrollTop = containerRef!.scrollTop + diff;
+            // If readmarker + bottom of buffer both fit in viewport, scroll to bottom.
+            // remainingScroll = scrollable content below current view
+            const remainingScroll = containerRef!.scrollHeight - containerRef!.scrollTop;
+            if (remainingScroll <= containerRef!.clientHeight) {
+              // Everything fits — scroll to bottom to see readmarker + all unread at once
+              containerRef!.scrollTop = containerRef!.scrollHeight;
+              isAtBottom = true;
+            } else {
+              // Position readmarker near middle of viewport (~45%) so it's visible with unread context below.
+              // targetY = container top + 0.45 * viewport height
+              const targetY = containerRect.top + containerRef!.clientHeight * 0.45;
+              // diff = how far to scroll: positive means scroll down, negative means scroll up
+              const diff = rmRect.top - targetY;
+              containerRef!.scrollTop = containerRef!.scrollTop + diff;
+              isAtBottom = false;
+            }
+          } else {
+            isAtBottom = false;
           }
-          isAtBottom = false;
           console.log(
             '[ChatView] scroll → readmarker — scrollTop:', containerRef!.scrollTop,
             '| bufferLines:', curLinesLength,
