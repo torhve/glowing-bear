@@ -519,9 +519,25 @@
 .coa-chat_nick_suffix { display: inline; }
 .coa-emphasis { display: inline; }
 .coa-chat_day_change { display: inline; }
+.coa-chat_value_null { display: inline; }
+.coa-chat_status_disabled { display: inline; }
+.coa-chat_status_enabled { display: inline; }
 
 
-/* WeeChat protocol attribute selectors — populated by theme-specific overrides */
+/* WeeChat protocol attribute selectors */
+.a-b { font-weight: bold; }
+.a-no-b { font-weight: normal; }
+.a-i { font-style: italic; }
+.a-no-i { font-style: normal; }
+.a-u { text-decoration: underline; }
+.a-no-u { text-decoration: none; }
+.a-r { filter: invert(1); }
+.a-no-r { filter: none; }
+.a-k {}
+.a-no-k {}
+.a-d { opacity: 0.7; }
+.a-no-d { opacity: 1; }
+.a-reset { font-weight: normal; font-style: normal; text-decoration: none; filter: none; opacity: 1; }
 /* WeeChat protocol color rules — base 16 palette for dark themes */
 [data-theme="dark"], [data-theme="black"], [data-theme="dark-spacious"], [data-theme="blue"], [data-theme="blue-modern"], [data-theme="base16-default"], [data-theme="base16-mocha"], [data-theme="base16-ocean-dark"], [data-theme="base16-solarized-dark"] {
   .cef-0 { color: #000000; }
@@ -1495,10 +1511,13 @@
   .cof-chat_value { color: var(--gb-cof-cyan); }
   .cof-chat_delimiters { color: var(--gb-cof-green); }
   .cof-chat_day_change { color: var(--gb-cof-cyan); }
+  .cof-chat_value_null { color: var(--gb-cof-blue); }
+  .cof-chat_status_disabled { color: var(--gb-cof-red); }
+  .cof-chat_status_enabled { color: var(--gb-cof-green); }
   .cof-chat_time { color: var(--gb-cof-white); }
   .cof-chat_time_delimiters { color: var(--gb-cof-gray); }
   .cof-chat_buffer { color: var(--gb-cof-white); }
-  .cof-chat_channel { color: var(--gb-cof-white); }
+  .cof-chat_channel { color: var(--gb-cof-white); font-weight: bold; }
   .cof-chat_inactive_window { color: var(--gb-cof-darkgray); }
   .cof-chat_inactive_buffer { color: var(--gb-cof-darkgray); }
   .cof-emphasis { color: var(--gb-cof-lightred); }
@@ -1508,6 +1527,9 @@
   .cob-chat_highlight { background-color: var(--gb-cob-lightred); }
   .cob-chat_nick_offline_highlight { background-color: var(--gb-cob-darkgray); }
   .cob-emphasis { background-color: var(--gb-cob-lightred); }
+  .cob-chat_value_null {}
+  .cob-chat_status_disabled {}
+  .cob-chat_status_enabled {}
 
 
   .cwf-black { color: var(--gb-cof-black); }
