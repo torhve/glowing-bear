@@ -332,8 +332,8 @@
       return;
     }
 
-    // Alt+G -> focus buffer search
-    if (e.altKey && (code === 71 || code === 103)) {
+    // Alt/Ctrl+G -> focus buffer search
+    if ((e.altKey || e.ctrlKey) && (code === 71 || code === 103)) {
       e.preventDefault();
       toggleBufferSearchGlobal();
       return;
@@ -384,7 +384,6 @@
   }
 
   let _altKeyPressed = $state(false);
-  let _ctrlKeyPressed = $state(false);
 
   function handleAltKeyDown(e: KeyboardEvent) {
     if (e.key === 'Alt' || e.key === 'AltRight' || e.key === 'AltLeft') {
@@ -394,16 +393,6 @@
 
   function handleAltKeyUp() {
     _altKeyPressed = false;
-  }
-
-  function handleCtrlKeyDown(e: KeyboardEvent) {
-    if (e.key === 'Control') {
-      _ctrlKeyPressed = true;
-    }
-  }
-
-  function handleCtrlKeyUp() {
-    _ctrlKeyPressed = false;
   }
 
   function handleTypeToFocus(e: KeyboardEvent) {
@@ -436,8 +425,6 @@
       document.addEventListener('keyup', handleGlobalKeyUp);
       document.addEventListener('keydown', handleAltKeyDown);
       document.addEventListener('keyup', handleAltKeyUp);
-      document.addEventListener('keydown', handleCtrlKeyDown);
-      document.addEventListener('keyup', handleCtrlKeyUp);
       document.addEventListener('keydown', handleTypeToFocus);
     }
 
@@ -449,8 +436,6 @@
         document.removeEventListener('keyup', handleGlobalKeyUp);
         document.removeEventListener('keydown', handleAltKeyDown);
         document.removeEventListener('keyup', handleAltKeyUp);
-        document.removeEventListener('keydown', handleCtrlKeyDown);
-        document.removeEventListener('keyup', handleCtrlKeyUp);
         document.removeEventListener('keydown', handleTypeToFocus);
       }
     };
@@ -576,7 +561,7 @@
       {/if}
       <div class="chat-area flex-1 flex flex-col min-w-0">
         <ChatView />
-        <InputBar ctrlKeyPressed={_ctrlKeyPressed} />
+        <InputBar />
       </div>
       {#if $settings.showNicklist && !isMobile() && hasCurrentBufferNicklist}
         <Nicklist />

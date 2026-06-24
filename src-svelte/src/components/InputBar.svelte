@@ -28,6 +28,8 @@
     onInsertUrls?: (urls: string[]) => void;
   } = $props();
 
+  let ctrlKeyPressed = $state(false);
+
   // Debug flag — open console and set `window.__debugPaste = true` before pasting
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let debugPaste = $derived(typeof window !== 'undefined' && (window as any).__debugPaste === true);
@@ -44,6 +46,8 @@
   let nextImageId = $state(1);
 
   let showColorPicker = $state(false);
+  let isHovered = $state(false);
+  let _ctrlDown = $state(false);
 
   // WeeChat standard color palette (IRC color codes 00-15)
   const IRC_COLORS = [
@@ -565,14 +569,7 @@
     isDraggingFile = false;
   }
 
-  // Only auto-focus on desktop — mobile users prioritize reading over typing
-  $effect(() => {
-    if ($currentBuffer && typeof window !== 'undefined' && window.innerWidth >= 768) {
-      if (!isPopoverOpen()) {
-        inputRef?.focus();
-      }
-    }
-  });
+  // Don't auto-focus the input on mount or buffer switch — user must use Alt+L or type a character to focus
 
   // Set mobile-friendly input attributes that TypeScript DOM types don't include
   $effect(() => {
@@ -612,16 +609,41 @@
       delete win.__resetFormattingState;
     };
   });
+
+  // Track Ctrl key state globally to show/hide the formatting toolbar
+  // Listens on window (not document) because Playwright dispatches keyboard events at page level,
+  // which may not bubble correctly through document on macOS.
+  $effect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Control' || e.ctrlKey) {
+        _ctrlDown = true;
+      }
+    }
+    function handleKeyUp(e: KeyboardEvent) {
+      if (e.key === 'Control' && !e.ctrlKey) {
+        _ctrlDown = false;
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  });
 </script>
 
-<div data-testid="input-bar" class="input-bar-container flex-shrink-0">
+<div data-testid="input-bar" class="input-bar-container flex-shrink-0"
+     onmouseenter={() => { isHovered = true; }}
+     onmouseleave={() => { if (!showColorPicker) isHovered = false; }}
+>
   <div class="input-bar-inner bg-surface border-t border-border px-3 py-2"
         role="group"
   >
 
-    <!-- Format toolbar — always visible at top of input bar -->
+    <!-- Format toolbar — visible when Ctrl key is held, color picker is open, or input bar is hovered/focused -->
     <div
-      class="format-toolbar"
+      class="format-toolbar transition-all duration-150 ease-in-out overflow-hidden {((_ctrlDown || showColorPicker || isHovered) ? 'max-h-12 opacity-100 mb-2' : 'max-h-0 opacity-0')}"
       role="toolbar"
       aria-label="Text formatting"
     >
