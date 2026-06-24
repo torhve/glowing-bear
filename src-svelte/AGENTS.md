@@ -22,14 +22,11 @@ Key files: `weechat.ts` (binary relay protocol), `connectionManager.ts` (WS life
 
 ```bash
 npm run dev                    # Vite dev server on localhost:8001
-npm run build                  # Production build to build/
 npm run check                  # svelte-check
 npm run lint                   # eslint src
 npm test                       # Vitest unit tests
-npm run test:e2e               # Playwright E2E (auto-starts gbtest if needed)
 npm run test:e2e -- --grep "X" # Targeted E2E tests
 npm run test:e2e e2e/specs/Component.test.ts  # Single file
-npm run test:e2e:watch         # Playwright UI mode
 npm run irc:start / irc:stop   # Manual gbtest start/stop
 ```
 
@@ -39,23 +36,19 @@ npm run irc:start / irc:stop   # Manual gbtest start/stop
 - **Never use `$:`** — compiles to `$effect.pre`, causes `$effect_orphan` errors during event handlers
 - Use `$state`, `$derived`, `$effect`, `$props()` (NOT `export let`)
 - Pattern: `let s = $state($settings)` + `$effect(() => { const unsub = $settings.subscribe(...) })`
+- `.svelte` templates: `$storeName` (e.g. `$settings`, `$buffers`)
+- `.ts` files: `const val = get(storeName)` via `import { get } from 'svelte/store'`
 
 ### Reactivity
 Immutable updates only. Spread copies: `buffers.set({ ...get(buffers) })`. Read via `get(store)`, mutate copy, then `store.set(copy)`. Never mutate in-place.
 
 **{#if} blocks after async boundaries do NOT reliably trigger.** Workaround: push placeholder items synchronously before `await`, update in-place after. For modals: render unconditionally, control visibility via `.showPopover()/.hidePopover()`.
 
-### Store Access
-- `.svelte` templates: `$storeName` (e.g. `$settings`, `$buffers`)
-- `.ts` files: `const val = get(storeName)` via `import { get } from 'svelte/store'`
-
 ### Components
 - `$props()` for props, `$state`/`$derived` for mutable/computed state
 - Import icons per-icon: `import X from '@lucide/svelte/icons/x'` — never barrel
 - Add `data-testid` on interactive elements for E2E tests
 - Use Tailwind semantic colors: `bg-bg`, `text-text`, `border-border`, `bg-surface`, `bg-surface-raised`, `bg-input-bg`, `text-text-secondary`, `text-danger`, `text-text-muted`, `accent`
-- Modals: `<BaseDialog>` with `id`, `labelledby`, close buttons with `popovertarget`/`popovertargetaction="hide"`
-- `mount(Component, { target, props })` returns component **exports**, not DOM element
 
 ### Security
 Always use `sanitizeHtml()` from `$lib/filters` for HTML injection. For messages/topics, prefer `tokenizeLinks()` + Svelte native escaping over `{@html}`.
@@ -77,9 +70,8 @@ Every non-trivial function needs a brief comment above it explaining intent.
 5. Shared state: `test.describe.configure({ mode: 'serial' })`
 
 ### Test Rules
-- **Test user-visible behavior, not implementation details.** DOM output, UI state, user flows. Implementation details (`new Audio(src)`, `new Notification(title)`) belong in unit tests.
+- **Test user-visible behavior, not implementation details.** DOM output, UI state, user flows.
 - **Prefer user-facing locators.** `getByRole()`/`getByText()` first. `data-testid` only when no semantic role or stable text fits.
-- **Mock browser APIs with `addInitScript`** in `beforeAll`, reset in `beforeEach`. Not per-test `page.evaluate()`.
 
 ### Deploying and pushing
 
@@ -90,7 +82,6 @@ Every non-trivial function needs a brief comment above it explaining intent.
 
 - **Svelte 5 `$effect.pre` orphan error** in dev-mode Playwright — filtered via `page.on('pageerror')`. Does NOT affect production.
 - **Vitest browser mode is NOT used** — incompatible with Svelte 5.
-- **Tauri on Windows uses MSWebView2**
 
 ## Prerequisites
 
