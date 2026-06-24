@@ -194,6 +194,77 @@
     prevActiveBufferId = currentBufferId;
     prevLinesLength = curLinesLength;
 
+    // When lines are added, defer all scroll decisions to rAF so that:
+    // 1) The browser has time to compute layout (getBoundingClientRect works)
+    // 2) Scroll events fire and update isAtBottom / lastScrollEventMaxScroll
+    // This ensures reliable at-bottom detection in both headed and headless mode.
+    if (linesAdded) {
+      requestAnimationFrame(() => {
+        // Re-read values after rAF to get accurate scroll state.
+        const curIsAtBottom = containerRef!.scrollTop >= containerRef!.scrollHeight - containerRef!.clientHeight - 3;
+        const curHasUnread = hasUnreadMessages;
+        const curReadEndIndex = readEndIndex;
+
+        console.log(
+          '[ChatView] scroll rAF — buffer:', $currentBuffer?.shortName,
+          '| curIsAtBottom:', curIsAtBottom,
+          '| curHasUnread:', curHasUnread,
+          '| curReadEndIndex:', curReadEndIndex,
+          '| scrollTop:', containerRef!.scrollTop,
+          '| scrollHeight:', containerRef!.scrollHeight,
+          '| clientHeight:', containerRef!.clientHeight
+        );
+
+        if (!curHasUnread && curIsAtBottom) {
+          // No unread and at bottom — scroll to follow.
+          readmarkerFailures = 0;
+          containerRef!.scrollTop = containerRef!.scrollHeight;
+          isAtBottom = true;
+          console.log('[ChatView] scroll → bottom (rAF)');
+        } else if (curIsAtBottom) {
+          // At bottom with unread — no scroll needed.
+          return;
+        } else if (readmarkerFailures >= 2) {
+          // Readmarker fallback.
+          readmarkerFailures = 0;
+          containerRef!.scrollTop = containerRef!.scrollHeight;
+          isAtBottom = true;
+          console.log('[ChatView] scroll → bottom fallback (rAF)');
+        } else {
+          // Has unread and not at bottom — scroll to readmarker.
+          const rmRow = document.querySelector('.readmarker');
+          if (!rmRow || !rmRow.parentElement) {
+            console.warn('[ChatView] readmarker row not in DOM yet');
+            readmarkerFailures++;
+            prevScrollKey = '';
+            isAtBottom = false;
+            return;
+          }
+          requestAnimationFrame(() => {
+            readmarkerFailures = 0;
+            const rmRect = rmRow.getBoundingClientRect();
+            const contRect = containerRef!.getBoundingClientRect();
+            if (containerRef!.scrollHeight > containerRef!.clientHeight) {
+              const remainingScroll = containerRef!.scrollHeight - containerRef!.scrollTop;
+              if (remainingScroll <= containerRef!.clientHeight) {
+                containerRef!.scrollTop = containerRef!.scrollHeight;
+                isAtBottom = true;
+              } else {
+                const targetY = contRect.top + containerRef!.clientHeight * 0.45;
+                const diff = rmRect.top - targetY;
+                containerRef!.scrollTop = containerRef!.scrollTop + diff;
+                isAtBottom = false;
+              }
+            } else {
+              isAtBottom = false;
+            }
+          });
+        }
+      });
+      return;
+    }
+
+    // Buffer changed but no lines added — handle synchronously as before.
     console.log(
       '[ChatView] scroll effect — buffer:', curBufferShortName,
       '| totalLines:', curLinesLength,
@@ -209,8 +280,7 @@
     );
 
     if (!curHasUnreadMessages) {
-      // No unread messages — scroll to bottom
-      // Use rAF so DOM has updated after new lines were added.
+      // No unread messages — scroll to bottom.
       readmarkerFailures = 0;
       requestAnimationFrame(() => {
         containerRef!.scrollTop = containerRef!.scrollHeight;
@@ -222,19 +292,6 @@
         );
       });
     } else if (readmarkerFailures >= 2) {
-      // Readmarker lookup failed twice — fallback to scrolling to bottom.
-      // The unread count may be stale or the readmarker may not render correctly.
-      readmarkerFailures = 0;
-      requestAnimationFrame(() => {
-        containerRef!.scrollTop = containerRef!.scrollHeight;
-        isAtBottom = true;
-        console.log(
-          '[ChatView] scroll → bottom (fallback) — scrollTop:', containerRef!.scrollTop,
-          '| scrollHeight:', containerRef!.scrollHeight,
-          '| bufferLines:', curLinesLength
-        );
-      });
-    } else {
       // Unread messages present — scroll to readmarker
       // Double rAF: first cycle lets Svelte render readmarker DOM, second positions it
       requestAnimationFrame(() => {
