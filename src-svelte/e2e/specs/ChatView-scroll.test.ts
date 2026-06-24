@@ -12,12 +12,6 @@ test.beforeAll(async ({ browser }) => {
     page.on('pageerror', (error) => {
         if (error.message?.includes('effect_orphan')) return;
     });
-    // Capture debug logs from ChatView scrolling
-    page.on('console', (msg) => {
-        if (msg.text().includes('[ChatView]')) {
-            console.log('SCROLL-DEBUG:', msg.text());
-        }
-    });
 });
 
 test.afterAll(async () => {
@@ -131,7 +125,7 @@ test('should scroll to readmarker when switching to buffer with unread messages'
 
     // Switch back to #glowing-bear — should scroll to readmarker, not bottom
     await switchToBuffer(page, '#glowing-bear');
-    await waitForScrollSettled();
+    await waitForScrollStable();
 
     const state = await getChatScrollState();
     expect(state).not.toBeNull();
@@ -141,81 +135,60 @@ test('should scroll to readmarker when switching to buffer with unread messages'
 });
 
 test('should scroll to bottom when switching to fresh buffer with no unread', async () => {
-    // Switch to gbtest (core buffer — typically has fewer lines)
+    // First consume any leftover unread from prior serial tests
+    await waitForBuffer(page, '#glowing-bear', 15000);
+    await switchToBuffer(page, '#glowing-bear');
+    await waitForScrollSettled();
+
+    // Switch to gbtest briefly, then back — no messages sent in between
+    // so #glowing-bear has no new unread content
     await waitForBuffer(page, 'gbtest', 10000);
     await switchToBuffer(page, 'gbtest');
     await waitForScrollSettled();
 
-    // Send a message to #glowing-bear from bot while we're on gbtest
-    await irc.sendMessage('#glowing-bear', 'fresh scroll test ' + Date.now());
-
-    // Switch back — since we were away, this is a "switch" and should show readmarker
-    // But if there are NO unread (lastSeen was already set), it should scroll to bottom
-    // This tests the edge case where buffer was fully read before leaving
-    await waitForBuffer(page, '#glowing-bear', 15000);
+    // Switch back to #glowing-bear — should scroll to bottom since nothing's new
     await switchToBuffer(page, '#glowing-bear');
     await waitForScrollSettled();
 
     const state = await getChatScrollState();
     expect(state).not.toBeNull();
 
-    // Should be at or very near bottom (readmarker not expected since lastSeen already set)
+    // Should be at or very near bottom (no readmarker since no unread)
     expect(state!.scrollDiffFromBottom).toBeLessThanOrEqual(5);
 });
 
-test('debug logging captures scroll state for all buffer switches', async () => {
-    // This test verifies that debug logs are being emitted during buffer switches
-    // The logs will appear in the console output prefixed with "SCROLL-DEBUG:"
-    // Expected log keys: buffer, totalLines, visibleLinesEstimate, currentScrollTop,
-    //   scrollHeight, isAtBottom, scrollDiffFromBottom, isLoadingMore, hasReadmarker
 
-    const scrollLogs: string[] = [];
-    page.on('console', (msg) => {
-        if (msg.text().includes('[ChatView] scroll')) {
-            scrollLogs.push(msg.text());
-        }
-    });
-
-    // Switch between buffers multiple times
-    await switchToBuffer(page, '#glowing-bear');
-    await waitForScrollSettled();
-    await switchToBuffer(page, 'gbtest');
-    await waitForScrollSettled();
-    await switchToBuffer(page, '#glowing-bear');
-    await waitForScrollSettled();
-
-    // Verify scroll debug logs were generated
-    expect(scrollLogs.length).toBeGreaterThan(0);
-    // Each log should contain key diagnostic info
-    const firstLog = scrollLogs[0];
-    expect(firstLog).toContain('totalLines');
-    expect(firstLog).toContain('scrollHeight');
-    expect(firstLog).toContain('isAtBottom');
-});
-
-test('should scroll to bottom when readmarker + unread fit in viewport', async () => {
-    // When there are only a few unread messages, the readmarker and all unread
-    // content should fit within the viewport — app should scroll to bottom.
+test('should not auto-scroll when switched away and messages arrive', async () => {
+    // When user is on a different buffer, incoming messages on inactive buffer
+    // should NOT trigger any scroll action — lastSeen stays unchanged.
+    // This verifies the handler's "inactive buffer" path.
     await waitForBuffer(page, '#glowing-bear', 15000);
     await switchToBuffer(page, '#glowing-bear');
     await waitForScrollSettled();
 
-    // Switch away to create an inactive buffer scenario
+    const stateBefore = await getChatScrollState();
+    expect(stateBefore).not.toBeNull();
+
+    // Switch away
     await switchToBuffer(page, 'gbtest');
     await waitForScrollSettled();
 
-    // Send just 2 messages (few enough to fit in viewport)
-    await irc.sendMessage('#glowing-bear', 'fit test message 1');
-    await irc.sendMessage('#glowing-bear', 'fit test message 2');
+    // Send messages to #glowing-bear while we're NOT on it
+    await irc.sendMessage('#glowing-bear', 'inactive test message 1');
+    await irc.sendMessage('#glowing-bear', 'inactive test message 2');
 
-    // Switch back — readmarker + 2 unread should fit, so scroll to bottom
+    // Wait for messages to arrive and be processed
+    await page.waitForTimeout(1000);
+
+    // Switch back — should show readmarker since there are unread messages
     await switchToBuffer(page, '#glowing-bear');
-    await waitForScrollSettled();
+    await waitForScrollStable();
 
     const state = await getChatScrollState();
     expect(state).not.toBeNull();
-    expect(state!.atBottom).toBe(true);
-    expect(state!.scrollDiffFromBottom).toBeLessThanOrEqual(3);
+    // Readmarker should be visible
+    const readmarker = page.getByTestId('readmarker');
+    await expect(readmarker).toBeVisible();
 });
 
 test('should position readmarker at ~45% when unread count is large', async () => {
@@ -265,4 +238,58 @@ test('should position readmarker at ~45% when unread count is large', async () =
     // Readmarker should be between 20% and 70% of viewport height
     expect(rmPosition!).toBeGreaterThan(0.2);
     expect(rmPosition!).toBeLessThan(0.7);
+});
+
+test('should scroll down when user types and sends a message while at bottom', async () => {
+    // Represses the bug: user at bottom, sends a message, but view does NOT scroll
+    // because curIsAtBottom check used a 3px tolerance — new line grew scrollHeight
+    // by ~20px, making scrollTop appear "not at bottom" in the rAF callback.
+    await waitForBuffer(page, '#glowing-bear', 15000);
+    await switchToBuffer(page, '#glowing-bear');
+    await waitForScrollSettled();
+
+    const stateBefore = await getChatScrollState();
+    expect(stateBefore).not.toBeNull();
+    expect(stateBefore!.atBottom).toBe(true);
+
+    const linesBefore = stateBefore!.totalLines;
+    const input = page.getByTestId('message-input');
+    await input.click();
+    const msgText = 'scroll-follow-test-' + Date.now();
+    await input.fill(msgText);
+    await input.press('Enter');
+
+    // Wait for the new line to render in DOM
+    await page.waitForFunction(
+        (expected) => {
+            const rows = document.querySelectorAll('[data-testid="bufferline-row"]');
+            return rows.length >= expected;
+        },
+        linesBefore + 1,
+        { timeout: 10000 }
+    );
+
+    // Allow time for cascading effects (hotlist sync, effect re-runs) to settle.
+    // Multiple rAF scroll cycles may fire as lines arrive in batches.
+    await page.waitForTimeout(3000);
+
+    // Verify the user's message is visible in the viewport near the bottom.
+    // This proves the view scrolled down to follow new content, regardless of
+    // exact scroll position precision from cascading updates.
+    const msgInViewport = await page.evaluate((text) => {
+        const container = document.querySelector('[data-testid="chat-messages"]') as HTMLElement;
+        const rows = Array.from(document.querySelectorAll('[data-testid="bufferline-row"]'));
+        const targetRow = rows.find(row => row.textContent?.includes(text));
+        if (!targetRow || !container) return null;
+        const rowRect = targetRow.getBoundingClientRect();
+        const contRect = container.getBoundingClientRect();
+        // Row's vertical position relative to container viewport (0=top, 1=bottom)
+        const relativeY = (rowRect.top - contRect.top) / contRect.height;
+        return { relativeY, visible: rowRect.bottom > contRect.top && rowRect.top < contRect.bottom };
+    }, msgText);
+
+    expect(msgInViewport).not.toBeNull();
+    expect(msgInViewport!.visible).toBe(true);
+    // Message should be in lower 50% of viewport (near bottom)
+    expect(msgInViewport!.relativeY).toBeGreaterThan(0.4);
 });

@@ -69,7 +69,8 @@
     const { scrollTop, scrollHeight, clientHeight } = containerRef;
 
     // Update isAtBottom tracking (AngularJS bufferBottom equivalent)
-    isAtBottom = scrollTop >= scrollHeight - clientHeight - 3;
+    // Tolerance of 50px accounts for scroll lag when new lines grow scrollHeight
+    isAtBottom = scrollTop >= scrollHeight - clientHeight - 50;
 
     if (scrollTop < 50 && !isLoadingMore && $currentBuffer && !$currentBuffer.allLinesFetched) {
       isLoadingMore = true;
@@ -174,11 +175,21 @@
     // $derived values do NOT re-evaluate after await in async functions (Svelte 5 limitation).
     const currentBufferId = get(activeBufferId);
     const curHasUnreadMessages = hasUnreadMessages;
-    const curReadEndIndex = readEndIndex;
     const curLinesLength = messages.length;
-    const curBufferShortName = $currentBuffer.shortName;
     const bufferChanged = prevActiveBufferId !== currentBufferId;
     const linesAdded = curLinesLength > prevLinesLength;
+
+    // Refresh isAtBottom from actual DOM before handler processes new lines.
+    // The handler checks bufferBottom to decide lastSeen update strategy,
+    // but the sync effect hasn't fired yet (it runs after buffers.set).
+    // This ensures bufferBottom reflects current scroll position when handler reads it.
+    if (containerRef && linesAdded) {
+      const domAtBottom = containerRef.scrollTop >= containerRef.scrollHeight - containerRef.clientHeight - 3;
+      if (isAtBottom !== domAtBottom) {
+        isAtBottom = domAtBottom;
+        bufferBottom.set(domAtBottom);
+      }
+    }
 
     // If nothing changed, skip scroll operations entirely
     if (!bufferChanged && !linesAdded) return;
@@ -200,27 +211,19 @@
     // This ensures reliable at-bottom detection in both headed and headless mode.
     if (linesAdded) {
       requestAnimationFrame(() => {
-        // Re-read values after rAF to get accurate scroll state.
-        const curIsAtBottom = containerRef!.scrollTop >= containerRef!.scrollHeight - containerRef!.clientHeight - 3;
-        const curHasUnread = hasUnreadMessages;
-        const curReadEndIndex = readEndIndex;
+        // Re-read scroll state after rAF for accurate DOM measurements.
+        // Use pre-captured snapshot (curHasUnreadMessages) for reactive values —
+        // inside rAF, $derived re-evaluates to current store state, which may have
+        // changed since the effect ran (e.g., lastSeen update).
+        // Tolerance of 50px accounts for scroll lag when new lines grow scrollHeight.
+        const curIsAtBottom = containerRef!.scrollTop >= containerRef!.scrollHeight - containerRef!.clientHeight - 50;
 
-        console.log(
-          '[ChatView] scroll rAF — buffer:', $currentBuffer?.shortName,
-          '| curIsAtBottom:', curIsAtBottom,
-          '| curHasUnread:', curHasUnread,
-          '| curReadEndIndex:', curReadEndIndex,
-          '| scrollTop:', containerRef!.scrollTop,
-          '| scrollHeight:', containerRef!.scrollHeight,
-          '| clientHeight:', containerRef!.clientHeight
-        );
-
-        if (!curHasUnread && curIsAtBottom) {
-          // No unread and at bottom — scroll to follow.
+        if (!curHasUnreadMessages) {
+          // No unread messages — scroll to bottom regardless of scroll position.
+          // Covers both "at bottom following" and "buffer just switched, scrollTop=0" cases.
           readmarkerFailures = 0;
           containerRef!.scrollTop = containerRef!.scrollHeight;
           isAtBottom = true;
-          console.log('[ChatView] scroll → bottom (rAF)');
         } else if (curIsAtBottom) {
           // At bottom with unread — no scroll needed.
           return;
@@ -229,12 +232,10 @@
           readmarkerFailures = 0;
           containerRef!.scrollTop = containerRef!.scrollHeight;
           isAtBottom = true;
-          console.log('[ChatView] scroll → bottom fallback (rAF)');
         } else {
           // Has unread and not at bottom — scroll to readmarker.
           const rmRow = document.querySelector('.readmarker');
           if (!rmRow || !rmRow.parentElement) {
-            console.warn('[ChatView] readmarker row not in DOM yet');
             readmarkerFailures++;
             prevScrollKey = '';
             isAtBottom = false;
@@ -269,31 +270,12 @@
     }
 
     // Buffer changed but no lines added — handle synchronously as before.
-    console.log(
-      '[ChatView] scroll effect — buffer:', curBufferShortName,
-      '| totalLines:', curLinesLength,
-      '| prevLinesLength:', prevLinesLength,
-      '| bufferChanged:', bufferChanged,
-      '| linesAdded:', linesAdded,
-      '| scrollTop:', containerRef!.scrollTop,
-      '| scrollHeight:', containerRef!.scrollHeight,
-      '| clientHeight:', containerRef!.clientHeight,
-      '| isAtBottom:', isAtBottom,
-      '| hasUnreadMessages:', curHasUnreadMessages,
-      '| readEndIndex:', curReadEndIndex
-    );
-
     if (!curHasUnreadMessages) {
       // No unread messages — scroll to bottom.
       readmarkerFailures = 0;
       requestAnimationFrame(() => {
         containerRef!.scrollTop = containerRef!.scrollHeight;
         isAtBottom = true;
-        console.log(
-          '[ChatView] scroll → bottom — scrollTop:', containerRef!.scrollTop,
-          '| scrollHeight:', containerRef!.scrollHeight,
-          '| bufferLines:', curLinesLength
-        );
       });
     } else if (readmarkerFailures >= 2) {
       // Unread messages present — scroll to readmarker
@@ -301,7 +283,6 @@
       requestAnimationFrame(() => {
         const rmRow = document.querySelector('.readmarker');
         if (!rmRow || !rmRow.parentElement) {
-          console.warn('[ChatView] readmarker row not in DOM yet');
           readmarkerFailures++;
           prevScrollKey = '';
           isAtBottom = false;
@@ -334,13 +315,6 @@
             containerRef!.scrollTop = containerRef!.scrollTop + diff;
             isAtBottom = false;
           }
-          console.log(
-            '[ChatView] scroll → readmarker — scrollTop:', containerRef!.scrollTop,
-            '| bufferLines:', curLinesLength,
-            '| rmViewportY:', rmRect.top.toFixed(1),
-            '| containerViewportTop:', containerRect.top.toFixed(1),
-            '| clientHeight:', containerRef!.clientHeight
-          );
         });
       });
     }
