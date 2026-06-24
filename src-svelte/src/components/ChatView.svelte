@@ -244,18 +244,22 @@
             readmarkerFailures = 0;
             const rmRect = rmRow.getBoundingClientRect();
             const contRect = containerRef!.getBoundingClientRect();
-            if (containerRef!.scrollHeight > containerRef!.clientHeight) {
-              const remainingScroll = containerRef!.scrollHeight - containerRef!.scrollTop;
-              if (remainingScroll <= containerRef!.clientHeight) {
-                containerRef!.scrollTop = containerRef!.scrollHeight;
-                isAtBottom = true;
-              } else {
-                const targetY = contRect.top + containerRef!.clientHeight * 0.45;
-                const diff = rmRect.top - targetY;
-                containerRef!.scrollTop = containerRef!.scrollTop + diff;
-                isAtBottom = false;
-              }
+            const remainingScroll = containerRef!.scrollHeight - containerRef!.scrollTop;
+            if (rmRect.bottom <= contRect.bottom && remainingScroll <= containerRef!.clientHeight) {
+              // Readmarker + unread fit in viewport and everything below fits — scroll to bottom.
+              containerRef!.scrollTop = containerRef!.scrollHeight;
+              isAtBottom = true;
+            } else if (rmRect.bottom <= contRect.bottom) {
+              // Readmarker visible but many unread below — position readmarker at ~45%.
+              const targetY = contRect.top + containerRef!.clientHeight * 0.45;
+              const diff = rmRect.top - targetY;
+              containerRef!.scrollTop = containerRef!.scrollTop + diff;
+              isAtBottom = false;
             } else {
+              // Readmarker not fully visible — position it at ~45% of viewport.
+              const targetY = contRect.top + containerRef!.clientHeight * 0.45;
+              const diff = rmRect.top - targetY;
+              containerRef!.scrollTop = containerRef!.scrollTop + diff;
               isAtBottom = false;
             }
           });
@@ -312,24 +316,22 @@
           const rmRect = rmRow.getBoundingClientRect();
           const containerRect = containerRef!.getBoundingClientRect();
 
-          if (containerRef!.scrollHeight > containerRef!.clientHeight) {
-            // If readmarker + bottom of buffer both fit in viewport, scroll to bottom.
-            // remainingScroll = scrollable content below current view
-            const remainingScroll = containerRef!.scrollHeight - containerRef!.scrollTop;
-            if (remainingScroll <= containerRef!.clientHeight) {
-              // Everything fits — scroll to bottom to see readmarker + all unread at once
-              containerRef!.scrollTop = containerRef!.scrollHeight;
-              isAtBottom = true;
-            } else {
-              // Position readmarker near middle of viewport (~45%) so it's visible with unread context below.
-              // targetY = container top + 0.45 * viewport height
-              const targetY = containerRect.top + containerRef!.clientHeight * 0.45;
-              // diff = how far to scroll: positive means scroll down, negative means scroll up
-              const diff = rmRect.top - targetY;
-              containerRef!.scrollTop = containerRef!.scrollTop + diff;
-              isAtBottom = false;
-            }
+          const remainingScroll = containerRef!.scrollHeight - containerRef!.scrollTop;
+          if (rmRect.bottom <= containerRect.bottom && remainingScroll <= containerRef!.clientHeight) {
+            // Readmarker + unread fit in viewport and everything below fits — scroll to bottom.
+            containerRef!.scrollTop = containerRef!.scrollHeight;
+            isAtBottom = true;
+          } else if (rmRect.bottom <= containerRect.bottom) {
+            // Readmarker visible but many unread below — position readmarker at ~45%.
+            const targetY = containerRect.top + containerRef!.clientHeight * 0.45;
+            const diff = rmRect.top - targetY;
+            containerRef!.scrollTop = containerRef!.scrollTop + diff;
+            isAtBottom = false;
           } else {
+            // Readmarker not fully visible — position it at ~45% of viewport.
+            const targetY = containerRect.top + containerRef!.clientHeight * 0.45;
+            const diff = rmRect.top - targetY;
+            containerRef!.scrollTop = containerRef!.scrollTop + diff;
             isAtBottom = false;
           }
           console.log(
