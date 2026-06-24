@@ -23,6 +23,11 @@
   }
 
   let showNicklist = $derived($settings.showNicklist);
+  let tick = $state(0);
+  $effect(() => {
+    const id = setInterval(() => { tick++; }, 1000);
+    return () => clearInterval(id);
+  });
 </script>
 
 <div data-testid="top-bar" style="padding-top: env(safe-area-inset-top, 0px);">
@@ -50,7 +55,7 @@
           {#if $connectionStats.lastMessageAt > 0}
             <div class="flex items-center gap-2 text-text-secondary mb-2">
               <MessageSquare size={14} />
-              <span>Last message: <strong class="text-text">{timeAgo($connectionStats.lastMessageAt)}</strong></span>
+              <span>Last message: <strong class="text-text">{timeAgo($connectionStats.lastMessageAt, tick)}</strong></span>
             </div>
           {/if}
           <div class="space-y-1.5">

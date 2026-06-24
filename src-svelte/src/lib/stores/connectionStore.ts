@@ -110,7 +110,7 @@ export function formatBytes(bytes: number): string {
     return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
 }
 
-export function timeAgo(timestamp: number): string {
+export function timeAgo(timestamp: number, _tick?: number): string {
     if (!timestamp) return '--';
     const diff = Date.now() - timestamp;
     if (diff < 1000) return '<1s ago';
