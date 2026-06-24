@@ -302,12 +302,28 @@ const styleMatchers: Array<{ regex: RegExp; fn: StyleMatcherFn }> = [
     }
 ];
 
+// First-character dispatch map — reduces regex checks from up to 9 down to 1-2 per style block.
+const matchersByFirstChar: Record<string, Array<{ regex: RegExp; fn: StyleMatcherFn }>> = {
+    '0': [styleMatchers[0]!], '1': [styleMatchers[0]!], '2': [styleMatchers[0]!],
+    '3': [styleMatchers[0]!], '4': [styleMatchers[0]!], '5': [styleMatchers[0]!],
+    '6': [styleMatchers[0]!], '7': [styleMatchers[0]!], '8': [styleMatchers[0]!],
+    '9': [styleMatchers[0]!], '@': [styleMatchers[1]!], 'F': [styleMatchers[2]!],
+    'B': [styleMatchers[3]!], '*': [styleMatchers[4]!, styleMatchers[5]!],
+    '%': [styleMatchers[6]!], '.': [styleMatchers[7]!], 'E': [styleMatchers[8]!]
+};
+
 function getStyle(txt: string): StyleResult {
-    for (let i = 0; i < styleMatchers.length; i++) {
-        const matcher = styleMatchers[i]!;
-        const m = txt.match(matcher.regex);
-        if (m) {
-            return matcher.fn(txt, m);
+    if (txt.length > 0) {
+        const first = txt[0]!;
+        const matchers = matchersByFirstChar[first];
+        if (matchers) {
+            for (let i = 0; i < matchers.length; i++) {
+                const matcher = matchers[i]!;
+                const m = txt.match(matcher.regex);
+                if (m) {
+                    return matcher.fn(txt, m);
+                }
+            }
         }
     }
     return { fgColor: null, bgColor: null, attrs: null, text: txt };
@@ -329,52 +345,53 @@ function attrsFromStr(str: string): TextAttrs | null {
 }
 
 export function convertIrcCodes(text: string): string {
-    // Manual single-pass conversion avoids V8 .replace() bug where multi-char
+    // Single-pass conversion avoids V8 .replace() bug where multi-char
     // replacement strings ending with a digit matching the next source char
     // cause that character to be duplicated.
-    // State machine tracks whether we're inside a WeeChat style code (\x19...),
-    // so attribute chars like \x02 inside patterns like \x19F@\x0212345 are
-    // preserved as-is rather than being converted.
+    // Pre-compiled regex matches any valid WeeChat style sequence so we can
+    // skip entire style blocks in one step instead of tracking state manually.
     // When preceded by \x1a or \x1b, raw bytes are WeeChat attribute chars.
+    // eslint-disable-next-line no-control-regex
+    const weechatStyleRegex = /^(?:(?:\d{2})|@\d{5}|F(?:[*!_/.%|]*\d{2}|@[\x01-\x06*!_/.%|]*\d{5})|B(?:\d{2}|@\d{5})|\*(?:[\x01-\x06*!_/.%|]*\d{2}|@[\x01-\x06*!_/.%|]*\d{5})[,~](?:\d{2}|@\d{5})|\*(?:[\x01-\x06*!_/.%|]*)(?:\d{2}|@\d{5})|%(?:[\x01-\x06*!_/.%|]*)(?:\d{2}|@\d{5})|\.(?:[\x01-\x06*!_/.%|]*)(?:\d{2}|@\d{5})|E)/;
+
     let result = '';
-    let insideWeechatStyleCode = false;
     for (let i = 0; i < text.length; i++) {
         const ch = text[i]!;
         const prevChar = i > 0 ? text[i - 1] : '';
         const isWeechatAttr = prevChar === '\x1a' || prevChar === '\x1b';
         switch (ch) {
-            case '\x19':
-                // Start of a WeeChat style code — subsequent bytes are part of it
+            case '\x19': {
+                // Start of a WeeChat style code — consume entire block via regex
                 result += ch;
-                insideWeechatStyleCode = true;
+                const remaining = text.substring(i + 1);
+                const match = remaining.match(weechatStyleRegex);
+                if (match) {
+                    result += match[0];
+                    i += match[0].length;
+                }
                 break;
-            case '\x1c':
-                // Reset — if inside WeeChat style code, keep as-is and end the style code
-                result += ch;
-                insideWeechatStyleCode = false;
-                break;
-            case '\x1a': case '\x1b':
-                // WeeChat attribute delimiters — pass through unchanged
+            }
+            case '\x1a': case '\x1b': case '\x1c':
+                // WeeChat control codes — pass through unchanged
                 result += ch;
                 break;
             case '\x02':
-                result += (insideWeechatStyleCode || isWeechatAttr) ? ch : '\x1a*';
+                result += isWeechatAttr ? ch : '\x1a*';
                 break;   // mIRC bold → WeeChat *
             case '\x1d':
-                result += (insideWeechatStyleCode || isWeechatAttr) ? ch : '\x1a/';
+                result += isWeechatAttr ? ch : '\x1a/';
                 break;   // mIRC italic → WeeChat /
             case '\x1f':
-                result += (insideWeechatStyleCode || isWeechatAttr) ? ch : '\x1a_';
+                result += isWeechatAttr ? ch : '\x1a_';
                 break;   // mIRC underline → WeeChat _
             case '\x16':
-                result += (insideWeechatStyleCode || isWeechatAttr) ? ch : '\x1a!';
+                result += isWeechatAttr ? ch : '\x1a!';
                 break;   // mIRC reverse → WeeChat !
             case '\x0f':
-                result += (insideWeechatStyleCode || isWeechatAttr) ? ch : '\x1c';
+                result += isWeechatAttr ? ch : '\x1c';
                 break;   // mIRC reset → WeeChat \x1c
             case '\x03': {
-                if (insideWeechatStyleCode || isWeechatAttr) {
-                    // Inside a WeeChat style code or after \x1a/\x1b, \x03 is an attr char
+                if (isWeechatAttr) {
                     result += ch;
                     break;
                 }
@@ -410,10 +427,6 @@ export function convertIrcCodes(text: string): string {
                 break;
             default:
                 result += ch;
-                // Printable chars end the WeeChat style code context
-                if (insideWeechatStyleCode && !'(FB*%.)'.includes(ch) && ch !== '@' && !',~|'.includes(ch)) {
-                    insideWeechatStyleCode = false;
-                }
         }
     }
     return result;
@@ -930,16 +943,26 @@ export class Protocol {
         const count = this.getInt();
         const objs: Array<Record<string, unknown>> = [];
 
+        // Pre-bind and cache parsers to avoid lookup and .call() overhead in the loops
+        const keysWithHandlers = keys.map(keyEntry => {
+            const key = keyEntry[0]!;
+            let type = keyEntry[1] ?? '';
+            if (!type) {
+                type = Protocol.hdataKeyTypes[key] ?? 'str';
+            }
+            const handler = Protocol.types[type];
+            if (!handler) {
+                throw new Error('Unknown type: ' + type);
+            }
+            return { key, parse: handler.bind(this) };
+        });
+
         for (let i = 0; i < count; i++) {
             const tmp: Record<string, unknown> = {};
             tmp.pointers = paths.map(() => this.getPointer());
-            for (const keyEntry of keys) {
-                const key = keyEntry[0]!;
-                let type = keyEntry[1] ?? '';
-                if (!type) {
-                    type = Protocol.hdataKeyTypes[key] ?? 'str';
-                }
-                tmp[key] = this.runType(type);
+            for (let j = 0; j < keysWithHandlers.length; j++) {
+                const kh = keysWithHandlers[j]!;
+                tmp[kh.key] = kh.parse();
             }
             objs.push(tmp);
         }
@@ -983,10 +1006,20 @@ export class Protocol {
         const count = this.getInt();
         const dict: Record<string, unknown> = {};
 
+        // Pre-resolve handlers to avoid lookup overhead inside the loop
+        const handlerKeys = Protocol.types[typeKeys];
+        const handlerValues = Protocol.types[typeValues];
+        if (!handlerKeys) throw new Error('Unknown type: ' + typeKeys);
+        if (!handlerValues) throw new Error('Unknown type: ' + typeValues);
+
+        const keyParse = handlerKeys.bind(this);
+        const valueParse = handlerValues.bind(this);
+        const cbStr = Protocol.typesStr[typeKeys];
+
         for (let i = 0; i < count; i++) {
-            const key = this.runType(typeKeys);
-            const keyStr = this.objToString(key as Record<string, unknown>, typeKeys);
-            const value = this.runType(typeValues);
+            const key = keyParse();
+            const keyStr = cbStr ? cbStr.call(this, key) : String(key);
+            const value = valueParse();
             dict[keyStr] = value;
         }
 
@@ -996,10 +1029,15 @@ export class Protocol {
     private getArray(): unknown[] {
         const type = this.getType();
         const count = this.getInt();
-        const values: unknown[] = [];
+        const handler = Protocol.types[type];
+        if (!handler) {
+            throw new Error('Unknown type: ' + type);
+        }
+        const parse = handler.bind(this);
+        const values: unknown[] = new Array(count);
 
         for (let i = 0; i < count; i++) {
-            values.push(this.runType(type));
+            values[i] = parse();
         }
 
         return values;
@@ -1015,7 +1053,13 @@ export class Protocol {
             const litem: Array<Record<string, unknown>> = [];
             for (let j = 0; j < itemcount; j++) {
                 const item: Record<string, unknown> = {};
-                item[this.getString()] = this.runType(this.getType());
+                const keyStr = this.getString();
+                const type = this.getType();
+                const handler = Protocol.types[type];
+                if (!handler) {
+                    throw new Error('Unknown type: ' + type);
+                }
+                item[keyStr] = handler.bind(this)();
                 litem.push(item);
             }
             values.push(litem);
