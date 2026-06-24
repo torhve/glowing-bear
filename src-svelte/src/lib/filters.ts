@@ -6,27 +6,16 @@ import DOMPurify from 'dompurify';
 /**
  * Sanitize HTML content to prevent XSS using DOMPurify.
  *
- * Default mode forbids dangerous tags: script, iframe, object, embed, form, input, img.
- * This prevents execution of malicious scripts and loading of external resources.
- * The `img` tag is explicitly forbidden to block image-based XSS vectors.
- *
- * Use `allowEmbeds: true` only for trusted plugin embed content (YouTube, Spotify, etc.)
- * which legitimately requires iframes and scripts.
+ * Forbids dangerous tags (script, iframe, object, embed, form, input, img)
+ * and event handler attributes. This prevents execution of malicious scripts
+ * and loading of external resources.
  *
  * Note: For message content and topics, prefer tokenizeLinks() + Svelte's native
  * text escaping instead of {@html} + sanitizeHtml(). Tokenization eliminates
  * the XSS surface area entirely by never using {@html}.
  */
-export function sanitizeHtml(html: string, opts: { allowEmbeds?: boolean } = {}): string {
+export function sanitizeHtml(html: string): string {
     if (!html) return '';
-    if (opts.allowEmbeds) {
-        return DOMPurify.sanitize(html, {
-            ADD_ATTR: ['target', 'allow', 'frameborder', 'allowfullscreen', 'scrolling'],
-            ADD_TAGS: ['script', 'iframe'],
-            FORBID_TAGS: ['style', 'form', 'textarea'],
-            FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur']
-        });
-    }
     return DOMPurify.sanitize(html, {
         ALLOWED_TAGS: ['span', 'a', 'code', 'b', 'i', 'u', 's', 'strike', 'br', 'div'],
         ALLOWED_ATTR: ['class', 'href', 'target', 'rel', 'style', 'dir'],
