@@ -31,7 +31,8 @@ export const settings = writable<Settings>({
     debugBuildMetadata: false,
     hotlistsync: true,
     stylizePrivateChats: false,
-    enableEmojify: true
+    enableEmojify: true,
+    enableFormatting: true
 });
 
 // Load from localStorage on init

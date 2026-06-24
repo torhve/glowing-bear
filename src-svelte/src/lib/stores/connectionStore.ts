@@ -95,6 +95,7 @@ export function recordBytesSent(bytes: number) {
         ...s,
         bytesSent: s.bytesSent + bytes,
         messagesSent: s.messagesSent + 1,
+        lastMessageAt: Date.now(),
         lastSentAt: Date.now()
     }));
 }

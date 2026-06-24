@@ -43,6 +43,28 @@
   let previewDialogRef = $state<{ dialog: HTMLDialogElement | undefined }>();
   let nextImageId = $state(1);
 
+  let showColorPicker = $state(false);
+
+  // WeeChat standard color palette (IRC color codes 00-15)
+  const IRC_COLORS = [
+    { code: '00', name: 'White', css: '#FFFFFF' },
+    { code: '01', name: 'Black', css: '#000000' },
+    { code: '02', name: 'Blue', css: '#000080' },
+    { code: '03', name: 'Green', css: '#008000' },
+    { code: '04', name: 'Red', css: '#FF0000' },
+    { code: '05', name: 'Brown', css: '#808000' },
+    { code: '06', name: 'Purple', css: '#800080' },
+    { code: '07', name: 'Orange', css: '#FF8000' },
+    { code: '08', name: 'Yellow', css: '#FFFF00' },
+    { code: '09', name: 'LightGreen', css: '#00FF00' },
+    { code: '10', name: 'Teal', css: '#008080' },
+    { code: '11', name: 'LightCyan', css: '#00FFFF' },
+    { code: '12', name: 'LightBlue', css: '#0000FF' },
+    { code: '13', name: 'Pink', css: '#FF00FF' },
+    { code: '14', name: 'Grey', css: '#808080' },
+    { code: '15', name: 'LightGrey', css: '#C0C0C0' },
+  ] as const;
+
   let canSend = $derived($currentBuffer && message.length > 0);
 
   // Clear all messages from a buffer, resetting lines and requestedLines count.
@@ -109,6 +131,36 @@
     }
   }
 
+  // Insert text at current cursor position, then advance cursor past inserted text.
+  function insertAtCursor(text: string): void {
+    const caret = getCaretPos();
+    message = message.slice(0, caret) + text + message.slice(caret);
+    setTimeout(() => setCaretPos(caret + text.length), 0);
+  }
+
+  // Insert a bold/italic/underline mIRC control char at the cursor position.
+  function toggleFormat(attr: 'bold' | 'italic' | 'underline'): void {
+    if (!$settings.enableFormatting) return;
+    const codes = { bold: '\x02', italic: '\x1d', underline: '\x1f' };
+    insertAtCursor(codes[attr]);
+    inputRef?.focus();
+  }
+
+  // Insert an IRC color code (\x03NN) at the cursor position.
+  function applyColor(colorCode: string): void {
+    if (!$settings.enableFormatting) return;
+    insertAtCursor(`\x03${colorCode}`);
+    showColorPicker = false;
+    inputRef?.focus();
+  }
+
+  // Insert the mIRC reset code (\x0f) at the cursor position to clear formatting.
+  function insertReset(): void {
+    if (!$settings.enableFormatting) return;
+    insertAtCursor('\x0f');
+    inputRef?.focus();
+  }
+
   function handleKeyDown(e: KeyboardEvent) {
     // Don't process keyboard shortcuts when a modal/dialog is open or focus is elsewhere
     if (isPopoverOpen() && document.activeElement !== inputRef) return false;
@@ -118,6 +170,40 @@
     // AltGraph detection — skip all handling
     if (e.getModifierState && e.getModifierState('AltGraph')) {
       return false;
+    }
+
+    // Formatting shortcuts always take priority over readline bindings
+    if (e.ctrlKey && !e.altKey && document.activeElement === inputRef) {
+      // Ctrl+B — toggle bold
+      if (code === 66 && !e.shiftKey) {
+        e.preventDefault();
+        toggleFormat('bold');
+        return true;
+      }
+      // Ctrl+I — toggle italic
+      if (code === 73 && !e.shiftKey) {
+        e.preventDefault();
+        toggleFormat('italic');
+        return true;
+      }
+      // Ctrl+U — toggle underline
+      if (code === 85 && !e.shiftKey) {
+        e.preventDefault();
+        toggleFormat('underline');
+        return true;
+      }
+      // Ctrl+Shift+R — insert reset code
+      if (code === 82 && e.shiftKey) {
+        e.preventDefault();
+        insertReset();
+        return true;
+      }
+      // Ctrl+K — toggle color picker
+      if (code === 75 && !e.shiftKey) {
+        e.preventDefault();
+        showColorPicker = !showColorPicker;
+        return true;
+      }
     }
 
     // Enter to submit, shift-enter for newline
@@ -497,10 +583,109 @@
       inputRef.enterKeyHint = 'send';
     }
   });
+
+  // Close color picker when clicking outside the input bar
+  $effect(() => {
+    if (!showColorPicker) return;
+    function handleClickOutside(e: MouseEvent) {
+      const inputBar = document.querySelector('[data-testid="input-bar"]');
+      if (inputBar && !inputBar.contains(e.target as Node)) {
+        showColorPicker = false;
+        document.removeEventListener('click', handleClickOutside);
+      }
+    }
+    setTimeout(() => document.addEventListener('click', handleClickOutside), 0);
+    return () => document.removeEventListener('click', handleClickOutside);
+  });
+
+  // Expose a reset function for E2E tests to clear message and formatting state
+  $effect(() => {
+    const win = window as typeof window & { __resetFormattingState?: () => void };
+    win.__resetFormattingState = () => {
+      message = '';
+      showColorPicker = false;
+      if (inputRef) {
+        inputRef.value = '';
+      }
+    };
+    return () => {
+      delete win.__resetFormattingState;
+    };
+  });
 </script>
 
 <div data-testid="input-bar" class="input-bar-container flex-shrink-0">
-  <div class="input-bar-inner bg-surface border-t border-border px-3 py-2">
+  <div class="input-bar-inner bg-surface border-t border-border px-3 py-2"
+        role="group"
+  >
+
+    <!-- Format toolbar — always visible at top of input bar -->
+    <div
+      class="format-toolbar"
+      role="toolbar"
+      aria-label="Text formatting"
+    >
+      <div class="flex items-center gap-1 px-1">
+        <button
+          type="button"
+          data-testid="format-bold"
+          onclick={() => toggleFormat('bold')}
+          class="format-btn px-2 py-0.5 text-xs font-bold rounded border transition-colors bg-input-bg border-border text-text-secondary hover:text-text hover:border-text-secondary"
+          title="Bold (Ctrl+B)"
+        >B</button>
+        <button
+          type="button"
+          data-testid="format-italic"
+          onclick={() => toggleFormat('italic')}
+          class="format-btn px-2 py-0.5 text-xs italic rounded border transition-colors bg-input-bg border-border text-text-secondary hover:text-text hover:border-text-secondary"
+          title="Italic (Ctrl+I)"
+        >I</button>
+        <button
+          type="button"
+          data-testid="format-underline"
+          onclick={() => toggleFormat('underline')}
+          class="format-btn px-2 py-0.5 text-xs underline rounded border transition-colors bg-input-bg border-border text-text-secondary hover:text-text hover:border-text-secondary"
+          title="Underline (Ctrl+U)"
+        >U</button>
+        <button
+          type="button"
+          data-testid="format-reset"
+          onclick={insertReset}
+          class="format-btn px-2 py-0.5 text-xs rounded border transition-colors bg-input-bg border-border text-text-secondary hover:text-text hover:border-text-secondary font-mono"
+          title="Reset formatting (Ctrl+Shift+R)"
+        >RST</button>
+        <button
+          type="button"
+          data-testid="format-color"
+          onclick={() => showColorPicker = !showColorPicker}
+          class="format-btn px-2 py-0.5 text-xs font-bold rounded border transition-colors bg-input-bg border-border text-text-secondary hover:text-text hover:border-text-secondary"
+          title="Color (Ctrl+K)"
+        >C</button>
+      </div>
+
+      <!-- Color picker popover -->
+      {#if showColorPicker}
+        <div
+          class="color-picker-popover fixed bottom-20 left-4 p-2 bg-surface border border-border rounded shadow-lg z-50"
+          role="listbox"
+          aria-label="Text color"
+        >
+          <div class="grid grid-cols-8 gap-1">
+            {#each IRC_COLORS as color (color.code)}
+              <button
+                type="button"
+                data-testid="color-{color.code}"
+                onclick={() => applyColor(color.code)}
+                class="color-swatch w-7 h-7 rounded border border-border flex items-center justify-center text-xs font-mono hover:scale-110 transition-transform"
+                style="background-color: {color.css}; color: {color.css === '#FFFFFF' || color.css === '#FFFF00' ? '#000000' : '#FFFFFF'};"
+                title="{color.name} ({color.code})"
+              >{color.code}</button>
+            {/each}
+          </div>
+        </div>
+      {/if}
+    </div>
+
     <div class="input-bar-row flex items-center space-x-2">
 
     <input
