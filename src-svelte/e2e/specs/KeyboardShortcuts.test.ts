@@ -347,10 +347,22 @@ test.describe('Keyboard Shortcuts', () => {
             await connect(page);
         });
 
+        test('should blur input on single Escape without disconnecting', async ({ page }) => {
+            const input = page.getByTestId('message-input');
+            await input.focus();
+            await expect(input).toBeFocused();
+            await page.keyboard.press('Escape');
+            // Input should lose focus
+            await expect(input).not.toBeFocused();
+            // Connection should remain active (chat view still visible)
+            await expect(page.getByTestId('chat-view')).toBeVisible();
+        });
+
         test('should disconnect with double Escape', async ({ page }) => {
             const input = page.getByTestId('message-input');
             await input.focus();
             await page.keyboard.press('Escape');
+            await page.waitForTimeout(50);
             await page.keyboard.press('Escape');
             await expect(page.getByTestId('host-input')).toBeVisible({ timeout: 15000 });
         });

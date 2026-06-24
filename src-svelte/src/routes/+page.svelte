@@ -257,6 +257,25 @@
   let lastEscapeTime = 0;
 
   function handleGlobalKeyboard(e: KeyboardEvent) {
+    // Escape handling first — always processes regardless of focused element
+    // (blurs input on single tap, disconnects on double tap)
+    if (e.code === 'Escape') {
+      // Always blur the input so subsequent Alt shortcuts (e.g. Alt+1 quick key) work
+      const input = document.querySelector<HTMLTextAreaElement>('[data-testid="message-input"]');
+      if (document.activeElement === input) {
+        input?.blur();
+      }
+      const now = Date.now();
+      if (now - lastEscapeTime <= 500) {
+        // Only disconnect if actually connected — prevents no-op on stale connections
+        if (get(connected)) {
+          disconnect();
+        }
+      }
+      lastEscapeTime = now;
+      return;
+    }
+
     // Skip when focus is in an input field so user can type normally
     const activeEl = document.activeElement;
     const tag = activeEl?.tagName || '';
@@ -336,24 +355,6 @@
     if ((e.altKey || e.ctrlKey) && (code === 71 || code === 103)) {
       e.preventDefault();
       toggleBufferSearchGlobal();
-      return;
-    }
-
-    // Escape -> double-tap -> disconnect (let native popover handle closing modals)
-    if (e.code === 'Escape') {
-      // Always blur the input so subsequent Alt shortcuts (e.g. Alt+1 quick key) work
-      const input = document.querySelector<HTMLTextAreaElement>('[data-testid="message-input"]');
-      if (document.activeElement === input) {
-        input?.blur();
-      }
-      const now = Date.now();
-      if (now - lastEscapeTime <= 500) {
-        // Only disconnect if actually connected — prevents no-op on stale connections
-        if (get(connected)) {
-          disconnect();
-        }
-      }
-      lastEscapeTime = now;
       return;
     }
   }
