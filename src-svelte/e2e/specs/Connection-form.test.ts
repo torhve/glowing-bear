@@ -12,8 +12,6 @@ test.describe('Connection Form', () => {
         // Always start with clean state: clear settings and force reload
         await page.goto('http://localhost:8001/');
         await page.evaluate(() => localStorage.removeItem('gb-settings'));
-        // Wait a bit for settings to be cleared before reload
-        await page.waitForTimeout(500);
         await page.reload();
         await waitForAppReady(page);
         // Verify we're disconnected (connection form should be visible)
@@ -93,7 +91,6 @@ test.describe('Connection Form', () => {
     test('should not connect with empty host', async ({ page }) => {
         await page.getByTestId('host-input').clear();
         await page.getByTestId('host-input').blur();
-        await page.waitForTimeout(300);
         await page.getByTestId('connect-button').click();
         await expect(page.getByTestId('host-input')).toHaveClass(/border-danger/, { timeout: 5000 });
     });
@@ -126,8 +123,7 @@ test.describe('Connection Form', () => {
         });
         await page.reload();
         await expect(page.getByTestId('host-input')).toBeVisible({ timeout: 5000 });
-        await page.waitForTimeout(300);
-        await expect(page.getByTestId('autoconnect-checkbox')).toBeAttached();
+        await expect(page.getByTestId('autoconnect-checkbox')).toBeAttached({ timeout: 5000 });
     });
 
     test('should connect when pressing Enter with focus off the form', async ({ page }) => {
@@ -290,7 +286,6 @@ test.describe('Disconnect handling', () => {
         });
         await page.goto('http://localhost:8001/');
         await page.evaluate(() => localStorage.removeItem('gb-settings'));
-        await page.waitForTimeout(500);
         await page.reload();
         await waitForAppReady(page);
     });

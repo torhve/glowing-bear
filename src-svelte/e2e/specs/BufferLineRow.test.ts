@@ -90,7 +90,7 @@ test.describe('rendering', () => {
                 container.dispatchEvent(new Event('scroll', { bubbles: true }));
             }
         });
-        await page.waitForTimeout(200);
+        await page.evaluate(() => new Promise(requestAnimationFrame));
         const msg = 'e2e-scroll-' + Date.now();
         const input = page.getByTestId('message-input');
         await input.fill(msg);
@@ -98,7 +98,8 @@ test.describe('rendering', () => {
         const messageCell = page.locator('[data-testid="bufferline-row"] td.message').filter({ hasText: msg });
         await expect(messageCell).toBeVisible({ timeout: 5000 });
         // Wait for rAF-based auto-scroll to complete
-        await page.waitForTimeout(100);
+        await page.evaluate(() => new Promise(requestAnimationFrame));
+        await page.evaluate(() => new Promise(requestAnimationFrame));
         // Verify chat container is scrolled to bottom
         const scrollState = await page.evaluate(() => {
             const container = document.querySelector('[data-testid="chat-messages"]') as HTMLElement;

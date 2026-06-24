@@ -49,19 +49,22 @@ test.describe('Autoconnect spam guard', () => {
                 autoconnect: true,
             }));
         });
-        await page.waitForTimeout(500);
         await page.reload();
         await waitForAppReady(page);
 
         // Wait for autoconnect to attempt and fail
-        await page.waitForTimeout(3000);
+        await expect(async () => {
+            const count = await page.evaluate(() => (window as any).__wsConnectionCount ?? 0);
+            expect(count).toBeGreaterThanOrEqual(1);
+        }).toPass({ timeout: 5000, intervals: [200] });
 
         const wsCount = await page.evaluate(() => (window as any).__wsConnectionCount ?? 0);
         expect(wsCount).toBeLessThanOrEqual(2);
 
         // Verify no additional attempts after failure
-        await page.waitForTimeout(2000);
-        const wsCountAfter = await page.evaluate(() => (window as any).__wsConnectionCount ?? 0);
-        expect(wsCountAfter).toBe(wsCount);
+        await expect(async () => {
+            const count = await page.evaluate(() => (window as any).__wsConnectionCount ?? 0);
+            expect(count).toBe(wsCount);
+        }).toPass({ timeout: 3000, intervals: [500] });
     });
 });

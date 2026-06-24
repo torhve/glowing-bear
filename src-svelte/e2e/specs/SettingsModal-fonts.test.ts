@@ -108,18 +108,16 @@ test('should update text field when slider moves', async () => {
     await textInput.fill('20px');
 
     // Wait for the effect to sync the slider position
-    await page.waitForTimeout(100);
-
-    // Verify slider moved to match
-    const sliderValue = await slider.inputValue();
-    expect(sliderValue).toBe('20');
+    await expect(async () => {
+        const val = await slider.inputValue();
+        expect(val).toBe('20');
+    }).toPass({ timeout: 2000, intervals: [50] });
 
     // Now move the slider to 28
     await slider.evaluate((el) => { (el as HTMLInputElement).value = '28'; el.dispatchEvent(new Event('input', { bubbles: true })); });
-    await page.waitForTimeout(100);
 
-    // Verify text field updated
-    await expect(textInput).toHaveValue('28px');
+    // Wait for text field to update
+    await expect(textInput).toHaveValue('28px', { timeout: 2000 });
 });
 
 test('should persist font size to localStorage', async () => {
@@ -159,7 +157,8 @@ test('should load font size from localStorage on reload', async () => {
 
     // Also verify slider synced
     const slider = page.getByTestId('font-size-slider');
-    await page.waitForTimeout(100);
-    const sliderValue = await slider.inputValue();
-    expect(sliderValue).toBe('22');
+    await expect(async () => {
+        const val = await slider.inputValue();
+        expect(val).toBe('22');
+    }).toPass({ timeout: 2000, intervals: [50] });
 });

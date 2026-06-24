@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test';
+import { Page, expect } from '@playwright/test';
 
 // Buffer list displays trimmedName (stripped of #, &, etc.), so match against that.
 function getBufferText(name: string): string {
@@ -17,7 +17,7 @@ export async function switchToBuffer(page: Page, name: string) {
     .filter({ hasText: getBufferText(name) })
     .first()
     .click();
-  await page.waitForTimeout(500);
+  await expect(page.getByTestId('topic-bar')).toContainText(getBufferText(name), { timeout: 5000 });
 }
 
 // On mobile viewports the buffer list hides after selection. This variant
@@ -28,15 +28,15 @@ export async function switchToBufferMobile(page: Page, name: string) {
   const orig = await page.viewportSize() || { width: 375, height: 667 };
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.evaluate(() => window.dispatchEvent(new Event('resize')));
-  await page.waitForTimeout(300);
+  await page.getByTestId('buffer-item').first().waitFor({ state: 'visible', timeout: 5000 });
   await switchToBuffer(page, name);
   // Restore mobile viewport first so isMobile() returns true
   await page.setViewportSize(orig);
   await page.evaluate(() => window.dispatchEvent(new Event('resize')));
-  await page.waitForTimeout(200);
+  await expect(page.getByTestId('buffer-list')).toBeAttached();
   // Now hideBufferListOnMobile will actually set showBufferList = false
   await page.evaluate(() => (window as any).__hideBufferListOnMobile?.());
-  await page.waitForTimeout(300);
+  await expect(page.getByTestId('buffer-list')).not.toBeAttached();
 }
 
 // Like waitForBuffer but safe for mobile: widens viewport so the buffer list
@@ -45,9 +45,8 @@ export async function waitForBufferMobile(page: Page, name: string, timeout = 10
   const orig = await page.viewportSize() || { width: 375, height: 667 };
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.evaluate(() => window.dispatchEvent(new Event('resize')));
-  await page.waitForTimeout(300);
+  await page.getByTestId('buffer-item').first().waitFor({ state: 'visible', timeout: 5000 });
   await waitForBuffer(page, name, timeout);
   await page.setViewportSize(orig);
   await page.evaluate(() => window.dispatchEvent(new Event('resize')));
-  await page.waitForTimeout(300);
 }

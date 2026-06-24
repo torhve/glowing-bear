@@ -28,7 +28,6 @@ test.describe('Native PBKDF2-SHA256 auth (no crypto.subtle)', () => {
         // Clear settings and load fresh page
         await page.goto('http://localhost:8001/');
         await page.evaluate(() => localStorage.removeItem('gb-settings'));
-        await page.waitForTimeout(500);
         await page.reload();
         await waitForAppReady(page);
         await expect(page.getByTestId('host-input')).toBeVisible({ timeout: 10000 });

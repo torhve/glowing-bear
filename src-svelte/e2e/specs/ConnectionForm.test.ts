@@ -15,7 +15,6 @@ test.describe('Features', () => {
                 await reg.unregister();
             }
         });
-        await page.waitForTimeout(500);
         await page.reload();
         await waitForAppReady(page);
     });
@@ -45,7 +44,6 @@ test.describe('Features', () => {
         await input.clear();
         await input.pressSequentially('invalid host!@#', { delay: 10 });
         await input.blur();
-        await page.waitForTimeout(500);
         await expect(input).toHaveClass(/border-danger/);
     });
 
@@ -118,7 +116,6 @@ test.describe('Features', () => {
         await portInput.clear();
         await portInput.pressSequentially('9001', { delay: 50 });
         await savePasswordCheck.check();
-        await page.waitForTimeout(500);
         await page.reload();
         await expect(hostInput).toHaveValue('localhost');
         await expect(portInput).toHaveValue('9001');

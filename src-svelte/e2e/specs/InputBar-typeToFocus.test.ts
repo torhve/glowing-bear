@@ -43,17 +43,12 @@ test.describe('Type to Focus (Slack-style input capture)', () => {
         await expect(page.getByTestId('message-input')).toBeVisible({ timeout: 5000 });
 
         const input = page.getByTestId('message-input');
-        // Explicitly blur the input to ensure type-to-focus can trigger
-        await input.blur();
-        await page.waitForTimeout(50);
-
-        // Click somewhere else to ensure input is not focused
+        // Click elsewhere to ensure input is not focused
         await page.getByTestId('topic-bar').click();
         await expect(input).not.toBeFocused();
 
         // Simulate type-to-focus behavior
         await simulateTypeToFocus(page, 'h');
-        await page.waitForTimeout(200);
 
         // Input should now be focused and contain 'h'
         await expect(input).toBeFocused();
@@ -68,7 +63,6 @@ test.describe('Type to Focus (Slack-style input capture)', () => {
         // Focus the input, type some text, then move cursor back
         await input.focus();
         await input.fill('helloworld');
-        await page.waitForTimeout(100);
 
         // Move cursor to position 5 (between "hello" and "world")
         await page.evaluate(() => {
@@ -81,7 +75,6 @@ test.describe('Type to Focus (Slack-style input capture)', () => {
 
         // Blur the input explicitly
         await input.blur();
-        await page.waitForTimeout(50);
 
         // Click elsewhere
         await page.getByTestId('topic-bar').click();
@@ -94,13 +87,9 @@ test.describe('Type to Focus (Slack-style input capture)', () => {
             input.setSelectionRange(5, 5);
         });
         await simulateTypeToFocus(page, 'a');
-        await page.waitForTimeout(200);
 
         // Value should be "helloaworld" — character inserted at cursor position
-        const value = await input.inputValue();
-        expect(value.length).toBe(11); // original length + 1 inserted char
-        expect(value.substring(0, 5)).toBe('hello');
-        expect(value.substring(6)).toBe('world');
+        await expect(input).toHaveValue(/^helloaworld$/);
     });
 
     test('should not double-insert when already focused in the input', async ({ page }) => {
@@ -111,7 +100,6 @@ test.describe('Type to Focus (Slack-style input capture)', () => {
         // Focus input and type normally
         await input.focus();
         await input.pressSequentially('ab');
-        await page.waitForTimeout(100);
 
         // Should contain exactly 'ab', not 'aab' or similar
         await expect(input).toHaveValue('ab');
@@ -129,7 +117,6 @@ test.describe('Type to Focus (Slack-style input capture)', () => {
         await page.keyboard.down('Control');
         await page.keyboard.press('c');
         await page.keyboard.up('Control');
-        await page.waitForTimeout(100);
 
         // Input should not be focused
         await expect(input).not.toBeFocused();
@@ -145,14 +132,10 @@ test.describe('Type to Focus (Slack-style input capture)', () => {
 
         // Press ArrowUp — should NOT focus input
         await page.keyboard.press('ArrowUp');
-        await page.waitForTimeout(100);
-
         await expect(input).not.toBeFocused();
 
         // Press Enter — should NOT focus input
         await page.keyboard.press('Enter');
-        await page.waitForTimeout(100);
-
         await expect(input).not.toBeFocused();
     });
 
@@ -168,8 +151,6 @@ test.describe('Type to Focus (Slack-style input capture)', () => {
 
         // Type a letter — should NOT focus input (mobile mode)
         await page.keyboard.press('a');
-        await page.waitForTimeout(100);
-
         await expect(input).not.toBeFocused();
     });
 
@@ -184,9 +165,7 @@ test.describe('Type to Focus (Slack-style input capture)', () => {
         // Simulate type-to-focus for each character
         for (const ch of 'world') {
             await simulateTypeToFocus(page, ch);
-            await page.waitForTimeout(50);
         }
-        await page.waitForTimeout(100);
 
         await expect(input).toHaveValue('world');
     });

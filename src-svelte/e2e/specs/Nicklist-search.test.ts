@@ -46,11 +46,11 @@ test('nicklist search filters nicks by name', async () => {
 
     // Type a common substring like 'o' which should match some but not all
     await searchInput.fill('o');
-    await page.waitForTimeout(300);
-
-    const afterCount = await allNicks.count();
-    expect(afterCount).toBeLessThanOrEqual(beforeCount);
-    expect(afterCount).toBeGreaterThan(0);
+    await expect(async () => {
+        const n = await allNicks.count();
+        expect(n).toBeLessThanOrEqual(beforeCount);
+        expect(n).toBeGreaterThan(0);
+    }).toPass({ timeout: 5000 });
 });
 
 test('clearing search restores all nicks', async () => {
@@ -58,31 +58,33 @@ test('clearing search restores all nicks', async () => {
 
     // Filter first
     await searchInput.fill('zzz_no_match_zzz');
-    await page.waitForTimeout(300);
-    const filteredCount = await page.getByTestId('nick-item').count();
-    expect(filteredCount).toBe(0);
+    await expect(async () => {
+        const n = await page.getByTestId('nick-item').count();
+        expect(n).toBe(0);
+    }).toPass({ timeout: 5000 });
 
     // Clear search
     await searchInput.clear();
-    await page.waitForTimeout(300);
 
     // All nicks should be back
-    const restoredCount = await page.getByTestId('nick-item').count();
-    expect(restoredCount).toBeGreaterThan(0);
+    await expect(async () => {
+        const n = await page.getByTestId('nick-item').count();
+        expect(n).toBeGreaterThan(0);
+    }).toPass({ timeout: 5000 });
 });
 
 test('search filters by both nick names and group names', async () => {
     const searchInput = page.getByTestId('nicklist-search');
 
     await searchInput.fill('gbbot');
-    await page.waitForTimeout(300);
+    await expect(async () => {
+        const n = await page.getByTestId('nick-item').count();
+        expect(n).toBeGreaterThanOrEqual(1);
+    }).toPass({ timeout: 5000 });
 
-    const matches = page.getByTestId('nick-item');
-    const matchCount = await matches.count();
-    expect(matchCount).toBeGreaterThanOrEqual(1);
-
+    const matchCount = await page.getByTestId('nick-item').count();
     for (let i = 0; i < matchCount; i++) {
-        const text = await matches.nth(i).textContent();
+        const text = await page.getByTestId('nick-item').nth(i).textContent();
         expect(text?.toLowerCase()).toContain('gbbot');
     }
 });

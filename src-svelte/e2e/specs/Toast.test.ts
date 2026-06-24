@@ -22,7 +22,7 @@ test.beforeEach(async () => {
     });
     // Clear any leftover toasts before each test, then wait for exit animations to complete
     await page.evaluate(() => (window as any).__toastStore?.set([]));
-    await page.waitForTimeout(500);
+    await expect(page.getByTestId('toast')).toHaveCount(0, { timeout: 5000 });
 });
 
 test('renders info toast with message', async () => {
@@ -140,9 +140,7 @@ test('manual close interrupts auto-dismiss timer', async () => {
 
     await page.getByTestId('toast-close').click();
     await expect(toast).not.toBeVisible({ timeout: 5000 });
-
-    await page.waitForTimeout(1000);
-    await expect(toast).not.toBeAttached();
+    await expect(toast).not.toBeAttached({ timeout: 5000 });
 });
 
 test('auto-dismiss triggers exit animation', async () => {
@@ -150,14 +148,8 @@ test('auto-dismiss triggers exit animation', async () => {
     const toast = page.getByTestId('toast');
     await expect(toast).toBeVisible({ timeout: 5000 });
 
-    await page.waitForTimeout(1200);
-
-    const hasRemovingClass = await toast.evaluate(el => el.classList.contains('toast-removing'));
-    if (hasRemovingClass) {
-        return;
-    }
-
-    await expect(toast).not.toBeVisible({ timeout: 2000 });
+    // Wait for auto-dismiss (duration 1000ms + animation time)
+    await expect(toast).not.toBeVisible({ timeout: 5000 });
 });
 
 test('multiple toasts dismiss independently by duration', async () => {
@@ -170,12 +162,10 @@ test('multiple toasts dismiss independently by duration', async () => {
     const toasts = page.getByTestId('toast');
     await expect(toasts).toHaveCount(3, { timeout: 5000 });
 
-    await page.waitForTimeout(1500);
+    // Short toast (1000ms) dismisses first
     await expect(toasts).toHaveCount(2, { timeout: 5000 });
-
-    await page.waitForTimeout(2000);
+    // Medium toast (3000ms) dismisses second
     await expect(toasts).toHaveCount(1, { timeout: 5000 });
-
-    await page.waitForTimeout(2000);
+    // Long toast (5000ms) dismisses last
     await expect(toasts).toHaveCount(0, { timeout: 5000 });
 });

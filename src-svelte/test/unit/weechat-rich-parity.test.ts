@@ -27,6 +27,10 @@ function hasActiveOverride(override: Record<string, boolean>): boolean {
     return Object.values(override).some(v => v === true);
 }
 
+// Old JS uses full name defaults (bold,reverse,italic,underline) + short keys for active attrs
+// New TS uses short keys throughout (b,r,i,u,k,d)
+const attrKeyMap: Record<string, string> = { bold: 'b', reverse: 'r', italic: 'i', underline: 'u' };
+
 function partsAreEquivalent(n: RichPart, o: RichPart, opts?: { allowTypeMismatch?: boolean; skipBgColor?: boolean }): boolean {
     if (n.text !== o.text) return false;
     // Allow type mismatch for out-of-range color codes (old JS bug: treats 2-digit as option index)
@@ -40,15 +44,25 @@ function partsAreEquivalent(n: RichPart, o: RichPart, opts?: { allowTypeMismatch
     }
     // For out-of-range codes, attrs.name also differs (null vs option name)
     if (!opts?.allowTypeMismatch && n.attrs.name !== o.attrs.name) return false;
-    // Override equivalence: {} and {bold:false,...} are both "inactive"
+    // Override equivalence: {} and {b:false,...} are both "inactive"
     const nActive = hasActiveOverride(n.attrs.override);
     const oActive = hasActiveOverride(o.attrs.override);
     if (nActive !== oActive) return false;
+    // Normalize old JS override keys to short form for comparison.
+    // Old JS uses full name defaults (bold,reverse,italic,underline) + short keys for active attrs.
+    // When both bold:false and b:true exist, the explicit short key wins.
+    const oNormalized: Record<string, boolean> = {};
+    for (const k in o.attrs.override) {
+        const mapped = attrKeyMap[k] ?? k;
+        oNormalized[mapped] = o.attrs.override[k];
+    }
     // If both have active attrs, check specific keys match
     if (nActive) {
-        const allKeys = new Set([...Object.keys(n.attrs.override), ...Object.keys(o.attrs.override)]);
+        const allKeys = new Set([...Object.keys(n.attrs.override), ...Object.keys(oNormalized)]);
         for (const key of allKeys) {
-            if (n.attrs.override[key] !== o.attrs.override[key]) return false;
+            const nVal = n.attrs.override[key] || false;
+            const oVal = oNormalized[key] || false;
+            if (nVal !== oVal) return false;
         }
     }
     return true;

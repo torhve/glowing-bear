@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, clearSettings, setSettings, waitForAppReady } from '../helpers/connection';
+import { connectToWeechat, clearSettings, setSettings, waitForAppReady, reconnect, fillPortInput } from '../helpers/connection';
 
 let page: import('@playwright/test').Page;
 
@@ -31,34 +31,13 @@ test.beforeEach(async () => {
     });
 });
 
-function fillPortInput(p: import('@playwright/test').Page, port: string) {
-    return p.evaluate((p) => {
-        const input = document.querySelector('[data-testid="port-input"]');
-        if (input) {
-            (input as HTMLInputElement).value = p;
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-    }, port);
-}
 
-async function reconnect(p: import('@playwright/test').Page) {
-    await clearSettings(p);
-    await setSettings(p, { savepassword: false, autoconnect: false });
-    await p.getByTestId('disconnect-button').click().catch(() => {});
-    await p.waitForTimeout(2000);
-    await p.getByTestId('host-input').fill('localhost');
-    await fillPortInput(p, '9001');
-    await p.getByTestId('password-input').fill('testpassword123');
-    await p.getByTestId('connect-button').click();
-    await p.getByTestId('chat-view').waitFor({ state: 'visible', timeout: 45000 });
-}
 
 test('disconnect via double Escape', async () => {
     await expect(page.getByTestId('chat-view')).toBeVisible();
 
     await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(1000);
 
     await expect(page.getByTestId('host-input')).toBeVisible({ timeout: 15000 });
     await expect(page.getByTestId('chat-view')).not.toBeVisible();
@@ -71,8 +50,6 @@ test('disconnect via TopBar button', async () => {
     const disconnectBtn = page.getByTestId('disconnect-button');
     await expect(disconnectBtn).toBeVisible();
     await disconnectBtn.click();
-    await page.waitForTimeout(2000);
-
     await expect(page.getByTestId('host-input')).toBeVisible({ timeout: 15000 });
     await expect(page.getByTestId('chat-view')).not.toBeVisible();
 });
@@ -88,7 +65,6 @@ test('reconnect preserves settings and reconnects successfully', async () => {
     }
     // Disconnect first
     await page.getByTestId('disconnect-button').click();
-    await page.waitForTimeout(2000);
     await expect(page.getByTestId('host-input')).toBeVisible({ timeout: 15000 });
 
     await page.getByTestId('host-input').fill('localhost');
@@ -134,12 +110,10 @@ test('disconnect toast shows reconnect button when autoconnect disabled', async 
 test('no-op when pressing Escape while already disconnected', async () => {
     // Disconnect first
     await page.getByTestId('disconnect-button').click();
-    await page.waitForTimeout(2000);
     await expect(page.getByTestId('host-input')).toBeVisible({ timeout: 15000 });
 
     // Press Escape — should not change anything
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(300);
 
     await expect(page.getByTestId('host-input')).toBeVisible();
     await expect(page.getByTestId('chat-view')).not.toBeVisible();

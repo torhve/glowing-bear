@@ -362,7 +362,7 @@ const emojiMap: Record<string, string> = {
     'flag_ve': '\u{1f1fb}\u{1f1ea}',
     'flag_vg': '\u{1f1fb}\u{1f1ec}',
     'flag_vi': '\u{1f1fb}\u{1f1ee}',
-    'flag vn': '\u{1f1fb}\u{1f1f3}',
+    'flag_vn': '\u{1f1fb}\u{1f1f3}',
     'flag_vu': '\u{1f1fb}\u{1f1fa}',
     'flag_wf': '\u{1f1fc}\u{1f1eb}',
     'flag_ws': '\u{1f1fc}\u{1f1f8}',

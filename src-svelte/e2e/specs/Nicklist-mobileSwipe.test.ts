@@ -37,7 +37,6 @@ async function swipeGesture(page: import('@playwright/test').Page, startX: numbe
     await page.evaluate(({ sx, sy, ex, ey }) => {
         (window as any).__swipeOnTarget(document, sx, sy, ex, ey);
     }, { sx: startX, sy: startY, ex: endX, ey: endY });
-    await page.waitForTimeout(100);
 }
 
 let browserPage: import('@playwright/test').Page;

@@ -417,17 +417,18 @@
     font-family: var(--font-mono, monospace);
   }
 
-  .irc-link {
+  /* Global to reach into TokenGroupRenderer */
+  :global(.irc-link) {
     color: oklch(62.3% 0.06 255);
     text-decoration: none;
   }
 
-  .irc-link:hover {
+  :global(.irc-link:hover) {
     color: oklch(65% 0.12 255);
     text-decoration: underline;
   }
 
-  .irc-code {
+  :global(.irc-code) {
     font-family: var(--font-mono, monospace);
     background: var(--gb-inline-code-bg, rgba(255, 255, 255, 0.1));
     padding: 0 2px;

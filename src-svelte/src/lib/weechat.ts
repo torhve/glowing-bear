@@ -335,11 +335,13 @@ export function convertIrcCodes(text: string): string {
     // State machine tracks whether we're inside a WeeChat style code (\x19...),
     // so attribute chars like \x02 inside patterns like \x19F@\x0212345 are
     // preserved as-is rather than being converted.
-    // Style code ends when we hit a non-style character (printable text).
+    // When preceded by \x1a or \x1b, raw bytes are WeeChat attribute chars.
     let result = '';
     let insideWeechatStyleCode = false;
     for (let i = 0; i < text.length; i++) {
         const ch = text[i]!;
+        const prevChar = i > 0 ? text[i - 1] : '';
+        const isWeechatAttr = prevChar === '\x1a' || prevChar === '\x1b';
         switch (ch) {
             case '\x19':
                 // Start of a WeeChat style code — subsequent bytes are part of it
@@ -356,26 +358,24 @@ export function convertIrcCodes(text: string): string {
                 result += ch;
                 break;
             case '\x02':
-                result += insideWeechatStyleCode ? ch : '\x1a*';
+                result += (insideWeechatStyleCode || isWeechatAttr) ? ch : '\x1a*';
                 break;   // mIRC bold → WeeChat *
             case '\x1d':
-                result += insideWeechatStyleCode ? ch : '\x1a/';
+                result += (insideWeechatStyleCode || isWeechatAttr) ? ch : '\x1a/';
                 break;   // mIRC italic → WeeChat /
             case '\x1f':
-                result += insideWeechatStyleCode ? ch : '\x1a_';
+                result += (insideWeechatStyleCode || isWeechatAttr) ? ch : '\x1a_';
                 break;   // mIRC underline → WeeChat _
             case '\x16':
-                result += insideWeechatStyleCode ? ch : '\x1a!';
+                result += (insideWeechatStyleCode || isWeechatAttr) ? ch : '\x1a!';
                 break;   // mIRC reverse → WeeChat !
             case '\x0f':
-                result += insideWeechatStyleCode ? ch : '\x1c';
+                result += (insideWeechatStyleCode || isWeechatAttr) ? ch : '\x1c';
                 break;   // mIRC reset → WeeChat \x1c
             case '\x03': {
-                if (insideWeechatStyleCode) {
-                    // Inside a WeeChat style code, \x03 is not a valid prefix.
-                    // End the style code and convert as bare mIRC reset.
-                    result += '\x1c';
-                    insideWeechatStyleCode = false;
+                if (insideWeechatStyleCode || isWeechatAttr) {
+                    // Inside a WeeChat style code or after \x1a/\x1b, \x03 is an attr char
+                    result += ch;
                     break;
                 }
                 let j = i + 1;
@@ -405,7 +405,7 @@ export function convertIrcCodes(text: string): string {
                 break;
             }
             case '\x01': case '\x04': case '\x05': case '\x06':
-                // mIRC-style attribute bytes — preserve inside style codes
+                // mIRC-style attribute bytes — preserve as-is
                 result += ch;
                 break;
             default:
@@ -441,7 +441,6 @@ export function rawText2Rich(rawText: string): RichPart[] {
     let curBgColor = getDefaultColor();
     let curAttrs = getDefaultAttributes();
     let curSpecialToken: number | null = null;
-    let curAttrsOnlyFalseOverrides = true;
 
     const result: RichPart[] = [];
 
