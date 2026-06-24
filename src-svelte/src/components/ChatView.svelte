@@ -278,8 +278,15 @@
         isAtBottom = true;
       });
     } else if (readmarkerFailures >= 2) {
-      // Unread messages present — scroll to readmarker
-      // Double rAF: first cycle lets Svelte render readmarker DOM, second positions it
+      // Readmarker fallback — scroll to bottom after repeated failures.
+      readmarkerFailures = 0;
+      requestAnimationFrame(() => {
+        containerRef!.scrollTop = containerRef!.scrollHeight;
+        isAtBottom = true;
+      });
+    } else {
+      // Unread messages present — scroll to readmarker.
+      // Double rAF: first cycle lets Svelte render readmarker DOM, second positions it.
       requestAnimationFrame(() => {
         const rmRow = document.querySelector('.readmarker');
         if (!rmRow || !rmRow.parentElement) {
