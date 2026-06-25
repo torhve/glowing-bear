@@ -25,8 +25,71 @@ function setAuthHeader(xhr: XMLHttpRequest) {
     xhr.setRequestHeader('Accept', 'application/json');
 }
 
-// Core upload logic: sends base64 data to Imgur API
-function doUpload(
+// Parse Imgur API response and resolve/reject based on result
+function parseUploadResponse(
+    xhr: XMLHttpRequest,
+    resolve: (val: UploadResult) => void,
+    reject: (err?: Error) => void,
+) {
+    if (xhr.status === 200) {
+        try {
+            const response = JSON.parse(xhr.responseText);
+            if (response.data && response.data.link) {
+                resolve({
+                    link: response.data.link.replace(/^http:/, 'https:'),
+                    deletehash: response.data.deletehash || '',
+                });
+            } else {
+                reject(new Error('Upload failed: no link in response'));
+            }
+        } catch (err) {
+            console.error('[imgur] upload error:', err);
+            reject(new Error('Upload failed: invalid response'));
+        }
+    } else {
+        reject(new Error('Upload failed: HTTP ' + xhr.status));
+    }
+}
+
+// Upload raw binary data to Imgur. Sends the file bytes directly with proper Content-Type.
+function doUploadBinary(
+    file: File,
+    progressCallback?: (percent: number) => void,
+): Promise<UploadResult> {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', 'https://api.imgur.com/3/image', true);
+        setAuthHeader(xhr);
+        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+
+        const { iToken, iAlb } = getImgurSettings();
+        if (iToken.length >= 38 && iAlb.length >= 6) {
+            // For binary uploads, album is sent as a header, not in FormData
+            xhr.setRequestHeader('X-Imgur-Album', iAlb);
+        }
+
+        xhr.onload = () => parseUploadResponse(xhr, resolve, reject);
+
+        if ('upload' in xhr) {
+            xhr.upload.onprogress = (event) => {
+                if (event.lengthComputable && progressCallback) {
+                    progressCallback(Math.round(event.loaded / event.total * 100));
+                }
+            };
+        }
+
+        // Read file as ArrayBuffer for raw binary upload
+        const reader = new FileReader();
+        reader.onload = () => {
+            xhr.send(reader.result as ArrayBuffer);
+        };
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsArrayBuffer(file);
+    });
+}
+
+// Upload base64-encoded image data to Imgur via FormData.
+function doUploadBase64(
     base64data: string,
     progressCallback?: (percent: number) => void,
 ): Promise<UploadResult> {
@@ -43,26 +106,7 @@ function doUpload(
             fd.append('album', iAlb);
         }
 
-        xhr.onload = () => {
-            if (xhr.status === 200) {
-                try {
-                    const response = JSON.parse(xhr.responseText);
-                    if (response.data && response.data.link) {
-                        resolve({
-                            link: response.data.link.replace(/^http:/, 'https:'),
-                            deletehash: response.data.deletehash || '',
-                        });
-                    } else {
-                        reject(new Error('Upload failed: no link in response'));
-                    }
-                } catch (err) {
-                    console.error('[imgur] upload error:', err);
-                    reject(new Error('Upload failed: invalid response'));
-                }
-            } else {
-                reject(new Error('Upload failed: HTTP ' + xhr.status));
-            }
-        };
+        xhr.onload = () => parseUploadResponse(xhr, resolve, reject);
 
         if ('upload' in xhr) {
             xhr.upload.onprogress = (event) => {
@@ -76,7 +120,7 @@ function doUpload(
     });
 }
 
-// Upload an image to Imgur. Accepts a File or a base64 data URL string.
+// Upload an image to Imgur. Accepts a File (binary upload) or base64 data URL string.
 export function uploadImage(
     input: File | string | null,
     progressCallback?: (percent: number) => void,
@@ -85,32 +129,23 @@ export function uploadImage(
         return Promise.reject(new Error('No image provided'));
     }
 
-    // If given a File, read it as data URL first
+    // File objects: send as raw binary (no FileReader.readAsDataURL hang on iOS)
     if (input instanceof File) {
         if (!input.type.match(/image.*/)) {
             return Promise.reject(new Error('File is not an image'));
         }
-
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                const base64 = ((event.target?.result as string).split(',')[1] || '');
-                doUpload(base64, progressCallback).then(resolve).catch(reject);
-            };
-            reader.onerror = () => reject(new Error('Failed to read file'));
-            reader.readAsDataURL(input);
-        });
+        return doUploadBinary(input, progressCallback);
     }
 
     // String input — accept data URLs or raw base64
     const str = input as string;
     if (str.startsWith('data:')) {
         const base64 = str.split(',')[1] || str;
-        return doUpload(base64, progressCallback);
+        return doUploadBase64(base64, progressCallback);
     }
 
     // Raw base64
-    return doUpload(str, progressCallback);
+    return doUploadBase64(str, progressCallback);
 }
 
 // Delete an uploaded image from Imgur using its deletehash

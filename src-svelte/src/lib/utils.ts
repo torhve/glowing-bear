@@ -355,18 +355,6 @@ export function filterImageFiles(files: File[]): File[] {
 }
 
 /**
- * Read a file as a base64 data URL, returning a Promise.
- */
-export function readFileAsDataUrl(file: File): Promise<string> {
-    return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => resolve('');
-        reader.readAsDataURL(file);
-    });
-}
-
-/**
  * Modify a textarea's value using a transformer function, then dispatch an input event.
  * Handles selection range preservation and focus management.
  */
