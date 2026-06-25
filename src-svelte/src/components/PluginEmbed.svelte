@@ -325,7 +325,7 @@
 </div>
 
 <style>
-  .embed {
+  :global(.embed) {
     max-width: 728px;
     max-height: 500px;
     overflow: hidden;
