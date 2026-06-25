@@ -194,10 +194,13 @@ export function createBufferLine(message: {
 
     const prefixtext = prefix.map(p => p.text).join('');
 
-    // Add highlight class to prefix parts without mutating shared classes from parseRichText.
+    // Add highlight class to prefix and content parts without mutating shared classes from parseRichText.
     // Each BufferLine must own its own classes array to avoid cross-line corruption.
     if (message.highlight) {
         prefix.forEach(p => {
+            p.classes = [...(p.classes || []), 'highlight'];
+        });
+        content.forEach(p => {
             p.classes = [...(p.classes || []), 'highlight'];
         });
     }

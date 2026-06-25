@@ -454,6 +454,17 @@
     background: var(--gb-bubble-code-bg-other, rgba(0, 0, 0, 0.15));
   }
 
+  /* Highlighted text — nick mention or highlightWords match */
+  :global(.bufferline .highlight) {
+    font-weight: bold;
+    color: var(--gb-highlight-text, #ffcc00);
+  }
+
+  :global(.bubble .highlight) {
+    font-weight: bold;
+    color: var(--gb-highlight-text-bubble, var(--gb-accent, #ffcc00));
+  }
+
   /* ===== Bubble mode styles ===== */
   /* Base bubble container — Signal-style rounded, no tails */
   .bubble {
