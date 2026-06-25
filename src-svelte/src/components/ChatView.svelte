@@ -207,16 +207,14 @@
 
     // When lines are added, defer all scroll decisions to rAF so that:
     // 1) The browser has time to compute layout (getBoundingClientRect works)
-    // 2) Scroll events fire and update isAtBottom / lastScrollEventMaxScroll
+    // 2) Scroll events fire and update isAtBottom from handleScroll
     // This ensures reliable at-bottom detection in both headed and headless mode.
     if (linesAdded) {
       requestAnimationFrame(() => {
         // Re-read scroll state after rAF for accurate DOM measurements.
-        // Use pre-captured snapshot (curHasUnreadMessages) for reactive values —
-        // inside rAF, $derived re-evaluates to current store state, which may have
-        // changed since the effect ran (e.g., lastSeen update).
-        // Tolerance of 50px accounts for scroll lag when new lines grow scrollHeight.
-        const curIsAtBottom = containerRef!.scrollTop >= containerRef!.scrollHeight - containerRef!.clientHeight - 50;
+        // Tolerance of 200px accounts for cumulative scrollHeight growth when multiple
+        // lines render before the user's scroll event fires (typical line ~20-30px).
+        const curIsAtBottom = containerRef!.scrollTop >= containerRef!.scrollHeight - containerRef!.clientHeight - 200;
 
         if (!curHasUnreadMessages) {
           // No unread messages — scroll to bottom regardless of scroll position.
@@ -225,8 +223,18 @@
           containerRef!.scrollTop = containerRef!.scrollHeight;
           isAtBottom = true;
         } else if (curIsAtBottom) {
-          // At bottom with unread — no scroll needed.
-          return;
+          // At bottom with phantom unread — absorb by updating lastSeen to cover all lines.
+          // Handler always increments lastSeen++ per line for active buffers. When user
+          // actually stays at bottom, these become phantom unread. Absorbing them here
+          // keeps the view clean without a readmarker, and we scroll to bottom to show new content.
+          const buf = get(currentBuffer);
+          if (buf) {
+            buf.lastSeen = messages.length - 1;
+            buffers.set({ ...get(buffers), [buf.id]: { ...buf } });
+          }
+          containerRef!.scrollTop = containerRef!.scrollHeight;
+          isAtBottom = true;
+          readmarkerFailures = 0;
         } else if (readmarkerFailures >= 2) {
           // Readmarker fallback.
           readmarkerFailures = 0;
