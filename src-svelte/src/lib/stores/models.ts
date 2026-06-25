@@ -11,6 +11,7 @@ import type {
     RichTextPart
 } from '$lib/types';
 import { Protocol } from '$lib/weechat';
+import { DEBUG_BUFFERS } from '$lib/debug';
 
 /**
  * Deep clone a BufferLine so that nested arrays (prefix, content) and their
@@ -431,13 +432,13 @@ export function setActiveBuffer(bufferId: string): boolean {
   const prevId = get(activeBufferId);
     if (prevId && currentBuffers[prevId]) {
         const prev = currentBuffers[prevId];
-        console.log('[buffer switch]', prev.shortName || prev.fullName, '→', buffer.shortName || buffer.fullName);
+        if (DEBUG_BUFFERS) console.log('[buffer switch]', prev.shortName || prev.fullName, '→', buffer.shortName || buffer.fullName);
         previousBufferId.set(prevId);
     } else if (prevId) {
-        console.log('[buffer switch]', '(none)', '→', buffer.shortName || buffer.fullName);
+        if (DEBUG_BUFFERS) console.log('[buffer switch]', '(none)', '→', buffer.shortName || buffer.fullName);
     }
 
-    console.log('[setActiveBuffer] target:', buffer.shortName, '| lines:', buffer.lines.length, '| lastSeen:', buffer.lastSeen, '| localUnread:', buffer.localUnread, '| unread:', buffer.unread, '| notification:', buffer.notification);
+    if (DEBUG_BUFFERS) console.log('[setActiveBuffer] target:', buffer.shortName, '| lines:', buffer.lines.length, '| lastSeen:', buffer.lastSeen, '| localUnread:', buffer.localUnread, '| unread:', buffer.unread, '| notification:', buffer.notification);
 
     // Compute effective unread count that avoids double-counting.
     const effectiveUnread = getEffectiveUnread(buffer);
@@ -451,7 +452,7 @@ export function setActiveBuffer(bufferId: string): boolean {
         targetLastSeen = Math.min(targetLastSeen, buffer.lines.length - 1);
     }
 
-    console.log('[setActiveBuffer] targetLastSeen:', targetLastSeen);
+    if (DEBUG_BUFFERS) console.log('[setActiveBuffer] targetLastSeen:', targetLastSeen);
 
     // Build a new buffers object with immutable updates to avoid in-place
     // mutations that can race with concurrent handler updates (e.g. hotlist).
@@ -586,11 +587,11 @@ export function checkAndNavigatePendingNotificationBuffer(): void {
         if (!pendingRaw) return;
         
         const pending = JSON.parse(pendingRaw) as { bufferId: string; timestamp: number };
-        console.log('[models] Found pending notification buffer:', pending.bufferId, 'timestamp:', new Date(pending.timestamp).toISOString());
+        if (DEBUG_BUFFERS) console.log('[models] Found pending notification buffer:', pending.bufferId, 'timestamp:', new Date(pending.timestamp).toISOString());
         
         const currentBuffers = get(buffers);
         if (pending.bufferId in currentBuffers) {
-            console.log('[models] Buffer exists, navigating to:', pending.bufferId);
+            if (DEBUG_BUFFERS) console.log('[models] Buffer exists, navigating to:', pending.bufferId);
             setActiveBuffer(pending.bufferId);
             localStorage.removeItem('gb_pendingNotificationBuffer');
         } else {

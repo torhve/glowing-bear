@@ -8,7 +8,7 @@ import { onDisconnect } from '$lib/notifications';
 import { Protocol } from '$lib/weechat';
 import { sha256, pbkdf2 as nativePbkdf2, toHexString } from '$lib/utils/crypto';
 import type { ProtocolMessage } from '$lib/types';
-import { DEBUG_NICKLIST, DEBUG_WEECHAT_COMMANDS } from '$lib/debug';
+import { DEBUG_NICKLIST, DEBUG_WEECHAT_COMMANDS, DEBUG_CONNECTION } from '$lib/debug';
 
 // Protocol instance for instance methods (setId, parse)
 // Static methods (formatHandshake, formatInit, etc.) are called on the constructor directly
@@ -117,7 +117,7 @@ export async function connect(host: string, port: number, path: string, password
         }
     }
     if (connecting) {
-        console.log('[connect] already connecting, skipping duplicate');
+        if (DEBUG_CONNECTION) console.log('[connect] already connecting, skipping duplicate');
         return;
     }
     connecting = true;
@@ -134,7 +134,7 @@ export async function connect(host: string, port: number, path: string, password
     }
 
     const url = `${proto}://${formattedHost}:${port}/${path}`;
-    console.log('Connecting to:', `${proto}://${formattedHost}:${port}`);
+    if (DEBUG_CONNECTION) console.log('Connecting to:', `${proto}://${formattedHost}:${port}`);
 
     // Close all existing WebSocket instances before starting new connection
     for (const w of webSockets) w.close(1000, 'new connection');
@@ -302,7 +302,7 @@ export async function connect(host: string, port: number, path: string, password
                 // Mark connected after buffer info + line loading complete
                 setConnectionStatus('connected');
                 connected.set(true);
-                console.log('[connect] connected=true, resolving promise');
+                if (DEBUG_CONNECTION) console.log('[connect] connected=true, resolving promise');
                 connectionState.update(current => ({ ...current, wasEverConnected: true, userDisconnect: false }));
 
                 // Start hotlist sync interval — only if user enabled it in settings.
@@ -331,7 +331,7 @@ export async function connect(host: string, port: number, path: string, password
                 // If onclose already set passwordError, don't overwrite with generic error
                 const errors = get(connectionState).errors;
                 if (errors.passwordError) {
-                    console.log('[connect] connection closed after auth failure');
+                    if (DEBUG_CONNECTION) console.log('[connect] connection closed after auth failure');
                     return;
                 }
                 console.error('Connection error:', e);
@@ -354,7 +354,7 @@ export async function connect(host: string, port: number, path: string, password
             webSockets.delete(thisWs);
             // If connection generation has changed, connect() replaced this WS — ignore
             if (genAtConnect !== connectionGeneration) return;
-            console.log('[connect] WebSocket close code=' + evt.code + ' reason=' + evt.reason);
+            if (DEBUG_CONNECTION) console.log('[connect] WebSocket close code=' + evt.code + ' reason=' + evt.reason);
             resetConnectionState();
             const shouldReject = detectError(evt);
             handleReconnectDecision(evt);
@@ -532,7 +532,7 @@ function scheduleReconnect() {
     }
 
     const delay = reconnectDelay(attempts);
-    console.log(`[reconnect] attempt ${attempts}/${maxReconnectAttempts}, retrying in ${delay / 1000}s`);
+    if (DEBUG_CONNECTION) console.log(`[reconnect] attempt ${attempts}/${maxReconnectAttempts}, retrying in ${delay / 1000}s`);
 
     const [host, port, path, password, tls, noCompression] = connectionData;
 

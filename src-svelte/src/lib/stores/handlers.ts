@@ -28,7 +28,7 @@ import {
 } from '$lib/stores/models';
 import { shouldResume } from '$lib/stores/bufferResume';
 import { createHighlight, playNotificationSound, updateTitle, updateFavico } from '$lib/notifications';
-import { DEBUG_NICKLIST } from '$lib/debug';
+import { DEBUG_NICKLIST, DEBUG_HANDLERS, DEBUG_HOTLIST } from '$lib/debug';
 import type { ProtocolMessage, BufferMessage, BufferLineMessage, NickMessage, NickGroupMessage, HotlistEntry, BufferData, BufferType } from '$lib/types';
 
 /**
@@ -56,7 +56,7 @@ export function handleVersionInfo(message: ProtocolMessage) {
         const value = (content as { key: string; value: string }).value;
         if (typeof value === 'string' && value.length > 0) {
             const version = value.split('.').map((c: string) => parseInt(c, 10));
-            console.log('[version] WeeChat version:', value, version);
+            if (DEBUG_HANDLERS) console.log('[version] WeeChat version:', value, version);
             weechatVersion.set(version);
             return;
         }
@@ -68,7 +68,7 @@ export function handleVersionInfo(message: ProtocolMessage) {
         const value = first.value;
         if (typeof value === 'string' && value.length > 0) {
             const version = value.split('.').map((c: string) => parseInt(c, 10));
-            console.log('[version] WeeChat version:', value, version);
+            if (DEBUG_HANDLERS) console.log('[version] WeeChat version:', value, version);
             weechatVersion.set(version);
         }
     }
@@ -304,7 +304,7 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
             if (nickMatch) {
                 inferredNick = nickMatch[1]!;
             }
-            console.log('[handler] creating buffer for:', lineMsg.buffer, 'nick:', inferredNick, 'msg:', lineMsg.message?.substring(0, 50));
+            if (DEBUG_HANDLERS) console.log('[handler] creating buffer for:', lineMsg.buffer, 'nick:', inferredNick, 'msg:', lineMsg.message?.substring(0, 50));
 
             buffer = createBuffer({
                 pointers: [lineMsg.buffer],
@@ -551,7 +551,7 @@ export function setOnUpgrade(cb: (() => void) | null) {
     onUpgradeCallback = cb;
 }
 export function handleUpgrade() {
-    console.log('[handler] _upgrade: WeeChat upgrading, disconnecting');
+    if (DEBUG_HANDLERS) console.log('[handler] _upgrade: WeeChat upgrading, disconnecting');
     onUpgradeCallback?.();
 }
 
@@ -563,7 +563,7 @@ export function setOnUpgradeEnded(cb: (() => void) | null) {
 }
 let upgradeReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 export function handleUpgradeEnded() {
-    console.log('[handler] _upgrade_ended: WeeChat upgrade complete, reconnecting');
+    if (DEBUG_HANDLERS) console.log('[handler] _upgrade_ended: WeeChat upgrade complete, reconnecting');
     if (upgradeReconnectTimer) clearTimeout(upgradeReconnectTimer);
     upgradeReconnectTimer = setTimeout(() => {
         upgradeReconnectTimer = null;
@@ -650,7 +650,7 @@ export function handleBufferOpened(message: ProtocolMessage) {
     // Check if this buffer matches a pending switch request from nicklist click
     const targetNick = get(pendingBufferSwitch) as string | null;
     if (targetNick && (buffer.shortName.toLowerCase() === targetNick.toLowerCase())) {
-        console.log('[handler] auto-switching to query buffer for:', targetNick);
+        if (DEBUG_HANDLERS) console.log('[handler] auto-switching to query buffer for:', targetNick);
         setActiveBuffer(buffer.id);
         pendingBufferSwitch.set(null);
     }
@@ -809,13 +809,15 @@ export function handleHotlistInfo(message: ProtocolMessage) {
     const hotlist = message.objects[0]?.content as HotlistEntry[];
     if (!hotlist) return;
 
-    console.table(hotlist.map(entry => ({
-        buffer: entry.buffer,
-        shortName: currentBuffers[entry.buffer]?.shortName || entry.buffer,
-        unread: entry.count[1],
-        highlight: entry.count[2],
-        private: entry.count[3],
-    })));
+    if (DEBUG_HOTLIST) {
+        console.table(hotlist.map(entry => ({
+            buffer: entry.buffer,
+            shortName: currentBuffers[entry.buffer]?.shortName || entry.buffer,
+            unread: entry.count[1],
+            highlight: entry.count[2],
+            private: entry.count[3],
+        })));
+    }
 
     // Build immutable copies of affected buffers and servers to ensure
     // Svelte reactivity triggers correctly when unread counts change.
