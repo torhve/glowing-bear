@@ -7,6 +7,7 @@ import { get } from 'svelte/store';
 import type { BufferData } from './types';
 import { initFavicon, drawBadge, resetBadge } from './faviconBadge';
 import { isTauri, setBadgeCount } from './tauriWindow';
+import { DEBUG_NOTIFICATIONS } from '$lib/debug';
 
 // Calculate total unread and notification counts across all buffers.
 function getTotalUnread(): { unread: number; notifications: number } {
@@ -57,7 +58,7 @@ async function setupTauriNotificationListener(): Promise<void> {
  * Request notification permission — uses Tauri native API in Tauri, browser API otherwise
  */
 export async function requestNotificationPermission(): Promise<boolean> {
-    console.log('[notification] requestNotificationPermission called');
+    if (DEBUG_NOTIFICATIONS) console.log('[notification] requestNotificationPermission called');
     await ensureTauriNotification();
 
     if (tauriNotif) {
@@ -102,13 +103,13 @@ export function isNotificationSupported(): boolean {
  * Create a desktop notification for a highlight — uses Tauri native in Tauri, browser API otherwise
  */
 export async function createHighlight(buffer: BufferData, message: string): Promise<void> {
-    console.log('[notification] createHighlight called:', buffer.shortName || buffer.fullName, message.substring(0, 50));
+    if (DEBUG_NOTIFICATIONS) console.log('[notification] createHighlight called:', buffer.shortName || buffer.fullName, message.substring(0, 50));
     await ensureTauriNotification();
 
     if (tauriNotif) {
         const bufferName = buffer.shortName || buffer.fullName;
         try {
-            console.log('[notification] sending Tauri notification:', `[${bufferName}]`, message.substring(0, 50));
+            if (DEBUG_NOTIFICATIONS) console.log('[notification] sending Tauri notification:', `[${bufferName}]`, message.substring(0, 50));
             tauriNotif.sendNotification({
                 title: `[${bufferName}]`,
                 body: message.substring(0, 200),
@@ -134,7 +135,7 @@ export async function createHighlight(buffer: BufferData, message: string): Prom
     };
 
     try {
-        console.log('[notification] creating browser notification:', title);
+        if (DEBUG_NOTIFICATIONS) console.log('[notification] creating browser notification:', title);
         const notification = new Notification(title, options);
         const tag = buffer.id;
 
@@ -143,7 +144,7 @@ export async function createHighlight(buffer: BufferData, message: string): Prom
 
         // Click handler - switch to the buffer
         notification.onclick = () => {
-            console.log('[notification] clicked, buffer.id:', buffer.id);
+            if (DEBUG_NOTIFICATIONS) console.log('[notification] clicked, buffer.id:', buffer.id);
             const result = setActiveBuffer(buffer.id);
             if (!result) {
                 console.warn('[notification] setActiveBuffer failed for buffer.id:', buffer.id, '— storing in localStorage as fallback');
@@ -235,11 +236,11 @@ export function updateFavico(): void {
 export function playNotificationSound(): void {
     const s = get(settings);
     if (!s.soundnotification) {
-        console.log('[notification] playNotificationSound skipped: soundnotification disabled');
+        if (DEBUG_NOTIFICATIONS) console.log('[notification] playNotificationSound skipped: soundnotification disabled');
         return;
     }
 
-    console.log('[notification] playing notification sound');
+    if (DEBUG_NOTIFICATIONS) console.log('[notification] playing notification sound');
     try {
         const audio = new Audio('/assets/audio/sonar.mp3');
         audio.volume = 0.5;
@@ -255,7 +256,7 @@ export function playNotificationSound(): void {
  * Initialize the notification system — async to ensure Tauri module loads before registering listeners
  */
 export async function initNotifications(): Promise<void> {
-    console.log('[notification] initNotifications called');
+    if (DEBUG_NOTIFICATIONS) console.log('[notification] initNotifications called');
     // Load persisted permission state from settings
     const s = get(settings);
     if (s.notificationPermission && s.notificationPermission !== 'default') {

@@ -11,8 +11,7 @@
   import { detectPrefixIcon, type PrefixIconType } from '$lib/utils/prefixIcons';
   import { imageExts, videoExts, audioExts, normalizeImageUrl } from '$lib/utils/mediaExtensions';
   import { detectEmbedUrl } from '$lib/utils/urlEmbeds';
-  import { get } from 'svelte/store';
-  import { settings } from '$lib/stores/settings';
+  import { DEBUG_METADATA } from '$lib/debug';
 
   let {
     message,
@@ -129,7 +128,7 @@
       }
 
       if (name) {
-        if (get(settings).debugBuildMetadata) {
+        if (DEBUG_METADATA) {
           console.log(`[buildMetadata] url="${url}" name="${name}" content="${content}" nsfw=${/nsfw/i.test(message.text)}`);
         }
         result.push({

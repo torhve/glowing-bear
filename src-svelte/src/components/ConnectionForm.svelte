@@ -24,6 +24,7 @@ import Key from '@lucide/svelte/icons/key';
   import Loader2 from '@lucide/svelte/icons/loader-2';
   import FormInput from './FormInput.svelte';
   import TauriTitlebar from './TauriTitlebar.svelte';
+  import { DEBUG_FORM } from '$lib/debug';
 
   let hostField = $state('');
   let port = $state('443');
@@ -112,14 +113,14 @@ import Key from '@lucide/svelte/icons/key';
   }
 
   async function handleConnect() {
-    console.log('handleConnect called, hostField:', hostField, 'hostInvalid:', hostInvalid);
+    if (DEBUG_FORM) console.log('handleConnect called, hostField:', hostField, 'hostInvalid:', hostInvalid);
     if (!hostField || hostField.trim() === '') {
       hostInvalid = true;
-      console.log('validateHost failed, hostInvalid:', hostInvalid);
+      if (DEBUG_FORM) console.log('validateHost failed, hostInvalid:', hostInvalid);
       return;
     }
     if (!validateHost()) {
-      console.log('validateHost failed, hostInvalid:', hostInvalid);
+      if (DEBUG_FORM) console.log('validateHost failed, hostInvalid:', hostInvalid);
       return;
     }
     clearErrors();

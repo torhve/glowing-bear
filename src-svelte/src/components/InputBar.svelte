@@ -10,6 +10,7 @@
   import Megaphone from '@lucide/svelte/icons/megaphone';
   import { get } from 'svelte/store';
   import ImageUploadPreview from './ImageUploadPreview.svelte';
+  import { DEBUG_INPUT } from '$lib/debug';
 
   interface PreviewItem {
     id: number;
@@ -28,10 +29,8 @@
     onInsertUrls?: (urls: string[]) => void;
   } = $props();
 
-  // Debug flag — open console and set `window.__debugPaste = true` before pasting
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let debugPaste = $derived(typeof window !== 'undefined' && (window as any).__debugPaste === true);
-  function log(...args: unknown[]) { if (debugPaste) console.log('[paste]', ...args); }
+  // Paste debugging — controlled by DEBUG_INPUT flag in $lib/debug
+  function log(...args: unknown[]) { if (DEBUG_INPUT) console.log('[paste]', ...args); }
 
   let inputRef = $state<HTMLTextAreaElement>();
   let fileInputRef = $state<HTMLInputElement>();

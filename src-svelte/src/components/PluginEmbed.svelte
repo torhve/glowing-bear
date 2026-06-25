@@ -4,6 +4,7 @@
   import { imageExts, videoExts, audioExts } from '$lib/utils/mediaExtensions';
   import Play from '@lucide/svelte/icons/play';
   import X from '@lucide/svelte/icons/x';
+  import { DEBUG_PLUGIN } from '$lib/debug';
 
   let { plugin }: { plugin: PluginMetadata } = $props();
 
@@ -33,13 +34,13 @@
       console.warn('[PluginEmbed] injectImage: embedRef is null, URL:', url);
       return;
     }
-    console.log('[PluginEmbed] injectImage: injecting image, url:', url);
+    if (DEBUG_PLUGIN) console.log('[PluginEmbed] injectImage: injecting image, url:', url);
     const img = document.createElement('img');
     img.className = 'embed';
     img.src = url;
     img.alt = 'Image preview';
     img.onload = () => {
-      console.log('[PluginEmbed] injectImage: image loaded successfully, url:', url);
+      if (DEBUG_PLUGIN) console.log('[PluginEmbed] injectImage: image loaded successfully, url:', url);
       img.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     };
     img.onerror = () => {
@@ -112,7 +113,7 @@
       console.warn('[PluginEmbed] processUrlContent: url or embedRef missing', { url, embedRef: !!embedRef });
       return;
     }
-    console.log('[PluginEmbed] processUrlContent: processing URL:', url);
+    if (DEBUG_PLUGIN) console.log('[PluginEmbed] processUrlContent: processing URL:', url);
 
     if (imageExts.test(url)) {
       injectImage(url);
@@ -253,11 +254,11 @@
       injectIframe(`https://www.allocine.fr/_iframe/videokast/?video=${allocineMatch[1]}&result=media`, '100%', '100%');
       return;
     }
-    console.log('[PluginEmbed] processUrlContent: no handler matched for URL:', url);
+    if (DEBUG_PLUGIN) console.log('[PluginEmbed] processUrlContent: no handler matched for URL:', url);
   }
 
   function showContent() {
-    console.log('[PluginEmbed] showContent called', { isString, isFunction, content, contentInjected });
+    if (DEBUG_PLUGIN) console.log('[PluginEmbed] showContent called', { isString, isFunction, content, contentInjected });
     visible = true;
     if (!contentInjected) {
       contentInjected = true;
@@ -269,7 +270,7 @@
         console.warn('[PluginEmbed] showContent: no valid content to process', { isString, isFunction, content });
       }
     } else {
-      console.log('[PluginEmbed] showContent: content already injected, skipping');
+      if (DEBUG_PLUGIN) console.log('[PluginEmbed] showContent: content already injected, skipping');
     }
   }
 
