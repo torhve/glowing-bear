@@ -488,7 +488,7 @@
             {/each}
             <!-- Readmarker row between read and unread -->
             <tr class="readmarker" data-testid="readmarker">
-              <td colspan="3">
+              <td colspan="3" class="py-2">
                 <div class="readmarker-container">
                   <div class="readmarker-line"></div>
                   <span class="readmarker-badge">{unreadCount} new</span>
@@ -561,11 +561,11 @@
   }
 
   .readmarker td {
-    padding: 8px 0 !important;
+    padding: 8px 0;
   }
 
   .readmarker {
-    height: auto !important;
+    height: auto;
   }
 
   .readmarker-container {

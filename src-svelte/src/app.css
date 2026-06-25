@@ -612,9 +612,7 @@
 
 
 /* Theme color palettes — loaded via [data-theme] selector */
-/* All --gb-* CSS variables used by Tailwind @theme and component styles */
 
-/* Theme color palettes — loaded via [data-theme] selector */
 /* All --gb-* CSS variables used by Tailwind @theme and component styles */
 
 [data-theme="dark"] {

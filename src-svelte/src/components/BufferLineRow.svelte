@@ -183,29 +183,29 @@
   <!-- Bubble mode layout for private/query buffers -->
   {#if isDateChange}
     <!-- Date separator -->
-    <div class="bubble-date-separator" data-testid="bufferline-row">
-      <span class="bubble-date-text">
+    <div class="bubble-date-separator flex items-center justify-center py-3.5 gap-3.5" data-testid="bufferline-row">
+      <span class="bubble-date-text text-[0.7em] whitespace-nowrap uppercase tracking-widest">
         <TokenGroupRenderer groups={tokenGroups} />
       </span>
     </div>
   {:else if isMiddle}
     <!-- Server/status message centered (not from either participant) -->
-    <div class="bubble-middle-row" data-testid="bufferline-row">
-      <div class={['bubble', { 'bubble-highlight': isHighlight }, 'bubble-middle-bg']}>
+    <div class="bubble-middle-row flex justify-center p-[4px_0]" data-testid="bufferline-row">
+      <div class={['bubble max-w-[70%] p-[6px_14px] rounded-[18px] leading-[1.45] text-[0.85em] relative break-words', { 'bubble-highlight': isHighlight }, 'bubble-middle-bg']}>
         <TokenGroupRenderer groups={tokenGroups} />
       </div>
     </div>
   {:else if isSelfMessage}
     <!-- Outgoing (self) — right-aligned -->
-    <div class="bubble-row bubble-self" data-testid="bufferline-row">
+    <div class="bubble-row flex flex-col p-[2px_0] bubble-self items-end" data-testid="bufferline-row">
       {#if isGroupStart}
-        <div class="bubble-meta bubble-meta-self">
-          <span class="bubble-nick">{message.prefixtext}</span>
-          <span class="bubble-time">{message.shortTime}</span>
+        <div class="bubble-meta flex gap-1.5 items-baseline mb-0.75 pr-1.5 justify-end">
+          <span class="bubble-nick font-semibold">{message.prefixtext}</span>
+          <span class="bubble-time opacity-80">{message.shortTime}</span>
         </div>
       {/if}
 
-      <div class={['bubble', { 'bubble-tail': isGroupStart }, { 'bubble-highlight': isHighlight }, 'bubble-self-bg']}>
+      <div class={['bubble max-w-[85%] p-[8px_14px] rounded-[20px] leading-[1.45] text-[0.95em] relative break-words', { 'bubble-tail': isGroupStart }, { 'bubble-highlight': isHighlight }, 'bubble-self-bg']}>
         {#if metadata.length > 0}
           {#each metadata as meta, i (i)}
             <PluginEmbed plugin={meta} />
@@ -219,15 +219,15 @@
     </div>
   {:else}
     <!-- Incoming (other user) — left-aligned -->
-    <div class="bubble-row bubble-other" data-testid="bufferline-row">
+    <div class="bubble-row flex flex-col p-[2px_0] bubble-other items-start" data-testid="bufferline-row">
       {#if isGroupStart}
-        <div class="bubble-meta bubble-meta-other">
-          <span class="bubble-nick">{message.prefixtext}</span>
-          <span class="bubble-time">{message.shortTime}</span>
+        <div class="bubble-meta flex gap-1.5 items-baseline mb-0.75 pl-1.5">
+          <span class="bubble-nick font-semibold">{message.prefixtext}</span>
+          <span class="bubble-time opacity-80">{message.shortTime}</span>
         </div>
       {/if}
 
-      <div class={['bubble', { 'bubble-tail': isGroupStart }, { 'bubble-highlight': isHighlight }, 'bubble-other-bg']}>
+      <div class={['bubble max-w-[85%] p-[8px_14px] rounded-[20px] leading-[1.45] text-[0.95em] relative break-words', { 'bubble-tail': isGroupStart }, { 'bubble-highlight': isHighlight }, 'bubble-other-bg']}>
         {#if metadata.length > 0}
           {#each metadata as meta, i (i)}
             <PluginEmbed plugin={meta} />
@@ -250,18 +250,18 @@
     </tr>
   {:else}
     <tr class={['bufferline', { highlight: isHighlight }]} data-testid="bufferline-row">
-      <td class="time">
-        <span class="date compact-time" class:repeated-time={isRepeatedTime}>
+      <td class="time text-right py-0 px-1.5 align-top font-mono">
+        <span class="date inline-flex items-center compact-time" class:repeated-time={isRepeatedTime}>
           {#if message.shortTime.includes(':')}
             {@const parts = message.shortTime.split(':')}
-            {parts[0]}<span class="time-delimiter">:</span>{parts.slice(1).join(':')}
+            {parts[0]}<span class="time-delimiter text-amber-400">:</span>{parts.slice(1).join(':')}
           {:else}
             {message.shortTime}
           {/if}
         </span>
       </td>
-      <td class="prefix">
-        <span class="compact-prefix" class:repeated-prefix={isRepeatedPrefix}>
+      <td class="prefix max-w-[120px] px-1 py-0 align-top whitespace-nowrap text-right border-r overflow-hidden truncate font-mono">
+        <span class="compact-prefix flex justify-end items-center" class:repeated-prefix={isRepeatedPrefix}>
           <span onclick={handleMention} role="button" tabindex="0" class="mention-link" onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleMention(); } }}>
             {#if message.showHiddenBrackets}<span class="hidden-bracket">&lt;</span>{/if}
             {#each message.prefix as part, pi (pi)}
@@ -286,7 +286,7 @@
           </span>
         </span>
       </td>
-      <td class="message" data-message={message.text}>
+      <td class="message py-px px-1 align-middle whitespace-pre-wrap break-words font-mono" data-message={message.text}>
         <!-- Plugin embeds -->
         {#if metadata.length > 0}
           {#each metadata as meta, i (i)}
@@ -304,27 +304,18 @@
 {/if}
 
 <style>
-  /* ===== Traditional table layout styles ===== */
+  /* ===== Dynamic sizing — cannot be expressed as Tailwind utilities ===== */
   .bufferline {
     line-height: var(--gb-line-height, 1.2);
-    padding: 2px 0 1px 0;
   }
 
-
-
-  .time {
-    text-align: right;
-    padding: 0 2px 0 6px;
-    vertical-align: top;
+  .time,
+  .prefix,
+  .message {
     font-size: var(--font-size, 14px);
-    font-family: var(--font-mono, monospace);
   }
 
-  .time .compact-time {
-    display: inline-flex;
-    align-items: center;
-  }
-
+  /* ===== Mobile responsive overrides ===== */
   @media (max-width: 640px) {
     .bufferline {
       display: flex;
@@ -339,8 +330,6 @@
       padding: 0;
       vertical-align: top;
       border: none;
-      font-size: var(--font-size, 14px);
-      font-family: var(--font-mono, monospace);
     }
 
     .time {
@@ -354,7 +343,6 @@
       text-align: left;
       overflow: visible;
       text-overflow: clip;
-      padding: 0 3px 0 1px;
     }
 
     .prefix .compact-prefix {
@@ -366,17 +354,13 @@
       flex: 1;
       min-width: 0;
       flex-wrap: wrap;
-      padding-left: 3px;
     }
   }
 
+  /* ===== Theme-aware colors — fallbacks are dark-theme values ===== */
   .time .compact-time.repeated-time {
-    color: var(--gb-repeated-time, #444);
+    color: var(--gb-repeated-time);
     visibility: visible;
-  }
-
-  .date .time-delimiter {
-    color: #cc843b;
   }
 
   .compact-time.repeated-time .time-delimiter {
@@ -384,46 +368,37 @@
   }
 
   .prefix {
-    max-width: 120px;
-    padding: 0 4px 0 2px;
-    vertical-align: top;
-    white-space: nowrap;
-    text-align: right;
-    border-right: 1px solid var(--gb-border, var(--color-border));
-    overflow: hidden;
-    text-overflow: ellipsis;
-    box-sizing: border-box;
-    font-family: var(--font-mono, monospace);
-    font-size: var(--font-size, 14px);
-  }
-
-  .prefix .compact-prefix {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
+    border-right: 1px solid var(--gb-border);
   }
 
   .prefix .compact-prefix.repeated-prefix {
     visibility: visible;
   }
 
-  .message {
-    padding: 1px 2px 1px 4px;
-    vertical-align: middle;
-    white-space: preserve-breaks;
-    word-break: break-word;
-    font-size: var(--font-size, 14px);
-    font-family: var(--font-mono, monospace);
+  /* Nick/time meta row colors */
+  .bubble-nick {
+    color: var(--gb-bubble-meta-color, var(--gb-text-muted));
   }
 
-  /* Global to reach into TokenGroupRenderer */
+  .bubble-date-separator::before,
+  .bubble-date-separator::after {
+    content: '';
+    height: 1px;
+    background: var(--gb-border);
+  }
+
+  .bubble-date-text {
+    color: var(--gb-text-muted);
+  }
+
+  /* ===== WeeChat protocol class overrides (must reach into TokenGroupRenderer) ===== */
   :global(.irc-link) {
-    color: oklch(62.3% 0.06 255);
+    color: var(--gb-link);
     text-decoration: none;
   }
 
   :global(.irc-link:hover) {
-    color: oklch(65% 0.12 255);
+    color: var(--gb-link-hover);
     text-decoration: underline;
   }
 
@@ -434,132 +409,15 @@
     border-radius: 2px;
   }
 
-  /* ===== Bubble mode styles ===== */
-  .bubble-row {
-    display: flex;
-    flex-direction: column;
-    padding: 2px 0;
-  }
-
-  /* Meta row (nick + time) above bubble */
-  .bubble-meta {
-    display: flex;
-    gap: 6px;
-    align-items: baseline;
-    font-size: 0.7em;
-    line-height: 1.2;
-    margin-bottom: 3px;
-  }
-
-  .bubble-meta-other {
-    padding-left: 6px;
-  }
-
-  .bubble-meta-self {
-    padding-right: 6px;
-    justify-content: flex-end;
-  }
-
-  .bubble-nick {
-    font-weight: 600;
-    color: var(--gb-bubble-meta-color, var(--gb-text-muted));
-  }
-
-  .bubble-time {
-    color: var(--gb-bubble-meta-color, var(--gb-text-muted));
-    opacity: 0.8;
-  }
-
-  /* Bubble container alignment */
-  .bubble-self {
-    align-items: flex-end;
-  }
-
-  .bubble-other {
-    align-items: flex-start;
-  }
-
-  /* Middle-aligned system messages (join/quit/away notices) */
-  .bubble-middle-row {
-    display: flex;
-    justify-content: center;
-    padding: 4px 0;
-  }
-
-  /* Bubble itself — Signal-style rounded, no tails */
-  .bubble {
-    max-width: 85%;
-    padding: 8px 14px;
-    border-radius: 20px;
-    line-height: 1.45;
-    font-size: 0.95em;
-    position: relative;
-    word-break: break-word;
-  }
-
-  /* Self-sent bubble: solid accent background, light text */
-  .bubble-self-bg {
-    background: var(--gb-bubble-self-bg, #4a90d9);
-    color: var(--gb-bubble-self-text, #ffffff);
-  }
-
-  /* Other's bubble: solid distinct background, bright text */
-  .bubble-other-bg {
-    background: var(--gb-bubble-other-bg, var(--gb-surface-raised));
-    color: var(--gb-bubble-other-text, var(--gb-text));
-  }
-
-  /* Middle-aligned system message bubble: solid, narrower, fully rounded */
-  .bubble-middle-bg {
-    background: var(--gb-bubble-middle-bg, var(--gb-border));
-    color: var(--gb-bubble-middle-text, var(--gb-text-secondary));
-    max-width: 70%;
-    border-radius: 18px;
-    padding: 6px 14px;
-    font-size: 0.85em;
-  }
-
-  /* Highlight indicator on bubble */
-  .bubble-highlight {
-    box-shadow: 0 0 0 2px var(--gb-bubble-highlight-border, var(--gb-accent));
-  }
-
-  /* Date separator in bubble mode */
-  .bubble-date-separator {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 14px 0;
-    gap: 14px;
-  }
-
-  .bubble-date-separator::before,
-  .bubble-date-separator::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: var(--gb-border, #333);
-  }
-
-  .bubble-date-text {
-    color: var(--gb-text-muted, #666);
-    font-size: 0.7em;
-    white-space: nowrap;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
-
-  /* Adjust links inside bubbles (global to reach into TokenGroupRenderer) */
   :global(.bubble .irc-link) {
-    color: oklch(75% 0.15 250);
+    color: var(--gb-link-bubble);
     text-decoration: underline;
   }
 
   :global(.bubble-self-bg .irc-link) {
-    color: oklch(85% 0.05 220);
+    color: var(--gb-link-bubble-self);
   }
 
-  /* Adjust inline code in bubbles (global to reach into TokenGroupRenderer) */
   :global(.bubble .irc-code) {
     background: var(--gb-bubble-code-bg, rgba(255, 255, 255, 0.2));
     padding: 1px 4px;
@@ -570,7 +428,7 @@
     background: var(--gb-bubble-code-bg-other, rgba(0, 0, 0, 0.15));
   }
 
-  /* Reset WeeChat background color classes inside chat bubbles (global to reach into TokenGroupRenderer) */
+  /* Reset WeeChat background classes inside chat bubbles */
   :global(.bubble [class*="cwb-"]),
   :global(.bubble [class*="ceb-"]),
   :global(.bubble [class*="cob-"]) {
