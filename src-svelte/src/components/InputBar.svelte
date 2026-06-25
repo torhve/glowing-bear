@@ -3,7 +3,7 @@
   import { sendMessage, sendWeeChatCommand } from '$lib/stores/connectionManager';
   import { settings } from '$lib/stores/settings';
   import { addToHistory, getHistoryUp, getHistoryDown } from '$lib/stores/inputHistory';
-  import { completeNick, isPopoverOpen, filterImageFiles, readFileAsDataUrl } from '$lib/utils';
+  import { completeNick, isPopoverOpen, filterImageFiles } from '$lib/utils';
   import Send from '@lucide/svelte/icons/send';
   import { emojifyInput } from '$lib/emojify';
   import Camera from '@lucide/svelte/icons/camera';
@@ -17,6 +17,7 @@
     name: string;
     size: number;
     dataUrl: string;
+    file?: File;
     progress: number;
     status: 'loading' | 'preview' | 'uploading' | 'success' | 'error';
     result?: { link: string; deletehash: string };
@@ -387,30 +388,30 @@
   }
 
   // Convert files to preview items and open the preview modal.
-  // Collect images for preview. Pushes placeholders synchronously before any await,
-  // then reads files asynchronously and updates placeholders in-place.
+  // Uses URL.createObjectURL for instant previews (no FileReader hang on iOS).
   // base64Strings handles images from clipboard.getAsString() fallback (macOS Safari).
-  async function collectImagesForPreview(
+  function collectImagesForPreview(
     files: FileList | File[],
     base64Strings?: string[],
-  ): Promise<void> {
+  ): void {
     const imageFiles = filterImageFiles(Array.from(files));
     if (imageFiles.length === 0 && !(base64Strings?.length)) return;
 
-    // Phase 1: push placeholder items synchronously to trigger dialog open
-    const placeholders: PreviewItem[] = [];
+    // Create preview items synchronously — createObjectURL is instant, no FileReader needed
+    const fileItems: PreviewItem[] = [];
     for (const file of imageFiles) {
-      placeholders.push({
+      fileItems.push({
         id: nextImageId++,
         name: file.name,
         size: file.size,
-        dataUrl: '',
+        dataUrl: URL.createObjectURL(file),
+        file,
         progress: 0,
-        status: 'loading',
+        status: 'preview',
       });
     }
 
-    // Add base64 data URLs directly (no FileReader needed)
+    // Add base64 data URLs directly (pasted images without File objects)
     const directItems: PreviewItem[] = [];
     if (base64Strings) {
       for (const dataUrl of base64Strings) {
@@ -425,21 +426,12 @@
       }
     }
 
-    for (const item of [...placeholders, ...directItems]) {
+    for (const item of [...fileItems, ...directItems]) {
       previewImages.push(item);
     }
 
     // Show dialog programmatically — avoids {#if} reactivity issues after async boundaries
     previewDialogRef?.dialog?.showPopover();
-
-    // Phase 2: read files asynchronously and update placeholders in-place
-    for (let i = 0; i < imageFiles.length; i++) {
-      const file = imageFiles[i]!;
-      const placeholder = placeholders[i]!;
-      const dataUrl = await readFileAsDataUrl(file);
-      placeholder.dataUrl = dataUrl;
-      placeholder.status = dataUrl ? 'preview' : 'error';
-    }
 
     inputRef?.focus();
   }
@@ -453,8 +445,13 @@
     onInsertUrls(urls);
   }
 
-  // Close image preview dialog
+  // Close image preview dialog, revoking object URLs to prevent memory leaks
   function closePreview() {
+    for (const img of previewImages) {
+      if (img.file) {
+        URL.revokeObjectURL(img.dataUrl);
+      }
+    }
     previewDialogRef?.dialog?.hidePopover();
     previewImages.splice(0);
     inputRef?.focus();

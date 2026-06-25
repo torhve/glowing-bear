@@ -12,6 +12,7 @@
     name: string;
     size: number;
     dataUrl: string;
+    file?: File;
     progress: number;
     status: 'loading' | 'preview' | 'uploading' | 'success' | 'error';
     result?: { link: string; deletehash: string };
@@ -43,10 +44,13 @@ export { dialog };
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
-  // Remove a single image from the preview list
+  // Remove a single image from the preview list, revoking object URL if it came from a File
   function removeImage(id: number) {
     const idx = images.findIndex(i => i.id === id);
-    if (idx !== -1) images.splice(idx, 1);
+    if (idx === -1) return;
+    const removed = images[idx];
+    if (removed?.file) URL.revokeObjectURL(removed.dataUrl);
+    images.splice(idx, 1);
   }
 
   // Upload all queued images sequentially
@@ -66,10 +70,10 @@ export { dialog };
       img.status = 'uploading';
       img.progress = 0;
 
-      try {
-        const result = await uploadImage(img.dataUrl, (pct) => {
-          img.progress = pct;
-        });
+       try {
+         const result = await uploadImage(img.file || img.dataUrl, (pct: number) => {
+           img.progress = pct;
+         });
         img.status = 'success';
         img.result = result;
       } catch (err) {
@@ -104,7 +108,11 @@ export { dialog };
     }
   }
 
+  // Close dialog and revoke all object URLs to prevent memory leaks
   function handleClose() {
+    for (const img of images) {
+      if (img.file) URL.revokeObjectURL(img.dataUrl);
+    }
     onClose();
   }
 
