@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, clearSettings, disconnect, setSettings, waitForAppReady } from '../helpers/connection';
+import { connectToWeechat, clearSettings, disconnect, reconnect, setSettings, waitForAppReady } from '../helpers/connection';
 import { switchToBuffer, waitForBuffer } from '../helpers/buffers';
 
 // Inject touch event dispatcher into the page for reuse across swipe functions.
@@ -95,7 +95,12 @@ async function getCurrentBufferName(p: import('@playwright/test').Page): Promise
 }
 
 test('vertical swipe on chat area does not switch buffers', async () => {
+    // Fresh connection to ensure clean state
+    await clearSettings(page);
     await setSettings(page, { showNicklist: false });
+    await page.goto('http://localhost:8001/');
+    await waitForAppReady(page);
+    await injectTouchDispatcher(page);
     await page.setViewportSize({ width: 375, height: 667 });
     await connectToWeechat(page);
 
@@ -126,7 +131,11 @@ test('vertical swipe on chat area does not switch buffers', async () => {
 });
 
 test('horizontal swipe right from left edge shows buffer list on mobile', async () => {
-    await disconnect(page);
+    // Fresh connection to ensure clean state
+    await clearSettings(page);
+    await page.goto('http://localhost:8001/');
+    await waitForAppReady(page);
+    await injectTouchDispatcher(page);
     await page.setViewportSize({ width: 375, height: 667 });
     await connectToWeechat(page);
 
@@ -144,9 +153,14 @@ test('horizontal swipe right from left edge shows buffer list on mobile', async 
 });
 
 test('horizontal swipe left from right edge opens nicklist on mobile', async () => {
-    // Enable alwaysnicklist so swipe-left works regardless of current buffer's nicks
+    // Ensure we're connected with alwaysnicklist enabled
+    await clearSettings(page);
     await setSettings(page, { alwaysnicklist: true });
+    await page.goto('http://localhost:8001/');
+    await waitForAppReady(page);
+    await injectTouchDispatcher(page);
     await page.setViewportSize({ width: 375, height: 667 });
+    await connectToWeechat(page);
 
     // Ensure buffer list is shown so we start from a clean state
     await swipeOnDocument(page, 10, 334, 325, 334);
@@ -159,11 +173,46 @@ test('horizontal swipe left from right edge opens nicklist on mobile', async () 
     const overlay = page.locator('.mobile-nicklist-overlay');
     await expect(overlay).toHaveClass(/translate-x-full/);
 
-    // Swipe left from right edge (start near right edge)
-    await swipeOnDocument(page, width - 10, height / 2, 50, height / 2);
+    // Swipe left from right edge (start ~50px in, within 80px threshold)
+    await swipeOnDocument(page, width - 50, height / 2, 50, height / 2);
 
     // Nicklist overlay should now be on-screen (translate-x-0)
     await expect(overlay).toHaveClass(/translate-x-0/);
+});
+
+test('swipe right on nicklist closes it without opening buffer list', async () => {
+    // Ensure we're connected with alwaysnicklist enabled
+    await clearSettings(page);
+    await setSettings(page, { alwaysnicklist: true });
+    await page.goto('http://localhost:8001/');
+    await waitForAppReady(page);
+    await injectTouchDispatcher(page);
+    await page.setViewportSize({ width: 375, height: 667 });
+    await connectToWeechat(page);
+
+    const width = 375;
+    const height = 667;
+
+    // Open nicklist by swiping left from right edge
+    await swipeOnDocument(page, width - 50, height / 2, 50, height / 2);
+
+    // Nicklist overlay should be visible
+    const overlay = page.locator('.mobile-nicklist-overlay');
+    await expect(overlay).toHaveClass(/translate-x-0/);
+
+    // Buffer list should NOT be visible
+    await expect(page.getByTestId('buffer-list')).not.toBeVisible();
+
+    // Swipe right on the nicklist overlay itself to close it
+    // Start from left edge of overlay, swipe past right edge for >50px deltaX
+    // Overlay is ~52px wide (w-52), positioned at right edge of viewport
+    await swipeOnElement(page, '.mobile-nicklist-overlay', width - 52, height / 2, width + 10, height / 2);
+
+    // Nicklist should now be closed (translate-x-full)
+    await expect(overlay).toHaveClass(/translate-x-full/);
+
+    // Buffer list should still NOT be visible (swipe on nicklist didn't trigger buffer list)
+    await expect(page.getByTestId('buffer-list')).not.toBeVisible();
 });
 
 
