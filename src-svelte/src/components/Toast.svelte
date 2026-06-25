@@ -77,7 +77,7 @@
 
 </script>
 
-<div class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm" data-testid="toast-container">
+<div class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm" data-testid="toast-container">
     {#each _displayToasts as toast (toast.id)}
         <div
             class:toast-removing={_removing.has(toast.id)}
