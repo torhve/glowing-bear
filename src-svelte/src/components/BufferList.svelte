@@ -17,6 +17,7 @@
   import Server from '@lucide/svelte/icons/server';
   import Monitor from '@lucide/svelte/icons/monitor';
   import Square from '@lucide/svelte/icons/square';
+import Copy from '@lucide/svelte/icons/copy';
 
 let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
 
@@ -29,6 +30,12 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
       ? groupByServer(sortedBuffers)
       : { 'All': sortedBuffers }
   );
+
+  // Long-press context menu state
+  let longPressBufferId = $state<string | null>(null);
+  let longPressMenuX = $state(0);
+  let longPressMenuY = $state(0);
+  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
 
   function groupByServer(bufs: BufferData[]) {
     const groups: Record<string, BufferData[]> = {};
@@ -43,6 +50,7 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
   }
 
   function handleBufferClick(bufferId: string) {
+    clearLongPress();
     switchBuffer(bufferId);
     onBufferSelect();
   }
@@ -73,6 +81,35 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
     updateSettings({ orderbyserver: !$settings.orderbyserver });
   }
 
+  function copyBufferName(name: string) {
+    navigator.clipboard.writeText(name).catch(() => {});
+    longPressBufferId = null;
+  }
+
+  function handleLongPressStart(bufferId: string, event: TouchEvent) {
+    const touch = event.touches[0] ?? event.changedTouches?.[0];
+    if (!touch) return;
+    longPressMenuX = touch.clientX;
+    longPressMenuY = touch.clientY;
+
+    longPressTimer = setTimeout(() => {
+      longPressBufferId = bufferId;
+      longPressTimer = null;
+    }, 500);
+  }
+
+  function clearLongPress() {
+    if (longPressTimer !== null) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+    longPressBufferId = null;
+  }
+
+  function handleLongPressEnd() {
+    clearLongPress();
+  }
+
     function getNotifyClass(buffer: BufferData): string {
         if (buffer.id === $activeBufferId) return 'text-accent';
         const eff = getEffectiveUnread(buffer);
@@ -99,19 +136,19 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
     }
 </script>
 
-<div class="w-48 sm:w-32 lg:w-36 bg-surface border-r border-border flex flex-col" data-testid="buffer-list">
+<div class="w-56 sm:w-48 lg:w-52 bg-surface border-r border-border flex flex-col" data-testid="buffer-list">
   <div class="buffer-list-header h-10 bg-surface-raised border-b border-border flex items-center justify-between px-2">
     <div class="flex items-center space-x-1">
       <button
         onclick={toggleServers}
-        class="text-text-muted hover:text-text p-1 rounded transition-colors"
+        class="text-text-muted hover:text-text p-2 rounded transition-colors"
         title={$settings.orderbyserver ? 'Switch to list view' : 'Group by server'}
         data-testid="toggle-server-groups"
       >
         {#if $settings.orderbyserver}
-          <List size={14} />
+          <List size={16} />
         {:else}
-          <LayoutGrid size={14} />
+          <LayoutGrid size={16} />
         {/if}
       </button>
     </div>
@@ -125,63 +162,120 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
               <Server size={12} />{groupName}
             </div>
          {/if}
-         {#each groupBufs as buffer, i (buffer.id)}
-                <div
-                    role="button"
-                    tabindex="0"
-                    onclick={() => handleBufferClick(buffer.id)}
-                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleBufferClick(buffer.id); }}
-                    data-testid="buffer-item"
-                    {@attach tooltipAttachment(buffer)}
-                    style="--i: {i}"
-                    class="buffer-item-enter group relative flex items-center px-2 py-1 cursor-pointer hover:bg-accent/10 transition-colors duration-150 {buffer.id === $activeBufferId ? 'border-l-[3px] border-l-accent bg-accent/20' : ''}"
-                  >
+          {#each groupBufs as buffer, i (buffer.id)}
+                 <div
+                     role="button"
+                     tabindex="0"
+                     onclick={() => handleBufferClick(buffer.id)}
+                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleBufferClick(buffer.id); }}
+                     ontouchstart={(e) => handleLongPressStart(buffer.id, e)}
+                     ontouchend={handleLongPressEnd}
+                     ontouchcancel={handleLongPressEnd}
+                     data-testid="buffer-item"
+                     {@attach tooltipAttachment(buffer)}
+                     style="--i: {i}"
+                     class="buffer-item-enter group relative flex items-center px-3 py-2 sm:px-4 sm:py-2.5 md:px-5 md:py-3 cursor-pointer hover:bg-accent/10 active:bg-accent/15 transition-colors duration-150 touch-manipulation select-none {buffer.id === $activeBufferId ? 'border-l-[3px] border-l-accent bg-accent/20' : ''}"
+                   >
                   {#if getBufferIcon(buffer)}
                     {@const Icon = getBufferIcon(buffer)}
-                   <Icon size={12} class="buffer-icon text-text-muted flex-shrink-0" />
+                   <Icon size={16} class="buffer-icon text-text-muted flex-shrink-0" />
                  {/if}
-<span class="buffer-name text-xs {getNotifyClass(buffer)} min-w-0 ml-0.5 truncate">
+<span class="buffer-name text-sm sm:text-xs {getNotifyClass(buffer)} min-w-0 ml-1 truncate">
                       {getDisplayName(buffer)}
                     </span>
 {#if getEffectiveUnread(buffer) > 0}
                           <span
-                            class="buffer-notification-badge absolute right-1 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] font-semibold rounded-full shadow-sm {buffer.id === $activeBufferId ? (buffer.notification > 0 ? '!bg-danger !text-text' : '!bg-warning !text-black') : (buffer.notification > 0 ? 'bg-red-600/15 text-red-600' : 'bg-accent/15 text-accent')}"
+                            class="buffer-notification-badge absolute right-2 top-1/2 -translate-y-1/2 px-2 py-0.5 text-[11px] font-semibold rounded-full shadow-sm {buffer.id === $activeBufferId ? (buffer.notification > 0 ? '!bg-danger !text-text' : '!bg-warning !text-black') : (buffer.notification > 0 ? 'bg-red-600/15 text-red-600' : 'bg-accent/15 text-accent')}"
                             data-testid="unread-badge"
                           >
                              {getEffectiveUnread(buffer)}
                            </span>
                         {/if}
-                   <span class="ml-auto flex items-center gap-1 flex-shrink-0 z-10">
+                   <span class="ml-auto flex items-center gap-1.5 flex-shrink-0 z-10">
                         {#if getQuickKeyIndex(buffer) !== null}
                              <span class="buffer-quickkey inline-flex items-center justify-center px-1 h-4 text-[10px] font-bold rounded-full bg-accent/90 text-white shadow-sm">
                                {getQuickKeyIndex(buffer)}
                              </span>
                            {/if}
-                 <button
-                      onclick={(e) => { e.stopPropagation(); handleTogglePin(buffer.id); }}
-                        class="text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100 focus:opacity-100 transition-colors"
-                      data-testid="pin-buffer"
-                     title="{buffer.pinned ? 'Unpin buffer' : 'Pin buffer'}"
-                   >
-                    {#if buffer.pinned}
-                      <PinOff size={14} />
-                    {:else}
-                      <Pin size={14} />
-                    {/if}
-                  </button>
                   <button
-                      onclick={(e) => { e.stopPropagation(); handleCloseBuffer(buffer.id); }}
-                        class="text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100 focus:opacity-100 transition-colors invisible"
-                        class:visible={buffer.notification === 0 && buffer.unread === 0 && buffer.id !== $activeBufferId}
-                        class:opacity-100={buffer.id === $activeBufferId}
-                       data-testid="close-buffer"
-                     >
-                      <X size={14} />
-                    </button>
-                  </span>
-            </div>
-        {/each}
+                       onclick={(e) => { e.stopPropagation(); handleTogglePin(buffer.id); }}
+                         class="text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100 focus:opacity-100 transition-colors"
+                       data-testid="pin-buffer"
+                      title="{buffer.pinned ? 'Unpin buffer' : 'Pin buffer'}"
+                    >
+                     {#if buffer.pinned}
+                       <PinOff size={16} />
+                     {:else}
+                       <Pin size={16} />
+                     {/if}
+                   </button>
+                  <button
+                       onclick={(e) => { e.stopPropagation(); handleCloseBuffer(buffer.id); }}
+                         class="text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100 focus:opacity-100 transition-colors invisible"
+                         class:visible={buffer.notification === 0 && buffer.unread === 0 && buffer.id !== $activeBufferId}
+                         class:opacity-100={buffer.id === $activeBufferId}
+                        data-testid="close-buffer"
+                      >
+                       <X size={16} />
+                     </button>
+                   </span>
+             </div>
+         {/each}
       </div>
     {/each}
   </div>
+
+  {#if longPressBufferId}
+    {@const targetBuffer = $buffers[longPressBufferId]}
+    <div
+      onclick={(e) => { e.stopPropagation(); clearLongPress(); }}
+      onkeydown={(e) => { if (e.key === 'Escape' || e.key === 'Enter') clearLongPress(); }}
+      role="button"
+      tabindex="0"
+      aria-label="Dismiss menu"
+      class="absolute inset-0 z-50 outline-none focus:bg-black/20"
+    >
+      <div
+        class="absolute bg-surface-raised border border-border rounded-lg shadow-xl py-1 min-w-[140px] z-50"
+        style="left: {longPressMenuX}px; top: {longPressMenuY}px;"
+      >
+        {#if targetBuffer && !targetBuffer.pinned}
+          <button
+            onclick={(e) => { e.stopPropagation(); handleTogglePin(longPressBufferId!); clearLongPress(); }}
+            data-testid="context-pin-buffer"
+            class="w-full flex items-center gap-2 px-3 py-2 text-sm text-text hover:bg-accent/10 transition-colors"
+          >
+            <Pin size={14} /> Pin buffer
+          </button>
+        {:else if targetBuffer && targetBuffer.pinned}
+          <button
+            onclick={(e) => { e.stopPropagation(); handleTogglePin(longPressBufferId!); clearLongPress(); }}
+            data-testid="context-unpin-buffer"
+            class="w-full flex items-center gap-2 px-3 py-2 text-sm text-text hover:bg-accent/10 transition-colors"
+          >
+            <PinOff size={14} /> Unpin buffer
+          </button>
+        {/if}
+        {#if targetBuffer && targetBuffer.notification === 0 && targetBuffer.unread === 0 && targetBuffer.id !== $activeBufferId}
+          <button
+            onclick={(e) => { e.stopPropagation(); handleCloseBuffer(longPressBufferId!); clearLongPress(); }}
+            data-testid="context-close-buffer"
+            class="w-full flex items-center gap-2 px-3 py-2 text-sm text-danger hover:bg-accent/10 transition-colors"
+          >
+            <X size={14} /> Close buffer
+          </button>
+        {/if}
+        {#if targetBuffer}
+          <div class="border-t border-border my-0.5"></div>
+          <button
+            onclick={(e) => { e.stopPropagation(); copyBufferName(getDisplayName(targetBuffer)); clearLongPress(); }}
+            data-testid="context-copy-name"
+            class="w-full flex items-center gap-2 px-3 py-2 text-sm text-text hover:bg-accent/10 transition-colors"
+          >
+            <Copy size={14} /> Copy name
+          </button>
+        {/if}
+      </div>
+    </div>
+  {/if}
 </div>
