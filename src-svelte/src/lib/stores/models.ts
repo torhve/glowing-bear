@@ -90,20 +90,14 @@ export function getEffectiveUnread(buffer: BufferData): number {
     return Math.max(weechatUnread + Math.max(0, localUnread - weechatUnread), localUnread);
 }
 
-// Sort buffers: pinned first, then highlights, then unreads, then by number.
-// Optionally groups by server when orderByServer is true.
+// Sort buffers: pinned first, then by number. Optionally groups by server when orderByServer is true.
 export function sortBuffers(buffersList: BufferData[], orderByServer: boolean): BufferData[] {
     const sorted = [...buffersList];
     sorted.sort((a, b) => {
         if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-        const aHighlight = a.notification > 0 ? 2 : 0;
-        const bHighlight = b.notification > 0 ? 2 : 0;
-        if (aHighlight !== bHighlight) return bHighlight - aHighlight;
-        const aUnread = a.unread > 0 ? 1 : 0;
-        const bUnread = b.unread > 0 ? 1 : 0;
-        if (aUnread !== bUnread) return bUnread - aUnread;
         if (orderByServer) {
-            return a.serverSortKey.localeCompare(b.serverSortKey) || a.number - b.number;
+            const serverCmp = a.plugin.localeCompare(b.plugin) || a.server.localeCompare(b.server);
+            if (serverCmp !== 0) return serverCmp;
         }
         return a.number - b.number;
     });
