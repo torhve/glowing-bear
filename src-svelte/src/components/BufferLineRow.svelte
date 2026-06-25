@@ -191,7 +191,7 @@
   {:else if isMiddle}
     <!-- Server/status message centered (not from either participant) -->
     <div class="bubble-middle-row flex justify-center p-[4px_0]" data-testid="bufferline-row">
-      <div class={['bubble max-w-[70%] p-[6px_14px] rounded-[18px] leading-[1.45] text-[0.85em] relative break-words', { 'bubble-highlight': isHighlight }, 'bubble-middle-bg']}>
+      <div class={['bubble max-w-[70%] p-[6px_14px] rounded-[18px] leading-[1.45] text-[0.85em] relative break-all', { 'bubble-highlight': isHighlight }, 'bubble-middle-bg']}>
         <TokenGroupRenderer groups={tokenGroups} />
       </div>
     </div>
@@ -205,14 +205,14 @@
         </div>
       {/if}
 
-      <div class={['bubble max-w-[85%] p-[8px_14px] rounded-[20px] leading-[1.45] text-[0.95em] relative break-words', { 'bubble-tail': isGroupStart }, { 'bubble-highlight': isHighlight }, 'bubble-self-bg']}>
+      <div class={['bubble max-w-[85%] p-[8px_14px] rounded-[20px] leading-[1.45] text-[0.95em] relative break-all', { 'bubble-tail': isGroupStart }, { 'bubble-highlight': isHighlight }, 'bubble-self-bg']}>
         {#if metadata.length > 0}
           {#each metadata as meta, i (i)}
             <PluginEmbed plugin={meta} />
           {/each}
         {/if}
 
-        <span dir="auto" class="message-content whitespace-pre-wrap break-words">
+        <span dir="auto" class="message-content whitespace-pre-wrap break-all">
           <TokenGroupRenderer groups={tokenGroups} />
         </span>
       </div>
@@ -227,14 +227,14 @@
         </div>
       {/if}
 
-      <div class={['bubble max-w-[85%] p-[8px_14px] rounded-[20px] leading-[1.45] text-[0.95em] relative break-words', { 'bubble-tail': isGroupStart }, { 'bubble-highlight': isHighlight }, 'bubble-other-bg']}>
+      <div class={['bubble max-w-[85%] p-[8px_14px] rounded-[20px] leading-[1.45] text-[0.95em] relative break-all', { 'bubble-tail': isGroupStart }, { 'bubble-highlight': isHighlight }, 'bubble-other-bg']}>
         {#if metadata.length > 0}
           {#each metadata as meta, i (i)}
             <PluginEmbed plugin={meta} />
           {/each}
         {/if}
 
-        <span dir="auto" class="message-content whitespace-pre-wrap break-words">
+        <span dir="auto" class="message-content whitespace-pre-wrap break-all">
           <TokenGroupRenderer groups={tokenGroups} />
         </span>
       </div>
@@ -286,7 +286,7 @@
           </span>
         </span>
       </td>
-      <td class="message py-px px-1 align-middle whitespace-pre-wrap break-words font-mono" data-message={message.text}>
+      <td class="message py-px px-1 align-middle whitespace-pre-wrap break-all font-mono" data-message={message.text}>
         <!-- Plugin embeds -->
         {#if metadata.length > 0}
           {#each metadata as meta, i (i)}
@@ -295,7 +295,7 @@
         {/if}
 
         <!-- Message content -->
-        <span dir="auto" class="message-content whitespace-pre-wrap break-words">
+        <span dir="auto" class="message-content whitespace-pre-wrap break-all">
           <TokenGroupRenderer groups={tokenGroups} />
         </span>
       </td>
