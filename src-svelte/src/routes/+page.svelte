@@ -454,7 +454,7 @@
     };
   });
 
-  let showBufferList = $state(true);
+  let showBufferList = $state(false);
   let nicklistOpenOnMobile = $state(false);
   // Whether current buffer has nick data to display (used for auto-hiding nicklist)
   let hasCurrentBufferNicklist = $derived(bufferHasNicklist($currentBuffer));
@@ -462,6 +462,8 @@
   let touchStartY = 0;
   let touchStartTime = 0;
   let touchStartTarget: HTMLElement | null = null;
+  // Whether touch gesture originated inside the mobile nicklist overlay
+  let touchStartedInNicklist = $state(false);
 
   function hideBufferListOnMobile() {
     if (isMobile()) showBufferList = false;
@@ -496,6 +498,8 @@
     touchStartY = firstTouch.clientY;
     touchStartTime = Date.now();
     touchStartTarget = e.target as HTMLElement | null;
+    // Track if touch originated inside the mobile nicklist overlay
+    touchStartedInNicklist = !!touchStartTarget?.closest('.mobile-nicklist-overlay');
   }
 
   function handleTouchMove(e: TouchEvent) {
@@ -520,17 +524,27 @@
     const deltaTime = Date.now() - touchStartTime;
 
     if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50 && deltaTime < 500) {
-      // Swipe right -> show buffer list
+      // Swipe right -> show buffer list (skip if touch started on nicklist overlay)
       if (deltaX > 0) {
-        showBufferList = true;
-        nicklistOpenOnMobile = false;
+        if (touchStartedInNicklist && nicklistOpenOnMobile) {
+          // Swipe right on nicklist -> close it, do NOT trigger buffer list
+          nicklistOpenOnMobile = false;
+        } else {
+          showBufferList = true;
+          nicklistOpenOnMobile = false;
+        }
       }
       // Swipe left -> check if from right edge (nicklist) or general (buffer list)
       else {
-        const rightEdgeThreshold = 40;
+        const rightEdgeThreshold = 80;
+        // If touching the nicklist panel while open -> close it directly
+        if (nicklistOpenOnMobile && touchStartedInNicklist) {
+          nicklistOpenOnMobile = false;
+        }
         // Only open nicklist on swipe if buffer has nicks or alwaysnicklist is set
-        if (touchStartX > window.innerWidth - rightEdgeThreshold && !nicklistOpenOnMobile && (hasCurrentBufferNicklist || $settings.alwaysnicklist)) {
+        else if (touchStartX > window.innerWidth - rightEdgeThreshold && !nicklistOpenOnMobile && (hasCurrentBufferNicklist || $settings.alwaysnicklist)) {
           nicklistOpenOnMobile = true;
+          showBufferList = false;
         } else if (nicklistOpenOnMobile) {
           nicklistOpenOnMobile = false;
         } else {
@@ -560,7 +574,11 @@
         }
       }
     }
+
+    // Reset nicklist touch tracking for next gesture
+    touchStartedInNicklist = false;
   }
+
 </script>
 
 {#if !$connected}
