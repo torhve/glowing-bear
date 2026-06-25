@@ -293,3 +293,86 @@ test('should scroll down when user types and sends a message while at bottom', a
     // Message should be in lower 50% of viewport (near bottom)
     expect(msgInViewport!.relativeY).toBeGreaterThan(0.4);
 });
+
+test('should NOT auto-scroll when user scrolled up in active buffer and messages arrive', async () => {
+    // Regression test: incoming messages should not scroll the view to bottom
+    // when the user has intentionally scrolled up to read older messages.
+    await waitForBuffer(page, 'gbtest', 15000);
+    await switchToBuffer(page, 'gbtest');
+    await waitForScrollSettled();
+
+    // First send enough messages to ensure scrollable content
+    for (let i = 0; i < 15; i++) {
+        await irc.sendMessage('#gbtest', `scroll-pad-${Date.now()}-${i}`);
+    }
+    await page.waitForTimeout(1000);
+    await waitForScrollSettled(8000);
+
+    // Scroll up to ~60% from top (intentionally away from bottom)
+    const scrollBefore = await page.evaluate(() => {
+        const container = document.querySelector('[data-testid="chat-messages"]') as HTMLElement;
+        if (!container) return null;
+        // Position at 60% of scroll range (clearly not at bottom)
+        const targetScrollTop = container.scrollHeight * 0.4;
+        container.scrollTop = targetScrollTop;
+        container.dispatchEvent(new Event('scroll', { bubbles: true }));
+        return {
+            scrollTop: container.scrollTop,
+            scrollHeight: container.scrollHeight,
+            clientHeight: container.clientHeight,
+        };
+    });
+    expect(scrollBefore).not.toBeNull();
+    // Verify we're actually scrolled up (not at bottom)
+    const diffFromBottom = scrollBefore!.scrollHeight - scrollBefore!.clientHeight - scrollBefore!.scrollTop;
+    expect(diffFromBottom).toBeGreaterThan(100);
+
+    // Send new messages while user is scrolled up
+    const msg1 = 'scrolled-up-test-1-' + Date.now();
+    const msg2 = 'scrolled-up-test-2-' + Date.now();
+    await irc.sendMessage('#gbtest', msg1);
+    await irc.sendMessage('#gbtest', msg2);
+
+    // Wait for messages to render
+    await page.waitForTimeout(2000);
+
+    // Allow time for any scroll effects to settle
+    await waitForScrollStable();
+
+    // Verify scroll position stayed roughly the same (within 50px tolerance)
+    const scrollAfter = await page.evaluate(() => {
+        const container = document.querySelector('[data-testid="chat-messages"]') as HTMLElement;
+        if (!container) return null;
+        return {
+            scrollTop: container.scrollTop,
+            scrollHeight: container.scrollHeight,
+            clientHeight: container.clientHeight,
+        };
+    });
+    expect(scrollAfter).not.toBeNull();
+    const scrollShift = Math.abs(scrollAfter!.scrollTop - scrollBefore!.scrollTop);
+    // View should not have scrolled significantly — within 50px of original position
+    expect(scrollShift).toBeLessThan(50);
+
+    // Readmarker should be visible since there are unread messages
+    const readmarker = page.getByTestId('readmarker');
+    await expect(readmarker).toBeVisible();
+
+    // The new messages should exist in DOM but NOT be visible in viewport
+    const newMsgVisibility = await page.evaluate((text) => {
+        const container = document.querySelector('[data-testid="chat-messages"]') as HTMLElement;
+        const rows = Array.from(document.querySelectorAll('[data-testid="bufferline-row"]'));
+        const targetRow = rows.find(row => row.textContent?.includes(text));
+        if (!targetRow || !container) return null;
+        const rowRect = targetRow.getBoundingClientRect();
+        const contRect = container.getBoundingClientRect();
+        return {
+            exists: true,
+            visible: rowRect.bottom > contRect.top && rowRect.top < contRect.bottom,
+        };
+    }, msg1);
+    expect(newMsgVisibility).not.toBeNull();
+    expect(newMsgVisibility!.exists).toBe(true);
+    // New message should NOT be visible (it's below the scrolled-up viewport, behind readmarker)
+    expect(newMsgVisibility!.visible).toBe(false);
+});

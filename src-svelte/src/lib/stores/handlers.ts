@@ -4,7 +4,6 @@ import {
     servers,
     activeBufferId,
     previousBufferId,
-    bufferBottom,
     localUnreadBuffers,
     hotlistClearedBuffers,
     weechatVersion,
@@ -357,24 +356,12 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                 // buffers scrolled up, increment as before. For inactive buffers,
                 // track local unread count regardless of whether lastSeen is set.
                 if (buffer.id === activeId && buffer.lastSeen >= 0) {
-                    // Refresh bufferBottom from actual DOM scroll position before checking.
-                    // The $effect that syncs isAtBottom → bufferBottom hasn't fired yet
-                    // (it runs after buffers.set triggers reactivity), so check DOM directly.
-                    if (typeof document !== 'undefined') {
-                        const container = document.querySelector('[data-testid="chat-messages"]') as HTMLElement | null;
-                        if (container) {
-                            // Wide tolerance (200px) accounts for cumulative scroll lag when
-                            // multiple lines arrive before DOM re-renders and rAF scrolls.
-                            // A typical line is ~20px, so this covers up to 10 lines of lag.
-                            const atBottom = container.scrollTop >= container.scrollHeight - container.clientHeight - 200;
-                            bufferBottom.set(atBottom);
-                        }
-                    }
-                    if (get(bufferBottom)) {
-                        buffer.lastSeen = buffer.lines.length - 1;
-                    } else {
-                        buffer.lastSeen++;
-                    }
+                    // Always increment lastSeen by one for active buffer new lines.
+                    // The "at bottom" auto-follow decision is deferred to ChatView's $effect,
+                    // which checks actual DOM scroll position after Svelte has rendered content.
+                    // Checking DOM here would be unreliable — scrollHeight hasn't grown yet
+                    // to include the newly added line, causing false positives even when scrolled up.
+                    buffer.lastSeen++;
                 } else if (buffer.id !== activeId && lineMsg.notify_level >= 1) {
                     // Track local unread count for real-time messages (notify_level >= 1)
                     // on inactive buffers. Backfill data (notify_level=0) is not counted,
