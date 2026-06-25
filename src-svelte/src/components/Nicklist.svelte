@@ -51,7 +51,7 @@
 </script>
 
 {#if showNicklist && hasNicklist}
-<div class="w-52 sm:w-28 lg:w-30 bg-surface border-l border-border flex flex-col overflow-hidden" data-testid="nicklist">
+<div class="w-52 sm:w-28 lg:w-30 bg-panel border-l border-border flex flex-col overflow-hidden" data-testid="nicklist">
   <div class="nicklist-header h-10 bg-surface-raised border-b border-border flex items-center justify-between px-3">
     <span class="nicklist-title flex items-center gap-1.5"><Users size={14} />Nicklist</span>
     {#if onClose}
@@ -118,7 +118,7 @@
   </div>
 </div>
 {:else if showNicklist && !hasNicklist && onClose}
-<div class="w-52 sm:w-28 lg:w-30 bg-surface border-l border-border flex flex-col overflow-hidden" data-testid="nicklist">
+<div class="w-52 sm:w-28 lg:w-30 bg-panel border-l border-border flex flex-col overflow-hidden" data-testid="nicklist">
   <div class="nicklist-header h-10 bg-surface-raised border-b border-border flex items-center justify-between px-3">
     <span class="nicklist-title flex items-center gap-1.5"><Users size={14} />Nicklist</span>
     {#if onClose}

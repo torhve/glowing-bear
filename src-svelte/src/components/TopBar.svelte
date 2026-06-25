@@ -64,7 +64,7 @@
               <span class="text-text font-mono">{formatBytes($connectionStats.bytesSent)}</span>
             </div>
             <div class="flex items-center justify-between gap-3 text-text-secondary">
-              <span class="flex items-center gap-1"><ArrowDown size={12} class="text-blue-400"/> Recv</span>
+              <span class="flex items-center gap-1"><ArrowDown size={12} class="text-accent"/> Recv</span>
               <span class="text-text font-mono">{formatBytes($connectionStats.bytesReceived)}</span>
             </div>
           </div>

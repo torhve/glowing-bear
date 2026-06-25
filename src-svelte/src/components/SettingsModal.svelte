@@ -1,7 +1,7 @@
 <script lang="ts">
   import { settings, updateSettings } from '$lib/stores/settings';
   import { requestNotificationPermission, isNotificationSupported } from '$lib/notifications';
-  import { themeStore, setTheme, themes } from '$lib/stores/theme';
+  import { themeStore, setTheme, themes, themeLabels } from '$lib/stores/theme';
   import { weechatVersion } from '$lib/stores/models';
 import BaseDialog from '$components/BaseDialog.svelte';
   import Palette from '@lucide/svelte/icons/palette';
@@ -124,7 +124,7 @@ import BaseDialog from '$components/BaseDialog.svelte';
               class="w-full px-3 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent"
             >
               {#each themes as theme (theme)}
-                <option value={theme}>{theme}</option>
+                <option value={theme}>{themeLabels[theme]}</option>
               {/each}
             </select>
           </div>
@@ -357,12 +357,12 @@ import BaseDialog from '$components/BaseDialog.svelte';
           {#if notifSupported}
               {#if notifPermissionStatus === 'granted'}
                 <div class="notification-status granted flex items-center gap-2 py-1">
-                  <span         class="text-xs text-green-400 font-medium transition-opacity">✓ Granted</span>
+                  <span         class="text-xs text-success font-medium transition-opacity">✓ Granted</span>
                 </div>
               {:else if notifPermissionStatus === 'denied'}
                 <div class="notification-status denied space-y-1">
                   <div class="flex items-center gap-2 py-1">
-                    <span class="text-xs text-red-400 font-medium">✕ Denied</span>
+                    <span class="text-xs text-danger font-medium">✕ Denied</span>
                   </div>
                  <p class="text-xs text-text-secondary">Permission was denied. Please enable notifications in your browser settings.</p>
                </div>
