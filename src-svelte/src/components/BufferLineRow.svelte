@@ -428,6 +428,91 @@
     background: var(--gb-bubble-code-bg-other, rgba(0, 0, 0, 0.15));
   }
 
+  /* ===== Bubble mode styles ===== */
+  .bubble-row {
+    display: flex;
+    flex-direction: column;
+    padding: 2px 0;
+  }
+
+  /* Meta row (nick + time) above bubble */
+  .bubble-meta {
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+    font-size: 0.7em;
+    line-height: 1.2;
+    margin-bottom: 3px;
+  }
+
+  .bubble-meta-other {
+    padding-left: 6px;
+  }
+
+  .bubble-meta-self {
+    padding-right: 6px;
+    justify-content: flex-end;
+  }
+
+  /* Bubble container alignment */
+  .bubble-self {
+    align-items: flex-end;
+  }
+
+  .bubble-other {
+    align-items: flex-start;
+  }
+
+  /* Middle-aligned system messages (join/quit/away notices) */
+  .bubble-middle-row {
+    display: flex;
+    justify-content: center;
+    padding: 4px 0;
+  }
+
+  /* Self-sent bubble: solid accent background, light text */
+  .bubble-self-bg {
+    background: var(--gb-bubble-self-bg, #4a90d9);
+    color: var(--gb-bubble-self-text, #ffffff);
+  }
+
+  /* Other's bubble: solid distinct background, bright text */
+  .bubble-other-bg {
+    background: var(--gb-bubble-other-bg, var(--gb-surface-raised));
+    color: var(--gb-bubble-other-text, var(--gb-text));
+  }
+
+  /* Middle-aligned system message bubble: solid, narrower, fully rounded */
+  .bubble-middle-bg {
+    background: var(--gb-bubble-middle-bg, var(--gb-border));
+    color: var(--gb-bubble-middle-text, var(--gb-text-secondary));
+    border-radius: 18px;
+    padding: 6px 14px;
+    font-size: 0.85em;
+  }
+
+  /* Highlight indicator on bubble */
+  .bubble-highlight {
+    box-shadow: 0 0 0 2px var(--gb-bubble-highlight-border, var(--gb-accent));
+  }
+
+  /* Date separator in bubble mode */
+  .bubble-date-separator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 14px 0;
+    gap: 14px;
+  }
+
+  .bubble-date-separator::before,
+  .bubble-date-separator::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--gb-border, #333);
+  }
+
   /* Reset WeeChat background classes inside chat bubbles */
   :global(.bubble [class*="cwb-"]),
   :global(.bubble [class*="ceb-"]),
