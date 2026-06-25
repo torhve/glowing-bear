@@ -58,8 +58,9 @@
   let prevLinesLength = $state(0);
   let prevScrollKey = $state<string>('');
   let readmarkerFailures = $state(0);
-  // Read end index for readmarker positioning. setActiveBuffer folds localUnread
-  // into lastSeen at switch time, so lastSeen alone gives the correct boundary.
+  // Read end index for readmarker positioning. lastSeen stays fixed when new messages
+  // arrive on active buffer — readmarker persists until user scrolls to bottom (absorbed)
+  // or switches buffers (recalculated by setActiveBuffer).
   let readEndIndex = $derived($currentBuffer?.lastSeen ?? -1);
   let hasUnreadMessages = $derived($currentBuffer && readEndIndex >= 0 && readEndIndex < messages.length - 1);
   let unreadCount = $derived(readEndIndex >= 0 ? messages.length - readEndIndex - 1 : 0);
@@ -216,17 +217,21 @@
         // lines render before the user's scroll event fires (typical line ~20-30px).
         const curIsAtBottom = containerRef!.scrollTop >= containerRef!.scrollHeight - containerRef!.clientHeight - 200;
 
-        if (!curHasUnreadMessages) {
+        // Re-compute hasUnreadMessages from fresh store values inside rAF.
+        // $derived does NOT re-evaluate after async boundaries in Svelte 5,
+        // so the pre-captured curHasUnreadMessages may be stale by now.
+        const freshReadEndIndex = $currentBuffer?.lastSeen ?? -1;
+        const freshHasUnread = $currentBuffer && freshReadEndIndex >= 0 && freshReadEndIndex < messages.length - 1;
+
+        if (!freshHasUnread) {
           // No unread messages — scroll to bottom regardless of scroll position.
           // Covers both "at bottom following" and "buffer just switched, scrollTop=0" cases.
           readmarkerFailures = 0;
           containerRef!.scrollTop = containerRef!.scrollHeight;
           isAtBottom = true;
         } else if (curIsAtBottom) {
-          // At bottom with phantom unread — absorb by updating lastSeen to cover all lines.
-          // Handler always increments lastSeen++ per line for active buffers. When user
-          // actually stays at bottom, these become phantom unread. Absorbing them here
-          // keeps the view clean without a readmarker, and we scroll to bottom to show new content.
+          // At bottom with unread — absorb by updating lastSeen to cover all lines.
+          // User explicitly caught up by scrolling to bottom, so clear the readmarker.
           const buf = get(currentBuffer);
           if (buf) {
             buf.lastSeen = messages.length - 1;

@@ -819,11 +819,21 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
         // After handleLineInfo's buffers.set(), do an immutable update to correct lastSeen
         // and set allLinesFetched — freshBuffer reference is now stale.
         const linesReceived = message.objects?.[0]?.content?.length ?? 0;
+        const isActiveBuffer = bufferId === get(activeBufferId);
         buffers.update(current => {
             const buf = current[bufferId];
             if (!buf) return current;
             const updated = { ...buf, lines: [...buf.lines], nicklist: { ...buf.nicklist } };
-            updated.lastSeen -= oldLength;
+            if (isActiveBuffer) {
+                // For active buffer backfill: handleLineInfo did NOT increment lastSeen,
+                // so no subtraction needed. Set lastSeen to end of buffer so user sees
+                // content at bottom with no phantom readmarker after scrolling back down.
+                updated.lastSeen = buf.lines.length - 1;
+            } else {
+                // For inactive buffer: handleLineInfo incremented lastSeen per-line,
+                // subtract old line count to preserve readmarker position relative to bottom.
+                updated.lastSeen -= oldLength;
+            }
             if (linesReceived < numLines) {
                 updated.allLinesFetched = true;
             }

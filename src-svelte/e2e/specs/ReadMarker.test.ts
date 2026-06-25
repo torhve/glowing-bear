@@ -124,7 +124,7 @@ test.describe('basic', () => {
         await expect(readmarker).toBeVisible();
     });
 
-    test('new messages should appear at bottom when already on buffer (readmarker cleared)', async () => {
+    test('new messages accumulate below readmarker when already on buffer', async () => {
         // Switch to gbtest buffer to create unread state for #glowing-bear
         await switchToBuffer(page, 'gbtest');
 
@@ -134,30 +134,32 @@ test.describe('basic', () => {
         await switchToBuffer(page, '#glowing-bear');
 
         const readmarker = page.getByTestId('readmarker');
-        await expect(readmarker).toBeVisible();
+        await expect(readmarker).toBeVisible({ timeout: 5000 });
 
         // Send a new message from bot while we're on the buffer
-        // IRC semantics: messages received while on buffer are immediately "read"
-        // so lastSeen advances and readmarker disappears
+        // Readmarker persists — new message accumulates as unread below it
         const uniqueMsg = 'message after readmarker ' + Date.now();
         await irc.sendMessage('#glowing-bear', uniqueMsg);
 
-        // Verify the new message actually appeared in the DOM
+        // Verify the new message appeared in the DOM
         const msgCell = page.locator('[data-testid="chat-messages"] td.message').filter({ hasText: uniqueMsg });
         await expect(msgCell).toBeVisible({ timeout: 5000 });
 
-        // Readmarker should be gone since we're on the buffer (message is considered read)
-        await expect(readmarker).not.toBeVisible();
+        // Readmarker should remain visible since lastSeen was NOT advanced for active buffer
+        await expect(readmarker).toBeVisible({ timeout: 5000 });
 
-        // New message should be at the bottom (no unread lines)
-        const allRows = page.locator('[data-testid="bufferline-row"]');
-        const rowCount = await allRows.count();
-        expect(rowCount).toBeGreaterThan(0);
-
-        // The new message should be the last row
-        const newRow = allRows.last();
-        const newText = await newRow.textContent();
-        expect(newText).toContain(uniqueMsg);
+        // Wait until there are bufferline rows after the readmarker (new message fully rendered)
+        await page.waitForFunction(() => {
+            const rm = document.querySelector('.readmarker');
+            if (!rm) return false;
+            let count = 0;
+            let sibling = rm.nextElementSibling;
+            while (sibling) {
+                if (sibling.classList?.contains('bufferline')) count++;
+                sibling = sibling.nextElementSibling;
+            }
+            return count >= 1;
+        }, {}, { timeout: 5000 });
     });
 
     test('scroll position should be preserved when switching back to buffer', async () => {

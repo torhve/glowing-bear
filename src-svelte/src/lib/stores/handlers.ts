@@ -351,17 +351,11 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
             // For buffers with lastSeen already set (already synced), apply post-sync logic
             // even during syncing phase. Also applies when not syncing (normal operation).
             if (buffer.lastSeen >= 0 || !isSyncing()) {
-                // For active buffers at bottom, set lastSeen to the
-                // last line so there are no phantom unread messages. For active
-                // buffers scrolled up, increment as before. For inactive buffers,
-                // track local unread count regardless of whether lastSeen is set.
-                if (buffer.id === activeId && buffer.lastSeen >= 0) {
-                    // Always increment lastSeen by one for active buffer new lines.
-                    // The "at bottom" auto-follow decision is deferred to ChatView's $effect,
-                    // which checks actual DOM scroll position after Svelte has rendered content.
-                    // Checking DOM here would be unreliable — scrollHeight hasn't grown yet
-                    // to include the newly added line, causing false positives even when scrolled up.
-                    buffer.lastSeen++;
+                // Do NOT advance lastSeen for active buffer lines. Readmarker stays in place
+                // until user explicitly scrolls to bottom (absorbed by ChatView effect) or
+                // switches buffers. This preserves the readmarker through incoming messages.
+                if (buffer.id === activeId) {
+                    // New lines on active buffer accumulate as unread; lastSeen unchanged.
                 } else if (buffer.id !== activeId && lineMsg.notify_level >= 1) {
                     // Track local unread count for real-time messages (notify_level >= 1)
                     // on inactive buffers. Backfill data (notify_level=0) is not counted,
@@ -1191,12 +1185,14 @@ export function handleLineInfo(message: ProtocolMessage, manually: boolean = tru
                 injectDateChangeMessageIfNeeded(buffer, manually, oldDate, newDate);
             }
             buffer.lines.push(line);
-            // Only increment lastSeen for manual loads when no unread messages
-            // exist yet — otherwise defer to post-backfill which accounts for
-            // hotlist-reported unread counts. For scroll-back fetches where
-            // lastSeen is already >= 0 from a previous visit, always increment.
-            if (manually && (buffer.lastSeen >= 0 || (buffer.unread === 0 && buffer.notification === 0))) {
-                buffer.lastSeen++;
+            // For manual fetches on active buffer, do NOT increment lastSeen —
+            // readmarker stays in place. For inactive buffers with lastSeen set
+            // or no unread, increment normally (will be corrected by fetchMoreLines).
+            // For buffers not yet synced (lastSeen < 0, no unread), defer to post-backfill.
+            if (manually && buffer.id !== get(activeBufferId)) {
+                if (buffer.lastSeen >= 0 || (buffer.unread === 0 && buffer.notification === 0)) {
+                    buffer.lastSeen++;
+                }
             }
         }
     }
