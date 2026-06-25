@@ -199,6 +199,8 @@ import BaseDialog from '$components/BaseDialog.svelte';
           <label class="settings-option flex items-center justify-between py-2" data-settings-option="showNicklist">
             <span class="settings-option-label text-sm text-text flex items-center gap-2"><Users size={14} class="text-text-secondary shrink-0" />Show nicklist</span>
             <input
+              id="show-nicklist"
+              name="showNicklist"
               type="checkbox"
               checked={$settings.showNicklist}
               onchange={() => updateSettings({ showNicklist: !$settings.showNicklist })}
@@ -210,6 +212,8 @@ import BaseDialog from '$components/BaseDialog.svelte';
           <label class="settings-option flex items-center justify-between py-2" data-settings-option="noembed">
             <span class="settings-option-label text-sm text-text flex items-center gap-2"><ImageOff size={14} class="text-text-secondary shrink-0" />Hide embedded content by default</span>
             <input
+              id="noembed"
+              name="noembed"
               type="checkbox"
               checked={$settings.noembed}
               onchange={() => updateSettings({ noembed: !$settings.noembed })}
@@ -221,6 +225,8 @@ import BaseDialog from '$components/BaseDialog.svelte';
           <label class="settings-option flex items-center justify-between py-2" data-settings-option="orderbyserver">
             <span class="settings-option-label text-sm text-text flex items-center gap-2"><FolderTree size={14} class="text-text-secondary shrink-0" />Hierarchical buffer view (group by server)</span>
             <input
+              id="orderbyserver"
+              name="orderbyserver"
               type="checkbox"
               checked={$settings.orderbyserver}
               onchange={() => updateSettings({ orderbyserver: !$settings.orderbyserver })}
@@ -232,6 +238,8 @@ import BaseDialog from '$components/BaseDialog.svelte';
           <label class="settings-option flex items-center justify-between py-2" data-settings-option="stylizePrivateChats">
             <span class="settings-option-label text-sm text-text flex items-center gap-2"><MessageCircle size={14} class="text-text-secondary shrink-0" />Stylize private chats as bubbles</span>
             <input
+              id="stylize-private-chats"
+              name="stylizePrivateChats"
               type="checkbox"
               checked={$settings.stylizePrivateChats}
               onchange={() => updateSettings({ stylizePrivateChats: !$settings.stylizePrivateChats })}
@@ -249,6 +257,8 @@ import BaseDialog from '$components/BaseDialog.svelte';
           <label class="settings-option flex items-center justify-between py-2" data-settings-option="onlyUnread">
             <span class="settings-option-label text-sm text-text flex items-center gap-2"><ListFilter size={14} class="text-text-secondary shrink-0" />Only show buffers with unread messages</span>
             <input
+              id="only-unread"
+              name="onlyUnread"
               type="checkbox"
               checked={$settings.onlyUnread}
               onchange={() => updateSettings({ onlyUnread: !$settings.onlyUnread })}
@@ -260,6 +270,8 @@ import BaseDialog from '$components/BaseDialog.svelte';
           <label class="settings-option flex items-center justify-between py-2" data-settings-option="readlineBindings">
             <span class="settings-option-label text-sm text-text flex items-center gap-2"><Keyboard size={14} class="text-text-secondary shrink-0" />Enable readline keybindings (Ctrl+A/E/U/W/B/F)</span>
             <input
+              id="readline-bindings"
+              name="readlineBindings"
               type="checkbox"
               checked={$settings.readlineBindings}
               onchange={() => updateSettings({ readlineBindings: !$settings.readlineBindings })}
@@ -271,6 +283,8 @@ import BaseDialog from '$components/BaseDialog.svelte';
           <label class="settings-option flex items-center justify-between py-2" data-settings-option="enableFormatting">
             <span class="settings-option-label text-sm text-text flex items-center gap-2"><Type size={14} class="text-text-secondary shrink-0" />Enable text formatting (Ctrl+B/I/U/K)</span>
             <input
+              id="enable-formatting"
+              name="enableFormatting"
               type="checkbox"
               checked={$settings.enableFormatting}
               onchange={() => updateSettings({ enableFormatting: !$settings.enableFormatting })}
@@ -283,6 +297,8 @@ import BaseDialog from '$components/BaseDialog.svelte';
           <label class="settings-option flex items-center justify-between py-2" data-settings-option="enableQuickKeys">
             <span class="settings-option-label text-sm text-text flex items-center gap-2"><ArrowLeftRight size={14} class="text-text-secondary shrink-0" />Use Alt+[0-9] to switch buffers</span>
             <input
+              id="enable-quick-keys"
+              name="enableQuickKeys"
               type="checkbox"
               checked={$settings.enableQuickKeys}
               onchange={() => updateSettings({ enableQuickKeys: !$settings.enableQuickKeys })}
@@ -294,6 +310,8 @@ import BaseDialog from '$components/BaseDialog.svelte';
           <label class="settings-option flex items-center justify-between py-2" data-settings-option="enableEmojify">
             <span class="settings-option-label text-sm text-text flex items-center gap-2"><SmilePlus size={14} class="text-text-secondary shrink-0" />Replace emoji shortcodes while typing (<code>:beer:</code> → 🍺)</span>
             <input
+              id="enable-emojify"
+              name="enableEmojify"
               type="checkbox"
               checked={$settings.enableEmojify}
               onchange={() => updateSettings({ enableEmojify: !$settings.enableEmojify })}
@@ -311,6 +329,8 @@ import BaseDialog from '$components/BaseDialog.svelte';
           <label class="settings-option flex items-center justify-between py-2" data-settings-option="useFavico">
             <span class="settings-option-label text-sm text-text flex items-center gap-2"><Eye size={14} class="text-text-secondary shrink-0" />Display unread count in favicon</span>
             <input
+              id="use-favico"
+              name="useFavico"
               type="checkbox"
               checked={$settings.useFavico}
               onchange={() => updateSettings({ useFavico: !$settings.useFavico })}
@@ -323,6 +343,8 @@ import BaseDialog from '$components/BaseDialog.svelte';
           <label class="settings-option flex items-center justify-between py-2" data-settings-option="soundnotification">
             <span class="settings-option-label text-sm text-text flex items-center gap-2"><Volume2 size={14} class="text-text-secondary shrink-0" />Play sound on notification</span>
             <input
+              id="sound-notification"
+              name="soundnotification"
               type="checkbox"
               checked={$settings.soundnotification}
               onchange={() => updateSettings({ soundnotification: !$settings.soundnotification })}
@@ -365,6 +387,8 @@ import BaseDialog from '$components/BaseDialog.svelte';
           <label class="settings-option flex items-center justify-between py-2" data-settings-option="enableMathjax">
             <span class="settings-option-label text-sm text-text flex items-center gap-2"><Sigma size={14} class="text-text-secondary shrink-0" />Enable LaTeX math rendering (KaTeX)</span>
             <input
+              id="enable-mathjax"
+              name="enableMathjax"
               type="checkbox"
               checked={$settings.enableMathjax}
               onchange={() => updateSettings({ enableMathjax: !$settings.enableMathjax })}
@@ -403,6 +427,8 @@ import BaseDialog from '$components/BaseDialog.svelte';
           <label class="settings-option flex items-center justify-between py-2" data-settings-option="savepassword">
             <span class="settings-option-label text-sm text-text flex items-center gap-2"><Lock size={14} class="text-text-secondary shrink-0" />Save password in browser</span>
             <input
+              id="save-password"
+              name="savepassword"
               type="checkbox"
               checked={$settings.savepassword}
               onchange={() => updateSettings({ savepassword: !$settings.savepassword })}
@@ -415,6 +441,8 @@ import BaseDialog from '$components/BaseDialog.svelte';
             <label class="settings-option flex items-center justify-between py-2" data-settings-option="autoconnect">
               <span class="settings-option-label text-sm text-text flex items-center gap-2"><LogIn size={14} class="text-text-secondary shrink-0" />Automatically connect</span>
               <input
+                id="auto-connect"
+                name="autoconnect"
                 type="checkbox"
                 checked={$settings.autoconnect}
                 onchange={() => updateSettings({ autoconnect: !$settings.autoconnect })}
