@@ -284,6 +284,18 @@
 
     const code = e.keyCode || e.which;
 
+    // PageUp -> scroll chat up
+    if (!e.ctrlKey && !e.altKey && !e.shiftKey && (code === 33 || code === 34)) {
+      e.preventDefault();
+      const chatContainer = document.querySelector<HTMLDivElement>('[data-testid="chat-messages"]');
+      if (chatContainer) {
+        chatContainer.scrollTop += code === 33
+          ? -chatContainer.clientHeight * 0.8
+          : chatContainer.clientHeight * 0.8;
+      }
+      return;
+    }
+
     // Alt+< -> previous buffer
     if (e.altKey && (e.code === 'Backquote' || e.code === 'IntlBackslash' || code === 60 || code === 226)) {
       e.preventDefault();
