@@ -132,7 +132,7 @@ describe('Readmarker behavior', () => {
     });
 
     describe('handleBufferLineAdded', () => {
-        it('increments lastSeen for active buffer', () => {
+        it('does NOT increment lastSeen for active buffer (readmarker persists)', () => {
             const now = Date.now();
             const buf = makeBuffer('0x100', { lines: [{ prefix: [], content: [], date: now, shortTime: '', formattedTime: '', buffer: '0x100', tags: [], highlight: false, displayed: true, prefixtext: '', text: 'line1', showHiddenBrackets: false }] as any, lastSeen: 0, active: true });
             buffers.set({ '0x100': buf });
@@ -142,8 +142,11 @@ describe('Readmarker behavior', () => {
             handleBufferLineAdded(createLineMessage('0x100', [], 0, 1, 0, now));
 
             const result = get(buffers)['0x100'];
-            expect(result!.lastSeen).toBe(1);
+            // lastSeen unchanged — readmarker stays in place, new message accumulates as unread
+            expect(result!.lastSeen).toBe(0);
             expect(result!.unread).toBe(0);
+            // New line was added to buffer
+            expect(result!.lines.length).toBe(2);
         });
 
         it('preserves lastSeen and increments unread for inactive buffer (notify_level=1)', () => {
