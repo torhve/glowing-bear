@@ -357,6 +357,22 @@
     }
   }
 
+  /* ===== Table layout structural rules (not expressible as Tailwind utilities) ===== */
+  .time .compact-time {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .date .time-delimiter {
+    color: #cc843b;
+  }
+
+  .prefix .compact-prefix {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+  }
+
   /* ===== Theme-aware colors — fallbacks are dark-theme values ===== */
   .time .compact-time.repeated-time {
     color: var(--gb-repeated-time);
@@ -377,7 +393,13 @@
 
   /* Nick/time meta row colors */
   .bubble-nick {
+    font-weight: 600;
     color: var(--gb-bubble-meta-color, var(--gb-text-muted));
+  }
+
+  .bubble-time {
+    color: var(--gb-bubble-meta-color, var(--gb-text-muted));
+    opacity: 0.8;
   }
 
   .bubble-date-separator::before,
@@ -389,6 +411,10 @@
 
   .bubble-date-text {
     color: var(--gb-text-muted);
+    font-size: 0.7em;
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
   }
 
   /* ===== WeeChat protocol class overrides (must reach into TokenGroupRenderer) ===== */
@@ -429,6 +455,12 @@
   }
 
   /* ===== Bubble mode styles ===== */
+  /* Base bubble container — Signal-style rounded, no tails */
+  .bubble {
+    position: relative;
+    word-break: break-word;
+  }
+
   .bubble-row {
     display: flex;
     flex-direction: column;
