@@ -120,6 +120,7 @@
 
     if (inputRef) {
       inputRef.style.height = 'auto';
+      inputRef.blur();
     }
   }
 
@@ -636,7 +637,7 @@
 </script>
 
 <div data-testid="input-bar" class="input-bar-container flex-shrink-0">
-  <div class="input-bar-inner bg-surface border-t border-border px-3 py-2"
+  <div class="input-bar-inner bg-panel border-t border-border px-3 py-2"
        role="group"
        onmouseenter={() => { isHovered = true; }}
        onmouseleave={() => { if (!showColorPicker) isHovered = false; }}
