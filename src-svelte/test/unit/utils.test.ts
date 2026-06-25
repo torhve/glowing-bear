@@ -104,15 +104,17 @@ describe('sortBuffers with pinned', () => {
     });
 
     it('sorts all pinned before all unpinned (with server grouping)', () => {
-        const serverA_pinned = makeBuffer({ shortName: 'A-pinned', number: 5, pinned: true, serverSortKey: 'irc.a.#a' });
-        const serverA_unpinned = makeBuffer({ shortName: 'A-unpinned', number: 2, pinned: false, serverSortKey: 'irc.a.#a' });
-        const serverB_pinned = makeBuffer({ shortName: 'B-pinned', number: 3, pinned: true, serverSortKey: 'irc.b.#b' });
-        const serverB_unpinned = makeBuffer({ shortName: 'B-unpinned', number: 1, pinned: false, serverSortKey: 'irc.b.#b' });
+        const serverA_pinned = makeBuffer({ shortName: 'A-pinned', number: 5, pinned: true, server: 'alpha' });
+        const serverA_unpinned = makeBuffer({ shortName: 'A-unpinned', number: 2, pinned: false, server: 'alpha' });
+        const serverB_pinned = makeBuffer({ shortName: 'B-pinned', number: 3, pinned: true, server: 'beta' });
+        const serverB_unpinned = makeBuffer({ shortName: 'B-unpinned', number: 1, pinned: false, server: 'beta' });
 
         const result = sortBuffers([serverA_unpinned, serverA_pinned, serverB_unpinned, serverB_pinned], true);
 
+        // Pinned tier first (sorted by plugin+server, then number within each server)
         expect(result[0].shortName).toBe('A-pinned');
         expect(result[1].shortName).toBe('B-pinned');
+        // Unpinned tier second
         expect(result[2].shortName).toBe('A-unpinned');
         expect(result[3].shortName).toBe('B-unpinned');
     });

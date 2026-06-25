@@ -12,7 +12,7 @@
   import { settings, updateSettings, applyHashParams } from '$lib/stores/settings';
   import { initTheme } from '$lib/stores/theme';
   import { get } from 'svelte/store';
-  import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig, visibleBuffers, sortedVisibleBuffers, checkAndNavigatePendingNotificationBuffer, getEffectiveUnread } from '$lib/stores/models';
+  import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig, sortedVisibleBuffers, checkAndNavigatePendingNotificationBuffer, getEffectiveUnread } from '$lib/stores/models';
   import { connectionState, setReconnectAttempts, setErrors } from '$lib/stores/connectionStore';
   import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer, getWs } from '$lib/stores/connectionManager';
   import { Protocol } from '$lib/weechat';
@@ -237,7 +237,7 @@
       } else {
         // Second digit -> jump to buffer
         const targetNum = _jumpDecimal * 10 + digit;
-        const sorted = (get(visibleBuffers) as BufferData[]).sort((a: BufferData, b: BufferData) => a.number - b.number);
+        const sorted = get(sortedVisibleBuffers) as BufferData[];
         const targetIdx = targetNum - 1;
         if (targetIdx >= 0 && targetIdx < sorted.length) {
           const targetBuf = sorted[targetIdx];
@@ -608,7 +608,7 @@
           >
             <X size={16} />
           </button>
-          <div class="mobile-nicklist-container h-full bg-surface border-l border-border flex flex-col overflow-hidden">
+          <div class="mobile-nicklist-container h-full bg-panel border-l border-border flex flex-col overflow-hidden">
             <Nicklist onClose={() => { nicklistOpenOnMobile = false; }} />
           </div>
         </div>
