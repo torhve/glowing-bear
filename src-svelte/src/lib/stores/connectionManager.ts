@@ -985,3 +985,34 @@ export function getWs() {
     }
     return null;
 }
+
+// Handle Vite HMR: when critical store modules are hot-reloaded, disconnect and
+// auto-reconnect to preserve connection state (module-level variables reset on HMR).
+if (import.meta.hot) {
+    let hmrReconnecting = false;
+    import.meta.hot.on('vite:beforeUpdate', (payload) => {
+        if (hmrReconnecting) return;
+        const criticalModules = ['connectionManager.ts', 'handlers.ts', 'models.ts'];
+        const shouldReconnect = payload.updates?.some(u =>
+            criticalModules.some(m => u.acceptedPath?.endsWith(m) || u.path?.endsWith(m))
+        );
+        if (!shouldReconnect) return;
+
+        // Save connection params before disconnect clears them
+        const savedData = connectionData;
+        if (!savedData) return;
+
+        hmrReconnecting = true;
+        addToast('HMR detected — reconnecting...', { type: 'info', duration: 0 });
+        const toastId = get(toastStore)[get(toastStore).length - 1]?.id;
+
+        disconnect();
+
+        setTimeout(() => {
+            const [h, p, path, pw, tls, noComp] = savedData!;
+            connect(h, p, path, pw, tls, noComp)
+                .then(() => { if (toastId) removeToast(toastId); })
+                .finally(() => { hmrReconnecting = false; });
+        }, 100);
+    });
+}
