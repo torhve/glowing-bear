@@ -638,6 +638,7 @@
   --gb-notification: #d9534f;
   --gb-highlight: #5a3f00;
   --gb-input-bg: #1a1a1a;
+  --gb-panel: #222222;
   --gb-cof-black: #000000;
   --gb-cof-red: #cd3131;
   --gb-cof-green: #00bf00;
@@ -696,8 +697,9 @@
    --gb-unread: #4a90d9;
    --gb-notification: #d9534f;
    --gb-highlight: #5a3f00;
-   --gb-input-bg: #1a1a1a;
-   --gb-cof-black: #000000;
+    --gb-input-bg: #1a1a1a;
+  --gb-panel: #222222;
+    --gb-cof-black: #000000;
   --gb-cof-red: #cd3131;
   --gb-cof-green: #00a300;
   --gb-cof-yellow: #9c9c00;
@@ -735,12 +737,12 @@
 
 [data-theme="black"] {
   --gb-bg: #000000;
-  --gb-surface: #0a0a0a;
-  --gb-surface-raised: #141414;
-  --gb-border: #222222;
-  --gb-text: #e0e0e0;
-  --gb-text-secondary: #888888;
-  --gb-text-muted: #555555;
+  --gb-surface: #222222;
+  --gb-surface-raised: #2a2a2a;
+  --gb-border: #333333;
+  --gb-text: #ddd;
+  --gb-text-secondary: #999;
+  --gb-text-muted: #666;
   --gb-accent: #4a90d9;
   --gb-accent-hover: #5ba3e6;
   --gb-link: #5a88b2;
@@ -756,6 +758,7 @@
   --gb-notification: #d9534f;
   --gb-highlight: #5a3f00;
   --gb-input-bg: #1a1a1a;
+  --gb-panel: #222222;
   --gb-cof-black: #000000;
   --gb-cof-red: #cd3131;
   --gb-cof-green: #00bf00;
@@ -815,6 +818,7 @@
   --gb-notification: #d9534f;
   --gb-highlight: #5a3f00;
   --gb-input-bg: #1a1a1a;
+  --gb-panel: #222222;
   --gb-cof-black: #000000;
   --gb-cof-red: #cd3131;
   --gb-cof-green: #00bf00;
@@ -854,19 +858,19 @@
 [data-theme="blue"] {
   --gb-bg: #181818;
   --gb-surface: #1c2633;
-  --gb-surface-raised: #243447;
-  --gb-border: #2c3e50;
-  --gb-text: #ddd;
-  --gb-text-secondary: #999;
-  --gb-text-muted: #666;
+  --gb-surface-raised: #2a3f55;
+  --gb-border: #3a506b;
+  --gb-text: #cdd6e0;
+  --gb-text-secondary: #abb2bf;
+  --gb-text-muted: #7c8fa0;
   --gb-accent: #3498db;
   --gb-accent-hover: #5dade2;
-  --gb-link: #5a90b8;
-  --gb-link-hover: #6aa0c8;
-  --gb-link-bubble: #5a90b8;
-  --gb-link-bubble-self: #5a90b8;
-  --gb-ribbon: #e67e22;
-  --gb-ribbon-light: rgba(230, 126, 34, 0.2);
+  --gb-link: #5a88b2;
+  --gb-link-hover: #6a98c2;
+  --gb-link-bubble: #5a88b2;
+  --gb-link-bubble-self: #5a88b2;
+  --gb-ribbon: #f39c12;
+  --gb-ribbon-light: rgba(243, 156, 18, 0.15);
   --gb-danger: #e74c3c;
   --gb-success: #2ecc71;
   --gb-warning: #f39c12;
@@ -874,6 +878,7 @@
   --gb-notification: #e74c3c;
   --gb-highlight: #2c3e50;
   --gb-input-bg: #1a1a1a;
+  --gb-panel: #1c2633;
   --gb-cof-black: #000000;
   --gb-cof-red: #cd3131;
   --gb-cof-green: #00bf00;
@@ -933,6 +938,7 @@
   --gb-notification: oklch(0.6 0.18 30);
   --gb-highlight: oklch(0.72 0.14 85);
   --gb-input-bg: oklch(0.19 0.006 260);
+  --gb-panel: oklch(0.27 0.015 260);
   --gb-cof-black: #000000;
   --gb-cof-red: oklch(0.6 0.18 30);
   --gb-cof-lightred: oklch(0.7 0.14 30);
@@ -992,6 +998,7 @@
   --gb-notification: #cc6666;
   --gb-highlight: #3e3d32;
   --gb-input-bg: #1e1e1e;
+  --gb-panel: #282828;
   --gb-cof-black: #000000;
   --gb-cof-red: #cd3131;
   --gb-cof-green: #00bf00;
@@ -1051,6 +1058,7 @@
   --gb-notification: #c82829;
   --gb-highlight: #fef0d4;
   --gb-input-bg: #e0e0e0;
+  --gb-panel: #e5e5e5;
   --gb-cof-black: #000000;
   --gb-cof-red: #cd3131;
   --gb-cof-green: #00bf00;
@@ -1110,6 +1118,7 @@
   --gb-notification: #cc6666;
   --gb-highlight: #3e3d32;
   --gb-input-bg: #2a2827;
+  --gb-panel: #34302f;
   --gb-cof-black: #000000;
   --gb-cof-red: #cd3131;
   --gb-cof-green: #00bf00;
@@ -1167,8 +1176,9 @@
    --gb-warning: #fac863;
    --gb-unread: #5faae6;
    --gb-notification: #ec5f67;
-   --gb-highlight: #3e3d32;
-   --gb-input-bg: #1e3038;
+    --gb-highlight: #3e3d32;
+     --gb-input-bg: #1e3038;
+     --gb-panel: #2a4050;
    --gb-cof-black: #000000;
    --gb-cof-red: #cd3131;
    --gb-cof-green: #00bf00;
@@ -1226,8 +1236,9 @@
    --gb-warning: #b58900;
    --gb-unread: #268bd2;
    --gb-notification: #dc322f;
-   --gb-highlight: #423e00;
-   --gb-input-bg: #00212b;
+    --gb-highlight: #423e00;
+     --gb-input-bg: #00212b;
+     --gb-panel: #073642;
    --gb-cof-black: #000000;
    --gb-cof-red: #cd3131;
    --gb-cof-green: #00bf00;
@@ -1284,9 +1295,10 @@
    --gb-success: #859900;
    --gb-warning: #b58900;
    --gb-unread: #268bd2;
-   --gb-notification: #dc322f;
-   --gb-highlight: #fdf6e3;
-   --gb-input-bg: #f0ead0;
+    --gb-notification: #dc322f;
+    --gb-highlight: #fdf6e3;
+     --gb-input-bg: #f0ead0;
+     --gb-panel: #eee8d5;
    --gb-cof-black: #000000;
    --gb-cof-red: #cd3131;
    --gb-cof-green: #00bf00;
@@ -1334,10 +1346,10 @@
   --gb-text-muted: #9399b2;
   --gb-accent: #89b4fa;
   --gb-accent-hover: #b4befe;
-  --gb-link: #9ab8d8;
-  --gb-link-hover: #8ad0e8;
-  --gb-link-bubble: #9ab8d8;
-  --gb-link-bubble-self: #9ab8d8;
+  --gb-link: #89dceb;
+  --gb-link-hover: #74c7ec;
+  --gb-link-bubble: #89dceb;
+  --gb-link-bubble-self: #89dceb;
   --gb-ribbon: #fab387;
   --gb-ribbon-light: rgba(250, 179, 135, 0.15);
   --gb-danger: #f38ba8;
@@ -1347,7 +1359,8 @@
   --gb-notification: #f38ba8;
   --gb-highlight: rgba(250, 179, 135, 0.25);
   --gb-input-bg: #181825;
-  --gb-cof-black: #000000;
+  --gb-panel: #181825;
+  --gb-cof-black: #45475a;
   --gb-cof-red: #f38ba8;
   --gb-cof-green: #a6e3a1;
   --gb-cof-yellow: #f9e2af;
@@ -1394,10 +1407,10 @@
   --gb-text-muted: #939ab7;
   --gb-accent: #8aadf4;
   --gb-accent-hover: #b7bdf8;
-  --gb-link: #9ab8d8;
-  --gb-link-hover: #8ad0e8;
-  --gb-link-bubble: #9ab8d8;
-  --gb-link-bubble-self: #9ab8d8;
+  --gb-link: #91d7e3;
+  --gb-link-hover: #7dc4e4;
+  --gb-link-bubble: #91d7e3;
+  --gb-link-bubble-self: #91d7e3;
   --gb-ribbon: #f5a97f;
   --gb-ribbon-light: rgba(245, 169, 127, 0.15);
   --gb-danger: #ed8796;
@@ -1407,7 +1420,8 @@
   --gb-notification: #ed8796;
   --gb-highlight: rgba(245, 169, 127, 0.25);
   --gb-input-bg: #1e2030;
-  --gb-cof-black: #000000;
+  --gb-panel: #1e2030;
+  --gb-cof-black: #494d64;
   --gb-cof-red: #ed8796;
   --gb-cof-green: #a6da95;
   --gb-cof-yellow: #eed49f;
@@ -1454,10 +1468,10 @@
   --gb-text-muted: #949cbb;
   --gb-accent: #8caaee;
   --gb-accent-hover: #babbf1;
-  --gb-link: #9ab8d8;
-  --gb-link-hover: #8ad0e8;
-  --gb-link-bubble: #9ab8d8;
-  --gb-link-bubble-self: #9ab8d8;
+  --gb-link: #99d1db;
+  --gb-link-hover: #85c1dc;
+  --gb-link-bubble: #99d1db;
+  --gb-link-bubble-self: #99d1db;
   --gb-ribbon: #ef9f76;
   --gb-ribbon-light: rgba(239, 159, 118, 0.15);
   --gb-danger: #e78284;
@@ -1467,7 +1481,8 @@
   --gb-notification: #e78284;
   --gb-highlight: rgba(239, 159, 118, 0.25);
   --gb-input-bg: #292c3c;
-  --gb-cof-black: #000000;
+  --gb-panel: #292c3c;
+  --gb-cof-black: #51576d;
   --gb-cof-red: #e78284;
   --gb-cof-green: #a6d189;
   --gb-cof-yellow: #e5c890;
@@ -1514,10 +1529,10 @@
   --gb-text-muted: #7c7f93;
   --gb-accent: #1e66f5;
   --gb-accent-hover: #7287fd;
-  --gb-link: #5a88b2;
-  --gb-link-hover: #6a98c2;
-  --gb-link-bubble: #5a88b2;
-  --gb-link-bubble-self: #5a88b2;
+  --gb-link: #04a5e5;
+  --gb-link-hover: #209fb5;
+  --gb-link-bubble: #04a5e5;
+  --gb-link-bubble-self: #04a5e5;
   --gb-ribbon: #fe640b;
   --gb-ribbon-light: rgba(254, 100, 11, 0.12);
   --gb-danger: #d20f39;
@@ -1527,7 +1542,8 @@
   --gb-notification: #d20f39;
   --gb-highlight: rgba(254, 100, 11, 0.15);
   --gb-input-bg: #e6e9ef;
-  --gb-cof-black: #000000;
+  --gb-panel: #e6e9ef;
+  --gb-cof-black: #5c5f77;
   --gb-cof-red: #d20f39;
   --gb-cof-green: #40a02b;
   --gb-cof-yellow: #df8e1d;
@@ -1580,6 +1596,9 @@
   --color-notification: var(--gb-notification);
   --color-highlight: var(--gb-highlight);
   --color-input-bg: var(--gb-input-bg);
+  --color-panel: var(--gb-panel);
+  --color-link: var(--gb-link);
+  --color-link-hover: var(--gb-link-hover);
 
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: "Fira Mono", "Consolas", "Monaco", "Courier New", monospace;

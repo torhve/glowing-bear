@@ -173,7 +173,7 @@ import Key from '@lucide/svelte/icons/key';
 
     <form
       onsubmit={(e) => { e.preventDefault(); handleConnect(); }}
-      class="connection-form bg-surface rounded-lg p-6 space-y-4 border border-border"
+      class="connection-form bg-panel rounded-lg p-6 space-y-4 border border-border"
     >
 <div class="connection-host-row grid grid-cols-4 gap-2">
         <div class="connection-host-field col-span-3">
@@ -335,7 +335,7 @@ import Key from '@lucide/svelte/icons/key';
     </form>
 
 <div class="info-accordion-container space-y-2">
-      <details open class="info-accordion bg-surface rounded border border-border" data-info-section="about">
+      <details open class="info-accordion bg-panel rounded border border-border" data-info-section="about">
         <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white transition-colors">
           <img src="/glowing-bear.svg" class="w-4 h-4" alt="" />About
         </summary>
@@ -345,7 +345,7 @@ import Key from '@lucide/svelte/icons/key';
           <p>Stack: SvelteKit 2, Svelte 5 runes, TypeScript, Tailwind CSS v4, Vite 6, Vitest, Playwright E2E testing, fflate, DOMPurify</p>
         </div>
       </details>
-      <details class="info-accordion bg-surface rounded border border-border" data-info-section="connection">
+      <details class="info-accordion bg-panel rounded border border-border" data-info-section="connection">
         <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white transition-colors">
           <Settings2 size={14} />Connection settings
         </summary>
@@ -353,7 +353,7 @@ import Key from '@lucide/svelte/icons/key';
           Enter your WeeChat relay address above and click Connect.
         </div>
       </details>
-      <details class="info-accordion bg-surface rounded border border-border" data-info-section="getting-started">
+      <details class="info-accordion bg-panel rounded border border-border" data-info-section="getting-started">
         <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white transition-colors">
           <Rocket size={14} />Getting Started
         </summary>
@@ -362,7 +362,7 @@ import Key from '@lucide/svelte/icons/key';
         </div>
       </details>
       {#if isWindowsTauri()}
-        <details class="info-accordion bg-surface rounded border border-border" data-info-section="flags">
+        <details class="info-accordion bg-panel rounded border border-border" data-info-section="flags">
           <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white transition-colors">
             <Globe size={14} />Flag emoji rendering on Windows
           </summary>
@@ -371,7 +371,7 @@ import Key from '@lucide/svelte/icons/key';
           </div>
         </details>
       {/if}
-      <details class="info-accordion bg-surface rounded border border-border" data-info-section="usage">
+      <details class="info-accordion bg-panel rounded border border-border" data-info-section="usage">
         <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white transition-colors">
           <Keyboard size={14} />Usage instructions
         </summary>
@@ -437,7 +437,7 @@ import Key from '@lucide/svelte/icons/key';
           </div>
         </div>
       </details>
-      <details class="info-accordion bg-surface rounded border border-border" data-info-section="install">
+      <details class="info-accordion bg-panel rounded border border-border" data-info-section="install">
         <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white transition-colors">
           <Download size={14} />Install app
         </summary>
@@ -445,7 +445,7 @@ import Key from '@lucide/svelte/icons/key';
           Chrome: Menu > Add to home screen. Desktop: Create application shortcuts.
         </div>
       </details>
-      <details class="info-accordion bg-surface rounded border border-border" data-info-section="get-involved">
+      <details class="info-accordion bg-panel rounded border border-border" data-info-section="get-involved">
         <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white transition-colors">
           <MessageCircle size={14} />Get involved
         </summary>

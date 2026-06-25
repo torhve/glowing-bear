@@ -13,9 +13,33 @@ export const themes = [
     'base16-ocean-dark',
     'base16-solarized-dark',
     'base16-solarized-light',
+    'catppuccin-mocha',
+    'catppuccin-macchiato',
+    'catppuccin-frappe',
+    'catppuccin-latte',
 ] as const;
 
 export type Theme = typeof themes[number];
+
+// Display-friendly labels for the theme selector dropdown
+export const themeLabels: Record<Theme, string> = {
+    'dark': 'Dark',
+    'light': 'Light',
+    'black': 'Black',
+    'dark-spacious': 'Dark Spacious',
+    'blue': 'Blue',
+    'blue-modern': 'Blue Modern',
+    'base16-default': 'Base16 Default',
+    'base16-light': 'Base16 Light',
+    'base16-mocha': 'Base16 Mocha',
+    'base16-ocean-dark': 'Base16 Ocean Dark',
+    'base16-solarized-dark': 'Base16 Solarized Dark',
+    'base16-solarized-light': 'Base16 Solarized Light',
+    'catppuccin-mocha': '☕ Catppuccin Mocha',
+    'catppuccin-macchiato': '🌿 Catppuccin Macchiato',
+    'catppuccin-frappe': '🌺 Catppuccin Frappé',
+    'catppuccin-latte': '🪴 Catppuccin Latte',
+};
 
 export const themeStore = writable<Theme>('dark');
 
