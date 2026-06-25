@@ -36,11 +36,11 @@
 
   function getPrefixClass(prefix: string): string {
     switch (prefix) {
-      case '~': return 'text-purple-400';
-      case '&': return 'text-red-400';
-      case '@': return 'text-blue-400';
-      case '%': return 'text-light-blue-400';
-      case '+': return 'text-green-400';
+      case '~': return 'text-[var(--gb-accent)]';
+      case '&': return 'text-[var(--gb-danger)]';
+      case '@': return 'text-[var(--gb-success)]';
+      case '%': return 'text-[var(--gb-warning)]';
+      case '+': return 'text-[var(--gb-text-muted)]';
       default: return 'text-text-muted';
     }
   }

@@ -145,7 +145,7 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
                     </span>
 {#if getEffectiveUnread(buffer) > 0}
                           <span
-                            class="buffer-notification-badge absolute right-1 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] font-semibold rounded-full shadow-sm {buffer.id === $activeBufferId ? (buffer.notification > 0 ? '!bg-red-600 !text-white' : '!bg-warning !text-black') : (buffer.notification > 0 ? 'bg-red-600/15 text-red-600' : 'bg-accent/15 text-accent')}"
+                            class="buffer-notification-badge absolute right-1 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] font-semibold rounded-full shadow-sm {buffer.id === $activeBufferId ? (buffer.notification > 0 ? '!bg-danger !text-text' : '!bg-warning !text-black') : (buffer.notification > 0 ? 'bg-red-600/15 text-red-600' : 'bg-accent/15 text-accent')}"
                             data-testid="unread-badge"
                           >
                              {getEffectiveUnread(buffer)}

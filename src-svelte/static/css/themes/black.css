@@ -1,9 +1,0 @@
-@import "dark.css";
-
-body {
-   background-color: #000;
-}
-
-.close, .close:hover, .close:focus {
-    color: #ddd;
-}

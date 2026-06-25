@@ -715,6 +715,7 @@
     <div class="input-bar-row flex items-center space-x-2">
 
     <input
+      id="upload-image-file"
       type="file"
       accept="image/*"
       multiple
@@ -724,6 +725,8 @@
     />
 
     <textarea
+      id="message-input"
+      name="message"
       bind:this={inputRef}
       bind:value={message}
       onkeydown={handleKeyDown}
@@ -737,8 +740,8 @@
       data-testid="message-input"
       placeholder={$currentBuffer ? `Message ${$currentBuffer.shortName}` : 'Select a buffer to start chatting...'}
       rows={1}
-      class="input-bar-textarea flex-1 bg-input-bg border border-border rounded px-3 py-2 text-text text-sm placeholder-text-muted focus:outline-none focus:border-accent resize-none transition-colors {isDraggingFile ? 'border-accent bg-accent/10' : ''}"
-      style="min-height: 36px; max-height: 150px;"
+      class="input-bar-textarea flex-1 bg-input-bg border border-border rounded px-3 py-2 text-text text-sm placeholder-text-muted focus:outline-none focus:border-accent resize-none transition-colors min-h-9 max-h-[150px] {isDraggingFile ? 'border-accent bg-accent/10' : ''}"
+      
     ></textarea>
 
     <button

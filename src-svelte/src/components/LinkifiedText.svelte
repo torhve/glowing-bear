@@ -29,12 +29,12 @@
 
 <style>
   .linkified-link {
-    color: oklch(62.3% 0.06 255);
+    color: var(--gb-link);
     text-decoration: none;
   }
 
   .linkified-link:hover {
-    color: oklch(65% 0.12 255);
+    color: var(--gb-link-hover);
     text-decoration: underline;
   }
 </style>

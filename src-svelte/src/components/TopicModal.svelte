@@ -36,10 +36,7 @@
         <div class="text-sm leading-relaxed text-text">
           {#each topic as part (part.text)}
             {#if part.text}
-              <span
-                class="{part.classes?.join(' ')}"
-                style="{part.fgColor.name !== '0' && part.fgColor.name !== undefined ? 'color: inherit;' : ''}"
-              >
+               <span class="{part.classes?.join(' ')} {part.fgColor.name !== '0' && part.fgColor.name !== undefined ? 'text-inherit' : ''}">
             <LinkifiedText text={part.text || ''} />
               </span>
             {/if}
