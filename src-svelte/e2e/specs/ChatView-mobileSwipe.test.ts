@@ -180,7 +180,8 @@ test('horizontal swipe left from right edge opens nicklist on mobile', async () 
     await expect(overlay).toHaveClass(/translate-x-0/);
 });
 
-test('swipe right on nicklist closes it without opening buffer list', async () => {
+// Swipe right on nicklist closes it and opens buffer list (overlays are mutually exclusive).
+test('swipe right on nicklist closes it and opens buffer list', async () => {
     // Ensure we're connected with alwaysnicklist enabled
     await clearSettings(page);
     await setSettings(page, { alwaysnicklist: true });
@@ -200,7 +201,7 @@ test('swipe right on nicklist closes it without opening buffer list', async () =
     const overlay = page.locator('.mobile-nicklist-overlay');
     await expect(overlay).toHaveClass(/translate-x-0/);
 
-    // Buffer list should NOT be visible
+    // Buffer list should NOT be visible yet
     await expect(page.getByTestId('buffer-list')).not.toBeVisible();
 
     // Swipe right on the nicklist overlay itself to close it
@@ -211,8 +212,8 @@ test('swipe right on nicklist closes it without opening buffer list', async () =
     // Nicklist should now be closed (translate-x-full)
     await expect(overlay).toHaveClass(/translate-x-full/);
 
-    // Buffer list should still NOT be visible (swipe on nicklist didn't trigger buffer list)
-    await expect(page.getByTestId('buffer-list')).not.toBeVisible();
+    // Buffer list should now be visible (overlays are mutually exclusive)
+    await expect(page.getByTestId('buffer-list')).toBeVisible({ timeout: 5000 });
 });
 
 

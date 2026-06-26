@@ -47,7 +47,7 @@ test('should display multiple buffer items', async () => {
 });
 
 test('should highlight the active buffer', async () => {
-    await expect(page.locator('[data-testid="buffer-item"].bg-accent\\/20')).toBeVisible();
+    await expect(page.locator('[data-testid="buffer-item"].border-s-accent')).toBeVisible();
 });
 
 test('should switch buffers when clicking a buffer item', async () => {

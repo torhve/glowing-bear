@@ -53,7 +53,9 @@ test('shows unread count on PM buffer', async () => {
     await expect(pmBufferItem!).toBeVisible({ timeout: 10000 });
 
     // Verify badge shows notification count (unread + notification combined)
-    const badgeText = await pmBufferItem!.locator('span.rounded-full').first().textContent({ timeout: 10000 });
+    const badge = pmBufferItem!.getByTestId('unread-badge');
+    await expect(badge).toBeVisible({ timeout: 10000 });
+    const badgeText = await badge.textContent();
     expect(badgeText).toBeTruthy();
     const badgeNum = parseInt(badgeText!, 10);
     expect(badgeNum).toBeGreaterThanOrEqual(1);
@@ -66,18 +68,12 @@ test('shows notification badge on PM buffer', async () => {
     await expect(pmBufferItem!).toBeVisible({ timeout: 10000 });
 
     // Verify the PM buffer item has a notification badge with numeric value
-    const badgeSpans = await pmBufferItem!.locator('span').all();
-    let foundBadge = false;
-    for (const span of badgeSpans) {
-        const text = await span.textContent();
-        if (text && /^\d+$/.test(text.trim())) {
-            const num = parseInt(text.trim(), 10);
-            expect(num).toBeGreaterThanOrEqual(1);
-            foundBadge = true;
-            break;
-        }
-    }
-    expect(foundBadge).toBe(true);
+    const badge = pmBufferItem!.getByTestId('unread-badge');
+    await expect(badge).toBeVisible({ timeout: 10000 });
+    const badgeText = await badge.textContent();
+    expect(badgeText).toBeTruthy();
+    const num = parseInt(badgeText!.trim(), 10);
+    expect(num).toBeGreaterThanOrEqual(1);
 });
 
 test('switches to PM buffer and shows message', async () => {
