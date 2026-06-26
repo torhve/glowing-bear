@@ -13,6 +13,7 @@
     "core:window:allow-unmaximize",
     "core:window:allow-is-maximized",
     "core:window:allow-set-badge-count",
+    "core:window:allow-set-badge-label",
     {
       "identifier": "opener:allow-open-url",
       "allow": [
