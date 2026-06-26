@@ -55,3 +55,9 @@ Add `data-testid` attributes, include `effect_orphan` pageerror filter, use `wai
 ### Test Rules
 - **Test user-visible behavior, not implementation details.** DOM output, UI state, user flows.
 - **Prefer user-facing locators.** `getByRole()`/`getByText()` first. `data-testid` only when no semantic role or stable text fits.
+
+
+### Git
+
+After code changing is completed -> offer a choice to the user to git commit.
+Do NOT git push.
