@@ -62,11 +62,10 @@
   // arrive on active buffer — readmarker persists until user scrolls to bottom (absorbed)
   // or switches buffers (recalculated by setActiveBuffer).
   let readEndIndex = $derived($currentBuffer?.lastSeen ?? -1);
-  // Readmarker visibility based solely on lastSeen position relative to message count.
-  // Do NOT depend on effectiveUnread — that value can be cleared by hotlist sync
-  // while lastSeen (and thus the readmarker) correctly persists for active buffers.
-  let hasUnreadMessages = $derived(readEndIndex >= 0 && readEndIndex < messages.length - 1);
-  let unreadCount = $derived(readEndIndex >= 0 ? messages.length - readEndIndex - 1 : 0);
+// Readmarker visibility based solely on lastSeen position relative to message count.
+      // Do NOT depend on effectiveUnread — that value can be cleared by hotlist sync
+      // while lastSeen (and thus the readmarker) correctly persists for active buffers.
+      let unreadCount = $derived(readEndIndex >= 0 ? messages.length - readEndIndex - 1 : 0);
 
   function handleScroll() {
     if (!containerRef) return;
@@ -176,11 +175,10 @@
       return;
     }
 
-    // Read reactive values BEFORE any await to avoid stale snapshots.
-    // $derived values do NOT re-evaluate after await in async functions (Svelte 5 limitation).
-    const currentBufferId = get(activeBufferId);
-    const curHasUnreadMessages = hasUnreadMessages;
-    const curLinesLength = messages.length;
+        // Read reactive values BEFORE any await to avoid stale snapshots.
+        // $derived values do NOT re-evaluate after await in async functions (Svelte 5 limitation).
+        const currentBufferId = get(activeBufferId);
+        const curLinesLength = messages.length;
     const bufferChanged = prevActiveBufferId !== currentBufferId;
     const linesAdded = curLinesLength > prevLinesLength;
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WeeChatRest, RestError } from '$lib/weechat-rest';
 import type {
     HandshakeResponse,
@@ -13,42 +13,53 @@ import type {
     RestErrorResponse
 } from '$lib/weechat-rest-types';
 
-function mockFetch(response: unknown, status = 200, ok = true): void {
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
-        ok,
-        status,
-        statusText: ok ? 'OK' : 'Error',
-        json: () => Promise.resolve(response),
-        text: () => Promise.resolve(JSON.stringify(response)),
-        headers: new Headers()
-    } as Response);
-}
+    function mockFetch(response: unknown, status = 200, ok = true): void {
+        vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+            ok,
+            status,
+            statusText: ok ? 'OK' : 'Error',
+            json: () => Promise.resolve(response),
+            text: () => Promise.resolve(JSON.stringify(response)),
+            headers: new Headers()
+        } as Response);
+    }
+    
+    function mockFetchNoContent(): void {
+        vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+            ok: true,
+            status: 204,
+            statusText: 'No Content',
+            json: () => Promise.resolve(null),
+            text: () => Promise.resolve(''),
+            headers: new Headers()
+        } as Response);
+    }
+    
+    function mockFetchError(status = 400, errorBody?: RestErrorResponse): void {
+        const body = errorBody ?? { error: 'Bad request' };
+        vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+            ok: false,
+            status,
+            statusText: 'Error',
+            json: () => Promise.resolve(body),
+            text: () => Promise.resolve(JSON.stringify(body)),
+            headers: new Headers()
+        } as Response);
+    }
 
-function mockFetchNoContent(): void {
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
-        ok: true,
-        status: 204,
-        statusText: 'No Content',
-        json: () => Promise.resolve(null),
-        text: () => Promise.resolve(''),
-        headers: new Headers()
-    } as Response);
-}
+    // Vitest 4: restore spies AND reset mock state between tests to prevent leaking
+    afterEach(() => {
+        vi.restoreAllMocks();
+        vi.resetAllMocks();
+    });
 
-function mockFetchError(status = 400, errorBody?: RestErrorResponse): void {
-    const body = errorBody ?? { error: 'Bad request' };
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
-        ok: false,
-        status,
-        statusText: 'Error',
-        json: () => Promise.resolve(body),
-        text: () => Promise.resolve(JSON.stringify(body)),
-        headers: new Headers()
-    } as Response);
-}
+    describe('WeeChatRest constructor', () => {
+        afterEach(() => {
+            vi.restoreAllMocks();
+            vi.resetAllMocks();
+        });
 
-describe('WeeChatRest constructor', () => {
-    it('creates instance with empty base URL', () => {
+        it('creates instance with empty base URL', () => {
         const client = new WeeChatRest();
         expect(client.baseUrl).toBe('');
     });
