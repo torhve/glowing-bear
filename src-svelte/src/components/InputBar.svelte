@@ -530,7 +530,16 @@
 
     log('collected:', imageFiles.length, 'files,', imageStringsPromises.length, 'promises');
     if (imageFiles.length === 0 && imageStringsPromises.length === 0) {
-      log('no images found, aborting');
+      log('no images found, handling text paste');
+      // No images in clipboard — handle plain text paste.
+      // Explicitly prevent default and insert at cursor to avoid race conditions
+      // between browser's native paste and Svelte's bind:value reactivity.
+      e.preventDefault();
+      const pastedText = data.getData('text/plain') || data.getData('text');
+      if (pastedText) {
+        log('pasted', pastedText.length, 'characters of text');
+        insertAtCursor(pastedText);
+      }
       return;
     }
 
