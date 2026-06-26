@@ -112,7 +112,45 @@ test('Alt+A prioritizes notification buffers over plain unread buffers', async (
     expect(afterThirdPress).toContain('gbtest');
 });
 
-// Test 2: Alt+A is a no-op when no buffers have activity
+// Test 3: Alt+A works even when focus is in the input bar.
+// On macOS, Alt+A produces dead key characters (e.g., "ä") if not intercepted.
+// This test verifies the global handler catches Alt+A regardless of input focus
+// and prevents the dead key character from being typed.
+test('Alt+A works from the input bar without typing dead key characters', async () => {
+    // Start on server buffer
+    await switchToBuffer(page, 'gbtest');
+    await page.waitForTimeout(500);
+
+    // Send a message to #glowing-bear to create unread activity
+    await botSay('unread-from-inputbar-' + Date.now());
+    await page.waitForTimeout(2000);
+
+    // Focus the input bar
+    await page.getByTestId('message-input').focus();
+    await page.waitForTimeout(100);
+
+    // Verify input is focused
+    const activeBefore = await page.evaluate(() => document.activeElement?.tagName || '');
+    expect(activeBefore).toBe('TEXTAREA');
+
+    // Verify input is empty before
+    const valueBefore = await page.getByTestId('message-input').inputValue();
+    expect(valueBefore).toBe('');
+
+    // Press Alt+A while input is still focused
+    await pressAltA();
+    await page.waitForTimeout(500);
+
+    // Should have switched to #glowing-bear (the buffer with unread)
+    const afterName = await getCurrentBufferName();
+    expect(afterName).toContain('glowing-bear');
+
+    // Input should still be empty — no dead key character typed
+    const valueAfter = await page.getByTestId('message-input').inputValue();
+    expect(valueAfter, 'No dead key character should be typed into the input').toBe('');
+});
+
+// Test 4: Alt+A is a no-op when no buffers have activity
 test('Alt+A does nothing when no buffers have unread or notification counts', async () => {
     // Switch to each buffer that might have leftover activity from previous test, clearing counts
     await switchToBuffer(page, '#glowing-bear');
