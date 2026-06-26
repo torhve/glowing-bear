@@ -1,10 +1,10 @@
 import { Page, expect } from '@playwright/test';
 
-export async function clearSettings(page: Page) {
-  await page.evaluate(() => {
+export async function clearSettings(page: Page, preserveLastBuffer = false) {
+  await page.evaluate((preserve) => {
     localStorage.removeItem('gb-settings');
-    localStorage.removeItem('gb-last-buffer');
-  });
+    if (!preserve) localStorage.removeItem('gb-last-buffer');
+  }, preserveLastBuffer);
 }
 
 export async function setSettings(page: Page, settings: Record<string, unknown>) {
@@ -31,8 +31,13 @@ export async function connectToWeechat(page: Page) {
   await page.getByTestId('chat-view').waitFor({ state: 'visible', timeout: 45000 });
 }
 
-export async function reconnect(page: Page, extraSettings?: Record<string, unknown>) {
-  await clearSettings(page);
+export async function reconnect(page: Page, options?: {
+  extraSettings?: Record<string, unknown>;
+  preserveLastBuffer?: boolean;
+}) {
+  const extraSettings = options?.extraSettings ?? {};
+  const preserveLastBuffer = options?.preserveLastBuffer ?? false;
+  await clearSettings(page, preserveLastBuffer);
   await setSettings(page, { savepassword: false, autoconnect: false, ...extraSettings });
   await page.getByTestId('disconnect-button').click().catch(() => {});
   await page.getByTestId('host-input').waitFor({ state: 'visible', timeout: 10000 });

@@ -46,7 +46,7 @@ async function getFaviconHref(p: import('@playwright/test').Page): Promise<strin
 }
 
 test('favicon badge updates when unread messages arrive on inactive buffer', async () => {
-    await reconnect(page, { useFavico: true });
+    await reconnect(page, { extraSettings: { useFavico: true } });
     await waitForBuffer(page, '#glowing-bear', 10000);
     await switchToBuffer(page, 'gbtest');
 
@@ -64,7 +64,7 @@ test('favicon badge updates when unread messages arrive on inactive buffer', asy
 });
 
 test('favicon badge resets when switching to buffer with unread', async () => {
-    await reconnect(page, { useFavico: true });
+    await reconnect(page, { extraSettings: { useFavico: true } });
     await waitForBuffer(page, '#glowing-bear', 10000);
     await switchToBuffer(page, 'gbtest');
 
@@ -85,7 +85,7 @@ test('favicon badge resets when switching to buffer with unread', async () => {
 });
 
 test('no badge drawn when favico setting is disabled', async () => {
-    await reconnect(page, { useFavico: false });
+    await reconnect(page, { extraSettings: { useFavico: false } });
     await waitForBuffer(page, '#glowing-bear', 10000);
     await switchToBuffer(page, 'gbtest');
 

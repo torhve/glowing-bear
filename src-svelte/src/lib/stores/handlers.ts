@@ -25,7 +25,7 @@ import {
     maxBufferLines,
     deepCloneBufferLine
 } from '$lib/stores/models';
-import { shouldResume } from '$lib/stores/bufferResume';
+import { lastBufferId, shouldResume } from '$lib/stores/bufferResume';
 import { createHighlight, playNotificationSound, updateTitle, updateFavico } from '$lib/notifications';
 import { DEBUG_NICKLIST, DEBUG_HANDLERS, DEBUG_HOTLIST } from '$lib/debug';
 import type { ProtocolMessage, BufferMessage, BufferLineMessage, NickMessage, NickGroupMessage, HotlistEntry, BufferData, BufferType } from '$lib/types';
@@ -178,6 +178,20 @@ export function handleBufferInfo(message: ProtocolMessage) {
             }
             return next;
         });
+    }
+
+    // Check for resume on existing buffers too — on reconnect, buffers already
+    // exist in the store so the per-buffer shouldResume check above was never hit.
+    // Read directly from localStorage (same source as shouldResume) rather than
+    // the store, because the store retains stale values preserved across disconnect.
+    if (!resumed && typeof window !== 'undefined') {
+        const savedId = localStorage.getItem('gb-last-buffer');
+        if (savedId && workingBuffers[savedId]) {
+            setActiveBuffer(savedId);
+            lastBufferId.set(savedId);
+            resumed = true;
+            console.debug('[handler]   auto-resumed (existing buffer) to:', savedId);
+        }
     }
 
     // Publish changed buffers to the store using update() to merge with
