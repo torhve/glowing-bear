@@ -376,9 +376,9 @@
       title="Click to view topic"
     >
       <FileText size={14} class="text-text-muted mr-1 flex-shrink-0" />
-      <span class="topic-channel-name text-text">{$currentBuffer.shortName}</span>
-      <span class="topic-separator text-text-muted mx-2">-</span>
-      <span class="topic-text text-text-secondary truncate">
+      <span class="topic-channel-name text-text flex-shrink-0 whitespace-nowrap">{$currentBuffer.shortName}</span>
+      <span class="topic-separator text-text-muted mx-2 flex-shrink-0">-</span>
+      <span class="topic-text text-text-secondary truncate overflow-hidden min-w-0">
         <LinkifiedText text={topicText} />
       </span>
     </button>
