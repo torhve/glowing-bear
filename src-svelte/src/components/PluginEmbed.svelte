@@ -1,6 +1,6 @@
 <script lang="ts">
   /* eslint-disable svelte/no-dom-manipulating */
-  import type { PluginMetadata } from '$lib/types';
+  import type { EmbedCallbackContext, PluginMetadata } from '$lib/types';
   import { imageExts, videoExts, audioExts } from '$lib/utils/mediaExtensions';
   import Play from '@lucide/svelte/icons/play';
   import X from '@lucide/svelte/icons/x';
@@ -79,6 +79,10 @@
     embedRef.appendChild(audio);
   }
 
+  // Create a sandboxed iframe for third-party embeds.
+  // allow-scripts lets the embed player execute; allow-popups enables
+  // YouTube fullscreen and similar features. No allow-same-origin keeps
+  // the iframe isolated from the parent window (postMessage for cross-origin comms).
   function injectIframe(src: string, width = '100%', height = '315px') {
     if (!embedRef) return;
     const iframe = document.createElement('iframe');
@@ -87,24 +91,29 @@
     iframe.width = width;
     iframe.height = height;
     iframe.frameBorder = '0';
+    iframe.sandbox = 'allow-scripts allow-popups';
     iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
     iframe.allowFullscreen = true;
     embedRef.innerHTML = '';
     embedRef.appendChild(iframe);
   }
 
+  // Execute plugin-provided embed callback functions.
+  // The callback receives a context object with getElement() to access
+  // the DOM container. Callbacks may perform async operations (fetch)
+  // that complete after this function returns.
   function loadAsyncEmbed() {
     if (!isFunction || !embedRef || !content) return;
 
-    const context = {
+    const context: EmbedCallbackContext = {
       getElement: () => embedRef
     };
 
     try {
-      const fn = content as () => void;
+      const fn = content as (this: EmbedCallbackContext) => void;
       fn.call(context);
     } catch (e) {
-      console.error('Plugin embed error:', e);
+      console.error('[PluginEmbed] async embed error:', e);
     }
   }
 
@@ -138,19 +147,23 @@
 
     const twitchClipMatch = url.match(/clips\.twitch\.tv\/(\w+)/);
     if (twitchClipMatch) {
-      injectIframe(`https://clips.twitch.tv/embed?clip=${twitchClipMatch[1]}&parent=localhost&parent=127.0.0.1`, '640px', '277px');
+      // Use dynamic hostname so Twitch embed works on any deployed instance, not just localhost.
+      const parent = window.location.hostname;
+      injectIframe(`https://clips.twitch.tv/embed?clip=${twitchClipMatch[1]}&parent=${parent}`, '640px', '277px');
       return;
     }
 
     const twitchVideoMatch = url.match(/twitch\.tv\/videos\/(\d+)/);
     if (twitchVideoMatch) {
-      injectIframe(`https://player.twitch.tv/?video=${twitchVideoMatch[1]}&parent=localhost&parent=127.0.0.1`);
+      const parent = window.location.hostname;
+      injectIframe(`https://player.twitch.tv/?video=${twitchVideoMatch[1]}&parent=${parent}`);
       return;
     }
 
     const twitchChannelMatch = url.match(/twitch\.tv\/([a-zA-Z0-9_]+)/);
     if (twitchChannelMatch && !twitchClipMatch) {
-      injectIframe(`https://player.twitch.tv/?channel=${twitchChannelMatch[1]}&parent=localhost&parent=127.0.0.1`);
+      const parent = window.location.hostname;
+      injectIframe(`https://player.twitch.tv/?channel=${twitchChannelMatch[1]}&parent=${parent}`);
       return;
     }
 
@@ -217,11 +230,23 @@
 
     const gistMatch = url.match(/gist\.github\.com\/([^/]+)\/([a-zA-Z0-9]+)/);
     if (gistMatch) {
-      const script = document.createElement('script');
-      script.src = `https://gist.github.com/${gistMatch[1]}/${gistMatch[2]}.js`;
-      script.id = `gist-${gistMatch[1]}-${gistMatch[2]}`;
+      // Gist embed scripts use document.write() which is ignored when loaded
+      // asynchronously into the parent. A sandboxed iframe with srcdoc gives
+      // the script a fresh document context where document.write() works.
+      // Only allow-scripts (no allow-same-origin) keeps the iframe isolated
+      // from the parent window.
+      const iframe = document.createElement('iframe');
+      iframe.className = 'embed';
+      iframe.width = '100%';
+      iframe.height = '300px';
+      iframe.frameBorder = '0';
+      iframe.sandbox = 'allow-scripts';
+      // Break up the <script> tag string to prevent Svelte parser from
+      // confusing it with an actual script block.
+      const gistScriptSrc = `https://gist.github.com/${gistMatch[1]}/${gistMatch[2]}.js`;
+      iframe.srcdoc = `<scr` + `ipt src="${gistScriptSrc}"></scr` + `ipt>`;
       embedRef.innerHTML = '';
-      embedRef.appendChild(script);
+      embedRef.appendChild(iframe);
       return;
     }
 
@@ -244,6 +269,26 @@
       injectIframe(`https://www.allocine.fr/_iframe/videokast/?video=${allocineMatch[1]}&result=media`, '100%', '100%');
       return;
     }
+
+    // Asciinema terminal recordings use document.write() embed scripts,
+    // so we load them inside a sandboxed iframe with srcdoc.
+    const asciinemaMatch = url.match(/asciinema\.org\/a\/([0-9a-z]+)/);
+    if (asciinemaMatch) {
+      const iframe = document.createElement('iframe');
+      iframe.className = 'embed';
+      iframe.width = '100%';
+      iframe.height = '300px';
+      iframe.frameBorder = '0';
+      iframe.sandbox = 'allow-scripts';
+      // Break up <script> tag to prevent Svelte parser confusion.
+      const scriptSrc = `https://asciinema.org/a/${asciinemaMatch[1]}.js`;
+      iframe.srcdoc = `<scr` + `ipt src="${scriptSrc}"></scr` + `ipt>`;
+
+      embedRef.innerHTML = '';
+      embedRef.appendChild(iframe);
+      return;
+    }
+
     if (DEBUG_PLUGIN) console.log('[PluginEmbed] processUrlContent: no handler matched for URL:', url);
   }
 

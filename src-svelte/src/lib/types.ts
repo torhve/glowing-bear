@@ -230,8 +230,14 @@ export interface Settings {
 
 // ---- Plugin Embeds ----
 
+// Context object passed to embed callback functions via `fn.call(context)`.
+// Callbacks use `this.getElement()` to get the DOM container for injection.
+export interface EmbedCallbackContext {
+    getElement: () => HTMLDivElement | null;
+}
+
 export interface PluginMetadata {
-    content: string | (() => void);
+    content: string | ((this: EmbedCallbackContext) => void);
     nsfw: boolean;
     name: string;
     className: string;
