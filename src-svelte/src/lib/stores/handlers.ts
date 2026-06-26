@@ -428,10 +428,12 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                     updateTitle();
                     updateFavico();
 
-                    // Only intrusive notifications (desktop popup, sound) fire when
-                    // the tab is hidden. When the window is focused, the user can
-                    // see the message in the UI.
-                    if (!isWindowFocused) {
+                    // Only intrusive notifications (desktop popup, sound) fire for
+                    // highlights or private messages, matching AngularJS behavior.
+                    // Regular channel messages only update passive indicators.
+                    const isHighlight = !!lineMsg.highlight;
+                    const isPrivateMessage = lineMsg.tags_array.includes('notify_private');
+                    if (!isWindowFocused && buffer.notify !== 0 && (isHighlight || isPrivateMessage)) {
                         // Strip WeeChat formatting codes from message/prefix for notification display
                         const notificationBody = formatNotificationBody(lineMsg);
 
