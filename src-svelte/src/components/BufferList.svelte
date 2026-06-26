@@ -110,12 +110,40 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
     clearLongPress();
   }
 
+    // Text color follows Tailwind nav pattern: active = full brightness,
+    // inactive = muted, hover brightens. Notifications still use accent.
     function getNotifyClass(buffer: BufferData): string {
-        if (buffer.id === $activeBufferId) return 'text-accent';
+        if (buffer.id === $activeBufferId) return 'text-text font-semibold';
         const eff = getEffectiveUnread(buffer);
-        if (buffer.notification >= 3) return 'text-white font-bold';
-        if (eff > 0) return 'text-accent';
-        return 'text-text-secondary';
+        if (buffer.notification >= 3) return 'text-accent font-bold';
+        if (eff > 0) return 'text-accent font-medium';
+        return 'text-text-secondary font-medium group-hover:text-text';
+    }
+
+    // Return icon color class — follows active/hover state for visual cohesion
+    // Active icons use full opacity; inactive icons are slightly muted
+    function getIconClass(buffer: BufferData): string {
+        if (buffer.id === $activeBufferId) return 'text-accent opacity-100';
+        return 'text-text-muted opacity-75 group-hover:opacity-100 transition-colors';
+    }
+
+    // Return badge styling — pill-style outlined badge with subtle fill
+    function getBadgeClass(buffer: BufferData): string {
+        if (buffer.id === $activeBufferId) {
+            return buffer.notification > 0
+                ? '!bg-danger/20 !text-danger outline outline-1 -outline-offset-1 !outline-danger/30'
+                : '!bg-warning/20 !text-warning outline outline-1 -outline-offset-1 !outline-warning/30';
+        }
+        return buffer.notification > 0
+            ? 'bg-danger/5 text-danger outline outline-1 -outline-offset-1 outline-danger/15'
+            : 'bg-accent/5 text-accent outline outline-1 -outline-offset-1 outline-accent/15';
+    }
+
+    // Calculate right offset for absolute-positioned controls.
+    // When a badge is present, shift controls left to avoid overlap.
+    function getBufferRightOffset(buffer: BufferData): string {
+        if (getEffectiveUnread(buffer) > 0) return 'right-8';
+        return 'right-2';
     }
 
    function getQuickKeyIndex(buffer: BufferData): number | null {
@@ -162,6 +190,7 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
               <Server size={12} />{groupName}
             </div>
          {/if}
+          <div class="space-y-0.5">
           {#each groupBufs as buffer, i (buffer.id)}
                  <div
                      role="button"
@@ -174,24 +203,27 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
                      data-testid="buffer-item"
                      {@attach tooltipAttachment(buffer)}
                      style="--i: {i}"
-                     class="buffer-item-enter group relative flex items-center px-3 py-2 sm:px-4 sm:py-2.5 md:px-5 md:py-3 cursor-pointer hover:bg-accent/10 active:bg-accent/15 transition-colors duration-150 touch-manipulation select-none {buffer.id === $activeBufferId ? 'border-l-[3px] border-l-accent bg-accent/20' : ''}"
+                     class="buffer-item-enter group relative flex items-center gap-0.5 px-3 py-2 sm:px-4 sm:py-2.5 md:px-5 md:py-3 cursor-pointer rounded-r-md hover:bg-surface-raised active:bg-accent/10 transition-colors duration-150 touch-manipulation select-none {buffer.id === $activeBufferId ? 'border-s-[3px] border-s-accent bg-surface-raised' : 'border-s-[3px] border-s-transparent'}"
                    >
                   {#if getBufferIcon(buffer)}
                     {@const Icon = getBufferIcon(buffer)}
-                   <Icon size={16} class="buffer-icon text-text-muted flex-shrink-0" />
+                   <div class="w-5 flex-shrink-0 inline-flex items-center justify-center">
+                     <Icon size={18} class="-translate-y-[1px] {getIconClass(buffer)}" />
+                   </div>
                  {/if}
-<span class="buffer-name text-sm sm:text-xs {getNotifyClass(buffer)} min-w-0 ml-1 truncate">
+<span class="buffer-name align-middle text-sm sm:text-xs {getNotifyClass(buffer)} min-w-0 truncate">
                       {getDisplayName(buffer)}
                     </span>
 {#if getEffectiveUnread(buffer) > 0}
                           <span
-                            class="buffer-notification-badge absolute right-2 top-1/2 -translate-y-1/2 px-2 py-0.5 text-[11px] font-semibold rounded-full shadow-sm {buffer.id === $activeBufferId ? (buffer.notification > 0 ? '!bg-danger !text-text' : '!bg-warning !text-black') : (buffer.notification > 0 ? 'bg-danger/15 text-danger' : 'bg-accent/15 text-accent')}"
+                            class="buffer-notification-badge absolute right-2 top-1/2 -translate-y-1/2 px-2 py-0.5 text-[11px] font-semibold rounded-full {getBadgeClass(buffer)}"
                             data-testid="unread-badge"
                           >
                              {getEffectiveUnread(buffer)}
                            </span>
                         {/if}
-                   <span class="ml-auto flex items-center gap-1.5 flex-shrink-0 z-10">
+                   <!-- Absolutely positioned right-side controls — don't consume flex space -->
+                   <div class="absolute top-1/2 -translate-y-1/2 flex items-center gap-1 {getBufferRightOffset(buffer)}">
                         {#if getQuickKeyIndex(buffer) !== null}
                              <span class="buffer-quickkey inline-flex items-center justify-center px-1 h-4 text-[10px] font-bold rounded-full bg-accent/90 text-white shadow-sm">
                                {getQuickKeyIndex(buffer)}
@@ -218,9 +250,10 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
                       >
                        <X size={16} />
                      </button>
-                   </span>
+                   </div>
              </div>
          {/each}
+          </div>
       </div>
     {/each}
   </div>
