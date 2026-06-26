@@ -82,16 +82,27 @@ async function closeWindow(): Promise<void> {
 }
 
 // Set the OS/taskbar badge count (no-op outside Tauri, no-op on Linux)
+// On macOS, uses setBadgeLabel(string) since setBadgeCount displays "0" instead of clearing.
 async function setBadgeCount(count: number): Promise<void> {
     if (!isTauri()) return;
     await ensureTauriWindow();
     if (!tauriWindow) return;
     try {
         const win = tauriWindow.getCurrentWindow();
-        await win.setBadgeCount(count);
+        if (isMacOSPlatform()) {
+            // macOS: use setBadgeLabel — pass undefined to clear the badge
+            if (count > 0) {
+                await win.setBadgeLabel(count.toString());
+            } else {
+                await win.setBadgeLabel(undefined);
+            }
+        } else {
+            // Windows/Linux: use setBadgeCount (number-based)
+            await win.setBadgeCount(count);
+        }
     } catch (e) {
         console.warn('Failed to set badge count:', e);
     }
 }
 
-export { isTauri, isWindowsTauri, isMacOSTauri, minimizeWindow, toggleMaximizeWindow, closeWindow, setBadgeCount };
+export { isTauri, isWindowsTauri, isMacOSTauri, minimizeWindow, toggleMaximizeWindow, closeWindow, setBadgeCount, isMacOSPlatform };
