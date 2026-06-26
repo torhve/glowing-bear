@@ -658,7 +658,7 @@
             <X size={16} />
           </button>
           <div class="mobile-nicklist-container h-full bg-panel border-l border-border flex flex-col overflow-hidden">
-            <Nicklist onClose={() => { nicklistOpenOnMobile = false; }} />
+            <Nicklist forceShow={true} onClose={() => { nicklistOpenOnMobile = false; }} />
           </div>
         </div>
       {/if}
