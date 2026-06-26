@@ -563,27 +563,40 @@
       // Swipe right -> show buffer list (skip if touch started on nicklist overlay)
       if (deltaX > 0) {
         if (touchStartedInNicklist && nicklistOpenOnMobile) {
-          // Swipe right on nicklist -> close it, do NOT trigger buffer list
-          nicklistOpenOnMobile = false;
+          // Swipe right on nicklist -> close it only when buffer list is not open
+          if (!showBufferList) {
+            nicklistOpenOnMobile = false;
+          }
         } else {
+          // Swipe right from chat/buffer area -> show buffer list
+          // Do not close nicklist — each overlay is controlled by its own swipe direction
           showBufferList = true;
-          nicklistOpenOnMobile = false;
         }
       }
       // Swipe left -> check if from right edge (nicklist) or general (buffer list)
       else {
         const rightEdgeThreshold = 80;
         // If touching the nicklist panel while open -> close it directly
+        // Do NOT close nicklist via swipe when buffer list is visible
         if (nicklistOpenOnMobile && touchStartedInNicklist) {
-          nicklistOpenOnMobile = false;
+          if (!showBufferList) {
+            nicklistOpenOnMobile = false;
+          }
         }
-        // Only open nicklist on swipe if buffer has nicks or alwaysnicklist is set
+        // Swipe from right edge -> open nicklist (always, regardless of buffer list state)
+        // and close buffer list if it was open
         else if (touchStartX > window.innerWidth - rightEdgeThreshold && !nicklistOpenOnMobile && (hasCurrentBufferNicklist || $settings.alwaysnicklist)) {
           nicklistOpenOnMobile = true;
-          showBufferList = false;
+          if (showBufferList) {
+            showBufferList = false;
+          }
         } else if (nicklistOpenOnMobile) {
-          nicklistOpenOnMobile = false;
+          // Close nicklist only when buffer list is not open
+          if (!showBufferList) {
+            nicklistOpenOnMobile = false;
+          }
         } else {
+          // General swipe left -> close buffer list
           showBufferList = false;
         }
       }
