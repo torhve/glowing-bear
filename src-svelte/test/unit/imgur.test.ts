@@ -17,15 +17,15 @@ let actualReader: {
     readAsArrayBuffer: ReturnType<typeof vi.fn>;
 };
 
-const mockFileReader = vi.fn(() => {
-    actualReader = {
-        onload: null,
-        onerror: null,
-        readAsDataURL: vi.fn(),
-        readAsArrayBuffer: vi.fn(),
-    };
-    return actualReader;
-});
+    const mockFileReader = vi.fn(function () {
+        actualReader = {
+            onload: null,
+            onerror: null,
+            readAsDataURL: vi.fn(),
+            readAsArrayBuffer: vi.fn(),
+        };
+        return actualReader;
+    });
 vi.stubGlobal('FileReader', mockFileReader);
 
 // Track the actual XMLHttpRequest instance created
@@ -40,21 +40,21 @@ let actualXhr: {
     upload: { onprogress: ((e: unknown) => void) | null };
 };
 
-const mockXhr = vi.fn(() => {
-    actualXhr = {
-        open: vi.fn(),
-        setRequestHeader: vi.fn(),
-        send: vi.fn(),
-        status: 0,
-        responseText: '',
-        onload: null,
-        onerror: null,
-        upload: {
-            onprogress: null,
-        },
-    };
-    return actualXhr;
-});
+    const mockXhr = vi.fn(function () {
+        actualXhr = {
+            open: vi.fn(),
+            setRequestHeader: vi.fn(),
+            send: vi.fn(),
+            status: 0,
+            responseText: '',
+            onload: null,
+            onerror: null,
+            upload: {
+                onprogress: null,
+            },
+        };
+        return actualXhr;
+    });
 vi.stubGlobal('XMLHttpRequest', mockXhr);
 
 describe('uploadImage', () => {
