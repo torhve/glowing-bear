@@ -2,6 +2,7 @@ import { writable, get } from 'svelte/store';
 
 // Max entries per buffer's input history to prevent unbounded growth.
 const maxHistoryEntries = 50;
+const STORAGE_KEY = 'gb_input_history';
 
 /**
  * Trims history lines to maxHistoryEntries, adjusting position index
@@ -23,6 +24,23 @@ export interface BufferHistory {
 }
 
 const history = writable<Record<string, BufferHistory>>({});
+
+// Load persisted history from localStorage on module init
+if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+    try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) history.set(JSON.parse(saved));
+    } catch {
+        /* Ignore corrupt data */
+    }
+}
+
+// Persist every state mutation to localStorage
+history.subscribe(state => {
+    if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+});
 
 export function addToHistory(bufferId: string, line: string) {
     const current = get(history);
