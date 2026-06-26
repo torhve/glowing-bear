@@ -163,6 +163,7 @@
     measureLinesPerScreen();
   });
 
+
   $effect(() => {
     // Auto-scroll when buffer changes or new lines arrive
     // Skip if loading more lines or was scrolled up during fetch
@@ -556,6 +557,13 @@
     .chat-table {
       border-collapse: separate;
       border-spacing: 2px 3px;
+    }
+
+    /* Ensure tbody spans full table width so flex-based bufferlines align left */
+    tbody,
+    .chat-tbody {
+      display: block;
+      width: 100%;
     }
   }
 
