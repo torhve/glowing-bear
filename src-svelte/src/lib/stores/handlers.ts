@@ -405,21 +405,32 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                     const serverKey = `${buffer.plugin}.${buffer.server}`;
                     serverDeltas[serverKey] = (serverDeltas[serverKey] || 0) + 1;
                 }
-            }
 
-            // Trigger notification subsystem for highlights/privates with notify_level >= 2.
-            // Suppress counting and desktop notifications when the buffer is active.
-            // Desktop notifications/sounds are further suppressed when tab is visible
-            // (user is looking at the app, even if scrolled to a different buffer).
-            if (lineMsg.notify_level >= 2 && buffer.id !== activeId) {
-                const isPrivate = buffer.type === 'private';
-                if (buffer.notify !== 0 && (lineMsg.highlight || isPrivate)) {
-                    buffer.notification++;
-                    const serverKey = `${buffer.plugin}.${buffer.server}`;
-                    serverDeltas[serverKey] = (serverDeltas[serverKey] || 0) + 1;
+                // Increment notification count for highlights/privates (notify_level >= 2).
+                // Requires buffer.notify != 0 and either a highlight or private message.
+                if (lineMsg.notify_level >= 2 && buffer.id !== activeId) {
+                    const isPrivate = buffer.type === 'private';
+                    if (buffer.notify !== 0 && (lineMsg.highlight || isPrivate)) {
+                        buffer.notification++;
+                        const serverKey = `${buffer.plugin}.${buffer.server}`;
+                        serverDeltas[serverKey] = (serverDeltas[serverKey] || 0) + 1;
+                    }
+                }
 
-                    // Only show desktop notifications and play sounds when tab is hidden.
-                    // When the window is focused, the user can see the message in the UI.
+                // Fire notification indicators for any message where the buffer's
+                // notify setting allows it. WeeChat notify levels: 0=none,
+                // 1=message, 2=important, 3=highlight.
+                // buffer.notify >= lineMsg.notify_level means this buffer is configured
+                // to notify at this level or higher.
+                if (buffer.notify >= lineMsg.notify_level && lineMsg.notify_level >= 1 && buffer.id !== activeId) {
+                    // Always update passive indicators regardless of window focus —
+                    // title and favicon badge are useful even when tab is visible.
+                    updateTitle();
+                    updateFavico();
+
+                    // Only intrusive notifications (desktop popup, sound) fire when
+                    // the tab is hidden. When the window is focused, the user can
+                    // see the message in the UI.
                     if (!isWindowFocused) {
                         // Strip WeeChat formatting codes from message/prefix for notification display
                         const notificationBody = formatNotificationBody(lineMsg);
@@ -427,8 +438,6 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                         // Trigger notification subsystem
                         createHighlight(buffer, notificationBody);
                         playNotificationSound();
-                        updateTitle();
-                        updateFavico();
                     }
                 }
             }
