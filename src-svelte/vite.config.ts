@@ -1,10 +1,24 @@
+import { execSync } from 'node:child_process';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { SvelteKitPWA } from '@vite-pwa/sveltekit';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 
+// Capture the latest git commit hash at build time for display in settings.
+// Falls back to "unknown" when not in a git repo.
+const gitCommit = (() => {
+    try {
+        return execSync('git rev-parse --short HEAD', { cwd: __dirname + '/..' }).toString().trim();
+    } catch {
+        return 'unknown';
+    }
+})();
+
 // Aliases managed via svelte.config.js kit.alias (propagated to Vite by SvelteKit)
 export default defineConfig({
+  define: {
+    __GIT_COMMIT__: JSON.stringify(gitCommit),
+  },
   plugins: [
     sveltekit(),
     tailwindcss(),

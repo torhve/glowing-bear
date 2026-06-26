@@ -11,7 +11,9 @@ export default ts.config(
 		languageOptions: {
 			globals: {
 				...globals.browser,
-				...globals.node
+				...globals.node,
+				// Vite build-time injected constant (see vite.config.ts)
+				__GIT_COMMIT__: 'readonly'
 			}
 		}
 	},
