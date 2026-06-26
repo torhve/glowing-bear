@@ -23,6 +23,9 @@ const embedMatchers: UrlMatcher[] = [
     { name: 'GitHub Gist', test: (url) => /gist\.github\.com\/([^/]+)\/([a-zA-Z0-9]+)/.test(url) },
     { name: 'Pastebin', test: (url) => /pastebin\.com\/([a-zA-Z0-9]+)/.test(url) },
     { name: 'AlloCine video', test: (url) => /allocine\.fr\/videokast\/video-([a-zA-Z0-9]+)/.test(url) },
+    { name: 'Asciinema', test: (url) => /asciinema\.org\/a\/([0-9a-z]+)/.test(url) },
+    // TikTok: match both long form (tiktok.com/@user/video/...) and short URLs (vm.tiktok.com/...)
+    { name: 'TikTok', test: (url) => /(?:tiktok\.com\/@[^/]+\/video\/[^/]+|vm\.tiktok\.com\/\w+)/.test(url) },
 ];
 
 export function detectEmbedUrl(url: string): EmbedMatch | null {

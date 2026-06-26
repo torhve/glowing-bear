@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { BufferLine, PluginMetadata } from '$lib/types';
+  import type { BufferLine, EmbedCallbackContext, PluginMetadata } from '$lib/types';
   import { tokenizeAndCodify, type TokenGroup } from '$lib/linkTokens';
   import TokenGroupRenderer from '$components/TokenGroupRenderer.svelte';
   import PluginEmbed from '$components/PluginEmbed.svelte';
@@ -108,7 +108,7 @@
     for (const rawUrl of urls) {
       const url = rawUrl.trim();
       let name: string | null = null;
-      let content: string | (() => void) = '';
+      let content: string | ((this: EmbedCallbackContext) => void) = '';
 
       if (imageExts.test(url)) {
         name = 'Image';
@@ -123,7 +123,40 @@
         const embedMatch = detectEmbedUrl(url);
         if (embedMatch) {
           name = embedMatch.name;
-          content = url;
+          // TikTok embed requires async oembed fetch + document.write() script.
+          // Return a callback function so PluginEmbed can execute it lazily
+          // when the user clicks "Show".
+          if (embedMatch.name === 'TikTok') {
+            content = function() {
+              const el = this.getElement();
+              if (!el) return;
+              // Fetch oembed HTML which contains the embed markup + script tag.
+              // The script uses document.write(), so we load everything inside
+              // a sandboxed srcdoc iframe for proper execution.
+              fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`)
+                .then((r) => r.json())
+                .then((data) => {
+                  const iframe = document.createElement('iframe');
+                  iframe.className = 'embed';
+                  iframe.width = '100%';
+                  iframe.height = '650px';
+                  iframe.frameBorder = '0';
+                  iframe.sandbox = 'allow-scripts allow-popups';
+                  // Combine the oembed HTML with the TikTok embed script.
+                  // Break up <script> to prevent Svelte parser confusion.
+                  iframe.srcdoc = data.html + `<scr` + `ipt src="https://www.tiktok.com/embed.js"></scr` + `ipt>`;
+
+                  el.innerHTML = '';
+                  el.appendChild(iframe);
+                })
+                .catch((e) => {
+                  console.error('[TikTok embed] fetch failed:', e);
+                });
+            };
+          }
+          else {
+            content = url;
+          }
         }
       }
 
