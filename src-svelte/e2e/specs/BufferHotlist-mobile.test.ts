@@ -5,6 +5,8 @@ import { botSay } from '../helpers/messages';
 import { switchToBuffer, switchToBufferMobile, waitForBuffer, waitForBufferMobile } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
 
+import { setupEffectOrphanFilter } from '../helpers/pageerror';
+
 let page: import('@playwright/test').Page;
 
 test.describe.configure({ mode: 'serial' });
@@ -12,9 +14,7 @@ test.describe.configure({ mode: 'serial' });
 test.beforeAll(async ({ browser }) => {
     page = await createConnectedPage(browser);
     await page.setViewportSize({ width: 375, height: 667 });
-    page.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
+    setupEffectOrphanFilter(page)
 });
 
 test.afterAll(async () => {
@@ -22,9 +22,7 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async () => {
-    page.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
+    setupEffectOrphanFilter(page)
 });
 
 // Hotlist is not rendered on desktop viewport; title is visible.

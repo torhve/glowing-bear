@@ -3,6 +3,8 @@ import { connectToWeechat, clearSettings, setSettings, waitForAppReady } from '.
 import { openSettings, closeSettings } from '../helpers/settings';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 
+import { setupEffectOrphanFilter } from '../helpers/pageerror';
+
 let page: import('@playwright/test').Page;
 
 test.describe.configure({ mode: 'serial' });
@@ -18,9 +20,7 @@ test.beforeAll(async ({ browser }) => {
         autoconnect: false,
         showNicklist: true,
     });
-    page.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
+    setupEffectOrphanFilter(page)
     await connectToWeechat(page);
     // Switch to #glowing-bear which has nick data (required for nicklist to render on desktop)
     await waitForBuffer(page, '#glowing-bear', 15000);
@@ -33,9 +33,7 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async () => {
-    page.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
+    setupEffectOrphanFilter(page)
 });
 
 test('should show nicklist button in topbar', async () => {

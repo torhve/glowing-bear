@@ -1,14 +1,13 @@
 import { test, expect } from '@playwright/test';
 import { connectToWeechat, waitForAppReady, setSettings } from '../helpers/connection';
 
+import { setupEffectOrphanFilter } from '../helpers/pageerror';
+
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Reconnect loop guard', () => {
     test.beforeEach(async ({ page }) => {
-        page.on('pageerror', (error) => {
-            if (error.message?.includes('effect_orphan')) return;
-            if (error.message?.includes('Request timeout')) return;
-        });
+        setupEffectOrphanFilter(page)
         await page.goto('http://localhost:8001/');
         await page.evaluate(() => localStorage.removeItem('gb-settings'));
         await page.reload();

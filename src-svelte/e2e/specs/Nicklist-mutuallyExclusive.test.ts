@@ -2,6 +2,8 @@ import { test, expect } from '@playwright/test';
 import { connectToWeechat, clearSettings, disconnect, reconnect, setSettings, waitForAppReady } from '../helpers/connection';
 import { waitForBuffer, switchToBuffer, waitForBufferMobile } from '../helpers/buffers';
 
+import { setupEffectOrphanFilter } from '../helpers/pageerror';
+
 // Inject touch event dispatcher into the page for swipe simulation.
 async function injectSwipeDispatcher(page: import('@playwright/test').Page) {
     await page.evaluate(() => {
@@ -53,9 +55,7 @@ test.beforeAll(async ({ browser }) => {
         alwaysnicklist: true,
     });
     await injectSwipeDispatcher(browserPage);
-    browserPage.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
+    setupEffectOrphanFilter(browserPage)
 });
 
 test.afterAll(async () => {
@@ -63,9 +63,7 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async () => {
-    browserPage.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
+    setupEffectOrphanFilter(browserPage)
 });
 
 // Swiping to open buffer list should close nicklist overlay — overlays must be mutually exclusive.

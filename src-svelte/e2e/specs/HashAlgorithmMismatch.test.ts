@@ -1,13 +1,13 @@
 import { test, expect } from '@playwright/test';
 import { connectToWeechat, waitForAppReady } from '../helpers/connection';
 
+import { setupEffectOrphanFilter } from '../helpers/pageerror';
+
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Hash algorithm mismatch error display', () => {
     test.beforeEach(async ({ page }) => {
-        page.on('pageerror', (error) => {
-            if (error.message?.includes('effect_orphan')) return;
-        });
+        setupEffectOrphanFilter(page)
     });
 
     test('should display hash algorithm error message when server rejects plain auth', async ({ page }) => {

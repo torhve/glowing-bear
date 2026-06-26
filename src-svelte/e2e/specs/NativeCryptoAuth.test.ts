@@ -1,13 +1,13 @@
 import { test, expect } from '@playwright/test';
 import { waitForAppReady } from '../helpers/connection';
 
+import { setupEffectOrphanFilter } from '../helpers/pageerror';
+
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Native PBKDF2-SHA256 auth (no crypto.subtle)', () => {
     test.beforeEach(async ({ page }) => {
-        page.on('pageerror', (error) => {
-            if (error.message?.includes('effect_orphan')) return;
-        });
+        setupEffectOrphanFilter(page)
     });
 
     test.afterEach(async ({ page }) => {

@@ -2,6 +2,8 @@ import { test, expect } from '@playwright/test';
 import { connectToWeechat, clearSettings, disconnect, setSettings, waitForAppReady } from '../helpers/connection';
 import { waitForBuffer, switchToBuffer, waitForBufferMobile, switchToBufferMobile } from '../helpers/buffers';
 
+import { setupEffectOrphanFilter } from '../helpers/pageerror';
+
 // Inject touch event dispatcher into the page for swipe simulation.
 async function injectSwipeDispatcher(page: import('@playwright/test').Page) {
     await page.evaluate(() => {
@@ -55,9 +57,7 @@ test.beforeAll(async ({ browser }) => {
         showNicklist: true,
     });
     await injectSwipeDispatcher(browserPage);
-    browserPage.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
+    setupEffectOrphanFilter(browserPage)
 });
 
 test.afterAll(async () => {
@@ -65,9 +65,7 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async () => {
-    browserPage.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
+    setupEffectOrphanFilter(browserPage)
 });
 
 test('nicklist is visible on desktop', async () => {

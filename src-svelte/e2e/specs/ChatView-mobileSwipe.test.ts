@@ -2,6 +2,8 @@ import { test, expect } from '@playwright/test';
 import { connectToWeechat, clearSettings, disconnect, reconnect, setSettings, waitForAppReady } from '../helpers/connection';
 import { switchToBuffer, waitForBuffer } from '../helpers/buffers';
 
+import { setupEffectOrphanFilter } from '../helpers/pageerror';
+
 // Inject touch event dispatcher into the page for reuse across swipe functions.
 async function injectTouchDispatcher(page: import('@playwright/test').Page) {
     await page.evaluate(() => {
@@ -72,9 +74,7 @@ test.beforeAll(async ({ browser }) => {
     await waitForAppReady(page);
     await clearSettings(page);
     await injectTouchDispatcher(page);
-    page.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
+    setupEffectOrphanFilter(page)
 });
 
 test.afterAll(async () => {
@@ -82,9 +82,7 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async () => {
-    page.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan') || error.message?.includes('Effect orphaned')) return;
-    });
+    setupEffectOrphanFilter(page)
 });
 
 // Get the current active buffer's short name from the topic bar

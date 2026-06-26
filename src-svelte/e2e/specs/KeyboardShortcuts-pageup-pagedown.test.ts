@@ -3,6 +3,8 @@ import { connectToWeechat, clearSettings, waitForAppReady } from '../helpers/con
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
 
+import { setupEffectOrphanFilter } from '../helpers/pageerror';
+
 async function connect(page: import('@playwright/test').Page) {
     await clearSettings(page);
     await connectToWeechat(page);
@@ -38,9 +40,7 @@ async function waitForScrollStable(page: import('@playwright/test').Page, timeou
 
 test.describe('PageUp/PageDown Global Scroll', () => {
     test.beforeEach(async ({ page }) => {
-        page.on('pageerror', (error) => {
-            if (error.message?.includes('effect_orphan')) return;
-        });
+        setupEffectOrphanFilter(page)
         await page.goto('http://localhost:8001/');
         await waitForAppReady(page);
         await connect(page);

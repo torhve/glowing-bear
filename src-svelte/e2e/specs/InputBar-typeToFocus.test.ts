@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { connectToWeechat, clearSettings, waitForAppReady, fillPortInput } from '../helpers/connection';
 
+import { setupEffectOrphanFilter } from '../helpers/pageerror';
+
 // Simulate the type-to-focus behavior: blur any focused element, then focus the input and insert a character.
 // This replicates what handleTypeToFocus does in +page.svelte since Playwright's keyboard events
 // don't reliably reach document-level keydown listeners in Chromium.
@@ -31,9 +33,7 @@ async function connect(page: import('@playwright/test').Page) {
 
 test.describe('Type to Focus (Slack-style input capture)', () => {
     test.beforeEach(async ({ page }) => {
-        page.on('pageerror', (error) => {
-            if (error.message?.includes('effect_orphan')) return;
-        });
+        setupEffectOrphanFilter(page)
         await page.goto('http://localhost:8001/');
         await waitForAppReady(page);
     });

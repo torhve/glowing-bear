@@ -3,6 +3,8 @@ import { connectToWeechat, clearSettings, waitForAppReady } from '../helpers/con
 import { irc } from '../helpers/irc-control';
 import { switchToBuffer, waitForBuffer } from '../helpers/buffers';
 
+import { setupEffectOrphanFilter } from '../helpers/pageerror';
+
 let page: import('@playwright/test').Page;
 
 test.describe.configure({ mode: 'serial' });
@@ -12,9 +14,7 @@ test.beforeAll(async ({ browser }) => {
     await page.goto('http://localhost:8001/');
     await waitForAppReady(page);
     await clearSettings(page);
-    page.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
+    setupEffectOrphanFilter(page)
     await connectToWeechat(page);
 });
 
@@ -23,9 +23,7 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async () => {
-    page.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
+    setupEffectOrphanFilter(page)
     // Ensure we're still connected after previous serial test
     const isConnected = await page.getByTestId('chat-view').isVisible().catch(() => false);
     if (!isConnected) {
