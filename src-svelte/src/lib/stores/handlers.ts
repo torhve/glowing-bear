@@ -102,12 +102,13 @@ export function handleBufferInfo(message: ProtocolMessage) {
 
     const currentBuffers = get(buffers);
 
-    // Build immutable copies so mutations in the loop don't affect the store reference
-    // before buffers.set() is called at the end.
-    const updatedBuffers: Record<string, BufferData> = {};
+    // Build working copies for mutation during the loop.
+    // Only actually-modified buffers are published via buffers.update().
+    // Pre-copy existing buffers so we can mutate them without touching the store.
+    const workingBuffers: Record<string, BufferData> = {};
     for (const id in currentBuffers) {
         const buf = currentBuffers[id];
-        if (buf) updatedBuffers[id] = { ...buf };
+        if (buf) workingBuffers[id] = { ...buf };
     }
 
     // Mark that we're in initial sync phase — hotlist has arrived with unread
@@ -125,14 +126,14 @@ export function handleBufferInfo(message: ProtocolMessage) {
     for (const bufferMsg of bufferInfos) {
         const bufferId = bufferMsg.pointers[0];
         if (!bufferId) continue;
-        if (updatedBuffers[bufferId]) {
+        if (workingBuffers[bufferId]) {
             // Update existing buffer — handleBufferUpdate returns partial data without mutating
-            const updates = handleBufferUpdate(updatedBuffers[bufferId], bufferMsg);
+            const updates = handleBufferUpdate(workingBuffers[bufferId], bufferMsg);
             // Clear existing lines on reconnect — sync events will repopulate.
             // Reset lastSeen/localUnread so the sync phase recalculates them
             // from hotlist counts (handleHotlistInfo runs after handleBufferInfo).
-            updatedBuffers[bufferId] = {
-                ...updatedBuffers[bufferId],
+            workingBuffers[bufferId] = {
+                ...workingBuffers[bufferId],
                 ...updates,
                 lines: [],
                 requestedLines: 0,
@@ -155,7 +156,7 @@ export function handleBufferInfo(message: ProtocolMessage) {
                 const serverKey = `${buffer.plugin}.${buffer.server}`;
                 serverDeltas[serverKey] = (serverDeltas[serverKey] || 0) + buffer.unread + buffer.notification;
             }
-            updatedBuffers[bufferId] = buffer;
+            workingBuffers[bufferId] = buffer;
             console.debug('[handler]   created buffer:', buffer.id, buffer.shortName, 'lines=' + buffer.lines.length);
 
             // Auto-resume
@@ -179,8 +180,28 @@ export function handleBufferInfo(message: ProtocolMessage) {
         });
     }
 
-    // Publish updated buffers to the store.
-    buffers.set(updatedBuffers);
+    // Publish changed buffers to the store using update() to merge with
+    // current state, preventing overwrites of concurrent changes from other
+    // handlers (e.g., setActiveBuffer called during auto-resume above).
+    const changedBuffers: Record<string, BufferData> = {};
+    for (const id in workingBuffers) {
+        const oldBuf = currentBuffers[id];
+        const newBuf = workingBuffers[id];
+        if (!newBuf) continue;
+        // Always include newly-created buffers; skip unchanged existing ones.
+        if (!oldBuf || newBuf !== oldBuf) {
+            changedBuffers[id] = newBuf;
+        }
+    }
+    if (Object.keys(changedBuffers).length > 0) {
+        buffers.update(current => {
+            const merged = { ...current };
+            for (const id in changedBuffers) {
+                if (changedBuffers[id]) merged[id] = changedBuffers[id];
+            }
+            return merged;
+        });
+    }
 
     // If no buffer was auto-resumed, prefer weechat.core before falling back to first buffer.
     if (resumed) return;
@@ -278,17 +299,14 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
         affectedIds.add(lineMsg.buffer);
     }
 
-    // Build immutable copies: deep-copy (new lines array) for affected buffers,
-    // shallow-copy for unchanged ones. Mutations below apply only to these copies.
+    // Build immutable copies: deep-copy only affected buffers.
+    // Unaffected buffers are NOT included — the merge via buffers.update()
+    // will preserve whatever state they currently have in the store.
     const updatedBuffers: Record<string, BufferData> = {};
-    for (const id in currentBuffers) {
+    for (const id of affectedIds) {
         const buf = currentBuffers[id];
         if (!buf) continue;
-        if (affectedIds.has(id)) {
-            updatedBuffers[id] = { ...buf, lines: buf.lines.map(deepCloneBufferLine), nicklist: { ...buf.nicklist }, localVariables: buf.localVariables ? { ...buf.localVariables } : undefined };
-        } else {
-            updatedBuffers[id] = buf;
-        }
+        updatedBuffers[id] = { ...buf, lines: buf.lines.map(deepCloneBufferLine), nicklist: { ...buf.nicklist }, localVariables: buf.localVariables ? { ...buf.localVariables } : undefined };
     }
 
     for (const lineMsg of lines) {
@@ -425,9 +443,17 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
         });
     }
 
-    // Update stores
+    // Update stores using update() to merge with current state.
+    // This prevents overwriting concurrent changes from other handlers
+    // that modified unaffected buffers between our snapshot and this write.
     console.debug('[handler] updating buffers store, total lines:', Object.values(updatedBuffers).reduce((sum: number, b: BufferData) => sum + b.lines.length, 0));
-    buffers.set(updatedBuffers);
+    buffers.update(current => {
+        const merged = { ...current };
+        for (const id in updatedBuffers) {
+            if (updatedBuffers[id]) merged[id] = updatedBuffers[id];
+        }
+        return merged;
+    });
 }
 
 // ---- Buffer line data changed handler ----
@@ -468,11 +494,11 @@ export function handleBufferLineDataChanged(message: ProtocolMessage) {
     const updatedLine = createBufferLine(lineMsg);
 
     // Immutable update: clone lines array, replace at index, then update store.
-    const updatedBuffers = { ...currentBuffers };
     const updatedBuffer = { ...buffer, lines: buffer.lines.map(deepCloneBufferLine) };
     updatedBuffer.lines[matchedIndex] = updatedLine;
-    updatedBuffers[lineMsg.buffer] = updatedBuffer;
-    buffers.set(updatedBuffers);
+    // Use update() to merge with current store state, preventing overwrites
+    // of concurrent changes from other handlers.
+    buffers.update(current => ({ ...current, [lineMsg.buffer]: updatedBuffer }));
 }
 
 // ---- Buffer merged/unmerged handler ----
@@ -492,7 +518,7 @@ export function handleBufferMergedOrUnmerged(message: ProtocolMessage) {
     if (oldNumber === newNumber) return;
 
     const current = get(buffers);
-    const updated = { ...current };
+    const updated: Record<string, BufferData> = {};
 
     // Shift intermediate buffers to fill the gap left by the moved buffer.
     for (const id in current) {
@@ -514,7 +540,15 @@ export function handleBufferMergedOrUnmerged(message: ProtocolMessage) {
     // Set the merged/unmerged buffer's new number.
     const moved = updateBuffer(bufferId, { number: newNumber });
     if (moved) updated[bufferId] = moved;
-    buffers.set(updated);
+    // Use update() to merge with current store state, preventing overwrites
+    // of concurrent changes from other handlers.
+    buffers.update(c => {
+        const merged = { ...c };
+        for (const id in updated) {
+            if (updated[id]) merged[id] = updated[id];
+        }
+        return merged;
+    });
 }
 
 // ---- Pong handler ----
@@ -649,8 +683,9 @@ export function handleBufferTitleChanged(message: ProtocolMessage) {
         number: obj.number,
     });
     if (!updated) return;
-    const current = get(buffers);
-    buffers.set({ ...current, [bufferId]: updated });
+    // Use update() to merge with current store state, preventing overwrites
+    // of concurrent changes from other handlers.
+    buffers.update(current => ({ ...current, [bufferId]: updated }));
 }
 
 // ---- Buffer renamed ----
@@ -666,8 +701,9 @@ export function handleBufferRenamed(message: ProtocolMessage) {
         prefix: ['#', '&', '+'].includes(obj.short_name.charAt(0)) ? obj.short_name.charAt(0) : '',
     });
     if (!updated) return;
-    const current = get(buffers);
-    buffers.set({ ...current, [bufferId]: updated });
+    // Use update() to merge with current store state, preventing overwrites
+    // of concurrent changes from other handlers.
+    buffers.update(current => ({ ...current, [bufferId]: updated }));
 }
 
 // ---- Buffer hidden/unhidden ----
@@ -677,8 +713,9 @@ export function handleBufferHidden(message: ProtocolMessage) {
     if (!obj) return;
     const updated = updateBuffer(obj.pointers[0], { hidden: true });
     if (!updated) return;
-    const current = get(buffers);
-    buffers.set({ ...current, [obj.pointers[0]]: updated });
+    // Use update() to merge with current store state, preventing overwrites
+    // of concurrent changes from other handlers.
+    buffers.update(current => ({ ...current, [obj.pointers[0]]: updated }));
 }
 
 export function handleBufferUnhidden(message: ProtocolMessage) {
@@ -686,8 +723,9 @@ export function handleBufferUnhidden(message: ProtocolMessage) {
     if (!obj) return;
     const updated = updateBuffer(obj.pointers[0], { hidden: false });
     if (!updated) return;
-    const current = get(buffers);
-    buffers.set({ ...current, [obj.pointers[0]]: updated });
+    // Use update() to merge with current store state, preventing overwrites
+    // of concurrent changes from other handlers.
+    buffers.update(current => ({ ...current, [obj.pointers[0]]: updated }));
 }
 
 // ---- Buffer moved ----
@@ -705,7 +743,7 @@ export function handleBufferMoved(message: ProtocolMessage) {
     if (oldNumber === newNumber) return;
 
     const current = get(buffers);
-    const updated = { ...current };
+    const updated: Record<string, BufferData> = {};
 
     // Shift intermediate buffers to fill the gap left by the moved buffer.
     for (const id in current) {
@@ -727,7 +765,15 @@ export function handleBufferMoved(message: ProtocolMessage) {
     // Set the moved buffer's new number.
     const moved = updateBuffer(bufferId, { number: newNumber });
     if (moved) updated[bufferId] = moved;
-    buffers.set(updated);
+    // Use update() to merge with current store state, preventing overwrites
+    // of concurrent changes from other handlers.
+    buffers.update(c => {
+        const merged = { ...c };
+        for (const id in updated) {
+            if (updated[id]) merged[id] = updated[id];
+        }
+        return merged;
+    });
 }
 
 // ---- Buffer local var changed ----
@@ -752,8 +798,9 @@ export function handleBufferLocalvarChanged(message: ProtocolMessage) {
 
     const updated = updateBuffer(bufferId, { type, indent, plugin, server, serverSortKey, pinned, localVariables: mergedLocalVars });
     if (!updated) return;
-    const current = get(buffers);
-    buffers.set({ ...current, [bufferId]: updated });
+    // Use update() to merge with current store state, preventing overwrites
+    // of concurrent changes from other handlers.
+    buffers.update(current => ({ ...current, [bufferId]: updated }));
 }
 
 // ---- Buffer cleared ----
@@ -764,8 +811,9 @@ export function handleBufferCleared(message: ProtocolMessage) {
     const bufferId = bufferMsg.pointers[0];
     const updated = updateBufferDeep(bufferId, { lines: [], requestedLines: 0 });
     if (!updated) return;
-    const current = get(buffers);
-    buffers.set({ ...current, [bufferId]: updated });
+    // Use update() to merge with current store state, preventing overwrites
+    // of concurrent changes from other handlers.
+    buffers.update(current => ({ ...current, [bufferId]: updated }));
 }
 
 // ---- Buffer closing ----
@@ -784,7 +832,6 @@ export function handleHotlistInfo(message: ProtocolMessage) {
     const activeId = get(activeBufferId);
     const previousId = get(previousBufferId);
     const currentServers = get(servers);
-    const localUnread = get(localUnreadBuffers);
     const hotlistCleared = get(hotlistClearedBuffers);
 
     const hotlist = message.objects[0]?.content as HotlistEntry[];
@@ -802,10 +849,13 @@ export function handleHotlistInfo(message: ProtocolMessage) {
 
     // Build immutable copies of affected buffers and servers to ensure
     // Svelte reactivity triggers correctly when unread counts change.
+    // Skip active and previous buffers — they are managed separately by
+    // setActiveBuffer and should not be overwritten by hotlist data.
     const updatedBuffers = {} as Record<string, BufferData>;
     const updatedServers = { ...currentServers };
 
     for (const id in currentBuffers) {
+        if (id === activeId || id === previousId) continue;
         const buf = currentBuffers[id];
         if (buf) {
             updatedBuffers[id] = { ...buf };
@@ -824,11 +874,18 @@ export function handleHotlistInfo(message: ProtocolMessage) {
     // be reflected in WeeChat's hotlist. Stale hotlist entries from prior activity
     // should not overwrite correct local counts.
     const hotlistBufferIds = new Set(hotlist.map(e => e.buffer));
+    // Re-read current store state to check guards against fresh data,
+    // since other handlers may have updated buffers between our initial snapshot
+    // and this point.
+    const freshBuffers = get(buffers);
     for (const id of hotlistBufferIds) {
-        const buf = updatedBuffers[id];
-        if (!buf || id === activeId || id === previousId) continue;
-        if ((buf.unread || 0) + (buf.notification || 0) + (buf.localUnread || 0) > 0) continue;
+        if (id === activeId || id === previousId) continue;
+        const freshBuf = freshBuffers[id];
+        if (!freshBuf) continue;
+        if ((freshBuf.unread || 0) + (freshBuf.notification || 0) + (freshBuf.localUnread || 0) > 0) continue;
 
+        const buf = updatedBuffers[id];
+        if (!buf) continue;
         buf.unread = 0;
         buf.notification = 0;
     }
@@ -840,13 +897,27 @@ export function handleHotlistInfo(message: ProtocolMessage) {
     }
 
     for (const entry of hotlist) {
-        const buffer = updatedBuffers[entry.buffer];
-        if (!buffer || entry.buffer === activeId || entry.buffer === previousId) continue;
+        if (entry.buffer === activeId || entry.buffer === previousId) continue;
 
         // Skip merge for buffers whose hotlist was recently cleared by setActiveBuffer.
         // WeeChat may not have processed the clear command yet, so its data is stale.
         // This prevents unread counts from reappearing during rapid buffer switching.
         if (hotlistCleared.has(entry.buffer)) continue;
+
+        // Read fresh state from store for accurate merging.
+        // Our snapshot may be stale if other handlers updated this buffer.
+        const freshBuf = freshBuffers[entry.buffer];
+        if (!freshBuf) continue;
+
+        // Skip buffers with real-time unreads — their local state is more accurate
+        // than stale hotlist data. Don't include them in updatedBuffers so the merge
+        // preserves their current store state (including lastSeen).
+        const hasFreshUnreads = (freshBuf.unread || 0) + (freshBuf.notification || 0) + (freshBuf.localUnread || 0) > 0;
+        if (hasFreshUnreads) continue;
+
+        // Build working copy from fresh data, not stale snapshot.
+        const buffer = { ...freshBuf };
+        updatedBuffers[entry.buffer] = buffer;
 
         // Merge WeeChat hotlist counts with locally-tracked counts.
         // Use Math.max to preserve optimistic local increments that haven't
@@ -857,7 +928,8 @@ export function handleHotlistInfo(message: ProtocolMessage) {
         buffer.notification = Math.max(buffer.notification, hotlistNotif);
         // Only calculate lastSeen if buffer has lines and no local unreads tracked.
         // Buffers with localUnread > 0 have more accurate local data than stale WeeChat hotlist.
-        if (buffer.lines.length > 0 && !localUnread.has(entry.buffer)) {
+        const freshLocalUnread = get(localUnreadBuffers);
+        if (buffer.lines.length > 0 && !freshLocalUnread.has(entry.buffer)) {
             const totalUnread = buffer.unread + buffer.notification;
             buffer.lastSeen = buffer.lines.length - 1 - totalUnread;
         }
@@ -874,7 +946,18 @@ export function handleHotlistInfo(message: ProtocolMessage) {
         }
     }
 
-    buffers.set(updatedBuffers);
+    // Use update() instead of set() to merge with current store state.
+    // This prevents overwriting concurrent changes from other handlers
+    // (e.g., handleBufferLineAdded) that modified buffers between our
+    // initial get(buffers) snapshot and this final write.
+    buffers.update(current => {
+        // Start with the live store state, then overlay our hotlist-derived changes.
+        const merged = { ...current };
+        for (const id in updatedBuffers) {
+            if (updatedBuffers[id]) merged[id] = updatedBuffers[id];
+        }
+        return merged;
+    });
     servers.set(updatedServers);
 }
 
@@ -940,7 +1023,8 @@ export function handleNicklist(message: ProtocolMessage, fresh?: boolean) {
         modifiedBuffers.add(ptr0);
     }
 
-    // Create new references only for affected buffers to trigger reactivity
+    // Create new references only for affected buffers to trigger reactivity.
+    // Only include modified buffers — unaffected buffers are preserved by buffers.update().
     const current = get(buffers);
 
     // Log final nicklist structure
@@ -957,13 +1041,21 @@ export function handleNicklist(message: ProtocolMessage, fresh?: boolean) {
         console.table(summary);
     }
 
-    const updated = { ...current };
+    const updated: Record<string, BufferData> = {};
     for (const id of modifiedBuffers) {
         const deep = updateBufferDeep(id);
         if (deep) updated[id] = deep;
     }
     if (DEBUG_NICKLIST) console.log('[nicklist] updating buffers store with', modifiedBuffers.size, 'modified buffer(s)');
-    buffers.set(updated);
+    // Use update() to merge with current store state, preventing overwrites
+    // of concurrent changes from other handlers.
+    buffers.update(c => {
+        const merged = { ...c };
+        for (const id in updated) {
+            if (updated[id]) merged[id] = updated[id];
+        }
+        return merged;
+    });
 }
 
 // ---- Update nick spokeAt timestamp for tab completion ----
@@ -1105,15 +1197,23 @@ export function handleNicklistDiff(message: ProtocolMessage) {
         modifiedBuffers.add(ptr0);
     }
 
-    // Immutable update: copy affected buffers and push new reference to trigger reactivity
-    const current = get(buffers);
-    const updated = { ...current };
+    // Create new references only for affected buffers to trigger reactivity.
+    // Only include modified buffers — unaffected buffers are preserved by buffers.update().
+    const updated: Record<string, BufferData> = {};
     for (const id of modifiedBuffers) {
         const deep = updateBufferDeep(id);
         if (deep) updated[id] = deep;
     }
     if (DEBUG_NICKLIST) console.log('[nicklist] updating buffers store with', modifiedBuffers.size, 'modified buffer(s)');
-    buffers.set(updated);
+    // Use update() to merge with current store state, preventing overwrites
+    // of concurrent changes from other handlers.
+    buffers.update(c => {
+        const merged = { ...c };
+        for (const id in updated) {
+            if (updated[id]) merged[id] = updated[id];
+        }
+        return merged;
+    });
 
     // Log nick count per affected buffer after applying diff
     if (DEBUG_NICKLIST) {
@@ -1127,7 +1227,7 @@ export function handleNicklistDiff(message: ProtocolMessage) {
 
 // ---- Line info handler (for fetchMoreLines and auto-sync) ----
 // Builds immutable copies of affected buffers, processes all lines on those
-// copies, then does a single buffers.set() to trigger Svelte reactivity.
+// copies, then uses buffers.update() to merge changes with current store state.
 export function handleLineInfo(message: ProtocolMessage, manually: boolean = true, clearLinesBufferId?: string) {
     const lines = message.objects[0]?.content as BufferLineMessage[];
     if (!lines) {
@@ -1153,21 +1253,19 @@ export function handleLineInfo(message: ProtocolMessage, manually: boolean = tru
         affectedIds.add(clearLinesBufferId);
     }
 
-    // Build immutable copies: deep-copy affected buffers, shallow-copy others
+    // Build immutable copies: deep-copy only affected buffers.
+    // Unaffected buffers are NOT included — the merge via buffers.update()
+    // will preserve whatever state they currently have in the store.
     const updatedBuffers: Record<string, BufferData> = {};
-    for (const id in currentBuffers) {
+    for (const id of affectedIds) {
         const buf = currentBuffers[id];
         if (!buf) continue;
-        if (affectedIds.has(id)) {
-            let linesCopy = buf.lines.map(deepCloneBufferLine);
-            // Clear lines for the buffer that requested a fresh fetch
-            if (id === clearLinesBufferId) {
-                linesCopy = [];
-            }
-            updatedBuffers[id] = { ...buf, lines: linesCopy, nicklist: { ...buf.nicklist }, localVariables: buf.localVariables ? { ...buf.localVariables } : undefined };
-        } else {
-            updatedBuffers[id] = buf;
+        let linesCopy = buf.lines.map(deepCloneBufferLine);
+        // Clear lines for the buffer that requested a fresh fetch
+        if (id === clearLinesBufferId) {
+            linesCopy = [];
         }
+        updatedBuffers[id] = { ...buf, lines: linesCopy, nicklist: { ...buf.nicklist }, localVariables: buf.localVariables ? { ...buf.localVariables } : undefined };
     }
 
     for (const lineMsg of reversed) {
@@ -1216,7 +1314,15 @@ export function handleLineInfo(message: ProtocolMessage, manually: boolean = tru
         if (buf) trimBufferLines(buf, limit);
     }
 
-    buffers.set(updatedBuffers);
+    // Use update() to merge with current store state, preventing overwrites
+    // of concurrent changes from other handlers.
+    buffers.update(current => {
+        const merged = { ...current };
+        for (const id in updatedBuffers) {
+            if (updatedBuffers[id]) merged[id] = updatedBuffers[id];
+        }
+        return merged;
+    });
 }
 
 // ---- Event dispatch table ----
@@ -1243,8 +1349,9 @@ const eventHandlers: Record<string, (msg: ProtocolMessage) => void> = {
         const hideBufferLineTimes = bufferType === 1;
         const updated = updateBuffer(bufferId, { bufferType, hideBufferLineTimes });
         if (!updated) return;
-        const current = get(buffers);
-        buffers.set({ ...current, [bufferId]: updated });
+        // Use update() to merge with current store state, preventing overwrites
+        // of concurrent changes from other handlers.
+        buffers.update(current => ({ ...current, [bufferId]: updated }));
     },
     '_buffer_renamed': handleBufferRenamed,
     '_buffer_hidden': handleBufferHidden,

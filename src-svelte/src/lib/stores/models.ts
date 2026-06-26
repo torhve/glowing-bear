@@ -384,8 +384,9 @@ export const sortedVisibleBuffers = derived([buffers, settings], ([$buffers, $se
 
 // ---- Store helpers ----
 export function addBuffer(buffer: BufferData) {
-    const current = get(buffers);
-    buffers.set({ ...current, [buffer.id]: buffer });
+    // Use update() to merge with current store state, preventing overwrites
+    // of concurrent changes from other handlers.
+    buffers.update(current => ({ ...current, [buffer.id]: buffer }));
 }
 
 export function getBuffer(bufferId: string): BufferData | undefined {
@@ -394,11 +395,11 @@ export function getBuffer(bufferId: string): BufferData | undefined {
 
 /**
  * Shallow-copy a single buffer with partial field overrides.
- * Returns a new BufferData object — caller must apply via `buffers.set()` or merge into updatedBuffers map.
+ * Returns a new BufferData object — caller must apply via `buffers.update()` merge.
  */
 /**
  * Shallow-copy a single buffer with partial field overrides.
- * Returns a new BufferData object — caller must apply via `buffers.set()` or merge into updatedBuffers map.
+ * Returns a new BufferData object — caller must apply via `buffers.update()` merge.
  */
 export function updateBuffer(bufferId: string, overrides: Partial<BufferData>): BufferData | undefined {
     const buf = get(buffers)[bufferId];
@@ -409,7 +410,7 @@ export function updateBuffer(bufferId: string, overrides: Partial<BufferData>): 
 /**
  * Deep-copy a buffer's mutable nested structures (lines, nicklist) along with field overrides.
  * Use this when handlers will mutate lines[] or nicklist[] arrays in-place after calling.
- * Returns a new BufferData object — caller must apply via `buffers.set()` or merge into updatedBuffers map.
+ * Returns a new BufferData object — caller must apply via `buffers.update()` merge.
  */
 export function updateBufferDeep(bufferId: string, overrides: Partial<BufferData> = {}): BufferData | undefined {
     const buf = get(buffers)[bufferId];
@@ -504,7 +505,17 @@ export function setActiveBuffer(bufferId: string): boolean {
 
     activeBufferId.set(bufferId);
     activeBufferChanged.update(n => n + 1);
-    buffers.set(updatedBuffers);
+    // Use update() to merge only the changed buffers (prev and target) with
+    // current store state, preventing overwrites of concurrent changes from
+    // other handlers on unaffected buffers.
+    buffers.update(current => {
+        const merged = { ...current };
+        if (prevId && updatedBuffers[prevId]) {
+            merged[prevId] = updatedBuffers[prevId];
+        }
+        if (updatedBuffers[bufferId]) merged[bufferId] = updatedBuffers[bufferId];
+        return merged;
+    });
     // Remove target buffer from localUnreadBuffers tracking since localUnread is now cleared.
     localUnreadBuffers.update((s: Set<string>) => { const copy = new Set(s); copy.delete(bufferId); return copy; });
     // Also remove the previous buffer from tracking — its localUnread was zeroed above.
@@ -522,13 +533,13 @@ export function setActiveBuffer(bufferId: string): boolean {
 }
 
 export function clearAllUnread() {
-    // Build immutable copies of all buffers and servers to ensure
-    // Svelte reactivity triggers correctly.
+    // Clear all unread/notification counts and reset readmarkers to the end.
     // Also clear localUnread/lastSeen so readmarkers don't persist for
     // locally-tracked unreads that WeeChat's hotlist doesn't report.
+    const current = get(buffers);
     const updatedBuffers: Record<string, BufferData> = {};
-    for (const id in get(buffers)) {
-        const buf = get(buffers)[id];
+    for (const id in current) {
+        const buf = current[id];
         if (buf) {
             updatedBuffers[id] = {
                 ...buf,
@@ -539,13 +550,22 @@ export function clearAllUnread() {
             };
         }
     }
-    buffers.set(updatedBuffers);
+    // Use update() to merge with current store state, preventing overwrites
+    // of concurrent changes from other handlers.
+    buffers.update(c => {
+        const merged = { ...c };
+        for (const id in updatedBuffers) {
+            if (updatedBuffers[id]) merged[id] = updatedBuffers[id];
+        }
+        return merged;
+    });
     localUnreadBuffers.update(() => new Set());
     hotlistClearedBuffers.update(() => new Set());
 
+    const currentServers = get(servers);
     const updatedServers: Record<string, { id: string; unread: number }> = {};
-    for (const key in get(servers)) {
-        const srv = get(servers)[key];
+    for (const key in currentServers) {
+        const srv = currentServers[key];
         if (srv) {
             updatedServers[key] = { ...srv, unread: 0 };
         }
@@ -565,7 +585,13 @@ export function removeBuffer(bufferId: string, wasActive: boolean) {
     const current = get(buffers);
     const rest = { ...current };
     delete rest[bufferId];
-    buffers.set(rest);
+    // Use update() to merge with current store state, preventing overwrites
+    // of concurrent changes from other handlers.
+    buffers.update(c => {
+        const updated = { ...c };
+        delete updated[bufferId];
+        return updated;
+    });
 
     if (wasActive) {
         const remaining = Object.keys(rest);
