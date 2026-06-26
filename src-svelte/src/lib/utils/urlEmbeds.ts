@@ -19,7 +19,6 @@ const embedMatchers: UrlMatcher[] = [
     { name: 'MixCloud', test: (url) => /mixcloud\.com\/([^?]+)/.test(url) },
     { name: 'Google Maps', test: (url) => /(?:maps\.google\.)|(?:google\..*\/maps)/.test(url) },
     { name: 'Giphy', test: (url) => /giphy\.com\/gifs\/[^/]*-([a-zA-Z0-9]+)?/.test(url) },
-    { name: 'Asciinema', test: (url) => /asciinema\.org\/a\/([a-zA-Z0-9]+)/.test(url) },
     { name: 'Meteogram', test: (url) => /yr\.no\/place\/[^/]+\/[^/]+\/[^/]+\/#/.test(url) },
     { name: 'GitHub Gist', test: (url) => /gist\.github\.com\/([^/]+)\/([a-zA-Z0-9]+)/.test(url) },
     { name: 'Pastebin', test: (url) => /pastebin\.com\/([a-zA-Z0-9]+)/.test(url) },
