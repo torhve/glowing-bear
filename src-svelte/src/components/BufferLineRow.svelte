@@ -293,7 +293,7 @@
           {/if}
         </span>
       </td>
-      <td class="prefix max-w-[120px] py-0 pl-1 pr-[5px] align-top whitespace-nowrap text-right border-r overflow-hidden truncate font-mono">
+      <td class="prefix max-w-[120px] py-0 pl-1 pr-[5px] align-top whitespace-nowrap text-right overflow-hidden truncate font-mono">
         <span class="compact-prefix flex justify-end items-center" class:repeated-prefix={isRepeatedPrefix}>
           <span onclick={handleMention} role="button" tabindex="0" class="mention-link" onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleMention(); } }}>
             {#if message.showHiddenBrackets}<span class="hidden-bracket">&lt;</span>{/if}
@@ -348,12 +348,18 @@
     font-size: var(--font-size, 14px);
   }
 
+  /* Fill remaining table width so time/prefix columns stay pinned to the left edge */
+  .message {
+    width: 100%;
+  }
+
   /* ===== Mobile responsive overrides ===== */
   @media (max-width: 640px) {
     .bufferline {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
+      width: 100%;
     }
 
     .time, .prefix, .message {
@@ -371,11 +377,11 @@
     }
 
     .prefix {
-      border-right: none;
       white-space: normal;
       text-align: left;
       overflow: visible;
       text-overflow: clip;
+      margin-right: 3px;
     }
 
     .prefix .compact-prefix {
@@ -384,8 +390,10 @@
     }
 
     .message {
+      display: flex;
       flex: 1;
       min-width: 0;
+      width: auto;
       flex-wrap: wrap;
     }
   }
@@ -416,8 +424,11 @@
     color: #666;
   }
 
-  .prefix {
-    border-right: 1px solid color-mix(in srgb, var(--gb-accent) 40%, transparent);
+  /* Prefix divider — only on desktop (border-collapse table layout) */
+  @media (min-width: 641px) {
+    .prefix {
+      border-right: 1px solid color-mix(in srgb, var(--gb-accent) 40%, transparent);
+    }
   }
 
   .prefix .compact-prefix.repeated-prefix {
