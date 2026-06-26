@@ -3,15 +3,15 @@ import { createConnectedPage } from '../fixtures/auth';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
 
+import { setupEffectOrphanFilter } from '../helpers/pageerror';
+
 let page: import('@playwright/test').Page;
 
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
     page = await createConnectedPage(browser);
-    page.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
+    setupEffectOrphanFilter(page)
 });
 
 test.afterAll(async () => {
@@ -19,9 +19,7 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async () => {
-    page.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
+    setupEffectOrphanFilter(page)
     // Clear stale readmarker from prior serial tests by scrolling to bottom
     const chatContainer = page.locator('[data-testid="chat-messages"]');
     await chatContainer.evaluate((el) => {

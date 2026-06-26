@@ -3,6 +3,8 @@ import { connectToWeechat, clearSettings, setSettings, waitForAppReady, reconnec
 import { switchToBuffer, switchToBufferMobile } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
 
+import { setupEffectOrphanFilter } from '../helpers/pageerror';
+
 let page: import('@playwright/test').Page;
 
 test.describe.configure({ mode: 'serial' });
@@ -17,9 +19,7 @@ test.beforeAll(async ({ browser }) => {
         savepassword: false,
         autoconnect: false,
     });
-    page.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
+    setupEffectOrphanFilter(page)
     await connectToWeechat(page);
 });
 
@@ -28,9 +28,7 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async () => {
-    page.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
+    setupEffectOrphanFilter(page)
 });
 
 

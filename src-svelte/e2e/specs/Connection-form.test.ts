@@ -1,14 +1,14 @@
 import { test, expect } from '@playwright/test';
 import { connectToWeechat, disconnect, fillPortInput, waitForAppReady, setSettings } from '../helpers/connection';
 
+import { setupEffectOrphanFilter } from '../helpers/pageerror';
+
 const RELAY_URL = 'ws://localhost:9001/weechat';
 const PASSWORD = 'testpassword123';
 
 test.describe('Connection Form', () => {
     test.beforeEach(async ({ page }) => {
-        page.on('pageerror', (error) => {
-            if (error.message?.includes('effect_orphan')) return;
-        });
+        setupEffectOrphanFilter(page)
         // Always start with clean state: clear settings and force reload
         await page.goto('http://localhost:8001/');
         await page.evaluate(() => localStorage.removeItem('gb-settings'));
@@ -153,9 +153,7 @@ test.describe.configure({ mode: 'serial' });
 
 test.describe('WeeChat relay protocol (via browser WebSocket)', () => {
     test.beforeEach(async ({ page }) => {
-        page.on('pageerror', (error) => {
-            if (error.message?.includes('effect_orphan')) return;
-        });
+        setupEffectOrphanFilter(page)
         await page.goto('http://localhost:8001/');
         await waitForAppReady(page);
         // Verify Protocol is exposed on window
@@ -281,9 +279,7 @@ test.describe('WeeChat relay protocol (via browser WebSocket)', () => {
 
 test.describe('Disconnect handling', () => {
     test.beforeEach(async ({ page }) => {
-        page.on('pageerror', (error) => {
-            if (error.message?.includes('effect_orphan')) return;
-        });
+        setupEffectOrphanFilter(page)
         await page.goto('http://localhost:8001/');
         await page.evaluate(() => localStorage.removeItem('gb-settings'));
         await page.reload();

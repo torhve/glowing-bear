@@ -2,15 +2,15 @@ import { test, expect } from '@playwright/test';
 import { createConnectedPage } from '../fixtures/auth';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 
+import { setupEffectOrphanFilter } from '../helpers/pageerror';
+
 let page: import('@playwright/test').Page;
 
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
     page = await createConnectedPage(browser);
-    page.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
+    setupEffectOrphanFilter(page)
 });
 
 test.afterAll(async () => {
@@ -18,9 +18,7 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async () => {
-    page.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
+    setupEffectOrphanFilter(page)
 });
 
 test('Tab key completes partial nick at start of input', async () => {

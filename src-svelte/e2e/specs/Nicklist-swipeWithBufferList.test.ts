@@ -2,6 +2,8 @@ import { test, expect } from '@playwright/test';
 import { createConnectedPage } from '../fixtures/auth';
 import { setSettings } from '../helpers/connection';
 
+import { setupEffectOrphanFilter } from '../helpers/pageerror';
+
 // Inject touch event dispatcher into the page for swipe simulation.
 async function injectSwipeDispatcher(page: import('@playwright/test').Page) {
     await page.evaluate(() => {
@@ -44,9 +46,7 @@ test.beforeAll(async ({ browser }) => {
     await page.setViewportSize({ width: 375, height: 667 });
     await page.evaluate(() => window.dispatchEvent(new Event('resize')));
     await injectSwipeDispatcher(page);
-    page.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
+    setupEffectOrphanFilter(page)
 });
 
 test.afterAll(async () => {
@@ -54,9 +54,7 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async () => {
-    page.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
+    setupEffectOrphanFilter(page)
 });
 
 // Swipe right to open buffer list should close an open nicklist (overlays are mutually exclusive).

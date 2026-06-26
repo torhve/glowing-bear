@@ -2,6 +2,8 @@ import { test, expect } from '@playwright/test';
 import { clearSettings, connectToWeechat, waitForAppReady } from '../helpers/connection';
 import { openSettings, closeSettings } from '../helpers/settings';
 
+import { setupEffectOrphanFilter } from '../helpers/pageerror';
+
 let page: import('@playwright/test').Page;
 
 test.describe.configure({ mode: 'serial' });
@@ -11,9 +13,7 @@ test.beforeAll(async ({ browser }) => {
     await page.goto('http://localhost:8001/');
     await waitForAppReady(page);
     await clearSettings(page);
-    page.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
+    setupEffectOrphanFilter(page)
     await connectToWeechat(page);
 });
 
@@ -22,9 +22,7 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async () => {
-    page.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
+    setupEffectOrphanFilter(page)
     // Close settings if still open from a previous test
     const modalVisible = await page.getByTestId('settings-modal').isVisible().catch(() => false);
     if (modalVisible) {

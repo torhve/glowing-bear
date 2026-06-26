@@ -3,6 +3,8 @@ import { createConnectedPage } from '../fixtures/auth';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
 
+import { setupEffectOrphanFilter } from '../helpers/pageerror';
+
 let page: import('@playwright/test').Page;
 const consoleLogs: string[] = [];
 
@@ -43,9 +45,7 @@ async function waitForConsoleLog(pattern: string, timeout = 10000) {
 
 test.beforeEach(async () => {
     consoleLogs.length = 0;
-    page.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
+    setupEffectOrphanFilter(page)
 });
 
 // When switching to an inactive buffer that received messages while we were away,

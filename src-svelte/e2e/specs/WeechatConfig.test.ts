@@ -2,6 +2,8 @@ import { test, expect } from '@playwright/test';
 import { createConnectedPage } from '../fixtures/auth';
 import { getConfigValue, setSettings } from '../helpers/connection';
 
+import { setupEffectOrphanFilter } from '../helpers/pageerror';
+
 let page: import('@playwright/test').Page;
 
 test.describe.configure({ mode: 'serial' });
@@ -9,9 +11,7 @@ test.describe.configure({ mode: 'serial' });
 test.beforeAll(async ({ browser }) => {
     page = await createConnectedPage(browser);
     await setSettings(page, { autoconnect: false });
-    page.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
+    setupEffectOrphanFilter(page)
 });
 
 test.afterAll(async () => {
@@ -19,9 +19,7 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async () => {
-    page.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
+    setupEffectOrphanFilter(page)
 });
 
 test('should have wconfig populated after connect', async () => {

@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { waitForAppReady } from '../helpers/connection';
 
+import { setupEffectOrphanFilter } from '../helpers/pageerror';
+
 test.describe('Features', () => {
     test.beforeEach(async ({ page }) => {
-        page.on('pageerror', (error) => {
-            if (error.message?.includes('effect_orphan')) return;
-        });
+        setupEffectOrphanFilter(page)
         // Clear saved settings and unregister service workers to avoid stale state bleed between test files
         await page.goto('http://localhost:8001/');
         await page.evaluate(() => localStorage.removeItem('gb-settings'));

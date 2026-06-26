@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { waitForAppReady } from '../helpers/connection';
 
+import { setupEffectOrphanFilter } from '../helpers/pageerror';
+
 test.describe('Hash params', () => {
     test.beforeEach(async ({ page }) => {
-        page.on('pageerror', (error) => {
-            if (error.message?.includes('effect_orphan')) return;
-        });
+        setupEffectOrphanFilter(page)
         // Clear settings on the base page before navigating to hash URL
         await page.goto('http://localhost:8001/');
         await page.evaluate(() => {

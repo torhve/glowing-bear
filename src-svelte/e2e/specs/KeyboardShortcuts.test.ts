@@ -2,6 +2,8 @@ import { test, expect } from '@playwright/test';
 import { connectToWeechat, clearSettings, waitForAppReady, fillPortInput } from '../helpers/connection';
 import { switchToBuffer, waitForBuffer } from '../helpers/buffers';
 
+import { setupEffectOrphanFilter } from '../helpers/pageerror';
+
 async function connect(page: import('@playwright/test').Page) {
     // Clear settings to ensure consistent state (nicklist visible, quick keys enabled)
     await clearSettings(page);
@@ -23,9 +25,7 @@ async function getCaretPosition(page: import('@playwright/test').Page): Promise<
 
 test.describe('Keyboard Shortcuts', () => {
     test.beforeEach(async ({ page }) => {
-        page.on('pageerror', (error) => {
-            if (error.message?.includes('effect_orphan')) return;
-        });
+        setupEffectOrphanFilter(page)
         await page.goto('http://localhost:8001/');
         await waitForAppReady(page);
     });
