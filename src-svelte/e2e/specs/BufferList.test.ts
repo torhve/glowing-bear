@@ -421,11 +421,11 @@ test.describe('quick keys display', () => {
 
         // Verify numbered badges appear on buffer items
         await expect(async () => {
-            const quickKeyBadges = page.locator('[data-testid="buffer-item"] .buffer-quickkey');
+            const quickKeyBadges = page.locator('[data-testid="buffer-item"] [data-testid="quick-key"]');
             const badgeCount = await quickKeyBadges.count();
             expect(badgeCount).toBeGreaterThanOrEqual(1);
         }).toPass({ timeout: 5000 });
-        const quickKeyBadges = page.locator('[data-testid="buffer-item"] .buffer-quickkey');
+        const quickKeyBadges = page.locator('[data-testid="buffer-item"] [data-testid="quick-key"]');
         const badgeCount = await quickKeyBadges.count();
 
         // Verify all badge values are unique integers in range 1-9
@@ -448,7 +448,7 @@ test.describe('quick keys display', () => {
 
         // Badges should no longer be visible
         await expect(async () => {
-            const n = await page.locator('[data-testid="buffer-item"] .buffer-quickkey').count();
+            const n = await page.locator('[data-testid="buffer-item"] [data-testid="quick-key"]').count();
             expect(n).toBe(0);
         }).toPass({ timeout: 5000 });
     });

@@ -18,6 +18,7 @@
   import Monitor from '@lucide/svelte/icons/monitor';
   import Square from '@lucide/svelte/icons/square';
 import Copy from '@lucide/svelte/icons/copy';
+import Badge from './Badge.svelte';
 
 let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
 
@@ -127,17 +128,6 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
         return 'text-text-muted opacity-75 group-hover:opacity-100 transition-colors';
     }
 
-    // Return badge styling — pill-style outlined badge with subtle fill
-    function getBadgeClass(buffer: BufferData): string {
-        if (buffer.id === $activeBufferId) {
-            return buffer.notification > 0
-                ? '!bg-danger/20 !text-danger outline outline-1 -outline-offset-1 !outline-danger/30'
-                : '!bg-warning/20 !text-warning outline outline-1 -outline-offset-1 !outline-warning/30';
-        }
-        return buffer.notification > 0
-            ? 'bg-danger/5 text-danger outline outline-1 -outline-offset-1 outline-danger/15'
-            : 'bg-accent/5 text-accent outline outline-1 -outline-offset-1 outline-accent/15';
-    }
 
     // Calculate right offset for absolute-positioned controls.
     // When a badge is present, shift controls left to avoid overlap.
@@ -215,20 +205,26 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
                       {getDisplayName(buffer)}
                     </span>
 {#if getEffectiveUnread(buffer) > 0}
-                          <span
-                            class="buffer-notification-badge absolute right-2 top-1/2 -translate-y-1/2 px-2 py-0.5 text-[11px] font-semibold rounded-full {getBadgeClass(buffer)}"
+                          <Badge
+                            variant={buffer.notification > 0 ? 'danger' : 'warning'}
+                            mode="subtle"
+                            class="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold"
                             data-testid="unread-badge"
                           >
-                             {getEffectiveUnread(buffer)}
-                           </span>
+                            {getEffectiveUnread(buffer)}
+                          </Badge>
+                        {/if}
+{#if getQuickKeyIndex(buffer) !== null}
+                          <Badge
+                            mode="bright"
+                            class="absolute left-1 top-1/2 -translate-y-1/2 h-4 text-[10px] font-bold shadow-sm px-1"
+                            data-testid="quick-key"
+                          >
+                            {getQuickKeyIndex(buffer)}
+                          </Badge>
                         {/if}
                    <!-- Absolutely positioned right-side controls — don't consume flex space -->
                    <div class="absolute top-1/2 -translate-y-1/2 flex items-center gap-1 {getBufferRightOffset(buffer)}">
-                        {#if getQuickKeyIndex(buffer) !== null}
-                             <span class="buffer-quickkey inline-flex items-center justify-center px-1 h-4 text-[10px] font-bold rounded-full bg-accent/90 text-white shadow-sm">
-                               {getQuickKeyIndex(buffer)}
-                             </span>
-                           {/if}
                   <button
                        onclick={(e) => { e.stopPropagation(); handleTogglePin(buffer.id); }}
                          class="text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100 focus:opacity-100 transition-colors"
