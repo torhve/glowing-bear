@@ -428,18 +428,24 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                     updateTitle();
                     updateFavico();
 
-                    // Only intrusive notifications (desktop popup, sound) fire for
-                    // highlights or private messages, matching AngularJS behavior.
-                    // Regular channel messages only update passive indicators.
+                    // Desktop notifications (popup) fire only when window is not focused,
+                    // to avoid spamming the user when they're already looking at the tab.
+                    // Sound plays regardless of focus — it's a local audio cue.
                     const isHighlight = !!lineMsg.highlight;
                     const isPrivateMessage = lineMsg.tags_array.includes('notify_private');
-                    if (!isWindowFocused && buffer.notify !== 0 && (isHighlight || isPrivateMessage)) {
-                        // Strip WeeChat formatting codes from message/prefix for notification display
-                        const notificationBody = formatNotificationBody(lineMsg);
-
-                        // Trigger notification subsystem
-                        createHighlight(buffer, notificationBody);
+                    if (buffer.notify !== 0 && (isHighlight || isPrivateMessage)) {
+                        // Play notification sound for highlights/PMs regardless of window focus.
+                        // Sound is a local audio cue that doesn't depend on tab visibility.
                         playNotificationSound();
+
+                        // Desktop popup only when window is not focused
+                        if (!isWindowFocused) {
+                            // Strip WeeChat formatting codes from message/prefix for notification display
+                            const notificationBody = formatNotificationBody(lineMsg);
+
+                            // Trigger notification subsystem
+                            createHighlight(buffer, notificationBody);
+                        }
                     }
                 }
             }

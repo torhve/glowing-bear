@@ -501,12 +501,14 @@
     return () => window.removeEventListener('resize', onResize);
   });
 
+  // Hide buffer list on mobile; also close nicklist overlay since overlays are mutually exclusive.
   function hideBufferListOnMobile() {
-    if (isMobileState) showBufferList = false;
+    if (isMobileState) { showBufferList = false; nicklistOpenOnMobile = false; }
   }
 
+  // Show buffer list on mobile; close nicklist overlay since overlays are mutually exclusive.
   function showBufferListOnMobile() {
-    if (isMobileState) showBufferList = true;
+    if (isMobileState) { showBufferList = true; nicklistOpenOnMobile = false; }
   }
 
   function isMobile() {
@@ -560,41 +562,32 @@
     const deltaTime = Date.now() - touchStartTime;
 
     if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50 && deltaTime < 500) {
-      // Swipe right -> show buffer list (skip if touch started on nicklist overlay)
+      // Swipe right -> show buffer list, close nicklist (overlays are mutually exclusive)
       if (deltaX > 0) {
         if (touchStartedInNicklist && nicklistOpenOnMobile) {
-          // Swipe right on nicklist -> close it only when buffer list is not open
-          if (!showBufferList) {
-            nicklistOpenOnMobile = false;
-          }
-        } else {
-          // Swipe right from chat/buffer area -> show buffer list
-          // Do not close nicklist — each overlay is controlled by its own swipe direction
+          // Swipe right on nicklist overlay -> close it and show buffer list
+          nicklistOpenOnMobile = false;
           showBufferList = true;
+        } else {
+          // Swipe right from chat/buffer area -> show buffer list, close nicklist
+          showBufferList = true;
+          nicklistOpenOnMobile = false;
         }
       }
       // Swipe left -> check if from right edge (nicklist) or general (buffer list)
       else {
         const rightEdgeThreshold = 80;
         // If touching the nicklist panel while open -> close it directly
-        // Do NOT close nicklist via swipe when buffer list is visible
         if (nicklistOpenOnMobile && touchStartedInNicklist) {
-          if (!showBufferList) {
-            nicklistOpenOnMobile = false;
-          }
+          nicklistOpenOnMobile = false;
         }
-        // Swipe from right edge -> open nicklist (always, regardless of buffer list state)
-        // and close buffer list if it was open
+        // Swipe from right edge -> open nicklist and close buffer list
         else if (touchStartX > window.innerWidth - rightEdgeThreshold && !nicklistOpenOnMobile && (hasCurrentBufferNicklist || $settings.alwaysnicklist)) {
           nicklistOpenOnMobile = true;
-          if (showBufferList) {
-            showBufferList = false;
-          }
+          showBufferList = false;
         } else if (nicklistOpenOnMobile) {
-          // Close nicklist only when buffer list is not open
-          if (!showBufferList) {
-            nicklistOpenOnMobile = false;
-          }
+          // Swipe left on nicklist from non-right-edge -> close it
+          nicklistOpenOnMobile = false;
         } else {
           // General swipe left -> close buffer list
           showBufferList = false;
@@ -634,7 +627,7 @@
   <ConnectionForm />
 {:else}
   <div class="main-layout h-dvh flex flex-col bg-bg" data-testid="chat-view">
-    <TopBar bufferListVisible={showBufferList || !isMobileState} onBufferSelect={hideBufferListOnMobile} onSearchOpen={showBufferListOnMobile} onNicklistToggle={() => { if (isMobile()) nicklistOpenOnMobile = !nicklistOpenOnMobile; else updateSettings({ showNicklist: !$settings.showNicklist }); }} />
+        <TopBar bufferListVisible={showBufferList || !isMobileState} onBufferSelect={hideBufferListOnMobile} onSearchOpen={showBufferListOnMobile} onNicklistToggle={() => { if (isMobile()) { nicklistOpenOnMobile = !nicklistOpenOnMobile; if (nicklistOpenOnMobile) showBufferList = false; } else updateSettings({ showNicklist: !$settings.showNicklist }); }} />
     <div class="main-content flex-1 flex overflow-hidden">
       {#if showBufferList || !isMobileState}
         <BufferList altKeyPressed={_altKeyPressed} onBufferSelect={hideBufferListOnMobile} />

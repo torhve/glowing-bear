@@ -111,10 +111,25 @@ function drawOnCanvas(count: number, type: 'notification' | 'unread'): void {
 }
 
 /**
- * Draw the favicon badge
+ * Draw the favicon badge.
+ * If the base image hasn't loaded yet, wait for it before drawing.
+ * This prevents silent failures when drawBadge is called during reconnect
+ * before initFavicon has finished loading /favicon.png.
  */
-export function drawBadge(count: number, type: 'notification' | 'unread'): void {
-    if (typeof document === 'undefined' || !isReady) return;
+export async function drawBadge(count: number, type: 'notification' | 'unread'): Promise<void> {
+    if (typeof document === 'undefined') return;
+
+    // Wait for base image to be ready — initFavicon loads asynchronously
+    if (!isReady) {
+        await new Promise<void>(resolve => {
+            const check = () => {
+                if (isReady) resolve();
+                else setTimeout(check, 50);
+            };
+            check();
+        });
+    }
+
     drawOnCanvas(count, type);
 }
 

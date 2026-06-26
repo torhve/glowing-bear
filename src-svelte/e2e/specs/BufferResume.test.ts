@@ -65,7 +65,7 @@ test('should restore last viewed buffer after reconnect', async () => {
     const activeItem = page.getByTestId('buffer-item')
         .filter({ hasText: 'glowing-bear' })
         .first();
-    await expect(activeItem).toHaveClass(/border-l-accent/);
+    await expect(activeItem).toHaveClass(/border-s-accent/);
 });
 
 test('should restore last viewed buffer after disconnect/reconnect via helper', async () => {
@@ -83,7 +83,7 @@ test('should restore last viewed buffer after disconnect/reconnect via helper', 
     const activeItem = page.getByTestId('buffer-item')
         .filter({ hasText: 'gbtest' })
         .first();
-    await expect(activeItem).toHaveClass(/border-l-accent/);
+    await expect(activeItem).toHaveClass(/border-s-accent/);
 });
 
 test('should fall back to weechat core when last viewed buffer no longer exists', async () => {

@@ -62,7 +62,10 @@
   // arrive on active buffer — readmarker persists until user scrolls to bottom (absorbed)
   // or switches buffers (recalculated by setActiveBuffer).
   let readEndIndex = $derived($currentBuffer?.lastSeen ?? -1);
-  let hasUnreadMessages = $derived($currentBuffer && readEndIndex >= 0 && readEndIndex < messages.length - 1);
+  // Readmarker visibility based solely on lastSeen position relative to message count.
+  // Do NOT depend on effectiveUnread — that value can be cleared by hotlist sync
+  // while lastSeen (and thus the readmarker) correctly persists for active buffers.
+  let hasUnreadMessages = $derived(readEndIndex >= 0 && readEndIndex < messages.length - 1);
   let unreadCount = $derived(readEndIndex >= 0 ? messages.length - readEndIndex - 1 : 0);
 
   function handleScroll() {
@@ -213,16 +216,28 @@
     // This ensures reliable at-bottom detection in both headed and headless mode.
     if (linesAdded) {
       requestAnimationFrame(() => {
-        // Re-read scroll state after rAF for accurate DOM measurements.
-        // Tolerance of 200px accounts for cumulative scrollHeight growth when multiple
-        // lines render before the user's scroll event fires (typical line ~20-30px).
-        const curIsAtBottom = containerRef!.scrollTop >= containerRef!.scrollHeight - containerRef!.clientHeight - 200;
+        // Re-read at-bottom state from actual DOM inside rAF.
+        // The pre-captured isAtBottom value can be stale if handleScroll hasn't fired yet
+        // (e.g., programmatic scrollTop changes that don't trigger Svelte on:scroll).
+        // Tight tolerance of 3px — only auto-scroll if truly at bottom.
+        // Generous tolerances cause false positives when users intentionally scroll up.
+        const domAtBottom = containerRef!.scrollTop >= containerRef!.scrollHeight - containerRef!.clientHeight - 3;
+        if (isAtBottom !== domAtBottom) {
+          isAtBottom = domAtBottom;
+          bufferBottom.set(domAtBottom);
+        }
+        const curIsAtBottom = isAtBottom;
 
-        // Re-compute hasUnreadMessages from fresh store values inside rAF.
+        // Re-compute readmarker state from live reactive values inside rAF.
         // $derived does NOT re-evaluate after async boundaries in Svelte 5,
-        // so the pre-captured curHasUnreadMessages may be stale by now.
+        // so we read $currentBuffer directly (reactive access works inside rAF).
+        // Use lastSeen position directly (not effectiveUnread) — hotlist sync
+        // can clear effectiveUnread while lastSeen correctly persists for active buffers.
+        // Read directly from $currentBuffer (reactive access works inside rAF).
+        // Cannot use $messages inside rAF — $derived is not a proper store.
         const freshReadEndIndex = $currentBuffer?.lastSeen ?? -1;
-        const freshHasUnread = $currentBuffer && freshReadEndIndex >= 0 && freshReadEndIndex < messages.length - 1;
+        const freshMessages = $currentBuffer?.lines ?? [];
+        const freshHasUnread = freshReadEndIndex >= 0 && freshReadEndIndex < freshMessages.length - 1;
 
         if (!freshHasUnread) {
           // No unread messages — scroll to bottom regardless of scroll position.
@@ -235,7 +250,7 @@
           // User explicitly caught up by scrolling to bottom, so clear the readmarker.
           const buf = get(currentBuffer);
           if (buf) {
-            buf.lastSeen = messages.length - 1;
+            buf.lastSeen = freshMessages.length - 1;
             buffers.set({ ...get(buffers), [buf.id]: { ...buf } });
           }
           containerRef!.scrollTop = containerRef!.scrollHeight;
@@ -283,35 +298,43 @@
       return;
     }
 
-    // Buffer changed but no lines added — handle synchronously as before.
-    if (!curHasUnreadMessages) {
-      // No unread messages — scroll to bottom.
-      readmarkerFailures = 0;
-      requestAnimationFrame(() => {
-        containerRef!.scrollTop = containerRef!.scrollHeight;
-        isAtBottom = true;
-      });
-    } else if (readmarkerFailures >= 2) {
-      // Readmarker fallback — scroll to bottom after repeated failures.
-      readmarkerFailures = 0;
-      requestAnimationFrame(() => {
-        containerRef!.scrollTop = containerRef!.scrollHeight;
-        isAtBottom = true;
-      });
-    } else {
-      // Unread messages present — scroll to readmarker.
-      // Double rAF: first cycle lets Svelte render readmarker DOM, second positions it.
-      requestAnimationFrame(() => {
-        const rmRow = document.querySelector('.readmarker');
-        if (!rmRow || !rmRow.parentElement) {
-          readmarkerFailures++;
-          prevScrollKey = '';
-          isAtBottom = false;
-          return;
-        }
+    // Buffer changed but no lines added — defer entire branch to rAF so that
+    // Svelte has time to render the new buffer's content (including readmarker)
+    // before we check for unread messages or try to position the scroll.
+    requestAnimationFrame(() => {
+      // Re-compute readmarker state from live reactive values inside rAF.
+      // $derived does NOT re-evaluate after async boundaries in Svelte 5,
+      // so we read $currentBuffer directly (reactive access works inside rAF).
+      // Use lastSeen position directly (not effectiveUnread) — hotlist sync
+      // can clear effectiveUnread while lastSeen correctly persists for active buffers.
+      // Read directly from $currentBuffer (reactive access works inside rAF).
+      // Cannot use $messages inside rAF — $derived is not a proper store.
+      const freshReadEndIndex = $currentBuffer?.lastSeen ?? -1;
+      const freshMessages = $currentBuffer?.lines ?? [];
+      const freshHasUnread = freshReadEndIndex >= 0 && freshReadEndIndex < freshMessages.length - 1;
 
-        // Second rAF ensures layout is computed after Svelte's DOM insert
+      if (!freshHasUnread) {
+        // No unread messages — scroll to bottom.
+        readmarkerFailures = 0;
+        containerRef!.scrollTop = containerRef!.scrollHeight;
+        isAtBottom = true;
+      } else if (readmarkerFailures >= 2) {
+        // Readmarker fallback — scroll to bottom after repeated failures.
+        readmarkerFailures = 0;
+        containerRef!.scrollTop = containerRef!.scrollHeight;
+        isAtBottom = true;
+      } else {
+        // Unread messages present — scroll to readmarker.
+        // Second rAF ensures layout is computed after Svelte's DOM insert.
         requestAnimationFrame(() => {
+          const rmRow = document.querySelector('.readmarker');
+          if (!rmRow || !rmRow.parentElement) {
+            readmarkerFailures++;
+            prevScrollKey = '';
+            isAtBottom = false;
+            return;
+          }
+
           readmarkerFailures = 0;
           // Use getBoundingClientRect for accurate viewport-relative positioning.
           // offsetTop is unreliable inside collapsed tables (relative to td, not container).
@@ -337,8 +360,8 @@
             isAtBottom = false;
           }
         });
-      });
-    }
+      }
+    });
   });
 
   // Handle mention click: extract nick from message prefix, insert into input at cursor.

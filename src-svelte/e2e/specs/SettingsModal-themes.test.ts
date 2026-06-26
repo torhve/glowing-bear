@@ -54,7 +54,7 @@ for (const { id, label } of catppuccinThemes) {
     test(`selecting "${label}" should set data-theme="${id}"`, async () => {
         await openSettings(page);
         const selector = page.getByTestId('theme-selector');
-        await selector.selectOption({ label });
+        await selector.selectOption({ value: id });
 
         const themeAttr = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
         expect(themeAttr).toBe(id);
@@ -63,7 +63,7 @@ for (const { id, label } of catppuccinThemes) {
 
 test('Catppuccin Mocha should apply correct background color', async () => {
     await openSettings(page);
-    await page.getByTestId('theme-selector').selectOption({ label: '☕ Catppuccin Mocha' });
+    await page.getByTestId('theme-selector').selectOption({ value: 'catppuccin-mocha' });
 
     const bgColor = await page.evaluate(() => {
         const root = document.documentElement;
@@ -74,7 +74,7 @@ test('Catppuccin Mocha should apply correct background color', async () => {
 
 test('Catppuccin Latte should apply correct background color', async () => {
     await openSettings(page);
-    await page.getByTestId('theme-selector').selectOption({ label: '🪴 Catppuccin Latte' });
+    await page.getByTestId('theme-selector').selectOption({ value: 'catppuccin-latte' });
 
     const bgColor = await page.evaluate(() => {
         const root = document.documentElement;
@@ -85,7 +85,7 @@ test('Catppuccin Latte should apply correct background color', async () => {
 
 test('theme selection should persist to localStorage', async () => {
     await openSettings(page);
-    await page.getByTestId('theme-selector').selectOption({ label: '☕ Catppuccin Frappé' });
+    await page.getByTestId('theme-selector').selectOption({ value: 'catppuccin-frappe' });
     await closeSettings(page);
 
     const storedTheme = await page.evaluate(() => {
@@ -102,7 +102,7 @@ test('theme selection should persist to localStorage', async () => {
 
 test('Catppuccin theme should survive page reload', async () => {
     await openSettings(page);
-    await page.getByTestId('theme-selector').selectOption({ label: '🌿 Catppuccin Macchiato' });
+    await page.getByTestId('theme-selector').selectOption({ value: 'catppuccin-macchiato' });
     await closeSettings(page);
 
     await page.reload();

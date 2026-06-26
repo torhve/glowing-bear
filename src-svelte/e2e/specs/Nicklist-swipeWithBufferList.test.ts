@@ -59,8 +59,8 @@ test.beforeEach(async () => {
     });
 });
 
-// Swipe right from chat area should NOT close an open nicklist when buffer list is visible.
-test('swipe right from chat does not close nicklist when buffer list is visible', async () => {
+// Swipe right to open buffer list should close an open nicklist (overlays are mutually exclusive).
+test('swipe right to open buffer list closes nicklist', async () => {
     await setSettings(page, { showNicklist: true, alwaysnicklist: true });
     const width = 375;
     const height = 667;
@@ -74,18 +74,15 @@ test('swipe right from chat does not close nicklist when buffer list is visible'
     // Open nicklist via swipe from right edge
     await swipeGesture(page, width - 10, height / 2, 50, height / 2);
     await expect(page.locator('.mobile-nicklist-overlay')).toHaveClass(/translate-x-0/);
+    // Buffer list should not be visible
+    await expect(page.getByTestId('buffer-list')).not.toBeAttached();
 
-    // Show buffer list via swipe right from left edge
+    // Show buffer list via swipe right from left edge — should close nicklist
     await swipeGesture(page, 10, height / 2, width - 50, height / 2);
     await expect(page.getByTestId('buffer-list')).toBeVisible({ timeout: 5000 });
 
-    // Both overlays are now open — swipe right from chat should NOT close nicklist
-    await swipeGesture(page, 50, height / 2, width - 10, height / 2);
-
-    // Nicklist should still be open
-    await expect(page.locator('.mobile-nicklist-overlay')).toHaveClass(/translate-x-0/);
-    // Buffer list should also still be visible
-    await expect(page.getByTestId('buffer-list')).toBeVisible();
+    // Nicklist should have been closed — overlays are mutually exclusive
+    await expect(page.locator('.mobile-nicklist-overlay')).toHaveClass(/translate-x-full/);
 });
 
 // Swipe left from non-right-edge should close buffer list without opening nicklist.

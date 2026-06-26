@@ -441,11 +441,14 @@ export function setActiveBuffer(bufferId: string): boolean {
     // Compute effective unread count that avoids double-counting.
     const effectiveUnread = getEffectiveUnread(buffer);
 
-    // Recalculate lastSeen from effective unread whenever unread exists,
-    // to handle stale values set during sync before the hotlist was processed.
+    // Recalculate lastSeen from unread count whenever unread exists.
+    // Use Math.max(effectiveUnread, localUnread) to handle hotlist race:
+    // effectiveUnread may be 0 if hotlist hasn't synced yet, but localUnread
+    // already tracks messages received while away from this buffer.
     let targetLastSeen = buffer.lastSeen;
-    if (buffer.lines.length > 0 && effectiveUnread > 0) {
-        targetLastSeen = Math.max(0, buffer.lines.length - effectiveUnread - 1);
+    const pendingUnread = Math.max(effectiveUnread, buffer.localUnread);
+    if (buffer.lines.length > 0 && pendingUnread > 0) {
+        targetLastSeen = Math.max(0, buffer.lines.length - pendingUnread - 1);
     } else if (targetLastSeen >= 0) {
         targetLastSeen = Math.min(targetLastSeen, buffer.lines.length - 1);
     }

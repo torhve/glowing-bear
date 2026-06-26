@@ -205,7 +205,9 @@ export function updateTitle(): void {
 }
 
 /**
- * Update the favicon badge
+ * Update the favicon badge.
+ * drawBadge is async (waits for base image), so we fire-and-forget here
+ * to avoid making all callers async.
  */
 export function updateFavico(): void {
     const s = get(settings);
@@ -216,11 +218,11 @@ export function updateFavico(): void {
     const { unread: totalUnread, notifications: totalNotifications } = getTotalUnread();
 
     if (totalNotifications > 0) {
-        drawBadge(totalNotifications, 'notification');
+        void drawBadge(totalNotifications, 'notification');
         try { navigator.setAppBadge(totalNotifications); } catch { /* not supported */ }
         void setBadgeCount(totalNotifications);
     } else if (totalUnread > 0) {
-        drawBadge(totalUnread, 'unread');
+        void drawBadge(totalUnread, 'unread');
         try { navigator.setAppBadge(totalUnread); } catch { /* not supported */ }
         void setBadgeCount(totalUnread);
     } else {
