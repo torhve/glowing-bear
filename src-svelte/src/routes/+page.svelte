@@ -12,7 +12,7 @@
   import { settings, updateSettings, applyHashParams } from '$lib/stores/settings';
   import { initTheme } from '$lib/stores/theme';
   import { get } from 'svelte/store';
-  import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig, sortedVisibleBuffers, checkAndNavigatePendingNotificationBuffer, getEffectiveUnread } from '$lib/stores/models';
+  import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig, sortedVisibleBuffers, checkAndNavigatePendingNotificationBuffer } from '$lib/stores/models';
   import { connectionState, setReconnectAttempts, setErrors } from '$lib/stores/connectionStore';
   import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer, getWs } from '$lib/stores/connectionManager';
   import { Protocol } from '$lib/weechat';
@@ -320,20 +320,28 @@
       return;
     }
 
-    // Alt+A -> switch to next buffer with activity, following unified sort order
+    // Alt+A -> switch to most urgent buffer (notifications > unreads, sorted by number)
+    // Matches AngularJS behavior: always scans from the beginning of the buffer list.
+    // Repeated presses naturally advance because switching clears that buffer's counts.
     if (e.altKey && (code === 97 || code === 65) && !e.ctrlKey) {
       e.preventDefault();
-      const sortedBuffs = get(sortedVisibleBuffers) as BufferData[];
-      const currentId = get(activeBufferId);
-      let startIndex = sortedBuffs.findIndex((b: BufferData) => b.id === currentId);
-      if (startIndex === -1) startIndex = 0;
+      const allBuffers = Object.values(get(buffers)) as BufferData[];
+      const sortedByNumber = allBuffers
+        .filter((b: BufferData) => !b.hidden)
+        .sort((a: BufferData, b: BufferData) => a.number - b.number);
 
-      // Find next buffer with any activity (highlights and unreads are already first in sort order)
-      for (let i = 1; i < sortedBuffs.length; i++) {
-        const idx = (startIndex + i) % sortedBuffs.length;
-        const b = sortedBuffs[idx];
-        if (b && getEffectiveUnread(b) > 0) {
-          switchBuffer(b.id);
+      // First pass: find first buffer with notifications (highlights/mentions)
+      for (const buf of sortedByNumber) {
+        if (buf.notification > 0) {
+          switchBuffer(buf.id);
+          return;
+        }
+      }
+
+      // Second pass: find first buffer with unread lines
+      for (const buf of sortedByNumber) {
+        if (buf.unread > 0) {
+          switchBuffer(buf.id);
           return;
         }
       }
