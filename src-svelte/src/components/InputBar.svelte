@@ -196,8 +196,8 @@
         toggleFormat('italic');
         return true;
       }
-      // Ctrl+U — toggle underline
-      if (code === 85 && !e.shiftKey) {
+      // Ctrl+_ — toggle underline (matches WeeChat; frees Ctrl+U for readline)
+      if (e.key === '_' || (code === 189 && e.shiftKey)) {
         e.preventDefault();
         toggleFormat('underline');
         return true;
@@ -678,7 +678,7 @@
           data-testid="format-underline"
           onclick={() => toggleFormat('underline')}
           class="format-btn px-2 py-0.5 text-xs underline rounded border transition-colors bg-input-bg border-border text-text-secondary hover:text-text hover:border-text-secondary"
-          title="Underline (Ctrl+U)"
+          title="Underline (Ctrl+_)"
         >U</button>
         <button
           type="button"

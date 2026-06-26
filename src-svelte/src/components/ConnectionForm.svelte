@@ -418,7 +418,7 @@ import Key from '@lucide/svelte/icons/key';
             <table class="w-full text-xs">
               <tbody>
                 <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Ctrl+A/E</td><td class="py-0.5">Start/end of line</td></tr>
-                <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Ctrl+U/K</td><td class="py-0.5">Delete to/from cursor</td></tr>
+                <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Ctrl+U</td><td class="py-0.5">Delete from start of line to cursor</td></tr>
                 <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Ctrl+W</td><td class="py-0.5">Delete word before cursor</td></tr>
                 <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Ctrl+B/F</td><td class="py-0.5">Move back/forward one char</td></tr>
                 <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Ctrl+H</td><td class="py-0.5">Backspace</td></tr>
@@ -429,7 +429,8 @@ import Key from '@lucide/svelte/icons/key';
             <p class="font-medium text-text mb-1">Text formatting</p>
             <table class="w-full text-xs">
               <tbody>
-                <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Ctrl+B/I/U</td><td class="py-0.5">Bold / Italic / Underline</td></tr>
+                <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Ctrl+B/I</td><td class="py-0.5">Bold / Italic</td></tr>
+                <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Ctrl+_</td><td class="py-0.5">Underline</td></tr>
                 <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Ctrl+Shift+R</td><td class="py-0.5">Reset formatting</td></tr>
                 <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Ctrl+K</td><td class="py-0.5">Color picker</td></tr>
               </tbody>
