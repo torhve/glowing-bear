@@ -22,19 +22,21 @@ export async function switchToBuffer(page: Page, name: string) {
 
 // On mobile viewports the buffer list hides after selection. This variant
 // temporarily widens the viewport so the buffer list shows, switches buffers,
-// then restores the original viewport size. After restoring, it calls
-// hideBufferListOnMobile so the buffer list hides on mobile as expected.
+// then restores the original viewport size. Since the buffer click happens
+// at desktop viewport, hideBufferListOnMobile isn't triggered (it checks
+// isMobileState). So we manually hide the buffer list after restoring mobile.
 export async function switchToBufferMobile(page: Page, name: string) {
   const orig = await page.viewportSize() || { width: 375, height: 667 };
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.evaluate(() => window.dispatchEvent(new Event('resize')));
   await page.getByTestId('buffer-item').first().waitFor({ state: 'visible', timeout: 5000 });
   await switchToBuffer(page, name);
-  // Restore mobile viewport first so isMobile() returns true
+  // Restore mobile viewport — resize listener updates isMobileState
+  // and may show buffer list on desktop→mobile transition.
   await page.setViewportSize(orig);
   await page.evaluate(() => window.dispatchEvent(new Event('resize')));
-  await expect(page.getByTestId('buffer-list')).toBeAttached();
-  // Now hideBufferListOnMobile will actually set showBufferList = false
+  // Manually hide buffer list since the click happened at desktop viewport
+  // where hideBufferListOnMobile wasn't triggered.
   await page.evaluate(() => (window as any).__hideBufferListOnMobile?.());
   await expect(page.getByTestId('buffer-list')).not.toBeAttached();
 }

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { connectToWeechat, clearSettings, setSettings, waitForAppReady, reconnect, fillPortInput } from '../helpers/connection';
-import { switchToBuffer } from '../helpers/buffers';
+import { switchToBuffer, switchToBufferMobile } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
 
 let page: import('@playwright/test').Page;
@@ -38,11 +38,13 @@ test.beforeEach(async () => {
 test('clicking hotlist item switches buffer', async () => {
     await page.setViewportSize({ width: 375, height: 667 });
     await page.evaluate(() => window.dispatchEvent(new Event('resize')));
+    // Buffer list is hidden by default on mobile — show it via dev helper
+    await page.evaluate(() => (window as any).__showBufferListOnMobile?.());
     await page.getByTestId('buffer-item').first().waitFor({ state: 'visible', timeout: 5000 });
 
     // Reconnect to get fresh state at mobile viewport
     await reconnect(page);
-    await switchToBuffer(page, 'gbtest');
+    await switchToBufferMobile(page, 'gbtest');
 
     // Send a message to another buffer to create hotlist entry
     const msg = 'hotlist-click-test-' + Date.now();
