@@ -276,16 +276,15 @@
       return;
     }
 
-    // Skip when focus is in an input field so user can type normally
-    const activeEl = document.activeElement;
-    const tag = activeEl?.tagName || '';
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-    if ((activeEl as HTMLElement)?.isContentEditable) return;
-
     const code = e.keyCode || e.which;
 
-    // PageUp -> scroll chat up
+    // PageUp/PageDown -> scroll chat (skip when focus is in an input field)
     if (!e.ctrlKey && !e.altKey && !e.shiftKey && (code === 33 || code === 34)) {
+      // Don't scroll chat when user is typing in the input bar
+      const activeEl = document.activeElement;
+      const tag = activeEl?.tagName || '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if ((activeEl as HTMLElement)?.isContentEditable) return;
       e.preventDefault();
       const chatContainer = document.querySelector<HTMLDivElement>('[data-testid="chat-messages"]');
       if (chatContainer) {
