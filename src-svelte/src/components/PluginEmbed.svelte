@@ -199,16 +199,6 @@
       return;
     }
 
-    const asciinemaMatch = url.match(/asciinema\.org\/a\/([a-zA-Z0-9]+)/);
-    if (asciinemaMatch) {
-      const script = document.createElement('script');
-      script.src = `https://asciinema.org/a/${asciinemaMatch[1]}.js`;
-      script.id = `asciicast-${asciinemaMatch[1]}`;
-      embedRef.innerHTML = '';
-      embedRef.appendChild(script);
-      return;
-    }
-
     const yrMatch = url.match(/yr\.no\/place\/[^/]+\/[^/]+\/[^/]+\/#/);
     if (yrMatch) {
       const parts = url.split('/');
