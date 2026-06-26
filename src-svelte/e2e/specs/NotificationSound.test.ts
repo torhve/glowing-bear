@@ -89,7 +89,7 @@ test.skip('sound plays on highlight when setting enabled', async () => {
 });
 
 test('sound does not play when soundnotification is disabled', async () => {
-    await reconnect(page, { soundnotification: false });
+    await reconnect(page, { extraSettings: { soundnotification: false } });
     await waitForBuffer(page, '#glowing-bear', 10000);
     await switchToBuffer(page, '#glowing-bear');
 
