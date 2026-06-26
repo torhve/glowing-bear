@@ -92,6 +92,30 @@ test('Bold button inserts bold control char on click', async () => {
     expect(value).not.toContain('\u000f');
 });
 
+// Bold shortcut test
+
+test('Ctrl+B inserts bold control char via shortcut', async () => {
+    const input = page.getByTestId('message-input');
+    await input.focus();
+    await page.waitForTimeout(50);
+
+    await clearFormattingState();
+    await page.waitForTimeout(50);
+
+    await page.keyboard.down('Control');
+    await page.keyboard.press('b');
+    await page.keyboard.up('Control');
+    await page.waitForTimeout(50);
+
+    await input.pressSequentially('bold text');
+    await page.waitForTimeout(50);
+
+    const value = await getRawInputValue();
+    expect(value).toContain('\u0002');
+    expect(value).toContain('bold text');
+    expect(value).not.toContain('\u000f');
+});
+
 // Italic button tests
 
 test('Italic button inserts italic control char on click', async () => {
@@ -114,6 +138,30 @@ test('Italic button inserts italic control char on click', async () => {
     expect(value).not.toContain('\u000f');
 });
 
+// Italic shortcut test
+
+test('Ctrl+I inserts italic control char via shortcut', async () => {
+    const input = page.getByTestId('message-input');
+    await input.focus();
+    await page.waitForTimeout(50);
+
+    await clearFormattingState();
+    await page.waitForTimeout(50);
+
+    await page.keyboard.down('Control');
+    await page.keyboard.press('i');
+    await page.keyboard.up('Control');
+    await page.waitForTimeout(50);
+
+    await input.pressSequentially('italic text');
+    await page.waitForTimeout(50);
+
+    const value = await getRawInputValue();
+    expect(value).toContain('\u001d');
+    expect(value).toContain('italic text');
+    expect(value).not.toContain('\u000f');
+});
+
 // Underline button tests
 
 test('Underline button inserts underline control char on click', async () => {
@@ -133,6 +181,33 @@ test('Underline button inserts underline control char on click', async () => {
 
     const value = await getRawInputValue();
     expect(value).toContain('\u001f');
+    expect(value).not.toContain('\u000f');
+});
+
+// Underline shortcut tests
+
+test('Ctrl+_ inserts underline control char via shortcut', async () => {
+    const input = page.getByTestId('message-input');
+    await input.focus();
+    await page.waitForTimeout(50);
+
+    await clearFormattingState();
+    await page.waitForTimeout(50);
+
+    // Ctrl+_ is produced by Ctrl+Shift+- on US keyboards
+    await page.keyboard.down('Control');
+    await page.keyboard.down('Shift');
+    await page.keyboard.press('-');
+    await page.keyboard.up('Shift');
+    await page.keyboard.up('Control');
+    await page.waitForTimeout(50);
+
+    await input.pressSequentially('underlined text');
+    await page.waitForTimeout(50);
+
+    const value = await getRawInputValue();
+    expect(value).toContain('\u001f');
+    expect(value).toContain('underlined text');
     expect(value).not.toContain('\u000f');
 });
 
