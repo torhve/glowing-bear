@@ -293,7 +293,7 @@
           {/if}
         </span>
       </td>
-      <td class="prefix max-w-[120px] px-1 py-0 align-top whitespace-nowrap text-right border-r overflow-hidden truncate font-mono">
+      <td class="prefix max-w-[120px] py-0 pl-1 pr-[5px] align-top whitespace-nowrap text-right border-r overflow-hidden truncate font-mono">
         <span class="compact-prefix flex justify-end items-center" class:repeated-prefix={isRepeatedPrefix}>
           <span onclick={handleMention} role="button" tabindex="0" class="mention-link" onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleMention(); } }}>
             {#if message.showHiddenBrackets}<span class="hidden-bracket">&lt;</span>{/if}
@@ -319,7 +319,7 @@
           </span>
         </span>
       </td>
-      <td class="message py-px px-1 align-middle whitespace-pre-wrap break-words font-mono" data-message={message.text}>
+      <td class="message py-px pl-[5px] pr-1 align-middle font-mono" data-message={message.text}>
         <!-- Plugin embeds -->
         {#if metadata.length > 0}
           {#each metadata as meta, i (i)}
@@ -417,7 +417,7 @@
   }
 
   .prefix {
-    border-right: 1px solid var(--gb-border);
+    border-right: 1px solid color-mix(in srgb, var(--gb-accent) 40%, transparent);
   }
 
   .prefix .compact-prefix.repeated-prefix {
