@@ -98,7 +98,7 @@ import BaseDialog from '$components/BaseDialog.svelte';
     <div class="settings-header px-6 py-4 border-b border-border flex items-center justify-between">
       <h2 id="settings-title" class="text-lg font-bold text-white">Settings</h2>
       <div class="flex items-center space-x-2">
-        <span class="settings-version text-xs text-text-muted">Glowing Bear version {appVersion} · WeeChat {$weechatVersion.join('.')}</span>
+        <span class="settings-version text-xs text-text-muted">Glowing Bear version {appVersion} ({__GIT_COMMIT__}) · WeeChat {$weechatVersion.join('.')}</span>
         <button
           type="button"
           data-testid="settings-modal-close"
