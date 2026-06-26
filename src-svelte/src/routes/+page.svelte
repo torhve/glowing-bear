@@ -461,8 +461,14 @@
     };
   });
 
+  // Hidden by default on mobile — shown via swipe-right or menu button.
+  // Always visible on desktop regardless of this flag.
   let showBufferList = $state(false);
   let nicklistOpenOnMobile = $state(false);
+  // Reactive mobile state — updated via resize listener so Svelte re-renders
+  // when viewport crosses the 768px threshold. Without this, isMobile() reads
+  // stale window.innerWidth that Svelte doesn't track.
+  let isMobileState = $state(typeof window !== 'undefined' && window.innerWidth < 768);
   // Whether current buffer has nick data to display (used for auto-hiding nicklist)
   let hasCurrentBufferNicklist = $derived(bufferHasNicklist($currentBuffer));
   let touchStartX = 0;
@@ -472,16 +478,39 @@
   // Whether touch gesture originated inside the mobile nicklist overlay
   let touchStartedInNicklist = $state(false);
 
+  // Resize listener keeps isMobileState in sync with actual viewport size.
+  // This ensures {#if} blocks and touch gesture guards react correctly when
+  // the viewport crosses the mobile/desktop boundary.
+  $effect(() => {
+    function onResize() {
+      const prev = isMobileState;
+      isMobileState = typeof window !== 'undefined' && window.innerWidth < 768;
+      // When transitioning from mobile to desktop, close mobile overlays.
+      if (prev && !isMobileState) {
+        showBufferList = false;
+        nicklistOpenOnMobile = false;
+      }
+      // When transitioning from desktop to mobile, show buffer list so
+      // users can select a buffer. Reset nicklist overlay.
+      if (!prev && isMobileState) {
+        showBufferList = true;
+        nicklistOpenOnMobile = false;
+      }
+    }
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  });
+
   function hideBufferListOnMobile() {
-    if (isMobile()) showBufferList = false;
+    if (isMobileState) showBufferList = false;
   }
 
   function showBufferListOnMobile() {
-    if (isMobile()) showBufferList = true;
+    if (isMobileState) showBufferList = true;
   }
 
   function isMobile() {
-    return typeof window !== 'undefined' && window.innerWidth < 768;
+    return isMobileState;
   }
 
   function initTouchGestures() {
@@ -592,20 +621,20 @@
   <ConnectionForm />
 {:else}
   <div class="main-layout h-dvh flex flex-col bg-bg" data-testid="chat-view">
-    <TopBar bufferListVisible={showBufferList || !isMobile()} onBufferSelect={hideBufferListOnMobile} onSearchOpen={showBufferListOnMobile} onNicklistToggle={() => { if (isMobile()) nicklistOpenOnMobile = !nicklistOpenOnMobile; else updateSettings({ showNicklist: !$settings.showNicklist }); }} />
+    <TopBar bufferListVisible={showBufferList || !isMobileState} onBufferSelect={hideBufferListOnMobile} onSearchOpen={showBufferListOnMobile} onNicklistToggle={() => { if (isMobile()) nicklistOpenOnMobile = !nicklistOpenOnMobile; else updateSettings({ showNicklist: !$settings.showNicklist }); }} />
     <div class="main-content flex-1 flex overflow-hidden">
-      {#if showBufferList || !isMobile()}
+      {#if showBufferList || !isMobileState}
         <BufferList altKeyPressed={_altKeyPressed} onBufferSelect={hideBufferListOnMobile} />
       {/if}
       <div class="chat-area flex-1 flex flex-col min-w-0">
         <ChatView />
         <InputBar />
       </div>
-      {#if $settings.showNicklist && !isMobile() && hasCurrentBufferNicklist}
+      {#if $settings.showNicklist && !isMobileState && hasCurrentBufferNicklist}
         <Nicklist />
       {/if}
       <!-- Desktop nicklist rendered inline -->
-      {#if isMobile() && (hasCurrentBufferNicklist || $settings.alwaysnicklist)}
+      {#if isMobileState && (hasCurrentBufferNicklist || $settings.alwaysnicklist)}
         <div class="mobile-nicklist-overlay fixed top-0 right-0 bottom-0 h-screen w-52 sm:w-28 lg:w-30 z-50 transition-transform duration-200 ease-out {nicklistOpenOnMobile ? 'translate-x-0' : 'translate-x-full'}">
           <button
             onclick={() => { nicklistOpenOnMobile = false; }}

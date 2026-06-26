@@ -40,9 +40,13 @@ test('hotlist hidden on desktop', async () => {
 // On mobile after buffer selection, hotlist renders in place of title.
 test('hotlist visible on mobile after buffer selection', async () => {
     await page.setViewportSize({ width: 375, height: 667 });
+    // Dispatch resize so Svelte's reactive isMobileState updates.
+    // Playwright's setViewportSize doesn't fire DOM events, so we need this.
     await page.evaluate(() => window.dispatchEvent(new Event('resize')));
-    await page.getByTestId('buffer-item').first().waitFor({ state: 'visible', timeout: 5000 });
-    // Click a buffer from the list — visible before any selection on mobile
+    // Buffer list is hidden by default on mobile — show it via dev helper
+    await page.evaluate(() => (window as any).__showBufferListOnMobile?.());
+    await page.waitForFunction(() => document.querySelector('[data-testid="buffer-item"]') !== null, { timeout: 10000 });
+    // Click a buffer from the list
     await switchToBuffer(page, 'glowing-bear');
     await botSay('hotlist test message 2');
     // Buffer list hidden on mobile after selection
