@@ -10,11 +10,11 @@
   import { DEBUG_NICKLIST } from '$lib/debug';
   import FormInput from './FormInput.svelte';
 
-  let { onClose }: { onClose?: () => void } = $props();
+  let { onClose, forceShow }: { onClose?: () => void; forceShow?: boolean } = $props();
   let searchQuery = $state('');
 
-  // Whether settings allow showing the nicklist
-  let showNicklist = $derived($settings.showNicklist);
+  // Whether settings allow showing the nicklist (bypassed when forceShow is true for mobile overlay)
+  let showNicklist = $derived(forceShow ?? $settings.showNicklist);
 
   // Whether current buffer actually has nick data to display
   let hasNicklist = $derived(bufferHasNicklist($currentBuffer));
