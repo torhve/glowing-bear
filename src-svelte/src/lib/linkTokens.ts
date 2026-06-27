@@ -49,10 +49,8 @@ export function tokenizeLinks(text: string): LinkToken[] {
 
     const tokens: LinkToken[] = [];
     let lastIndex = 0;
-    const regex = new RegExp(URL_REGEX.source, 'g');
-    let match;
 
-    while ((match = regex.exec(text)) !== null) {
+    for (const match of text.matchAll(URL_REGEX)) {
         // Add text before the URL
         if (match.index > lastIndex) {
             const beforeText = text.slice(lastIndex, match.index);
