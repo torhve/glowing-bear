@@ -3,7 +3,7 @@
   import { get } from 'svelte/store';
   import { currentBuffer, saveScrollPosition, activeBufferId, bufferBottom, buffers, recalculateLinesPerScreen } from '$lib/stores/models';
   import { settings } from '$lib/stores/settings';
-  import { fetchMoreLines } from '$lib/stores/connectionManager';
+  import { fetchMoreLines, closeBufferOnWeeChat, pinBuffer, unpinBuffer } from '$lib/stores/connectionManager';
   import { buildMentionText, isFreeBuffer, modifyTextareaValue } from '$lib/utils';
   import BufferLineRow from '$components/BufferLineRow.svelte';
   import TopicModal from '$components/TopicModal.svelte';
@@ -11,6 +11,9 @@
   import ChevronUp from '@lucide/svelte/icons/chevron-up';
   import Inbox from '@lucide/svelte/icons/inbox';
   import FileText from '@lucide/svelte/icons/file-text';
+  import Pin from '@lucide/svelte/icons/pin';
+  import PinOff from '@lucide/svelte/icons/pin-off';
+  import X from '@lucide/svelte/icons/x';
 
   let containerRef = $state<HTMLDivElement>();
   let endOfBufferRef = $state<HTMLSpanElement>();
@@ -65,9 +68,37 @@
 // Readmarker visibility based solely on lastSeen position relative to message count.
       // Do NOT depend on effectiveUnread — that value can be cleared by hotlist sync
       // while lastSeen (and thus the readmarker) correctly persists for active buffers.
-      let unreadCount = $derived(readEndIndex >= 0 ? messages.length - readEndIndex - 1 : 0);
+          let unreadCount = $derived(readEndIndex >= 0 ? messages.length - readEndIndex - 1 : 0);
 
-  function handleScroll() {
+      // Toggle pin/unpin for the currently active buffer via WeeChat localvar_set.
+      function handleTogglePin() {
+        const bufId = get(activeBufferId);
+        if (!bufId) return;
+        const bufferData = get(buffers)[bufId];
+        if (!bufferData) return;
+        const wasPinned = bufferData.pinned;
+        buffers.update(current => {
+          const existing = current[bufId];
+          if (!existing) return current;
+          const updated = { ...current };
+          updated[bufId] = { ...existing, pinned: !wasPinned };
+          return updated;
+        });
+        if (wasPinned) {
+          unpinBuffer(bufId);
+        } else {
+          pinBuffer(bufId);
+        }
+      }
+
+      // Close the currently active buffer via WeeChat /close command.
+      function handleCloseBuffer() {
+        const bufId = get(activeBufferId);
+        if (!bufId) return;
+        closeBufferOnWeeChat(bufId);
+      }
+
+      function handleScroll() {
     if (!containerRef) return;
     const { scrollTop, scrollHeight, clientHeight } = containerRef;
 
@@ -389,22 +420,56 @@
 </script>
 
 <div class="chat-view-container flex-1 flex flex-col overflow-hidden">
-  {#if $currentBuffer}
-    <button
-      type="button"
-      data-testid="topic-bar"
-      popovertarget="topic-modal"
-      class="h-8 bg-input-bg border-b border-border flex items-center px-3 text-sm hover:bg-surface transition-colors w-full text-left"
-      title="Click to view topic"
-    >
-      <FileText size={14} class="text-text-muted mr-1 flex-shrink-0" />
-      <span class="topic-channel-name text-text flex-shrink-0 whitespace-nowrap">{$currentBuffer.shortName}</span>
-      <span class="topic-separator text-text-muted mx-2 flex-shrink-0">-</span>
-      <span class="topic-text text-text-secondary truncate overflow-hidden min-w-0">
-        <LinkifiedText text={topicText} />
-      </span>
-    </button>
-  {/if}
+      {#if $currentBuffer}
+        <div class="h-8 bg-input-bg border-b border-border flex items-center px-3 w-full" data-testid="topic-bar-container">
+          <!-- Left zone: clickable to open topic modal -->
+          <button
+            type="button"
+            data-testid="topic-bar"
+            popovertarget="topic-modal"
+            class="flex items-center flex-1 min-w-0 text-left text-sm hover:bg-surface transition-colors rounded py-1"
+            title="Click to view topic"
+          >
+            <FileText size={14} class="text-text-muted mr-1 flex-shrink-0" />
+            <span class="topic-channel-name text-text flex-shrink-0 whitespace-nowrap">{$currentBuffer.shortName}</span>
+            <span class="topic-separator text-text-muted mx-2 flex-shrink-0">-</span>
+            <span class="topic-text text-text-secondary truncate overflow-hidden min-w-0">
+              <LinkifiedText text={topicText} />
+            </span>
+          </button>
+
+          <!-- Right zone: action controls (always visible) -->
+          <div class="flex items-center gap-0.5 flex-shrink-0 ml-2" data-testid="topic-controls">
+            <!-- Pin/Unpin button -->
+            <button
+              type="button"
+              onclick={handleTogglePin}
+              class="text-text-muted hover:text-text p-1 rounded transition-colors"
+              data-testid="pin-buffer"
+              title={$currentBuffer.pinned ? 'Unpin buffer' : 'Pin buffer'}
+            >
+              {#if $currentBuffer.pinned}
+                <PinOff size={16} />
+              {:else}
+                <Pin size={16} />
+              {/if}
+            </button>
+
+            <!-- Close button — only show if buffer has no activity (no unread/notification) -->
+            {#if $currentBuffer.notification === 0 && $currentBuffer.unread === 0}
+              <button
+                type="button"
+                onclick={handleCloseBuffer}
+                class="text-text-muted hover:text-danger p-1 rounded transition-colors"
+                data-testid="close-buffer"
+                title="Close buffer"
+              >
+                <X size={16} />
+              </button>
+            {/if}
+          </div>
+        </div>
+      {/if}
 
   <div
     bind:this={containerRef}

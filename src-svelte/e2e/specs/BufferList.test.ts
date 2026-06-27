@@ -116,7 +116,7 @@ test('should close buffer search with Escape key', async () => {
     await expect(modal).not.toBeVisible({ timeout: 5000 });
 });
 
-test('should show close button on active buffer item', async () => {
+test('should show close button in topic bar for active buffer', async () => {
     const closeButtons = page.getByTestId('close-buffer');
     const count = await closeButtons.count();
     expect(count).toBeGreaterThanOrEqual(1);
