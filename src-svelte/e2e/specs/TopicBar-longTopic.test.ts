@@ -35,10 +35,9 @@ test('channel name does not wrap with very long topic', async () => {
     // Wait for topic to propagate
     await page.waitForTimeout(1000);
 
-    const topicBar = page.getByTestId('topic-bar').first();
-
-    // The topic bar button has fixed height h-8 (32px). If channel name wraps to two lines,
-    // it would still fit within the button but the content would be clipped or overflow.
+    // The topic bar opener button has fixed height h-8 (32px) via parent container.
+    // If channel name wraps to two lines, it would still fit within the button
+    // but the content would be clipped or overflow.
     // Check that the channel name element stays on a single line by verifying its height
     // is less than the full button height (it should be ~1 line, not 2).
     const channelNameEl = page.locator('.topic-channel-name').first();
@@ -68,10 +67,11 @@ test('topic text truncates with ellipsis for very long topic', async () => {
     const barBox = await page.getByTestId('topic-bar').first().boundingBox();
 
     expect(topicBox, 'topic text element should exist').not.toBeNull();
-    expect(barBox, 'topic bar should exist').not.toBeNull();
+    expect(barBox, 'topic opener button should exist').not.toBeNull();
 
-    // Topic text width should be less than available space in the bar
-    // (it should be truncated, not overflowing)
-    const availableWidth = (barBox!.width - 60); // subtract icon + channel name + separator space
-    expect(topicBox!.width, 'topic text should be truncated to fit').toBeLessThan(availableWidth + 20);
+    // Topic text width should be less than available space within the opener button.
+    // The opener button is narrower than the full topic bar (controls zone takes space on right).
+    // Subtract icon + channel name + separator space from the opener button width.
+    const availableWidth = (barBox!.width - 80); // subtract icon + channel name + separator + padding
+    expect(topicBox!.width, 'topic text should be truncated to fit').toBeLessThan(availableWidth + 25);
 });
