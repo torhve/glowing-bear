@@ -45,6 +45,10 @@
 
   let showColorPicker = $state(false);
   let isHovered = $state(false);
+  let textareaFocused = $state(false);
+  // Last known cursor position — saved on input/blur so format buttons work reliably
+  // even when clicking them causes the textarea to lose focus.
+  let lastCaretPos = $state(0);
   let _ctrlDown = $state(false);
 
   // WeeChat standard color palette (IRC color codes 00-15)
@@ -135,8 +139,9 @@
   }
 
   // Insert text at current cursor position, then advance cursor past inserted text.
+  // Uses lastCaretPos (tracked on input/blur) so it works after textarea loses focus on button click.
   function insertAtCursor(text: string): void {
-    const caret = getCaretPos();
+    const caret = textareaFocused ? getCaretPos() : lastCaretPos;
     message = message.slice(0, caret) + text + message.slice(caret);
     setTimeout(() => setCaretPos(caret + text.length), 0);
   }
@@ -375,6 +380,8 @@
     if (inputRef) {
       inputRef.style.height = 'auto';
       inputRef.style.height = Math.min(inputRef.scrollHeight, 150) + 'px';
+      // Save cursor position so format buttons work after textarea loses focus.
+      lastCaretPos = inputRef.selectionStart;
     }
 
     // Emojify :shortcode: patterns as user types, matching AngularJS behavior
@@ -612,6 +619,9 @@
     win.__resetFormattingState = () => {
       message = '';
       showColorPicker = false;
+      _ctrlDown = false;
+      textareaFocused = false;
+      isHovered = false;
       if (inputRef) {
         inputRef.value = '';
       }
@@ -632,7 +642,9 @@
       }
     }
     function handleKeyUp(e: KeyboardEvent) {
-      if (e.key === 'Control' && !e.ctrlKey) {
+      // Only check e.key — the !e.ctrlKey guard causes issues in Playwright
+      // where the browser's modifier state may lag behind the keyup event.
+      if (e.key === 'Control') {
         _ctrlDown = false;
       }
     }
@@ -650,11 +662,13 @@
        role="group"
        onmouseenter={() => { isHovered = true; }}
        onmouseleave={() => { if (!showColorPicker) isHovered = false; }}
+       onfocusin={() => { textareaFocused = true; }}
+       onfocusout={() => { textareaFocused = false; }}
   >
 
     <!-- Format toolbar — visible when Ctrl key is held, color picker is open, or input bar is hovered/focused -->
     <div
-      class="format-toolbar transition-all duration-150 ease-in-out overflow-hidden {((_ctrlDown || showColorPicker || isHovered) ? 'max-h-12 opacity-100 mb-2' : 'max-h-0 opacity-0')}"
+      class="format-toolbar transition-all duration-150 ease-in-out overflow-hidden {((_ctrlDown || showColorPicker || isHovered || textareaFocused) ? 'max-h-12 opacity-100 mb-2' : 'max-h-0 opacity-0')}"
       role="toolbar"
       aria-label="Text formatting"
     >
@@ -743,7 +757,12 @@
       ondragover={handleDragOver}
       ondragleave={handleDragEnd}
       ondragend={handleDragEnd}
-      onblur={() => { isHovered = false; }}
+          onblur={() => {
+            // Also set textareaFocused here because the capture-phase onfocusout
+            // on the parent div doesn't fire for programmatic blur() calls.
+            textareaFocused = false;
+            lastCaretPos = inputRef?.selectionStart ?? 0;
+          }}
       data-testid="message-input"
       placeholder={$currentBuffer ? `Message ${$currentBuffer.shortName}` : 'Select a buffer to start chatting...'}
       rows={1}
