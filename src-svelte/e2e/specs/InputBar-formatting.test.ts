@@ -42,19 +42,6 @@ async function getRawInputValue(): Promise<string> {
     });
 }
 
-// Helper: programmatically set the message state and update the textarea DOM
-async function setMessage(text: string): Promise<void> {
-    await page.evaluate((msg) => {
-        const el = document.querySelector('[data-testid="message-input"]') as HTMLTextAreaElement;
-        if (el) {
-            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
-            nativeInputValueSetter?.call(el, msg);
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-    }, text);
-    await page.waitForTimeout(30);
-}
-
 // Helper: clear both Svelte state and DOM to reset formatting
 async function clearFormattingState(): Promise<void> {
     await page.evaluate(() => {
@@ -316,11 +303,12 @@ test('Clicking a color inserts IRC color code (no reset)', async () => {
 // Toolbar visibility tests
 
 test('Format toolbar is hidden by default', async () => {
-    // Blur any focused input and move mouse away from input bar
-    await page.mouse.click(10, 10);
-    await page.waitForTimeout(200);
-    await page.mouse.move(100, 100);
-    await page.waitForTimeout(300);
+    // Clear all formatting state from previous tests.
+    await clearFormattingState();
+    // Click on buffer list (top of page) to blur textarea and move mouse away from input bar.
+    // User-initiated focus change triggers capture-phase focusout event that Svelte handles.
+    await page.getByTestId('buffer-list-items').click({ force: true });
+    await page.waitForTimeout(500);
 
     await expect(page.locator('.format-toolbar')).not.toBeVisible();
 });
