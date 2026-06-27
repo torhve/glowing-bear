@@ -683,12 +683,13 @@
     position: relative;
   }
 
-  .readmarker-line {
-    flex: 1;
-    height: 1px;
-    background: linear-gradient(to right, transparent, var(--gb-ribbon, #f0ad4e), var(--gb-ribbon, #f0ad4e), transparent);
-    opacity: 0.6;
-  }
+      .readmarker-line {
+        flex: 1;
+        min-width: 20px;
+        height: 1px;
+        background: linear-gradient(to right, transparent, var(--gb-ribbon, #f0ad4e), var(--gb-ribbon, #f0ad4e), transparent);
+        opacity: 0.6;
+      }
 
   .readmarker-badge {
     display: inline-flex;
