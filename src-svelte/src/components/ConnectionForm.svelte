@@ -159,7 +159,8 @@ import Key from '@lucide/svelte/icons/key';
 
 <div
   role="presentation"
-  class="connection-page min-h-[100vh] min-h-dvh bg-bg flex flex-col overflow-y-scroll"
+  class="connection-page min-h-[100vh] min-h-dvh flex flex-col overflow-y-scroll"
+  style:background="linear-gradient(135deg, var(--gb-bg), color-mix(in srgb, var(--gb-bg) 90%, var(--gb-accent)))"
   onkeydown={makeKeyboardActivatable(() => { if (!['INPUT','TEXTAREA','SELECT'].includes((document.activeElement as HTMLElement).tagName)) handleConnect(); })}
 >
   <TauriTitlebar variant="standalone" />
