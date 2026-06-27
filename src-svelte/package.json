@@ -8,6 +8,7 @@
     "dev": "vite dev",
     "prebuild": "node static/generate-icons.mjs",
     "build": "vite build && cp build/404.html build/index.html",
+    "build:docker": "vite build && cp build/404.html build/index.html",
     "generate-icons": "node static/generate-icons.mjs",
     "generate-icns": "node static/generate-icns.mjs",
     "preview": "vite preview",

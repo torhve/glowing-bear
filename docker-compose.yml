@@ -1,0 +1,26 @@
+# Glowing Bear Svelte — Docker Compose
+# Usage:
+#   docker compose up -d                                    # Start with defaults (host:8080 → container:8080)
+#   docker compose up -d --build                            # Rebuild image from source first
+#   GIT_COMMIT=$(git rev-parse --short HEAD) docker compose up -d --build  # Bake git commit into image
+#   SERVER_PORT=9090 HOST_PORT=9090 docker compose up -d    # Change port
+
+services:
+  website:
+    build:
+      context: .
+      target: production
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+    container_name: glowing-bear-web
+    ports:
+      - "${HOST_PORT:-8080}:${SERVER_PORT:-8080}"
+    restart: unless-stopped
+    environment:
+      - SERVER_HOST=${SERVER_HOST:-[::]}
+      - SERVER_PORT=${SERVER_PORT:-8080}
+      - SERVER_ROOT=${SERVER_ROOT:-/var/public}
+      - SERVER_CONFIG_FILE=${SERVER_CONFIG_FILE:-/etc/sws.toml}
+    volumes:
+      # Mount sws.toml at runtime so config changes apply without rebuilding
+      - ./sws.toml:/etc/sws.toml

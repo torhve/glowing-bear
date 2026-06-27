@@ -12,6 +12,6 @@ build/
 
 # Opencode workspace config
 .opencode/
-
+    
 # Nested repo copy
 /glowing-bear/

@@ -1,0 +1,33 @@
+# Node modules (reinstalled via npm ci in builder stage)
+node_modules
+src-svelte/node_modules
+
+# Build output (regenerated during build)
+src-svelte/build
+src-svelte/.svelte-kit
+
+# Test artifacts
+src-svelte/test-results
+src-svelte/playwright-report
+src-svelte/coverage
+
+# Tauri build artifacts
+src-tauri/target
+
+# Version control
+.git
+.github
+
+# Documentation
+*.md
+
+# IDE / editor
+.idea
+.vscode
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Personal notes / planning
+TODO.md

@@ -1,0 +1,38 @@
+# Static Web Server configuration for Glowing Bear Svelte
+# https://static-web-server.net/
+
+# Serve files from /var/public (set via SERVER_ROOT env in Dockerfile)
+root = "/var/public"
+
+# Gzip compression for text-based assets
+[compression]
+enable = true
+level = 6
+# Compress these file types
+extensions = [".html", ".js", ".css", ".json", ".svg", ".xml", ".webmanifest"]
+
+# Cache headers: aggressive for hashed Vite assets, no-cache for entry points
+[[headers]]
+by = "path: /_app/assets/*"
+match = "glob"
+values = { "Cache-Control" = "immutable, max-age=31536000" }
+
+[[headers]]
+by = "path: /index.html"
+match = "exact"
+values = { "Cache-Control" = "no-cache, no-store, must-revalidate" }
+
+[[headers]]
+by = "path: /sw.js"
+match = "exact"
+values = { "Cache-Control" = "no-cache, no-store, must-revalidate" }
+
+[[headers]]
+by = "path: /_app/*.js"
+match = "glob"
+values = { "Cache-Control" = "no-cache, no-store, must-revalidate" }
+
+# SPA fallback: any 404 response is rewritten to index.html so client-side routing works
+[[rewrite]]
+response = 404
+to = "/index.html"

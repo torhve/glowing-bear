@@ -5,14 +5,14 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 
 // Capture the latest git commit hash at build time for display in settings.
-// Falls back to "unknown" when not in a git repo.
-const gitCommit = (() => {
+// Priority: GIT_COMMIT env var (Docker build-arg) > git command > "unknown"
+const gitCommit = process.env.GIT_COMMIT ?? (() => {
     try {
         return execSync('git rev-parse --short HEAD', { cwd: __dirname + '/..' }).toString().trim();
     } catch {
         return 'unknown';
     }
-})();
+})()
 
 // Aliases managed via svelte.config.js kit.alias (propagated to Vite by SvelteKit)
 export default defineConfig({
