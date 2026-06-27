@@ -623,8 +623,8 @@ function concatenateTypedArrays(...arrays: Uint8Array[]): Uint8Array<ArrayBuffer
 }
 
 // Central WebSocket send wrapper — logs all outbound WS messages
-function sendWs(data: string | ArrayBufferLike, label = '') {
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
+    function sendWs(data: string | ArrayBuffer, label = '') {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
         console.warn('[WS] send skipped — not open');
         return;
     }

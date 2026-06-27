@@ -506,7 +506,6 @@ export function handleBufferLineDataChanged(message: ProtocolMessage) {
 
     // Find matching line by (buffer, date). Multiple lines may share the same timestamp,
     // so prefer the last match (closest to bottom) since WeeChat processes top-to-bottom.
-    let matchedIndex = -1;
     const matches: number[] = [];
     for (let i = 0; i < buffer.lines.length; i++) {
         const line = buffer.lines[i];
@@ -518,7 +517,7 @@ export function handleBufferLineDataChanged(message: ProtocolMessage) {
         console.debug('[handler] _buffer_line_data_changed: no matching line for date', lineMsg.date);
         return;
     }
-    matchedIndex = matches[matches.length - 1]!;
+        const matchedIndex = matches[matches.length - 1]!;
 
     // Create new BufferLine from updated data using createBufferLine for consistent
     // highlight class handling and RichTextPart processing.
