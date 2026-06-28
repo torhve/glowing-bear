@@ -59,7 +59,7 @@ npm run lint                   # eslint src-svelte/src
 npm test                       # Vitest unit tests
 npm run test:e2e -- --grep "X" # Targeted E2E tests
 npm run irc:start / irc:stop   # Manual gbtest IRC server
-npm run tauri                 # Tauri CLI passthrough
+npm run tauri                 # Tauri CLI (uses @tauri-apps/cli)
 npm run tauri:dev             # Tauri desktop dev mode
 npm run tauri:build           # Tauri desktop production build
 ```

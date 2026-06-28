@@ -45,7 +45,9 @@ Glowing Bear can be packaged as a native desktop application via [Tauri 2](https
 npm install
 npm run tauri:build
 ```
-
+    
+Uses the project-bundled `@tauri-apps/cli` (v2) rather than a globally installed `cargo tauri`, ensuring version consistency with Rust dependencies.
+    
 Produces installers for Linux (deb), macOS (dmg), and Windows (msi/nsis).
 
 ## Getting Started for Users
