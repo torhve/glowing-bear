@@ -828,7 +828,13 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
                 // For active buffer backfill: handleLineInfo did NOT increment lastSeen,
                 // so no subtraction needed. Set lastSeen to end of buffer so user sees
                 // content at bottom with no phantom readmarker after scrolling back down.
-                updated.lastSeen = buf.lines.length - 1;
+                // If localUnread > 0, preserve those real-time messages received while
+                // this buffer was inactive — position lastSeen before them.
+                if (buf.localUnread > 0) {
+                    updated.lastSeen = Math.max(0, buf.lines.length - buf.localUnread - 1);
+                } else {
+                    updated.lastSeen = buf.lines.length - 1;
+                }
             } else {
                 // For inactive buffer: handleLineInfo incremented lastSeen per-line,
                 // subtract old line count to preserve readmarker position relative to bottom.
