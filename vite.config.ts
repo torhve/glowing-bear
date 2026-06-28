@@ -8,42 +8,40 @@ import { defineConfig } from 'vite';
 // Capture the latest git commit hash at build time for display in settings.
 // Priority: GIT_COMMIT env var (Docker build-arg) > git command > "unknown"
 const gitCommit = process.env.GIT_COMMIT ?? (() => {
-    try {
-        return execSync('git rev-parse --short HEAD', { cwd: __dirname }).toString().trim();
-    } catch {
-        return 'unknown';
-    }
-})()
+  try {
+    return execSync('git rev-parse --short HEAD', { cwd: __dirname }).toString().trim();
+  } catch {
+    return 'unknown';
+  }
+})();
 
-    // Aliases managed via svelte.config.js kit.alias (propagated to Vite by SvelteKit)
-    // Explicit resolve aliases ensure Vite picks them up when configs are at repo root
-    export default defineConfig({
-      define: {
-        __GIT_COMMIT__: JSON.stringify(gitCommit),
-      },
-      resolve: {
-        alias: {
-          $lib: path.resolve(__dirname, 'src-svelte/src/lib'),
-          '$lib/*': path.resolve(__dirname, 'src-svelte/src/lib/*'),
-          $components: path.resolve(__dirname, 'src-svelte/src/components'),
-          '$components/*': path.resolve(__dirname, 'src-svelte/src/components/*'),
-        },
-      },
-      plugins: [
+// Aliases managed via svelte.config.js kit.alias (propagated to Vite by SvelteKit)
+// Explicit resolve aliases ensure Vite picks them up when configs are at repo root
+export default defineConfig({
+  define: {
+    __GIT_COMMIT__: JSON.stringify(gitCommit),
+  },
+  resolve: {
+    alias: {
+      $lib: path.resolve(__dirname, 'src-svelte/src/lib'),
+      $components: path.resolve(__dirname, 'src-svelte/src/components'),
+    },
+  },
+  plugins: [
     sveltekit(),
     tailwindcss(),
-        SvelteKitPWA({
-          registerType: 'autoUpdate',
-          manifest: false,
-          kit: {
-            adapterFallback: '404.html',
-            outDir: path.resolve(__dirname, 'src-svelte/.svelte-kit'),
-          },
-          workbox: {
-            globPatterns: ['**/*.{js,css,ico,png,svg,webp,webmanifest}'],
-            navigateFallback: '404.html',
-          },
-        }),
+    SvelteKitPWA({
+      registerType: 'autoUpdate',
+      manifest: false,
+      kit: {
+        adapterFallback: '404.html',
+        outDir: path.resolve(__dirname, 'src-svelte/.svelte-kit'),
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,ico,png,svg,webp,webmanifest}'],
+        navigateFallback: '404.html',
+      },
+    }),
   ],
   optimizeDeps: {
     exclude: ['@lucide/svelte'],
