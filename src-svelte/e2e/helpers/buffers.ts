@@ -30,7 +30,9 @@ export async function switchToBuffer(
 		timeout: opts?.timeout ?? 10000,
 	});
 	await bufferItem.click({ timeout: opts?.timeout ?? 10000 });
-	await expect(page.getByTestId("topic-bar")).toContainText(
+	// Check only the channel-name span — topic bar shows "{shortName} - {topicText}" format
+	// so matching against the full element text can fail when topic contains similar substrings.
+	await expect(page.getByTestId("topic-bar").locator(".topic-channel-name")).toContainText(
 		getBufferText(name),
 		{ timeout: opts?.timeout ?? 10000 },
 	);

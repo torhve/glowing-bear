@@ -144,12 +144,15 @@ test('shows bot nick change', async () => {
 
     // Wait for the infoline to render, then verify it's visible
     await expect(async () => {
-const lines = await page.locator('[data-testid="bufferline-row"]').count();
-expect(lines).toBeGreaterThan(0);
-// Nick change infoline contains "is now known as <newNick>"
-const infoline = page.locator('[data-testid="bufferline-row"]').filter({ hasText: 'now known as' });
-await expect(infoline.first()).toBeVisible();
+        const lines = await page.locator('[data-testid="bufferline-row"]').count();
+        expect(lines).toBeGreaterThan(0);
+        // Nick change infoline contains "is now known as <newNick>"
+        const infoline = page.locator('[data-testid="bufferline-row"]').filter({ hasText: 'now known as' });
+        await expect(infoline.first()).toBeVisible();
     }).toPass({ timeout: 15000, intervals: [500] });
+
+    // reset botnick
+    await irc.botNick('gbbot2');
 });
 
 // ---- Nicklist diff tests ----

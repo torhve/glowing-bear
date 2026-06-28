@@ -25,7 +25,9 @@ test.beforeEach(async () => {
 	const count = await bufferItems.count();
 	for (let i = 0; i < count; i++) {
 		const item = bufferItems.nth(i);
-		const name = await item.textContent();
+		// Read only the .buffer-name span — full textContent includes badge numbers
+		// which would break switchToBuffer's .topic-channel-name assertion.
+		const name = await item.locator('.buffer-name').textContent();
 		if (name) {
 			await switchToBuffer(page, name.trim());
 			const pinBtn = page.getByTestId('topic-bar-container').getByTestId('pin-buffer');
@@ -38,7 +40,8 @@ test.beforeEach(async () => {
 	}
 	// Return to first buffer for consistent starting state
 	if (count > 0) {
-		const first = await bufferItems.first().textContent();
+		// Read only the .buffer-name span for consistent starting state.
+		const first = await bufferItems.first().locator('.buffer-name').textContent();
 		if (first) await switchToBuffer(page, first.trim());
 	}
 });

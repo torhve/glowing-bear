@@ -463,7 +463,7 @@ export class IRCServer {
         sendOk();
         return;
       }
-case 'send_pm': {
+      case 'send_pm': {
         if (!cmd.nick || cmd.text === undefined) { sendErr('Missing nick or text'); return; }
         const target = this.getClientByNick(cmd.nick);
         if (!target) { sendErr('Target not found'); return; }

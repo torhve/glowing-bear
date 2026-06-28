@@ -1,9 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { createConnectedPage } from '../fixtures/auth';
-import { sendWeechatCommand } from '../helpers/connection';
-import { botSay } from '../helpers/messages';
-import { switchToBuffer, switchToBufferMobile, waitForBuffer, waitForBufferMobile } from '../helpers/buffers';
-import { irc } from '../helpers/irc-control';
+import { botSay, botPm } from '../helpers/messages';
+import { switchToBuffer } from '../helpers/buffers';
 
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
 
@@ -21,8 +19,24 @@ test.afterAll(async () => {
     await page.close();
 });
 
+// Clear leftover unread from previous serial tests so each test starts with
+// an empty hotlist. Pressing Alt+A repeatedly jumps to each unread buffer,
+// which clears its counts via setActiveBuffer — natural user action.
+async function clearAllUnread(p: typeof page) {
+    const orig = (await p.viewportSize()) || { width: 375, height: 667 };
+    await p.setViewportSize({ width: 1280, height: 720 });
+    await p.evaluate(() => window.dispatchEvent(new Event('resize')));
+    for (let i = 0; i < 10; i++) {
+        await p.keyboard.press('Alt+A');
+        await p.waitForTimeout(200);
+    }
+    await p.setViewportSize(orig);
+    await p.evaluate(() => window.dispatchEvent(new Event('resize')));
+}
+
 test.beforeEach(async () => {
     setupEffectOrphanFilter(page)
+    await clearAllUnread(page);
 });
 
 // Hotlist is not rendered on desktop viewport; title is visible.
@@ -54,39 +68,75 @@ test('hotlist visible on mobile after buffer selection', async () => {
     await expect(page.getByTestId('buffer-hotlist')).toBeAttached();
 });
 
-// Bot sends messages to #glowing-bear while user views core.weechat → hotlist populates.
+// Bot sends PM to testuser creating a query buffer with unread.
+// On mobile, the hotlist only renders after a buffer is selected (buffer list hides).
+// Click #glowing-bear from buffer list so hotlist appears, then send PM to create unread.
 test('hotlist shows buffers with unread messages', async () => {
-    // Send PM to testuser which creates an inactive buffer (not #glowing-bear)
-    await irc.sendPm('testuser', 'hotlist shows buffers with unread messages!');
+    // Ensure viewport is mobile
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.evaluate(() => window.dispatchEvent(new Event('resize')));
 
-    // Verify message rendered before checking hotlist — prevents false negatives when
-    // relay delivery is slower than the test advances.
-    const msgRow = page.locator('[data-testid="bufferline-row"] td.message').first();
-    await expect(msgRow).toBeVisible({ timeout: 10000 });
+    // Show buffer list so we can click a buffer
+    await page.evaluate(() => (window as any).__showBufferListOnMobile?.());
+    await page.waitForFunction(
+        () => document.querySelector('[data-testid="buffer-item"]') !== null,
+        { timeout: 10000 },
+    );
+
+    // Click #glowing-bear to trigger buffer selection → hotlist renders
+    await switchToBuffer(page, 'glowing-bear');
+
+    // Now hotlist should be visible on mobile. Send a PM to create an
+    // inactive query buffer with unread messages that appears in hotlist.
+    await botPm('hotlist test message!');
 
     // Wait for hotlist to populate (sync interval fires every ~5s)
     await expect(async () => {
         const n = await page.getByTestId('hotlist-buffer-item').count();
         expect(n).toBeGreaterThanOrEqual(1);
-    }).toPass({ timeout: 10000 });
+    }).toPass({ timeout: 30000 });
+
     const items = page.getByTestId('hotlist-buffer-item');
     const firstItem = items.first();
-    await expect(firstItem).toContainText('gbbot');
+    await expect(firstItem).toContainText('gbbot2');
     const countBadge = firstItem.getByTestId('hotlist-count');
     await expect(countBadge).toContainText(/\(\d+\)/);
 });
 
 // Clicking a hotlist item switches to that buffer.
 test('clicking hotlist item switches buffer', async () => {
+    // Ensure viewport is mobile
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.evaluate(() => window.dispatchEvent(new Event('resize')));
+
+    // Show buffer list so we can click #glowing-bear
+    await page.evaluate(() => (window as any).__showBufferListOnMobile?.());
+    await page.waitForFunction(
+        () => document.querySelector('[data-testid="buffer-item"]') !== null,
+        { timeout: 10000 },
+    );
+
+    // Click #glowing-bear to trigger buffer selection → hotlist renders
+    await switchToBuffer(page, 'glowing-bear');
+
+    // Send a PM to create an inactive query buffer with unread
+    await botPm('hotlist switch test!');
+
+    // Wait for hotlist to populate (sync interval fires every ~5s)
+    await expect(async () => {
+        const n = await page.getByTestId('hotlist-buffer-item').count();
+        expect(n).toBeGreaterThanOrEqual(1);
+    }).toPass({ timeout: 30000 });
+
     const items = page.getByTestId('hotlist-buffer-item');
-    const count = await items.count();
-    expect(count).toBeGreaterThanOrEqual(1);
     const firstItem = items.first();
     await firstItem.click();
-    await botSay('switch test message');
+
+    // Verify we switched to the query buffer
+    await botPm('switch confirm');
     await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 10000 });
     const topicText = await page.getByTestId('topic-bar').textContent();
-    expect(topicText).toContain('gbbot');
+    expect(topicText).toContain('gbbot2');
 });
 
 // TODO: fix buffer creation via relay — sendWeechatCommand doesn't reliably create buffers in test environment

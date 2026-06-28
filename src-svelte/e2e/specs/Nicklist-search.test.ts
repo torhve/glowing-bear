@@ -64,7 +64,9 @@ test('nicklist search filters nicks by name', async () => {
 
     // Pick a real nick from the current list and use a substring of it
     // so we know at least one match will remain after filtering.
-    const sampleNick = await allNicks.first().textContent() || '';
+    // Extract bare nick name from .nick-name span — full textContent includes
+    // prefix characters (e.g., '@gbbot') which don't match the search filter.
+    const sampleNick = await allNicks.first().locator('.nick-name').textContent() || '';
     const query = sampleNick.trim().substring(0, 2);
 
     // Use keyboard.type() for proper input event dispatch that Svelte 5 captures
@@ -108,7 +110,8 @@ test('search filters by both nick names and group names', async () => {
     const searchInput = page.getByTestId('nicklist-search');
 
     // Get a real nick name from the list to search for
-    const sampleNick = await page.getByTestId('nick-item').first().textContent() || '';
+    // Extract bare nick name from .nick-name span (full textContent includes prefix).
+    const sampleNick = await page.getByTestId('nick-item').first().locator('.nick-name').textContent() || '';
     const query = sampleNick.trim();
 
     await searchInput.click();
@@ -120,7 +123,8 @@ test('search filters by both nick names and group names', async () => {
 
     const matchCount = await page.getByTestId('nick-item').count();
     for (let i = 0; i < matchCount; i++) {
-        const text = await page.getByTestId('nick-item').nth(i).textContent();
-        expect(text?.toLowerCase()).toContain(query.toLowerCase());
+        // Check the bare nick name contains the search query.
+        const nickName = await page.getByTestId('nick-item').nth(i).locator('.nick-name').textContent();
+        expect(nickName?.toLowerCase()).toContain(query.toLowerCase());
     }
 });
