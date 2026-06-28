@@ -2,7 +2,7 @@ bower_components/
 node_modules/
 
 # local build products
-build/ 
+build/
 
 # IntelliJ / WebStorm
 .idea/
@@ -17,8 +17,6 @@ build/
 .pi/
 .pi-lens/
 
-# Nested repo copy
-/glowing-bear/
 
 # ---- src-svelte specific ----
 
@@ -26,20 +24,13 @@ build/
 .svelte-kit/
 
 # Test output
-src-svelte/test-results/
-src-svelte/e2e/test-results/
-src-svelte/e2e/playwright-report/
+/test-results/
+/playwright-report/
 
 *.tsbuildinfo
 
 # Coverage
 src-svelte/coverage/
-
-# Playwright MCP auto-generated logs
-src-svelte/.playwright-mcp/
-
-# Auto-generated HTML test report
-/src-svelte/playwright-report/
 
 # Opencode planning docs
 /src-svelte/plans/
