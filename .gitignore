@@ -12,6 +12,52 @@ build/
 
 # Opencode workspace config
 .opencode/
-    
+
+# pi tool artifacts
+.pi/
+.pi-lens/
+
 # Nested repo copy
 /glowing-bear/
+
+# ---- src-svelte specific ----
+
+# SvelteKit generated (matches anywhere in repo)
+.svelte-kit/
+
+# Test output
+src-svelte/test-results/
+src-svelte/e2e/test-results/
+src-svelte/e2e/playwright-report/
+
+*.tsbuildinfo
+
+# Coverage
+src-svelte/coverage/
+
+# Playwright MCP auto-generated logs
+src-svelte/.playwright-mcp/
+
+# Auto-generated HTML test report
+/src-svelte/playwright-report/
+
+# Opencode planning docs
+/src-svelte/plans/
+
+# Planning/spec documents (not e2e/specs/)
+/src-svelte/specs/
+
+# External WeeChat API reference docs
+/src-svelte/doc/
+
+# Empty directory
+/src-svelte/library
+
+# Personal notes
+/src-svelte/TODO.md
+
+# Misplaced test file
+/src-svelte/seed.spec.ts
+
+# Nested e2e directory with auto-generated reports
+src-svelte/e2e/e2e/
