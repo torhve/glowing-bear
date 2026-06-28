@@ -336,8 +336,8 @@ function handleBufferUpdate(
  * Strips remaining control codes (mIRC/WeeChat) that may leak through parsing
  * when input contains mixed-format codes (e.g., mIRC \x03 inside WeeChat \x19).
  */
-// eslint-disable-next-line no-control-regex -- strips mIRC/WeeChat control bytes from parsed text
 const stripControlCodes = (text: string) =>
+	// eslint-disable-next-line no-control-regex -- strips mIRC/WeeChat control bytes from parsed text
 	text.replace(/[\x01-\x06\x0f\x16\x19-\x1f]/g, "");
 
 /**
