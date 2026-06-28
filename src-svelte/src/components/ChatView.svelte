@@ -213,15 +213,16 @@
     const bufferChanged = prevActiveBufferId !== currentBufferId;
     const linesAdded = curLinesLength > prevLinesLength;
 
-    // Refresh isAtBottom from actual DOM before handler processes new lines.
-    // The handler checks bufferBottom to decide lastSeen update strategy,
-    // but the sync effect hasn't fired yet (it runs after buffers.set).
-    // This ensures bufferBottom reflects current scroll position when handler reads it.
+    // Capture at-bottom state SYNCHRONOUSLY before new lines change scrollHeight.
+    // Once Svelte renders new rows, scrollHeight increases and scrollTop appears
+    // "not at bottom" even though the user was following the chat.
+    // We use this captured value inside rAF to decide whether to auto-scroll.
+    let _wasAtBottomBeforeLines = false;
     if (containerRef && linesAdded) {
-      const domAtBottom = containerRef.scrollTop >= containerRef.scrollHeight - containerRef.clientHeight - 3;
-      if (isAtBottom !== domAtBottom) {
-        isAtBottom = domAtBottom;
-        bufferBottom.set(domAtBottom);
+      _wasAtBottomBeforeLines = containerRef.scrollTop >= containerRef.scrollHeight - containerRef.clientHeight - 3;
+      if (isAtBottom !== _wasAtBottomBeforeLines) {
+        isAtBottom = _wasAtBottomBeforeLines;
+        bufferBottom.set(_wasAtBottomBeforeLines);
       }
     }
 
@@ -268,29 +269,75 @@
         const freshMessages = $currentBuffer?.lines ?? [];
         const freshHasUnread = freshReadEndIndex >= 0 && freshReadEndIndex < freshMessages.length - 1;
 
-            // Detect if the last added line is the user's own echoed message.
-            // We check prefixtext against our own nick using two patterns:
-            // Channel prefixes: "#channel/Nick" — ends with "/myNick"
-            // Query prefixes: "< Nick >" or "<Nick>" — strip brackets/whitespace to get bare nick
-            // WeeChat adds spaces around nicks in query prefixes (e.g., "< testuser >")
-            // When posting, the echo is counted as unread (lastSeen isn't updated for active buffers),
-            // and the new line increases scrollHeight so domAtBottom becomes false.
-            // Without this check, the code falls into "scroll to readmarker" — away from your own message.
-            const lastLine = freshMessages[freshMessages.length - 1];
-            const myNickVal = myNick;
-            const lastPrefix = lastLine?.prefixtext ?? '';
-            const strippedPrefix = lastPrefix.replace(/[<>]/g, '').trim();
-            const isOwnMessage =
-                lastPrefix.endsWith('/' + myNickVal) ||
-                strippedPrefix === myNickVal;
+// Detect own messages among unread lines for robustness.
+                // When posting, the echo is counted as unread (lastSeen isn't updated for active buffers).
+                // Multiple lines can arrive in a single _buffer_line_added batch,
+                // so the last line may not be the echo. Scan all unread lines instead.
+                // For buffer switches: check only the last line — old own messages in the
+                // unread range would cause false positives and destroy the readmarker.
+                // Read myNick directly from buffer data inside rAF ($derived doesn't re-evaluate in callbacks).
+                const curBuffer = $currentBuffer;
+                let myNickVal = curBuffer?.localVariables?.nick ?? '';
+                if (!myNickVal && curBuffer) {
+                  const serverBuf = Object.values(get(buffers)).find(b =>
+                    b.type === 'server' && b.plugin === curBuffer.plugin && b.server === curBuffer.server
+                  );
+                  myNickVal = serverBuf?.localVariables?.nick ?? '';
+                }
+                let isOwnMessage = false;
+                if (myNickVal) {
+                  if (!bufferChanged && freshHasUnread) {
+                    // Same buffer with unread: scan all unread lines for own message.
+                    for (let i = freshReadEndIndex + 1; i < freshMessages.length; i++) {
+                      const line = freshMessages[i];
+                      if (!line) continue;
+                      const prefix = line.prefixtext ?? '';
+                      const stripped = prefix.replace(/[<>]/g, '').trim();
+                      if (
+                        (line.tags && line.tags.includes('irc_selfmsg')) ||
+                        prefix.endsWith('/' + myNickVal) ||
+                        stripped === myNickVal
+                      ) {
+                        isOwnMessage = true;
+                        break;
+                      }
+                    }
+                  } else {
+                    // Buffer switch or no unread: check only the last line.
+                    const lastLine = freshMessages[freshMessages.length - 1];
+                    const lastPrefix = lastLine?.prefixtext ?? '';
+                    const strippedPrefix = lastPrefix.replace(/[<>]/g, '').trim();
+                    isOwnMessage =
+                        (lastLine?.tags && lastLine.tags.includes('irc_selfmsg')) ||
+                        lastPrefix.endsWith('/' + myNickVal) ||
+                        strippedPrefix === myNickVal;
+                  }
+                }
 
-        if (!freshHasUnread || isOwnMessage) {
-          // No unread messages — scroll to bottom regardless of scroll position.
-          // Covers both "at bottom following" and "buffer just switched, scrollTop=0" cases.
-          readmarkerFailures = 0;
-          containerRef!.scrollTop = containerRef!.scrollHeight;
-          isAtBottom = true;
-        } else if (curIsAtBottom) {
+            // When lines are added to the SAME buffer (not a switch), use the pre-captured
+            // at-bottom state. This is critical: once Svelte renders new rows, scrollHeight increases
+            // and scrollTop appears "not at bottom" even though the user was following the chat.
+            // For buffer switches, _wasAtBottomBeforeLines was captured from the OLD buffer's
+            // dimensions — meaningless for the new buffer — so don't use it.
+            if (!bufferChanged && _wasAtBottomBeforeLines) {
+              readmarkerFailures = 0;
+              containerRef!.scrollTop = containerRef!.scrollHeight;
+              isAtBottom = true;
+              // Absorb unread by updating lastSeen since user caught up.
+              if (freshHasUnread) {
+                const buf = get(currentBuffer);
+                if (buf) {
+                  buf.lastSeen = freshMessages.length - 1;
+                  buffers.set({ ...get(buffers), [buf.id]: { ...buf } });
+                }
+              }
+            } else if (!freshHasUnread || isOwnMessage) {
+              // No unread messages or own message in unread range — scroll to bottom.
+              // Covers both "at bottom following" and "buffer just switched, scrollTop=0" cases.
+              readmarkerFailures = 0;
+              containerRef!.scrollTop = containerRef!.scrollHeight;
+              isAtBottom = true;
+            } else if (curIsAtBottom) {
           // At bottom with unread — absorb by updating lastSeen to cover all lines.
           // User explicitly caught up by scrolling to bottom, so clear the readmarker.
           const buf = get(currentBuffer);
@@ -358,18 +405,24 @@
       const freshMessages = $currentBuffer?.lines ?? [];
       const freshHasUnread = freshReadEndIndex >= 0 && freshReadEndIndex < freshMessages.length - 1;
 
-          // Detect if the last line in this buffer is the user's own message.
-          // We check prefixtext against our own nick using two patterns:
-          // Channel prefixes: "#channel/Nick" — ends with "/myNick"
-          // Query prefixes: "< Nick >" or "<Nick>" — strip brackets/whitespace to get bare nick
-          // WeeChat adds spaces around nicks in query prefixes (e.g., "< testuser >")
-          const lastLine = freshMessages[freshMessages.length - 1];
-          const myNickVal = myNick;
-          const lastPrefix = lastLine?.prefixtext ?? '';
-          const strippedPrefix = lastPrefix.replace(/[<>]/g, '').trim();
-          const isOwnMessage =
-              lastPrefix.endsWith('/' + myNickVal) ||
-              strippedPrefix === myNickVal;
+// Check only the last line for own-message detection on buffer switch.
+              // Old own messages elsewhere in the unread range would cause false positives
+              // and destroy the readmarker. Read myNick directly from buffer data inside rAF.
+              const curBuffer = $currentBuffer;
+              let myNickVal = curBuffer?.localVariables?.nick ?? '';
+              if (!myNickVal && curBuffer) {
+                const serverBuf = Object.values(get(buffers)).find(b =>
+                  b.type === 'server' && b.plugin === curBuffer.plugin && b.server === curBuffer.server
+                );
+                myNickVal = serverBuf?.localVariables?.nick ?? '';
+              }
+              const lastLine = freshMessages[freshMessages.length - 1];
+              const lastPrefix = lastLine?.prefixtext ?? '';
+              const strippedPrefix = lastPrefix.replace(/[<>]/g, '').trim();
+              const isOwnMessage =
+                  (lastLine?.tags && lastLine.tags.includes('irc_selfmsg')) ||
+                  lastPrefix.endsWith('/' + myNickVal) ||
+                  strippedPrefix === myNickVal;
 
       if (!freshHasUnread || isOwnMessage) {
         // No unread messages or own message at bottom — scroll to bottom.

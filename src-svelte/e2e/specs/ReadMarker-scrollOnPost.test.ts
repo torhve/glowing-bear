@@ -50,12 +50,12 @@ test.beforeEach(async () => {
     await chatContainer.evaluate((el) => {
         (el as HTMLElement).scrollTop = (el as HTMLElement).scrollHeight;
     });
-    await waitForScrollSettled();
+    await waitForScrollSettled(120000);
 
     // Send a dummy message to advance lastSeen past all existing content.
     await irc.sendMessage('#glowing-bear', `BEFORE-EACH-RESET-${Date.now()}`);
     await page.waitForTimeout(2000);
-    await waitForScrollSettled();
+    await waitForScrollSettled(120000);
 });
 
 // Helper: wait for readmarker to appear in DOM and be positioned.

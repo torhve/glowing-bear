@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { connectToWeechat, clearSettings, setSettings, waitForAppReady } from '../helpers/connection';
+import { switchToBuffer } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
 
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
@@ -160,17 +161,20 @@ test('sound plays when soundnotification is enabled', async () => {
     // Reset captured Audio calls (mock injected via addInitScript in beforeAll)
     await page.evaluate(() => { (window as any).__audioCalls = []; });
 
-    // Switch to channel buffer so PM triggers notification
-    await switchToFirstBuffer();
+    // Switch to #glowing-bear so PM creates an inactive query buffer
+    await switchToBuffer(page, '#glowing-bear');
 
     // Send a PM (triggers notify_private → playNotificationSound)
     await irc.sendPm('testuser', 'Sound test message!');
+
+    // Brief delay for notification handler to process
+    await page.waitForTimeout(500);
 
     // Check that Audio was called with the sonar.mp3 path
     await expect(async () => {
         const audioCalls = await page.evaluate(() => (window as any).__audioCalls || []);
         expect(audioCalls).toContain('/assets/audio/sonar.mp3');
-    }).toPass({ timeout: 10000, intervals: [200] });
+    }).toPass({ timeout: 15000, intervals: [300] });
 });
 
 test('sound does NOT play when soundnotification is disabled', async () => {

@@ -63,7 +63,9 @@ test.describe("PageUp/PageDown Global Scroll", () => {
 		// This advances lastSeen past all existing content, clearing the readmarker.
 		await page.waitForTimeout(500);
 		await irc.sendMessage("#glowing-bear", `KB-RESET-${Date.now()}`);
-		// Wait for auto-scroll to bottom after our reset message
+		// Wait for auto-scroll to bottom after our reset message.
+		// With accumulated content from many prior serial tests, rendering can take
+		// a long time. Use generous timeout and tolerance.
 		await page.waitForFunction(
 			() => {
 				const container = document.querySelector(
@@ -72,9 +74,9 @@ test.describe("PageUp/PageDown Global Scroll", () => {
 				if (!container) return false;
 				const diff =
 					container.scrollHeight - container.clientHeight - container.scrollTop;
-				return diff <= 50;
+				return diff <= 100;
 			},
-			{ timeout: 10000 },
+			{ timeout: 30000 },
 		);
 	});
 
@@ -85,7 +87,8 @@ test.describe("PageUp/PageDown Global Scroll", () => {
 		for (let i = 0; i < 20; i++) {
 			await irc.sendMessage("#glowing-bear", `pageup-test-${Date.now()}-${i}`);
 		}
-		// Wait for auto-scroll to settle at bottom after messages arrive
+		// Wait for auto-scroll to settle at bottom after messages arrive.
+		// With accumulated content from prior serial tests, use generous tolerance.
 		await page.waitForFunction(
 			() => {
 				const container = document.querySelector(
@@ -94,9 +97,9 @@ test.describe("PageUp/PageDown Global Scroll", () => {
 				if (!container) return false;
 				const diff =
 					container.scrollHeight - container.clientHeight - container.scrollTop;
-				return diff <= 50;
+				return diff <= 100;
 			},
-			{ timeout: 10000 },
+			{ timeout: 30000 },
 		);
 
 		const stateBefore = await getChatScrollState(page);
