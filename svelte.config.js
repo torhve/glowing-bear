@@ -14,8 +14,12 @@ const config = {
 		}),
 		outDir: 'src-svelte/.svelte-kit',
 		files: {
+			appTemplate: 'src-svelte/src/app.html',
 			routes: 'src-svelte/src/routes',
 			lib: 'src-svelte/src/lib',
+			hooks: {
+				server: 'src-svelte/src/hooks.server.ts',
+			},
 		},
 		alias: {
 			'$lib': 'src-svelte/src/lib',
