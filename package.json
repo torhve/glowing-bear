@@ -7,8 +7,8 @@
   "scripts": {
     "dev": "NODE_OPTIONS=--no-warnings vite dev",
     "prebuild": "node static/generate-icons.mjs",
-    "build": "vite build && cp build/404.html build/index.html",
-    "build:docker": "vite build && cp build/404.html build/index.html",
+    "build": "vite build",
+    "build:docker": "vite build",
     "generate-icons": "node static/generate-icons.mjs",
     "generate-icns": "node static/generate-icns.mjs",
     "preview": "vite preview",
@@ -28,6 +28,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@rollup/rollup": "^4.0.0",
     "@tauri-apps/cli": "^2.11.3",
     "@playwright/test": "^1.61.1",
     "@resvg/resvg-js": "^2.6.2",
