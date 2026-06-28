@@ -65,6 +65,7 @@ function makeBuffer(id: string, opts: Partial<BufferData> = {}): BufferData {
         requestedLines: 0,
         allLinesFetched: false,
         lastSeen: -1,
+        localUnread: 0,
         unread: 0,
         notification: 0,
         notify: 3,

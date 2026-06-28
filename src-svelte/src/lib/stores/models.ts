@@ -544,7 +544,7 @@ export function setActiveBuffer(bufferId: string): boolean {
 	// effectiveUnread may be 0 if hotlist hasn't synced yet, but localUnread
 	// already tracks messages received while away from this buffer.
 	let targetLastSeen = buffer.lastSeen;
-	const pendingUnread = Math.max(effectiveUnread, buffer.localUnread);
+	const pendingUnread = Math.max(effectiveUnread, buffer.localUnread ?? 0);
 	if (buffer.lines.length > 0 && pendingUnread > 0) {
 		targetLastSeen = Math.max(0, buffer.lines.length - pendingUnread - 1);
 	} else if (targetLastSeen >= 0) {
