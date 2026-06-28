@@ -15,7 +15,7 @@ test.beforeAll(async ({ browser }) => {
 });
 
 test.afterAll(async () => {
-	await page.close();
+	if (page) await page.close();
 });
 
 test.beforeEach(async () => {
@@ -290,36 +290,35 @@ test("should scroll down when user types and sends a message while at bottom", a
 		{ timeout: 10000 },
 	);
 
-	// Allow time for cascading effects (hotlist sync, effect re-runs) to settle.
-	// Multiple rAF scroll cycles may fire as lines arrive in batches.
-	await page.waitForTimeout(3000);
-
-	// Verify the user's message is visible in the viewport near the bottom.
-	// This proves the view scrolled down to follow new content, regardless of
-	// exact scroll position precision from cascading updates.
-	const msgInViewport = await page.evaluate((text) => {
-		const container = document.querySelector(
-			'[data-testid="chat-messages"]',
-		) as HTMLElement;
-		const rows = Array.from(
-			document.querySelectorAll('[data-testid="bufferline-row"]'),
-		);
-		const targetRow = rows.find((row) => row.textContent?.includes(text));
-		if (!targetRow || !container) return null;
-		const rowRect = targetRow.getBoundingClientRect();
-		const contRect = container.getBoundingClientRect();
-		// Row's vertical position relative to container viewport (0=top, 1=bottom)
-		const relativeY = (rowRect.top - contRect.top) / contRect.height;
-		return {
-			relativeY,
-			visible: rowRect.bottom > contRect.top && rowRect.top < contRect.bottom,
-		};
-	}, msgText);
-
-	expect(msgInViewport).not.toBeNull();
-	expect(msgInViewport!.visible).toBe(true);
-	// Message should be in lower 50% of viewport (near bottom)
-	expect(msgInViewport!.relativeY).toBeGreaterThan(0.4);
+		// Wait for the message to become visible in the viewport.
+		// After sending a message while at bottom, scroll-follow should bring it into view.
+		// With accumulated content from prior serial tests, cascading effects (hotlist sync,
+		// effect re-runs, layout recalculation) can take longer than a fixed timeout.
+		await expect(async () => {
+			const result = await page.evaluate((text) => {
+				const container = document.querySelector(
+					'[data-testid="chat-messages"]',
+				) as HTMLElement;
+				if (!container) return null;
+				const rows = Array.from(
+					document.querySelectorAll('[data-testid="bufferline-row"]'),
+				);
+				const targetRow = rows.find((row) => row.textContent?.includes(text));
+				if (!targetRow) return null;
+				const rowRect = targetRow.getBoundingClientRect();
+				const contRect = container.getBoundingClientRect();
+				// Row's vertical position relative to container viewport (0=top, 1=bottom)
+				const relativeY = (rowRect.top - contRect.top) / contRect.height;
+				return {
+					relativeY,
+					visible: rowRect.bottom > contRect.top && rowRect.top < contRect.bottom,
+				};
+			}, msgText);
+			expect(result).not.toBeNull();
+			expect(result!.visible).toBe(true);
+			// Message should be in lower 50% of viewport (near bottom)
+			expect(result!.relativeY).toBeGreaterThan(0.4);
+		}).toPass({ timeout: 15000, intervals: [500] });
 });
 
 test("should NOT auto-scroll when user scrolled up in active buffer and messages arrive", async () => {

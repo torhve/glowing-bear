@@ -8,7 +8,6 @@
   import { settings } from '$lib/stores/settings';
   import { insertNickIntoInput, bufferHasNicklist, makeKeyboardActivatable } from '$lib/utils';
   import { DEBUG_NICKLIST } from '$lib/debug';
-  import FormInput from './FormInput.svelte';
 
   let { onClose, forceShow }: { onClose?: () => void; forceShow?: boolean } = $props();
   let searchQuery = $state('');
@@ -17,22 +16,24 @@
   let showNicklist = $derived(forceShow ?? $settings.showNicklist);
 
   // Whether current buffer actually has nick data to display
-  let hasNicklist = $derived(bufferHasNicklist($currentBuffer));
+      let hasNicklist = $derived(bufferHasNicklist($currentBuffer));
 
-  let filteredNickGroups = $derived(
-    $currentBuffer?.nicklist
-      ? (Object.entries($currentBuffer.nicklist) as [string, NickGroup][])
-          // Skip root group (it's just a placeholder, not displayed in Angular either)
-          .filter(([name]) => name !== 'root')
-          .filter(([name, group]) => {
-            if (!searchQuery) return true;
-            const query = searchQuery.toLowerCase();
-            return name.toLowerCase().includes(query) ||
-                   group.nicks.some((nick: Nick) => nick.name.toLowerCase().includes(query));
-          })
-          // Preserve WeeChat order (no alphabetical sort)
-      : []
-  );
+      /* Use $derived.by() for explicit dependency tracking — ensures Svelte 5
+         tracks all reactive reads (searchQueryLower, $currentBuffer) even when
+         accessed inside nested callbacks like .filter() and .some(). */
+      let filteredNickGroups = $derived.by(() => {
+        const query = searchQuery.toLowerCase();
+        const nicklist = $currentBuffer?.nicklist;
+        if (!nicklist) return [];
+        return (Object.entries(nicklist) as [string, NickGroup][])
+            // Skip root group (it's just a placeholder, not displayed in Angular either)
+            .filter(([name]) => name !== 'root')
+            .filter(([name, group]) => {
+              if (!query) return true;
+              return name.toLowerCase().includes(query) ||
+                     group.nicks.some((nick: Nick) => nick.name.toLowerCase().includes(query));
+            });
+      });
 
   function getPrefixClass(prefix: string): string {
     switch (prefix) {
@@ -69,16 +70,17 @@
   <div class="nicklist-search-area px-2 py-1 border-b border-border">
     <div class="relative">
       <Search size={14} class="nicklist-search-icon absolute left-2 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
-      <FormInput
-        value={searchQuery}
-        oninput={(e: Event) => { searchQuery = (e.target as HTMLInputElement).value; }}
-        id="nicklist-search"
-        data-testid="nicklist-search"
-        placeholder="Search nicks..."
-        variant="search"
-        size="sm"
-        extraClass="pr-2"
-      />
+          <!-- Uncontrolled input: oninput reads from DOM and updates $state.
+               Avoids Svelte 5 controlled-input re-render conflict with Playwright .fill() -->
+          <input
+            type="text"
+            id="nicklist-search"
+            data-testid="nicklist-search"
+            placeholder="Search nicks..."
+            autocapitalize="off"
+            oninput={(e) => { searchQuery = (e.target as HTMLInputElement).value; }}
+            class="form-input w-full bg-input-bg border border-border rounded text-text focus:outline-none focus:border-accent hover:border-text-muted placeholder-text-muted transition-colors pl-8 pr-2 py-1 text-xs"
+          />
     </div>
   </div>
 

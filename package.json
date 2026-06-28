@@ -1,11 +1,11 @@
 {
   "name": "glowing-bear",
   "private": true,
-  "version": "0.20.0",
+  "version": "0.20.1",
   "description": "Glowing Bear — A web client for WeeChat",
   "type": "module",
   "scripts": {
-    "dev": "NODE_OPTIONS=--no-warnings vite dev",
+    "dev": "vite dev",
     "prebuild": "node static/generate-icons.mjs",
     "build": "vite build",
     "build:docker": "vite build",

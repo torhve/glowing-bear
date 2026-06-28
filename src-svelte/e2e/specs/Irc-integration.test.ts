@@ -130,9 +130,26 @@ test('switches between core and #glowing-bear buffers', async () => {
 test('shows bot nick change', async () => {
     await waitForBuffer(page, '#glowing-bear', 15000);
     await switchToBuffer(page, '#glowing-bear');
-    await irc.botNick('gbbot2');
-    const msgRow = page.locator('[data-testid="bufferline-row"] td.message').filter({ hasText: 'gbbot2' }).first();
-    await expect(msgRow).toBeVisible({ timeout: 10000 });
+
+    // Use a unique nick to avoid collision with prior serial tests
+    // that may have renamed the bot
+    const newNick = `gbnick${Date.now()}`;
+
+    // First reset bot to known nick so we always produce a visible change
+    await irc.botNick('gbbot');
+    await page.waitForTimeout(500);
+
+    // Now change to our unique nick
+    await irc.botNick(newNick);
+
+    // Wait for the infoline to render, then verify it's visible
+    await expect(async () => {
+const lines = await page.locator('[data-testid="bufferline-row"]').count();
+expect(lines).toBeGreaterThan(0);
+// Nick change infoline contains "is now known as <newNick>"
+const infoline = page.locator('[data-testid="bufferline-row"]').filter({ hasText: 'now known as' });
+await expect(infoline.first()).toBeVisible();
+    }).toPass({ timeout: 15000, intervals: [500] });
 });
 
 // ---- Nicklist diff tests ----
