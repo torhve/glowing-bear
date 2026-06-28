@@ -19,9 +19,7 @@ const config = {
 		},
 		alias: {
 			'$lib': 'src-svelte/src/lib',
-			'$lib/*': 'src-svelte/src/lib/*',
 			'$components': 'src-svelte/src/components',
-			'$components/*': 'src-svelte/src/components/*',
 		}
 	}
 };
