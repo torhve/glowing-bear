@@ -13,7 +13,7 @@ const config = {
 			strict: false
 		}),
 		files: {
-			routes: 'src-svelte/src',
+			routes: 'src-svelte/src/routes',
 			lib: 'src-svelte/src/lib',
 		},
 		alias: {
