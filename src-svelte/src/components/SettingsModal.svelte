@@ -1,5 +1,6 @@
 <script lang="ts">
   import { settings, updateSettings } from '$lib/stores/settings';
+    import { get } from 'svelte/store';
   import { requestNotificationPermission, isNotificationSupported } from '$lib/notifications';
   import { themeStore, setTheme, themes, themeLabels } from '$lib/stores/theme';
   import { weechatVersion } from '$lib/stores/models';
@@ -90,6 +91,16 @@ import BaseDialog from '$components/BaseDialog.svelte';
       enableFormatting: true
     });
     setTheme('dark');
+  }
+
+  // Toggle save-password checkbox: when unchecked, clear stored password from settings.
+  function toggleSavePassword() {
+    const s = get(settings);
+    if (!s.savepassword) {
+      updateSettings({ savepassword: true });
+    } else {
+      updateSettings({ savepassword: false, password: '' });
+    }
   }
 </script>
 
@@ -431,7 +442,7 @@ import BaseDialog from '$components/BaseDialog.svelte';
               name="savepassword"
               type="checkbox"
               checked={$settings.savepassword}
-              onchange={() => updateSettings({ savepassword: !$settings.savepassword })}
+              onchange={toggleSavePassword}
               class="w-4 h-4"
               data-settings-checkbox="savepassword"
             />
