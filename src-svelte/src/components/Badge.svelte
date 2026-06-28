@@ -3,7 +3,7 @@
      * Badge — Small pill-style indicator with optional icon and label.
      * Supports filled, outlined, and subtle-outline render modes across semantic color themes.
      */
-    import type { SvelteComponentTyped } from 'svelte';
+    import type { Component } from 'svelte';
 
     type BadgeVariant = 'default' | 'success' | 'warning' | 'danger';
     type BadgeMode = 'filled' | 'outline' | 'subtle' | 'solid' | 'bright';
@@ -18,7 +18,7 @@
     } = $props<{
         variant?: BadgeVariant;
         mode?: BadgeMode;
-        icon?: typeof SvelteComponentTyped;
+        icon?: Component;
         class?: string;
         children?: import('svelte').Snippet;
         [key: string]: unknown;

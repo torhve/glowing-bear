@@ -9,6 +9,7 @@ Source code in `src-svelte/src/` has `components/`, `lib/`, `routes/`. Config fi
 ### Key modules by directory
 
 **`src-svelte/src/lib/stores/`** — Reactive state management:
+
 - `connectionManager.ts` — WebSocket connection lifecycle, reconnection logic
 - `connectionStore.ts` — Current connection state
 - `handlers.ts` — WeeChat protocol message handlers
@@ -19,6 +20,7 @@ Source code in `src-svelte/src/` has `components/`, `lib/`, `routes/`. Config fi
 - `inputHistory.ts`, `inputState.ts` — Input bar state and history
 
 **`src-svelte/src/lib/` (root)** — Core utilities:
+
 - `filters.ts` — Text filters (`sanitizeHtml`, `escapeHtml`, `codify`, `inlinecolour`, `truncate`)
 - `linkTokens.ts` — URL/code tokenization (`tokenizeLinks`, `codifyText`, `tokenizeAndCodify`)
 - `notifications.ts` — Desktop notification dispatch (Tauri + Web Notifications API)
@@ -32,6 +34,7 @@ Source code in `src-svelte/src/` has `components/`, `lib/`, `routes/`. Config fi
 - `imgur.ts` — Imgur image upload integration
 
 **`src-svelte/src/lib/utils/`** — Helper utilities:
+
 - `bufferTooltip.ts` — Buffer tooltip content generation
 - `crypto.ts` — Password hashing (PBKDF2, native crypto)
 - `mediaExtensions.ts` — Media file type detection
@@ -39,6 +42,7 @@ Source code in `src-svelte/src/` has `components/`, `lib/`, `routes/`. Config fi
 - `urlEmbeds.ts` — URL embed/rich preview generation
 
 **`src-svelte/src/components/`** — UI components:
+
 - `BufferList`, `BufferLineRow`, `BufferHotlist`, `BufferSearchModal` — Buffer navigation
 - `ChatView`, `InputBar` — Chat display and input
 - `Nicklist` — Nickname list with search
@@ -49,8 +53,6 @@ Source code in `src-svelte/src/` has `components/`, `lib/`, `routes/`. Config fi
 
 ## Commands
 
-Run from repo root (`src-svelte/` is a source subdirectory only):
-
 ```bash
 npm run dev                    # Dev server (localhost:8001)
 npm run build                  # Production build (static output to build/)
@@ -60,13 +62,14 @@ npm test                       # Vitest unit tests
 npm run test:e2e -- --grep "X" # Targeted E2E tests
 npm run irc:start / irc:stop   # Manual gbtest IRC server
 npm run tauri                 # Tauri CLI (uses @tauri-apps/cli)
-npm run tauri:dev             # Tauri desktop dev mode
-npm run tauri:build           # Tauri desktop production build
+npm run tauri dev             # Tauri desktop dev mode
+npm run tauri build           # Tauri desktop production build
 ```
 
 ## Code Style (CRITICAL)
 
 ### Svelte 5 Runes
+
 - **Never use `$:`** — compiles to `$effect.pre`, causes `$effect_orphan` errors during event handlers
 - Use `$state`, `$derived`, `$effect`, `$props()` (NOT `export let`)
 - `.svelte` templates: `$storeName` (e.g. `$settings`, `$buffers`)
@@ -86,9 +89,13 @@ $effect(() => {
 
 Do NOT initialize `$state` with a store value if you also subscribe to it in an effect — the `$state` initialization creates an unwanted reactive dependency that causes the effect to re-run on every store change.
 
+Use `untrack()` from `svelte` to read a value inside `$effect` without creating a reactive dependency:
+
 ### Reactivity
 
-Immutable updates only. Spread copies: `buffers.set({ ...get(buffers) })`. Read via `get(store)`, mutate copy, then `store.set(copy)`. Never mutate in-place.
+**Writable stores** (`writable()`) require immutable updates. Read via `get(store)`, mutate copy, then `store.set(copy)`. Spread pattern: `buffers.set({ ...get(buffers) })` or `buffers.update(...)`.
+
+**`$state` proxies** support in-place mutation — `.push()`, `.splice()`, direct property assignment all trigger reactivity via Svelte 5's proxy mechanism. Use mutation for local `$state` arrays/objects; use immutable updates for writable stores.
 
 **{#if} blocks after async boundaries do NOT reliably trigger.** Workaround: push placeholder items synchronously before `await`, update in-place after. For modals: render unconditionally, control visibility via `.showPopover()/.hidePopover()`.
 
@@ -98,6 +105,7 @@ Immutable updates only. Spread copies: `buffers.set({ ...get(buffers) })`. Read 
 - Import icons per-icon: `import X from '@lucide/svelte/icons/x'` — never barrel
 - Add `data-testid` on interactive elements for E2E tests
 - Use Tailwind semantic colors (`bg-panel`, `text-text`, `bg-surface-raised`, etc.)
+- Use Svelte 5 event handler syntax (`onclick`, `oninput`, `onscroll`, etc.) — never `on:click` (Svelte 4)
 
 ### Security
 
