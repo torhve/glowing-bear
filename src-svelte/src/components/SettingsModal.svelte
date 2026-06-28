@@ -30,7 +30,7 @@ import BaseDialog from '$components/BaseDialog.svelte';
   import Lock from '@lucide/svelte/icons/lock';
   import LogIn from '@lucide/svelte/icons/log-in';
   import Cog from '@lucide/svelte/icons/cog';
-  import { version as appVersion } from '../../package.json';
+  import { version as appVersion } from '../../../package.json';
   import FormInput from '$components/FormInput.svelte';
 
   let notifSupported = $derived(isNotificationSupported());

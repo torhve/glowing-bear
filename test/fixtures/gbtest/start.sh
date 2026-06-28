@@ -2,7 +2,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SRC_SVELTE_DIR="$SCRIPT_DIR/../../../src-svelte"
+REPO_ROOT="$SCRIPT_DIR/../../.."
 WEECHAT_HOME="/tmp/gbtest-weechat"
 
 IRC_PORT=6667
@@ -56,7 +56,7 @@ mkdir -p "$WEECHAT_HOME"
 
 if ! $IRC_ALREADY_RUNNING; then
 	# 1. Start IRC server as daemon
-	cd "$SRC_SVELTE_DIR" && npx tsx "test/irc-server/index.ts" \
+	cd "$REPO_ROOT" && npx tsx "src-svelte/test/irc-server/index.ts" \
 		--daemon \
 		--port="$IRC_PORT" \
 		--control-port="$CONTROL_PORT" \
@@ -139,6 +139,6 @@ echo "  Bot nick:       gbbot"
 echo "  Auto channel:   #glowing-bear"
 echo "  Config dir:     $WEECHAT_HOME"
 echo ""
-echo "Run 'npm run dev' (from src-svelte/) to start the UI."
+echo "Run 'npm run dev' (from repo root) to start the UI."
 echo "Run 'npm run test:e2e' to run playwright tests."
 echo "Run '$SCRIPT_DIR/stop.sh' to shut down."

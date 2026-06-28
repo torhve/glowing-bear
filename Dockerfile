@@ -13,15 +13,17 @@ WORKDIR /app
 COPY sws.toml ./
 
 # Copy only package manifests first — cached unless lockfile changes
-COPY src-svelte/package*.json ./src-svelte/
-RUN cd src-svelte && npm ci
+COPY package*.json .
+RUN npm ci
 
 # Copy full source tree — cached unless source or static files change
 COPY src-svelte/ ./src-svelte/
+# Static assets (icons, manifest) live at repo root
+COPY static/ ./static/
 
 # Build: uses build:docker to skip prebuild (icon generation requires ImageMagick + macOS nicutil)
-# Pre-generated icons in src-svelte/static/ are copied above, so nothing is lost
-RUN cd src-svelte && GIT_COMMIT=$GIT_COMMIT npm run build:docker
+# Pre-generated icons in static/ are copied above, so nothing is lost
+RUN GIT_COMMIT=$GIT_COMMIT npm run build:docker
 
 # Production stage: lightweight static web server
 FROM ghcr.io/static-web-server/static-web-server:2-alpine
@@ -33,7 +35,7 @@ ENV SERVER_ROOT=/var/public
 ENV SERVER_CONFIG_FILE=/etc/sws.toml
 
 COPY --from=builder /app/sws.toml /etc/sws.toml
-COPY --from=builder /app/src-svelte/build/ /var/public/
+COPY --from=builder /app/build/ /var/public/
 
 EXPOSE 8080
 

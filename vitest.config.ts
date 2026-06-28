@@ -8,14 +8,14 @@ export default defineConfig({
   plugins: [svelte()],
   resolve: {
     alias: {
-      $lib: path.resolve('./src/lib'),
-      $components: path.resolve('./src/components'),
-      '@tauri-apps/plugin-notification': path.resolve('./test/unit/mocks/tauri-plugin-notification.js'),
+      $lib: path.resolve('./src-svelte/src/lib'),
+      $components: path.resolve('./src-svelte/src/components'),
+      '@tauri-apps/plugin-notification': path.resolve('./src-svelte/test/unit/mocks/tauri-plugin-notification.js'),
     },
   },
   test: {
     globals: true,
-    include: ['test/unit/**/*.test.ts'],
+    include: ['src-svelte/test/unit/**/*.test.ts'],
     environment: 'jsdom',
   },
 });
