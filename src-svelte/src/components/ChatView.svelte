@@ -65,40 +65,40 @@
   // arrive on active buffer — readmarker persists until user scrolls to bottom (absorbed)
   // or switches buffers (recalculated by setActiveBuffer).
   let readEndIndex = $derived($currentBuffer?.lastSeen ?? -1);
-// Readmarker visibility based solely on lastSeen position relative to message count.
-      // Do NOT depend on effectiveUnread — that value can be cleared by hotlist sync
-      // while lastSeen (and thus the readmarker) correctly persists for active buffers.
-          let unreadCount = $derived(readEndIndex >= 0 ? messages.length - readEndIndex - 1 : 0);
+  // Readmarker visibility based solely on lastSeen position relative to message count.
+  // Do NOT depend on effectiveUnread — that value can be cleared by hotlist sync
+  // while lastSeen (and thus the readmarker) correctly persists for active buffers.
+  let unreadCount = $derived(readEndIndex >= 0 ? messages.length - readEndIndex - 1 : 0);
 
-      // Toggle pin/unpin for the currently active buffer via WeeChat localvar_set.
-      function handleTogglePin() {
-        const bufId = get(activeBufferId);
-        if (!bufId) return;
-        const bufferData = get(buffers)[bufId];
-        if (!bufferData) return;
-        const wasPinned = bufferData.pinned;
-        buffers.update(current => {
-          const existing = current[bufId];
-          if (!existing) return current;
-          const updated = { ...current };
-          updated[bufId] = { ...existing, pinned: !wasPinned };
-          return updated;
-        });
-        if (wasPinned) {
-          unpinBuffer(bufId);
-        } else {
-          pinBuffer(bufId);
-        }
-      }
+  // Toggle pin/unpin for the currently active buffer via WeeChat localvar_set.
+  function handleTogglePin() {
+    const bufId = get(activeBufferId);
+    if (!bufId) return;
+    const bufferData = get(buffers)[bufId];
+    if (!bufferData) return;
+    const wasPinned = bufferData.pinned;
+    buffers.update(current => {
+      const existing = current[bufId];
+      if (!existing) return current;
+      const updated = { ...current };
+      updated[bufId] = { ...existing, pinned: !wasPinned };
+      return updated;
+    });
+    if (wasPinned) {
+      unpinBuffer(bufId);
+    } else {
+      pinBuffer(bufId);
+    }
+  }
 
-      // Close the currently active buffer via WeeChat /close command.
-      function handleCloseBuffer() {
-        const bufId = get(activeBufferId);
-        if (!bufId) return;
-        closeBufferOnWeeChat(bufId);
-      }
+  // Close the currently active buffer via WeeChat /close command.
+  function handleCloseBuffer() {
+    const bufId = get(activeBufferId);
+    if (!bufId) return;
+    closeBufferOnWeeChat(bufId);
+  }
 
-      function handleScroll() {
+  function handleScroll() {
     if (!containerRef) return;
     const { scrollTop, scrollHeight, clientHeight } = containerRef;
 
@@ -192,39 +192,78 @@
 
   // Recalculate when font size setting changes
   $effect(() => {
-    void $settings.fontsize;
-    measureLinesPerScreen();
-  });
+    /*
+         * Scroll decision tree:
+         *
+         * +------------------------------------------------------+
+         * |  bufferChanged?                                     |
+         * |                                                      |
+         * |  YES ==>  +------------------------------------+     |
+         * |           | linesAdded?                          |     |
+         * |           |                                      |     |
+         * |           | YES ==> rAF: check hasUnread        |     |
+         * |           |          +- no unread               |     |
+         * |           |          |  ==> scroll to bottom       |     |
+         * |           |          +- has unread, fail>=2      |     |
+         * |           |          |  ==> fallback to bottom     |     |
+         * |           |          +- has unread               |     |
+         * |           |             ==> position readmarker    |     |
+         * |           +-+------------------------------------+     |
+         * |              |                                        |
+         * |  NO  ==>  +--+----------------------------------+     |
+         * |           | linesAdded?                          |     |
+         * |           |                                      |     |
+         * |           | YES ==> wasFollowing?                |     |
+         * |           |          +- true  ==> scroll to bottom |     |
+         * |           |          |         absorb unread       |     |
+         * |           |          +- false ==> do nothing (stop) |     |
+         * |           |            (user manually scrolled)     |     |
+         * |           |                                      |     |
+         * |           | NO ==> skip                          |     |
+         * |           +--------------------------------------+     |
+         * +------------------------------------------------------+
+         *
+         * Key insight: same-buffer auto-scroll is governed entirely by wasFollowing.
+         * Buffer-switch logic uses readmarker positioning. No ownMessage detection.
+         */
 
-
-  $effect(() => {
-    // Auto-scroll when buffer changes or new lines arrive
-    // Skip if loading more lines or was scrolled up during fetch
+    // Skip if no buffer, loading more lines, or empty buffer
     if (!$currentBuffer || isLoadingMore || messages.length === 0 || !containerRef) {
       prevActiveBufferId = get(activeBufferId);
       prevLinesLength = messages.length;
       return;
     }
 
-        // Read reactive values BEFORE any await to avoid stale snapshots.
-        // $derived values do NOT re-evaluate after await in async functions (Svelte 5 limitation).
-        const currentBufferId = get(activeBufferId);
-        const curLinesLength = messages.length;
+    // Read reactive values synchronously before any await to avoid stale snapshots.
+    // $derived values do NOT re-evaluate after await in async functions (Svelte 5 limitation).
+    const currentBufferId = get(activeBufferId);
+    const curLinesLength = messages.length;
     const bufferChanged = prevActiveBufferId !== currentBufferId;
     const linesAdded = curLinesLength > prevLinesLength;
 
-    // Capture at-bottom state SYNCHRONOUSLY before new lines change scrollHeight.
-    // Once Svelte renders new rows, scrollHeight increases and scrollTop appears
-    // "not at bottom" even though the user was following the chat.
-    // We use this captured value inside rAF to decide whether to auto-scroll.
-    let _wasAtBottomBeforeLines = false;
-    if (containerRef && linesAdded) {
-      _wasAtBottomBeforeLines = containerRef.scrollTop >= containerRef.scrollHeight - containerRef.clientHeight - 3;
-      if (isAtBottom !== _wasAtBottomBeforeLines) {
-        isAtBottom = _wasAtBottomBeforeLines;
-        bufferBottom.set(_wasAtBottomBeforeLines);
+    // Initialize from scroll handler's authoritative state (50px tolerance).
+    // Only attempt synchronous re-check if scroll handler hasn't detected "following".
+    // $effect runs AFTER Svelte renders new rows, so scrollHeight has already grown —
+    // a fresh scrollTop check would falsely report "not at bottom".
+    let wasFollowing = isAtBottom;
+    if (containerRef && linesAdded && !wasFollowing) {
+      wasFollowing = containerRef.scrollTop >= containerRef.scrollHeight - containerRef.clientHeight - 3;
+      if (isAtBottom !== wasFollowing) {
+        isAtBottom = wasFollowing;
+        bufferBottom.set(wasFollowing);
       }
     }
+
+        // DEBUG: log scroll state on each effect run
+        console.log('[scroll-effect]',
+          `buf=${$currentBuffer?.shortName}`, { bufferChanged, linesAdded, wasFollowing,
+          scrollTop: containerRef?.scrollTop ?? '?',
+          scrollHeight: containerRef?.scrollHeight ?? '?',
+          clientHeight: containerRef?.clientHeight ?? '?',
+          threshold: containerRef ? containerRef.scrollHeight - containerRef.clientHeight - 3 : '?',
+          isAtBottom, lastSeen: $currentBuffer?.lastSeen ?? -1,
+          lines: curLinesLength },
+        );
 
     // If nothing changed, skip scroll operations entirely
     if (!bufferChanged && !linesAdded) return;
@@ -240,238 +279,63 @@
     prevActiveBufferId = currentBufferId;
     prevLinesLength = curLinesLength;
 
-    // When lines are added, defer all scroll decisions to rAF so that:
-    // 1) The browser has time to compute layout (getBoundingClientRect works)
-    // 2) Scroll events fire and update isAtBottom from handleScroll
-    // This ensures reliable at-bottom detection in both headed and headless mode.
-    if (linesAdded) {
+    // Same buffer + lines added: defer to rAF for layout, but decision is simple.
+    // wasFollowing is authoritative - captured synchronously before render.
+    if (!bufferChanged && linesAdded) {
       requestAnimationFrame(() => {
-        // Re-read at-bottom state from actual DOM inside rAF.
-        // The pre-captured isAtBottom value can be stale if handleScroll hasn't fired yet
-        // (e.g., programmatic scrollTop changes that don't trigger Svelte on:scroll).
-        // Tight tolerance of 3px — only auto-scroll if truly at bottom.
-        // Generous tolerances cause false positives when users intentionally scroll up.
-        const domAtBottom = containerRef!.scrollTop >= containerRef!.scrollHeight - containerRef!.clientHeight - 3;
-        if (isAtBottom !== domAtBottom) {
-          isAtBottom = domAtBottom;
-          bufferBottom.set(domAtBottom);
-        }
-        const curIsAtBottom = isAtBottom;
-
-        // Re-compute readmarker state from live reactive values inside rAF.
-        // $derived does NOT re-evaluate after async boundaries in Svelte 5,
-        // so we read $currentBuffer directly (reactive access works inside rAF).
-        // Use lastSeen position directly (not effectiveUnread) — hotlist sync
-        // can clear effectiveUnread while lastSeen correctly persists for active buffers.
-        // Read directly from $currentBuffer (reactive access works inside rAF).
-        // Cannot use $messages inside rAF — $derived is not a proper store.
-        const freshReadEndIndex = $currentBuffer?.lastSeen ?? -1;
-        const freshMessages = $currentBuffer?.lines ?? [];
-        const freshHasUnread = freshReadEndIndex >= 0 && freshReadEndIndex < freshMessages.length - 1;
-
-// Detect own messages among unread lines for robustness.
-                // When posting, the echo is counted as unread (lastSeen isn't updated for active buffers).
-                // Multiple lines can arrive in a single _buffer_line_added batch,
-                // so the last line may not be the echo. Scan all unread lines instead.
-                // For buffer switches: check only the last line — old own messages in the
-                // unread range would cause false positives and destroy the readmarker.
-                // Read myNick directly from buffer data inside rAF ($derived doesn't re-evaluate in callbacks).
-                const curBuffer = $currentBuffer;
-                let myNickVal = curBuffer?.localVariables?.nick ?? '';
-                if (!myNickVal && curBuffer) {
-                  const serverBuf = Object.values(get(buffers)).find(b =>
-                    b.type === 'server' && b.plugin === curBuffer.plugin && b.server === curBuffer.server
-                  );
-                  myNickVal = serverBuf?.localVariables?.nick ?? '';
-                }
-                let isOwnMessage = false;
-                if (myNickVal) {
-                  if (!bufferChanged && freshHasUnread) {
-                    // Same buffer with unread: scan all unread lines for own message.
-                    for (let i = freshReadEndIndex + 1; i < freshMessages.length; i++) {
-                      const line = freshMessages[i];
-                      if (!line) continue;
-                      const prefix = line.prefixtext ?? '';
-                      const stripped = prefix.replace(/[<>]/g, '').trim();
-                      if (
-                        (line.tags && line.tags.includes('irc_selfmsg')) ||
-                        prefix.endsWith('/' + myNickVal) ||
-                        stripped === myNickVal
-                      ) {
-                        isOwnMessage = true;
-                        break;
-                      }
-                    }
-                  } else {
-                    // Buffer switch or no unread: check only the last line.
-                    const lastLine = freshMessages[freshMessages.length - 1];
-                    const lastPrefix = lastLine?.prefixtext ?? '';
-                    const strippedPrefix = lastPrefix.replace(/[<>]/g, '').trim();
-                    isOwnMessage =
-                        (lastLine?.tags && lastLine.tags.includes('irc_selfmsg')) ||
-                        lastPrefix.endsWith('/' + myNickVal) ||
-                        strippedPrefix === myNickVal;
-                  }
-                }
-
-            // When lines are added to the SAME buffer (not a switch), use the pre-captured
-            // at-bottom state. This is critical: once Svelte renders new rows, scrollHeight increases
-            // and scrollTop appears "not at bottom" even though the user was following the chat.
-            // For buffer switches, _wasAtBottomBeforeLines was captured from the OLD buffer's
-            // dimensions — meaningless for the new buffer — so don't use it.
-            if (!bufferChanged && _wasAtBottomBeforeLines) {
-              readmarkerFailures = 0;
-              isAtBottom = true;
-              // Double-rAF: first rAF after Svelte renders, second rAF after layout computes.
-              requestAnimationFrame(() => requestAnimationFrame(() => {
-                if (containerRef) containerRef.scrollTop = containerRef.scrollHeight;
-              }));
-              // Absorb unread by updating lastSeen since user caught up.
-              if (freshHasUnread) {
-                const buf = get(currentBuffer);
-                if (buf) {
-                  buf.lastSeen = freshMessages.length - 1;
-                  buffers.set({ ...get(buffers), [buf.id]: { ...buf } });
-                }
-              }
-            } else if (!freshHasUnread || isOwnMessage) {
-              // No unread messages or own message in unread range — scroll to bottom.
-              // Covers both "at bottom following" and "buffer just switched, scrollTop=0" cases.
-              readmarkerFailures = 0;
-              isAtBottom = true;
-              // Double-rAF: first rAF after Svelte renders, second rAF after layout computes.
-              requestAnimationFrame(() => requestAnimationFrame(() => {
-                if (containerRef) containerRef.scrollTop = containerRef.scrollHeight;
-              }));
-            } else if (bufferChanged && freshHasUnread) {
-              // Buffer switch with unread — preserve readmarker, defer scroll
-              // positioning to post-render rAF where DOM elements are available.
-              isAtBottom = false;
-              requestAnimationFrame(() => {
-                const rmRow = document.querySelector('.readmarker');
-                if (rmRow && containerRef) {
-                  const rmRect = rmRow.getBoundingClientRect();
-                  const contRect = containerRef.getBoundingClientRect();
-                  const remainingScroll = containerRef.scrollHeight - containerRef.scrollTop;
-                  if (rmRect.bottom <= contRect.bottom && remainingScroll <= containerRef.clientHeight) {
-                    containerRef.scrollTop = containerRef.scrollHeight;
-                    isAtBottom = true;
-                  } else {
-                    const targetY = contRect.top + containerRef.clientHeight * 0.45;
-                    containerRef.scrollTop += rmRect.top - targetY;
-                  }
-                } else if (containerRef) {
-                  // Readmarker not rendered yet — scroll to bottom as safe default
-                  containerRef.scrollTop = containerRef.scrollHeight;
-                  isAtBottom = true;
-                }
-              });
-            } else if (!bufferChanged && curIsAtBottom) {
-          // At bottom with unread — absorb by updating lastSeen to cover all lines.
-          // User explicitly caught up by scrolling to bottom, so clear the readmarker.
-          // Guarded by !bufferChanged: when switching buffers, curIsAtBottom carries
-          // stale state from the OLD buffer and must not be trusted.
-          const buf = get(currentBuffer);
-          if (buf) {
-            buf.lastSeen = freshMessages.length - 1;
-            buffers.set({ ...get(buffers), [buf.id]: { ...buf } });
-          }
-          // Double-rAF for correct layout. isAtBottom already true from curIsAtBottom check.
-          requestAnimationFrame(() => requestAnimationFrame(() => {
-            if (containerRef) containerRef.scrollTop = containerRef.scrollHeight;
-          }));
-          readmarkerFailures = 0;
-        } else if (readmarkerFailures >= 2) {
-          // Readmarker fallback.
+        // Auto-scroll if either pre-capture or continuous scroll handler says 'following'.
+        // Pre-capture uses strict 3px tolerance; handleScroll uses generous 50px.
+        // Using OR ensures we don't miss cases where user is near-bottom but outside 3px.
+        if (wasFollowing || isAtBottom) {
           readmarkerFailures = 0;
           isAtBottom = true;
-          // Double-rAF for correct layout.
-          requestAnimationFrame(() => requestAnimationFrame(() => {
-            if (containerRef) containerRef.scrollTop = containerRef.scrollHeight;
-          }));
-        } else {
-          // Has unread and not at bottom — scroll to readmarker.
-          const rmRow = document.querySelector('.readmarker');
-          if (!rmRow || !rmRow.parentElement) {
-            readmarkerFailures++;
-            prevScrollKey = '';
-            isAtBottom = false;
-            return;
-          }
+          // Double-rAF: first after Svelte renders, second after layout computes.
           requestAnimationFrame(() => {
-            readmarkerFailures = 0;
-            const rmRect = rmRow.getBoundingClientRect();
-            const contRect = containerRef!.getBoundingClientRect();
-            const remainingScroll = containerRef!.scrollHeight - containerRef!.scrollTop;
-            if (rmRect.bottom <= contRect.bottom && remainingScroll <= containerRef!.clientHeight) {
-              // Readmarker + unread fit in viewport and everything below fits — scroll to bottom.
-              containerRef!.scrollTop = containerRef!.scrollHeight;
-              isAtBottom = true;
-            } else if (rmRect.bottom <= contRect.bottom) {
-              // Readmarker visible but many unread below — position readmarker at ~45%.
-              const targetY = contRect.top + containerRef!.clientHeight * 0.45;
-              const diff = rmRect.top - targetY;
-              containerRef!.scrollTop = containerRef!.scrollTop + diff;
-              isAtBottom = false;
-            } else {
-              // Readmarker not fully visible — position it at ~45% of viewport.
-              const targetY = contRect.top + containerRef!.clientHeight * 0.45;
-              const diff = rmRect.top - targetY;
-              containerRef!.scrollTop = containerRef!.scrollTop + diff;
-              isAtBottom = false;
-            }
+            if (containerRef) containerRef.scrollTop = containerRef.scrollHeight;
           });
-        }
+          // Absorb unread by updating lastSeen since user caught up.
+          const buf = get(currentBuffer);
+          if (buf && buf.lastSeen >= 0) {
+            buf.lastSeen = buf.lines.length - 1;
+            buffers.set({ ...get(buffers), [buf.id]: { ...buf } });
+          }
+            } else {
+              // User manually scrolled away from bottom - do nothing.
+              // Preserve their reading position; unread accumulates behind readmarker.
+              console.log('[scroll-effect SKIP]',
+                `buf=${$currentBuffer?.shortName}`,
+                'wasFollowing=false, not scrolling',
+              );
+            }
       });
       return;
     }
 
-    // Buffer changed but no lines added — defer entire branch to rAF so that
+    // Buffer changed (with or without line changes) - defer to rAF so that
     // Svelte has time to render the new buffer's content (including readmarker)
     // before we check for unread messages or try to position the scroll.
     requestAnimationFrame(() => {
       // Re-compute readmarker state from live reactive values inside rAF.
       // $derived does NOT re-evaluate after async boundaries in Svelte 5,
       // so we read $currentBuffer directly (reactive access works inside rAF).
-      // Use lastSeen position directly (not effectiveUnread) — hotlist sync
+      // Use lastSeen position directly (not effectiveUnread) - hotlist sync
       // can clear effectiveUnread while lastSeen correctly persists for active buffers.
-      // Read directly from $currentBuffer (reactive access works inside rAF).
-      // Cannot use $messages inside rAF — $derived is not a proper store.
       const freshReadEndIndex = $currentBuffer?.lastSeen ?? -1;
       const freshMessages = $currentBuffer?.lines ?? [];
       const freshHasUnread = freshReadEndIndex >= 0 && freshReadEndIndex < freshMessages.length - 1;
 
-// Check only the last line for own-message detection on buffer switch.
-              // Old own messages elsewhere in the unread range would cause false positives
-              // and destroy the readmarker. Read myNick directly from buffer data inside rAF.
-              const curBuffer = $currentBuffer;
-              let myNickVal = curBuffer?.localVariables?.nick ?? '';
-              if (!myNickVal && curBuffer) {
-                const serverBuf = Object.values(get(buffers)).find(b =>
-                  b.type === 'server' && b.plugin === curBuffer.plugin && b.server === curBuffer.server
-                );
-                myNickVal = serverBuf?.localVariables?.nick ?? '';
-              }
-              const lastLine = freshMessages[freshMessages.length - 1];
-              const lastPrefix = lastLine?.prefixtext ?? '';
-              const strippedPrefix = lastPrefix.replace(/[<>]/g, '').trim();
-              const isOwnMessage =
-                  (lastLine?.tags && lastLine.tags.includes('irc_selfmsg')) ||
-                  lastPrefix.endsWith('/' + myNickVal) ||
-                  strippedPrefix === myNickVal;
-
-      if (!freshHasUnread || isOwnMessage) {
-        // No unread messages or own message at bottom — scroll to bottom.
+      if (!freshHasUnread) {
+        // No unread messages - scroll to bottom.
         readmarkerFailures = 0;
         containerRef!.scrollTop = containerRef!.scrollHeight;
         isAtBottom = true;
       } else if (readmarkerFailures >= 2) {
-        // Readmarker fallback — scroll to bottom after repeated failures.
+        // Readmarker fallback - scroll to bottom after repeated failures.
         readmarkerFailures = 0;
         containerRef!.scrollTop = containerRef!.scrollHeight;
         isAtBottom = true;
       } else {
-        // Unread messages present — scroll to readmarker.
+        // Unread messages present - scroll to readmarker.
         // Second rAF ensures layout is computed after Svelte's DOM insert.
         requestAnimationFrame(() => {
           const rmRow = document.querySelector('.readmarker');
@@ -490,17 +354,17 @@
 
           const remainingScroll = containerRef!.scrollHeight - containerRef!.scrollTop;
           if (rmRect.bottom <= containerRect.bottom && remainingScroll <= containerRef!.clientHeight) {
-            // Readmarker + unread fit in viewport and everything below fits — scroll to bottom.
+            // Readmarker + unread fit in viewport and everything below fits - scroll to bottom.
             containerRef!.scrollTop = containerRef!.scrollHeight;
             isAtBottom = true;
           } else if (rmRect.bottom <= containerRect.bottom) {
-            // Readmarker visible but many unread below — position readmarker at ~45%.
+            // Readmarker visible but many unread below - position readmarker at ~45%.
             const targetY = containerRect.top + containerRef!.clientHeight * 0.45;
             const diff = rmRect.top - targetY;
             containerRef!.scrollTop = containerRef!.scrollTop + diff;
             isAtBottom = false;
           } else {
-            // Readmarker not fully visible — position it at ~45% of viewport.
+            // Readmarker not fully visible - position it at ~45% of viewport.
             const targetY = containerRect.top + containerRef!.clientHeight * 0.45;
             const diff = rmRect.top - targetY;
             containerRef!.scrollTop = containerRef!.scrollTop + diff;
@@ -510,6 +374,7 @@
       }
     });
   });
+
 
   // Handle mention click: extract nick from message prefix, insert into input at cursor.
   function handleMention(message: BufferLine) {
@@ -801,13 +666,13 @@
     position: relative;
   }
 
-      .readmarker-line {
-        flex: 1;
-        min-width: 20px;
-        height: 1px;
-        background: linear-gradient(to right, transparent, var(--gb-ribbon, #f0ad4e), var(--gb-ribbon, #f0ad4e), transparent);
-        opacity: 0.6;
-      }
+  .readmarker-line {
+    flex: 1;
+    min-width: 20px;
+    height: 1px;
+    background: linear-gradient(to right, transparent, var(--gb-ribbon, #f0ad4e), var(--gb-ribbon, #f0ad4e), transparent);
+    opacity: 0.6;
+  }
 
   .readmarker-badge {
     display: inline-flex;
