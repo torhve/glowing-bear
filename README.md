@@ -23,9 +23,6 @@ npm run build
 
 This produces a `build/` directory containing all the files you need. Point your web server at it. For HTTPS hosting, see the [Getting Started](#getting-started-for-users) section below.
 
-### GitHub Pages
-
-The static build from `npm run build` outputs a self-contained site that works on GitHub Pages. Deploy the `build/` directory to a `gh-pages` branch.
 
 ### Progressive Web App
 
@@ -45,9 +42,9 @@ Glowing Bear can be packaged as a native desktop application via [Tauri 2](https
 npm install
 npm run tauri:build
 ```
-    
+
 Uses the project-bundled `@tauri-apps/cli` (v2) rather than a globally installed `cargo tauri`, ensuring version consistency with Rust dependencies.
-    
+
 Produces installers for Linux (deb), macOS (dmg), and Windows (msi/nsis).
 
 ## Getting Started for Users
