@@ -1,5 +1,4 @@
 {
-  "extends": "./src-svelte/.svelte-kit/tsconfig.json",
   "compilerOptions": {
     "incremental": true,
     "target": "es2022",
@@ -8,10 +7,17 @@
     "strict": true,
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,
+    "isolatedModules": true,
     "disableSizeLimit": true,
     "forceConsistentCasingInFileNames": true,
     "noUncheckedIndexedAccess": true,
-    "types": ["vite/client", "node"]
+    "types": ["vite/client", "node"],
+    "paths": {
+      "$lib": ["./src-svelte/src/lib"],
+      "$lib/*": ["./src-svelte/src/lib/*"],
+      "$components": ["./src-svelte/src/components"],
+      "$components/*": ["./src-svelte/src/components/*"]
+    }
   },
   "include": [
     "src-svelte/src/**/*.d.ts",
