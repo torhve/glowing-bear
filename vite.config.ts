@@ -39,7 +39,8 @@ const gitCommit = process.env.GIT_COMMIT ?? (() => {
             adapterFallback: '404.html',
           },
           workbox: {
-            // Static adapter outputs to build/ — scan there instead of client/
+            // Custom outDir (src-svelte/.svelte-kit) — tell PWA where client output lives
+            globDirectory: path.resolve(__dirname, 'src-svelte/.svelte-kit/output/client'),
             globPatterns: ['**/*.{js,css,ico,png,svg,webp,webmanifest}'],
             navigateFallback: '404.html',
           },

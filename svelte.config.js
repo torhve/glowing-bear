@@ -12,6 +12,7 @@ const config = {
 			precompress: false,
 			strict: false
 		}),
+		outDir: 'src-svelte/.svelte-kit',
 		files: {
 			routes: 'src-svelte/src/routes',
 			lib: 'src-svelte/src/lib',
