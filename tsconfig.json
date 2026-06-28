@@ -1,5 +1,5 @@
 {
-  "extends": "./.svelte-kit/tsconfig.json",
+  "extends": "./src-svelte/.svelte-kit/tsconfig.json",
   "compilerOptions": {
     "incremental": true,
     "target": "es2022",
@@ -10,7 +10,7 @@
     "verbatimModuleSyntax": true,
     "disableSizeLimit": true,
     "noUncheckedIndexedAccess": true,
-    "types": ["vite/client"]
+    "types": ["vite/client", "node"]
   },
-  "include": ["src/**/*.d.ts", "src/**/*.js", "src/**/*.ts", "src/**/*.svelte", "vite.config.ts"]
+  "include": ["src-svelte/src/**/*.d.ts", "src-svelte/src/**/*.js", "src-svelte/src/**/*.ts", "src-svelte/src/**/*.svelte", "vite.config.ts"]
 }
