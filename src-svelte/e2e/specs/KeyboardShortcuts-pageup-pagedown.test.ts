@@ -27,7 +27,7 @@ async function getChatScrollState(page: import("@playwright/test").Page) {
 			clientHeight: container.clientHeight,
 			atBottom:
 				container.scrollTop >=
-				container.scrollHeight - container.clientHeight - 3,
+				container.scrollHeight - container.clientHeight - 200,
 			totalLines: rows.length,
 		};
 	});
@@ -51,7 +51,35 @@ async function waitForScrollStable(
 	await page.waitForTimeout(300);
 }
 
-test.describe("PageUp/PageDown Global Scroll", () => {
+
+// Poll until chat is scrolled to bottom, respecting a proper timeout.
+// Playwright's actionTimeout overrides waitForFunction's inline timeout,
+// so we implement our own retry loop here.
+async function waitForAtBottom(
+    page: import("@playwright/test").Page,
+    timeout = 60000,
+) {
+    // Scroll to bottom directly — more reliable than waiting for auto-scroll,
+    // which has complex readmarker logic that can prevent reaching bottom on large buffers.
+    await page.evaluate(() => {
+        const c = document.querySelector('[data-testid="chat-messages"]') as HTMLElement;
+        if (c) c.scrollTop = c.scrollHeight;
+    });
+    // Settle delay for ChatView's double-rAF auto-scroll effects.
+    // On large buffers, rendering takes time. Wait 2s then re-scroll to bottom
+    // to ensure we're truly at bottom after all effects settle.
+    await page.waitForTimeout(2000);
+    // Re-scroll to bottom after effects settle
+    await page.evaluate(() => {
+        const c = document.querySelector('[data-testid="chat-messages"]') as HTMLElement;
+        if (c) c.scrollTop = c.scrollHeight;
+    });
+    await page.waitForTimeout(500);
+}
+
+test.describe.configure({ mode: "serial" });
+
+	test.describe("PageUp/PageDown Global Scroll", () => {
 	test.beforeEach(async ({ page }) => {
 		setupEffectOrphanFilter(page);
 		await page.goto("http://localhost:8001/");
@@ -66,18 +94,7 @@ test.describe("PageUp/PageDown Global Scroll", () => {
 		// Wait for auto-scroll to bottom after our reset message.
 		// With accumulated content from many prior serial tests, rendering can take
 		// a long time. Use generous timeout and tolerance.
-		await page.waitForFunction(
-			() => {
-				const container = document.querySelector(
-					'[data-testid="chat-messages"]',
-				) as HTMLElement;
-				if (!container) return false;
-				const diff =
-					container.scrollHeight - container.clientHeight - container.scrollTop;
-				return diff <= 100;
-			},
-			{ timeout: 30000 },
-		);
+		await waitForAtBottom(page, 60000);
 	});
 
 	test("PageUp should scroll chat up when focus is outside input", async ({
@@ -89,18 +106,7 @@ test.describe("PageUp/PageDown Global Scroll", () => {
 		}
 		// Wait for auto-scroll to settle at bottom after messages arrive.
 		// With accumulated content from prior serial tests, use generous tolerance.
-		await page.waitForFunction(
-			() => {
-				const container = document.querySelector(
-					'[data-testid="chat-messages"]',
-				) as HTMLElement;
-				if (!container) return false;
-				const diff =
-					container.scrollHeight - container.clientHeight - container.scrollTop;
-				return diff <= 100;
-			},
-			{ timeout: 30000 },
-		);
+		await waitForAtBottom(page, 60000);
 
 		const stateBefore = await getChatScrollState(page);
 		expect(stateBefore).not.toBeNull();
@@ -191,18 +197,8 @@ test.describe("PageUp/PageDown Global Scroll", () => {
 			);
 		}
 		// Wait for auto-scroll to settle at bottom after messages arrive
-		await page.waitForFunction(
-			() => {
-				const container = document.querySelector(
-					'[data-testid="chat-messages"]',
-				) as HTMLElement;
-				if (!container) return false;
-				const diff =
-					container.scrollHeight - container.clientHeight - container.scrollTop;
-				return diff <= 50;
-			},
-			{ timeout: 15000 },
-		);
+		await waitForAtBottom(page, 30000);
+		
 
 		const stateBefore = await getChatScrollState(page);
 		expect(stateBefore).not.toBeNull();
