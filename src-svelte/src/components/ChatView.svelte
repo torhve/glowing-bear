@@ -343,9 +343,34 @@
               requestAnimationFrame(() => requestAnimationFrame(() => {
                 if (containerRef) containerRef.scrollTop = containerRef.scrollHeight;
               }));
-            } else if (curIsAtBottom) {
+            } else if (bufferChanged && freshHasUnread) {
+              // Buffer switch with unread — preserve readmarker, defer scroll
+              // positioning to post-render rAF where DOM elements are available.
+              isAtBottom = false;
+              requestAnimationFrame(() => {
+                const rmRow = document.querySelector('.readmarker');
+                if (rmRow && containerRef) {
+                  const rmRect = rmRow.getBoundingClientRect();
+                  const contRect = containerRef.getBoundingClientRect();
+                  const remainingScroll = containerRef.scrollHeight - containerRef.scrollTop;
+                  if (rmRect.bottom <= contRect.bottom && remainingScroll <= containerRef.clientHeight) {
+                    containerRef.scrollTop = containerRef.scrollHeight;
+                    isAtBottom = true;
+                  } else {
+                    const targetY = contRect.top + containerRef.clientHeight * 0.45;
+                    containerRef.scrollTop += rmRect.top - targetY;
+                  }
+                } else if (containerRef) {
+                  // Readmarker not rendered yet — scroll to bottom as safe default
+                  containerRef.scrollTop = containerRef.scrollHeight;
+                  isAtBottom = true;
+                }
+              });
+            } else if (!bufferChanged && curIsAtBottom) {
           // At bottom with unread — absorb by updating lastSeen to cover all lines.
           // User explicitly caught up by scrolling to bottom, so clear the readmarker.
+          // Guarded by !bufferChanged: when switching buffers, curIsAtBottom carries
+          // stale state from the OLD buffer and must not be trusted.
           const buf = get(currentBuffer);
           if (buf) {
             buf.lastSeen = freshMessages.length - 1;

@@ -51,6 +51,14 @@ import type {
 function trimBufferLines(buffer: BufferData, limit: number) {
 	if (buffer.lines.length <= limit) return;
 	const linesToRemove = buffer.lines.length - limit;
+	// Adjust localUnread for removed lines — it tracks real-time messages
+	// received while this buffer was inactive. If trimmed lines were part of
+	// the locally-tracked unread range, reduce the count accordingly.
+	if (buffer.localUnread > 0) {
+		const unreadStartIndex = Math.max(0, buffer.lines.length - buffer.localUnread);
+		const overlap = Math.max(0, Math.min(linesToRemove, unreadStartIndex));
+		buffer.localUnread = Math.max(0, buffer.localUnread - overlap);
+	}
 	buffer.lines.splice(0, linesToRemove);
 	buffer.requestedLines -= linesToRemove;
 	buffer.lastSeen = Math.max(0, buffer.lastSeen - linesToRemove);
@@ -1065,7 +1073,7 @@ export function handleBufferCleared(message: ProtocolMessage) {
 	const bufferMsg = message.objects[0]?.content[0];
 	if (!bufferMsg) return;
 	const bufferId = bufferMsg.pointers[0];
-	const updated = updateBufferDeep(bufferId, { lines: [], requestedLines: 0 });
+	const updated = updateBufferDeep(bufferId, { lines: [], requestedLines: 0, localUnread: 0 });
 	if (!updated) return;
 	// Use update() to merge with current store state, preventing overwrites
 	// of concurrent changes from other handlers.

@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
 import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, incrementReconnectAttempts } from '$lib/stores/connectionStore';
-import { buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer, clearAllUnread, localUnreadBuffers, hotlistClearedBuffers, bufferBottom, previousBufferId, pendingBufferSwitch } from '$lib/stores/models';
+import { buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer, clearAllUnread, localUnreadBuffers, hotlistClearedBuffers, bufferBottom, previousBufferId, pendingBufferSwitch, isSyncing } from '$lib/stores/models';
 import { settings } from '$lib/stores/settings';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist, setOnUpgrade, setOnUpgradeEnded } from '$lib/stores/handlers';
 import { addToast, removeToast, clearToasts, toastStore } from '$lib/toast';
@@ -809,6 +809,10 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
         // created a new store copy during the async wait, so our captured reference is stale.
         const freshBuffer = getBuffer(bufferId);
         if (!freshBuffer) return;
+        // Capture sync state and old line count before handleLineInfo processes lines.
+        // If initial sync completes during handleLineInfo, we must NOT subtract oldLength
+        // afterward — initial sync already set lastSeen correctly from hotlist counts.
+        const wasSyncingBefore = isSyncing();
         // Capture old line count before clearing, to correct lastSeen after handleLineInfo
         // increments it per-line (including injected date-change lines).
         const oldLength = freshBuffer.lines.length;
@@ -820,6 +824,7 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
         // and set allLinesFetched — freshBuffer reference is now stale.
         const linesReceived = message.objects?.[0]?.content?.length ?? 0;
         const isActiveBuffer = bufferId === get(activeBufferId);
+        const syncCompletedDuringFetch = wasSyncingBefore && !isSyncing();
         buffers.update(current => {
             const buf = current[bufferId];
             if (!buf) return current;
@@ -835,10 +840,19 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
                 } else {
                     updated.lastSeen = buf.lines.length - 1;
                 }
+            } else if (wasSyncingBefore) {
+                // Buffer was syncing before fetch — initial sync may have set lastSeen.
+                // If sync completed during fetch, skip subtraction (initial sync handled it).
+                // If sync did not complete, subtract oldLength as normal.
+                if (!syncCompletedDuringFetch) {
+                    updated.lastSeen -= oldLength;
+                }
             } else {
-                // For inactive buffer: handleLineInfo incremented lastSeen per-line,
-                // subtract old line count to preserve readmarker position relative to bottom.
-                updated.lastSeen -= oldLength;
+                // Buffer was already synced before this fetch (lastSeen >= 0).
+                // handleLineInfo cleared old lines and added new ones. Per-line lastSeen++
+                // was skipped due to localUnread > 0 guard, so lastSeen is stale.
+                // Reset to end of buffer — setActiveBuffer will recalculate using localUnread.
+                updated.lastSeen = updated.lines.length - 1;
             }
             if (linesReceived < numLines) {
                 updated.allLinesFetched = true;
@@ -885,16 +899,49 @@ export async function switchBuffer(bufferId: string): Promise<boolean> {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         return false;
     }
-    // Fetch lines only for buffers that haven't been read yet (lastSeen < 0).
-    // Buffers with a valid readmarker position should not have their lines
-    // cleared and refetched — that would destroy the preserved lastSeen value.
+    // Fetch lines for buffers that need historical context before switching.
+    // Fetch if: lastSeen < 0 (never synced), or line count is very low (< 20)
+    // meaning initial sync didn't load enough history for proper readmarker positioning.
+    // Buffers with sufficient cached lines should not be refetched — that would
+    // destroy the preserved lastSeen value and localUnread state.
     const buffer = getBuffer(bufferId);
-    if (buffer && buffer.lastSeen < 0 && buffer.requestedLines < 100) {
+    if (buffer && (buffer.lastSeen < 0 || buffer.lines.length < 20) && buffer.requestedLines < 100) {
+        // Track whether this buffer was already synced. For unsynced buffers,
+        // initial sync sets lastSeen during fetch, and we need to adjust for
+        // prepended historical lines. For already-synced buffers, fetchMoreLines
+        // resets lastSeen to end of new lines, so no adjustment needed here.
+        const wasAlreadySynced = buffer.lastSeen >= 0;
+        // Capture line count before fetch so we can adjust lastSeen afterward.
+        // Historical lines are prepended during initial sync, shifting existing
+        // line indices. lastSeen must shift by the same amount to stay valid.
+        const preFetchLineCount = buffer.lines.length;
         try {
             await fetchMoreLines(100, bufferId);
         } catch (err) {
             console.error('[setActiveBuffer] fetchMoreLines failed:', err);
             // Silently ignore fetch failures on buffer switch
+        }
+        // Only adjust lastSeen for buffers that were NOT synced before fetch.
+        // For those, initial sync set lastSeen based on partial line data, then
+        // more historical lines were prepended. Shift lastSeen to account for this.
+        // For already-synced buffers, fetchMoreLines reset lastSeen to end of buffer.
+        if (!wasAlreadySynced) {
+            const postFetchBuffer = getBuffer(bufferId);
+            if (postFetchBuffer) {
+                const prependedCount = postFetchBuffer.lines.length - preFetchLineCount;
+                if (prependedCount > 0 && postFetchBuffer.lastSeen >= 0) {
+                    buffers.update(current => {
+                        const buf = current[bufferId];
+                        if (!buf) return current;
+                        const updated = { ...buf };
+                        updated.lastSeen = Math.min(
+                            buf.lastSeen + prependedCount,
+                            buf.lines.length - 1,
+                        );
+                        return { ...current, [bufferId]: updated };
+                    });
+                }
+            }
         }
     }
     const success = setActiveBuffer(bufferId);
