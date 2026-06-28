@@ -27,26 +27,19 @@ import Key from '@lucide/svelte/icons/key';
   import TauriTitlebar from './TauriTitlebar.svelte';
   import { DEBUG_FORM } from '$lib/debug';
 
-  let hostField = $state('');
-  let port = $state('443');
-  let password = $state('');
-  let tls = $state(false);
+  // Populate form fields from saved settings once on mount.
+  // Using one-time init (not a reactive $effect) prevents typed values
+  // from being overwritten when other form fields trigger updateSettings().
+  const savedSettings = get(settings);
+  let hostField = $state(savedSettings.hostField || '');
+  let port = $state(savedSettings.port || '443');
+  let password = $state(savedSettings.password || '');
+  let tls = $state(savedSettings.tls || false);
   let hostInvalid = $state(false);
   let showPassword = $state(false);
-  let savepassword = $state(false);
-  let autoconnect = $state(false);
+  let savepassword = $state(savedSettings.savepassword || false);
+  let autoconnect = $state(savedSettings.autoconnect || false);
   let shakePassword = $state(false);
-
-  // Populate form fields from saved settings (reactive to store changes)
-  $effect(() => {
-    const s = $settings;
-    if (s.hostField) hostField = s.hostField;
-    if (s.port) port = s.port;
-    tls = s.tls || false;
-    savepassword = s.savepassword || false;
-    autoconnect = s.autoconnect || false;
-    password = s.password || '';
-  });
 
   // Autoconnect is handled by +page.svelte's tryAutoConnect(). The ConnectionForm
   // only handles explicit user-initiated connections via handleConnect().
@@ -156,6 +149,16 @@ import Key from '@lucide/svelte/icons/key';
   function toggleTLS() {
     updateSettings({ tls });
   }
+
+  // Toggle save-password checkbox: when unchecked, clear stored password from settings.
+  // When checked, only update the savepassword flag — password is saved on connect.
+  function toggleSavePassword() {
+    if (!savepassword) {
+      updateSettings({ savepassword: true });
+    } else {
+      updateSettings({ savepassword: false, password: '' });
+    }
+  }
 </script>
 
 <div
@@ -263,7 +266,7 @@ import Key from '@lucide/svelte/icons/key';
           data-testid="savepassword-checkbox"
           type="checkbox"
           bind:checked={savepassword}
-          onchange={() => updateSettings({ savepassword })}
+          onclick={toggleSavePassword}
            class="mr-1"
          />
         <Save size={16} class="text-text-secondary flex-shrink-0" />
