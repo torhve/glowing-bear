@@ -321,8 +321,11 @@
             // dimensions — meaningless for the new buffer — so don't use it.
             if (!bufferChanged && _wasAtBottomBeforeLines) {
               readmarkerFailures = 0;
-              containerRef!.scrollTop = containerRef!.scrollHeight;
               isAtBottom = true;
+              // Double-rAF: first rAF after Svelte renders, second rAF after layout computes.
+              requestAnimationFrame(() => requestAnimationFrame(() => {
+                if (containerRef) containerRef.scrollTop = containerRef.scrollHeight;
+              }));
               // Absorb unread by updating lastSeen since user caught up.
               if (freshHasUnread) {
                 const buf = get(currentBuffer);
@@ -335,8 +338,11 @@
               // No unread messages or own message in unread range — scroll to bottom.
               // Covers both "at bottom following" and "buffer just switched, scrollTop=0" cases.
               readmarkerFailures = 0;
-              containerRef!.scrollTop = containerRef!.scrollHeight;
               isAtBottom = true;
+              // Double-rAF: first rAF after Svelte renders, second rAF after layout computes.
+              requestAnimationFrame(() => requestAnimationFrame(() => {
+                if (containerRef) containerRef.scrollTop = containerRef.scrollHeight;
+              }));
             } else if (curIsAtBottom) {
           // At bottom with unread — absorb by updating lastSeen to cover all lines.
           // User explicitly caught up by scrolling to bottom, so clear the readmarker.
@@ -345,14 +351,19 @@
             buf.lastSeen = freshMessages.length - 1;
             buffers.set({ ...get(buffers), [buf.id]: { ...buf } });
           }
-          containerRef!.scrollTop = containerRef!.scrollHeight;
-          isAtBottom = true;
+          // Double-rAF for correct layout. isAtBottom already true from curIsAtBottom check.
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            if (containerRef) containerRef.scrollTop = containerRef.scrollHeight;
+          }));
           readmarkerFailures = 0;
         } else if (readmarkerFailures >= 2) {
           // Readmarker fallback.
           readmarkerFailures = 0;
-          containerRef!.scrollTop = containerRef!.scrollHeight;
           isAtBottom = true;
+          // Double-rAF for correct layout.
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            if (containerRef) containerRef.scrollTop = containerRef.scrollHeight;
+          }));
         } else {
           // Has unread and not at bottom — scroll to readmarker.
           const rmRow = document.querySelector('.readmarker');

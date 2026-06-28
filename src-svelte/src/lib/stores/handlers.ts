@@ -473,9 +473,9 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
 			// unread count from the hotlist that arrived before sync.
 			if (isSyncing() && buffer.lastSeen < 0) {
 				// Check if we've received enough lines to cover all unread.
-				// unreadSum = message unread + private + highlights.
-				// unread is index 1, notification is indices 2+3 combined.
-				const unreadSum = buffer.unread + buffer.notification;
+				// Include localUnread — real-time messages received while this
+				// buffer was inactive are not reflected in hotlist counts yet.
+				const unreadSum = buffer.unread + buffer.notification + (buffer.localUnread || 0);
 				if (buffer.lines.length > unreadSum && buffer.lastSeen < 0) {
 					buffer.lastSeen = buffer.lines.length - unreadSum - 1;
 					setSyncing(false);
@@ -1702,8 +1702,12 @@ export function handleLineInfo(
 			// readmarker stays in place. For inactive buffers with lastSeen set
 			// or no unread, increment normally (will be corrected by fetchMoreLines).
 			// For buffers not yet synced (lastSeen < 0, no unread), defer to post-backfill.
+			// If localUnread > 0, skip per-line increment — those real-time messages
+			// must remain unread; the post-backfill recalc will position lastSeen correctly.
 			if (manually && buffer.id !== get(activeBufferId)) {
-				if (
+				if (buffer.localUnread > 0) {
+					// Skip increment — let post-backfill recalc handle positioning.
+				} else if (
 					buffer.lastSeen >= 0 ||
 					(buffer.unread === 0 && buffer.notification === 0)
 				) {
@@ -1714,14 +1718,15 @@ export function handleLineInfo(
 	}
 
 	// Post-backfill: set lastSeen for buffers with lastSeen < 0 after loading.
-	// Account for hotlist-reported unread counts so the readmarker appears at
-	// the correct position instead of being hidden at the bottom.
+	// Account for hotlist-reported unread counts AND localUnread so the readmarker
+	// appears at the correct position. localUnread tracks real-time messages received
+	// while this buffer was inactive, which are not reflected in hotlist counts yet.
 	for (const buf of Object.values(updatedBuffers)) {
 		if (buf.lastSeen < 0 && buf.lines.length > 0) {
-			const unreadSum = (buf.unread || 0) + (buf.notification || 0);
+			const totalUnread = (buf.unread || 0) + (buf.notification || 0) + (buf.localUnread || 0);
 			buf.lastSeen =
-				unreadSum > 0
-					? Math.max(0, buf.lines.length - unreadSum - 1)
+				totalUnread > 0
+					? Math.max(0, buf.lines.length - totalUnread - 1)
 					: buf.lines.length - 1;
 		}
 	}
