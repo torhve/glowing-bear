@@ -22,9 +22,9 @@
     "irc:server": "npx tsx test/irc-server/index.ts",
     "irc:start": "bash test/fixtures/gbtest/start.sh",
     "irc:stop": "bash test/fixtures/gbtest/stop.sh",
-    "tauri": "cd src-tauri && cargo tauri",
-    "tauri:dev": "cd src-tauri && cargo tauri dev",
-    "tauri:build": "cd src-tauri && cargo tauri build"
+    "tauri": "npx tauri",
+    "tauri:dev": "npx tauri dev",
+    "tauri:build": "npx tauri build"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
