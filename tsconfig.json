@@ -9,8 +9,15 @@
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,
     "disableSizeLimit": true,
+    "forceConsistentCasingInFileNames": true,
     "noUncheckedIndexedAccess": true,
     "types": ["vite/client", "node"]
   },
-  "include": ["src-svelte/src/**/*.d.ts", "src-svelte/src/**/*.js", "src-svelte/src/**/*.ts", "src-svelte/src/**/*.svelte", "vite.config.ts"]
+  "include": [
+    "src-svelte/src/**/*.d.ts",
+    "src-svelte/src/**/*.js",
+    "src-svelte/src/**/*.ts",
+    "src-svelte/src/**/*.svelte",
+    "vite.config.ts"
+  ]
 }
