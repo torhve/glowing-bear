@@ -23,6 +23,6 @@ export async function botSayColored(text: string, fg?: string, bg?: string) {
 }
 
 //sends a PM (IRC PRIVMSG) from gbbot to testuser on weechat relay
-export async function botPm(text: string) {
-  await irc.sendPm('testuser', text);
+    export async function botPm(text: string) {
+      await irc.sendPm('testuser', text);
 }
