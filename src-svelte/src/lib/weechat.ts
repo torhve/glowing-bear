@@ -396,26 +396,42 @@ export function convertIrcCodes(text: string): string {
                     break;
                 }
                 let j = i + 1;
-                let rest = '';
                 // Parse fg color digits
+                let fg = '';
                 while (j < text.length && text[j]! >= '0' && text[j]! <= '9') {
-                    rest += text[j]!;
+                    fg += text[j]!;
                     j++;
                 }
-                if (rest.length === 0) {
+                if (fg.length === 0) {
                     result += '\x1c';
                 } else {
+                    // Pad single-digit fg to 2 digits for downstream style matchers
+                    if (fg.length === 1) {
+                        fg = '0' + fg;
+                    }
                     // Check for optional ,NN (bg color)
+                    let bg = '';
                     if (j < text.length && text[j]! === ',') {
-                        rest += ',';
                         j++;
                         while (j < text.length && text[j]! >= '0' && text[j]! <= '9') {
-                            rest += text[j]!;
+                            bg += text[j]!;
                             j++;
                         }
-                        result += '\x19*' + rest;
+                        // Pad single-digit bg to 2 digits
+                        if (bg.length === 1) {
+                            bg = '0' + bg;
+                        }
+                        // mIRC codes 0-16 map to option indices, not WeeChat palette.
+                        // \x19*fg,bg routes through getColorObj → weechat names.
+                        // For codes ≤ 16, emit separate bare codes so pattern 0
+                        // handles them with option names instead.
+                        if (parseInt(fg, 10) <= 16) {
+                            result += '\x19' + fg + '\x19B' + bg;
+                        } else {
+                            result += '\x19*' + fg + ',' + bg;
+                        }
                     } else {
-                        result += '\x19' + rest;
+                        result += '\x19' + fg;
                     }
                 }
                 i = j - 1;

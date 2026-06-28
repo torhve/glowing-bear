@@ -281,8 +281,8 @@ describe('Protocol rawText2Rich conversion', () => {
                 expect(convertIrcCodes('\x0304red')).toBe('\x1904red');
             });
 
-            it('converts mIRC color with fg+bg \\x0312,04 to \\x19*12,04', () => {
-                expect(convertIrcCodes('\x0312,04text')).toBe('\x19*12,04text');
+            it('converts mIRC color with fg+bg \\x0312,04 to \\x1912\\x19B04 (option range)', () => {
+                expect(convertIrcCodes('\x0312,04text')).toBe('\x1912\x19B04text');
             });
 
             it('converts bare \\x03 to WeeChat reset \\x1c', () => {
