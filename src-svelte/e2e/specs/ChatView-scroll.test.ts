@@ -433,3 +433,115 @@ test("should NOT auto-scroll when user scrolled up in active buffer and messages
 	// New message should NOT be visible (it's below the scrolled-up viewport, behind readmarker)
 	expect(newMsgVisibility!.visible).toBe(false);
 });
+
+    test("should NOT auto-scroll when scrolled up slightly and messages arrive on active buffer", async () => {
+        // Regression test for bug: user has readmarker, scrolled down past it (to read recent content),
+        // new message arrives -> old code scrolled to readmarker; fixed code does nothing.
+        await waitForBuffer(page, "#glowing-bear", 15000);
+        await switchToBuffer(page, "#glowing-bear");
+        await waitForScrollSettled();
+
+        // Send enough messages to ensure scrollable content and a visible readmarker.
+        for (let i = 0; i < 30; i++) {
+            await irc.sendMessage("#glowing-bear", `scroll-pad-${Date.now()}-${i}`);
+        }
+        await page.waitForFunction(
+            () => {
+                const rows = document.querySelectorAll('[data-testid="bufferline-row"]');
+                return rows.length >= 30;
+            },
+            { timeout: 15000 },
+        );
+        await page.waitForTimeout(500);
+        await waitForScrollSettled(8000);
+
+        // Verify the chat container is actually scrollable.
+        const state = await getChatScrollState();
+        if (!state || state.scrollHeight - state.clientHeight < 100) {
+            test.skip();
+            return;
+        }
+
+        // Scroll up just enough to hide the readmarker (~2 lines worth, ~40px).
+        // This simulates: user was at bottom, scrolled down to read recent messages,
+        // readmarker is now off-screen below.
+        const scrollBefore = await page.evaluate(() => {
+            const container = document.querySelector(
+                '[data-testid="chat-messages"]',
+            ) as HTMLElement;
+            if (!container) return null;
+            const maxScrollTop = container.scrollHeight - container.clientHeight;
+            // Position ~40px above bottom (clearly not at bottom, but close)
+            const targetScrollTop = Math.max(0, maxScrollTop - 40);
+            container.scrollTop = targetScrollTop;
+            container.dispatchEvent(new Event("scroll", { bubbles: true }));
+            return {
+                scrollTop: container.scrollTop,
+                scrollHeight: container.scrollHeight,
+                clientHeight: container.clientHeight,
+            };
+        });
+        expect(scrollBefore).not.toBeNull();
+        // Verify we're clearly not at bottom
+        const diffFromBottom =
+            scrollBefore!.scrollHeight -
+            scrollBefore!.clientHeight -
+            scrollBefore!.scrollTop;
+        expect(diffFromBottom).toBeGreaterThan(20);
+
+        // Send new messages while user is scrolled up slightly
+        const msg1 = "scrolled-slightly-test-1-" + Date.now();
+        await irc.sendMessage("#glowing-bear", msg1);
+
+        // Wait for messages to render
+        await page.waitForTimeout(2000);
+        await waitForScrollStable();
+
+        // Verify scroll position stayed roughly the same.
+        // With the fix, no auto-scroll should occur.
+        const scrollAfter = await page.evaluate(() => {
+            const container = document.querySelector(
+                '[data-testid="chat-messages"]',
+            ) as HTMLElement;
+            if (!container) return null;
+            return {
+                scrollTop: container.scrollTop,
+                scrollHeight: container.scrollHeight,
+                clientHeight: container.clientHeight,
+            };
+        });
+        expect(scrollAfter).not.toBeNull();
+        const scrollShift = Math.abs(
+            scrollAfter!.scrollTop - scrollBefore!.scrollTop,
+        );
+        // View should not have scrolled significantly — within 30px of original position.
+        // (scrollHeight grows by ~20px per new line; scrollTop naturally shifts by that amount.)
+        expect(scrollShift).toBeLessThan(30);
+
+        // Readmarker should be visible since there are unread messages
+        const readmarker = page.getByTestId("readmarker");
+        await expect(readmarker).toBeVisible();
+
+        // The new message should exist in DOM but NOT be visible in viewport
+        const newMsgVisibility = await page.evaluate((text) => {
+            const container = document.querySelector(
+                '[data-testid="chat-messages"]',
+            ) as HTMLElement;
+            const rows = Array.from(
+                document.querySelectorAll('[data-testid="bufferline-row"]'),
+            );
+            const targetRow = rows.find((row) => row.textContent?.includes(text));
+            if (!targetRow || !container) return null;
+            const rowRect = targetRow.getBoundingClientRect();
+            const contRect = container.getBoundingClientRect();
+            return {
+                exists: true,
+                visible: rowRect.bottom > contRect.top && rowRect.top < contRect.bottom,
+            };
+        }, msg1);
+        expect(newMsgVisibility).not.toBeNull();
+        expect(newMsgVisibility!.exists).toBe(true);
+        // New message should NOT be visible (it's below the scrolled-up viewport, behind readmarker)
+        expect(newMsgVisibility!.visible).toBe(false);
+    });
+
