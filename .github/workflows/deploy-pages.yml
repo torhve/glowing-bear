@@ -25,7 +25,10 @@ jobs:
         run: npm ci
 
       - name: Sync SvelteKit
-        run: npx svelte-kit sync
+        run: |
+          mkdir -p src-svelte/.svelte-kit
+          echo '{"compilerOptions":{}}' > src-svelte/.svelte-kit/tsconfig.json
+          npx svelte-kit sync
 
       - name: Build
         env:
