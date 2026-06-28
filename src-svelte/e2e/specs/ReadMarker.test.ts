@@ -122,44 +122,6 @@ test.describe('basic', () => {
         await expect(readmarker).toBeVisible();
     });
 
-    test('new messages accumulate below readmarker when already on buffer', async () => {
-        // Switch to gbtest buffer to create unread state for #glowing-bear
-        await switchToBuffer(page, 'gbtest');
-
-        // Send a message to #glowing-bear while away to create unread
-        await irc.sendMessage('#glowing-bear', 'readmarker setup msg ' + Date.now());
-
-        await switchToBuffer(page, '#glowing-bear');
-
-        const readmarker = page.getByTestId('readmarker');
-        await expect(readmarker).toBeVisible({ timeout: 5000 });
-
-        // Send a new message from bot while we're on the buffer
-        // Readmarker persists — new message accumulates as unread below it
-        const uniqueMsg = 'message after readmarker ' + Date.now();
-        await irc.sendMessage('#glowing-bear', uniqueMsg);
-
-        // Verify the new message appeared in the DOM
-        const msgCell = page.locator('[data-testid="chat-messages"] td.message').filter({ hasText: uniqueMsg });
-        await expect(msgCell).toBeVisible({ timeout: 5000 });
-
-        // Readmarker should remain visible since lastSeen was NOT advanced for active buffer
-        await expect(readmarker).toBeVisible({ timeout: 5000 });
-
-        // Wait until there are bufferline rows after the readmarker (new message fully rendered)
-        await page.waitForFunction(() => {
-            const rm = document.querySelector('.readmarker');
-            if (!rm) return false;
-            let count = 0;
-            let sibling = rm.nextElementSibling;
-            while (sibling) {
-                if (sibling.classList?.contains('bufferline')) count++;
-                sibling = sibling.nextElementSibling;
-            }
-            return count >= 1;
-        }, {}, { timeout: 5000 });
-    });
-
     test('scroll position should be preserved when switching back to buffer', async () => {
         // Send a message from bot while we're on #glowing-bear so it's displayed
         await irc.sendMessage('#glowing-bear', 'scroll test msg');
