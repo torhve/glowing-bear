@@ -37,10 +37,9 @@ const gitCommit = process.env.GIT_COMMIT ?? (() => {
           manifest: false,
           kit: {
             adapterFallback: '404.html',
+            outDir: path.resolve(__dirname, 'src-svelte/.svelte-kit'),
           },
           workbox: {
-            // Custom outDir (src-svelte/.svelte-kit) — tell PWA where client output lives
-            globDirectory: path.resolve(__dirname, 'src-svelte/.svelte-kit/output/client'),
             globPatterns: ['**/*.{js,css,ico,png,svg,webp,webmanifest}'],
             navigateFallback: '404.html',
           },
