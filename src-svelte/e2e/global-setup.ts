@@ -48,7 +48,7 @@ export default async function globalSetup(_config: FullConfig) {
   }
 
   console.log('[global-setup] gbtest environment not detected, starting...');
-  const startScript = path.join(__dirname, '..', '..', 'test', 'fixtures', 'gbtest', 'start.sh');
+  const startScript = path.join(__dirname, '..', '..', '..', 'test', 'fixtures', 'gbtest', 'start.sh');
 
   await new Promise<void>((resolve, reject) => {
     execFile('bash', [startScript], { timeout: 120000 }, (error) => {

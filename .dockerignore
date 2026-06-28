@@ -1,15 +1,14 @@
 # Node modules (reinstalled via npm ci in builder stage)
 node_modules
-src-svelte/node_modules
-
+    
 # Build output (regenerated during build)
-src-svelte/build
-src-svelte/.svelte-kit
-
+build
+.svelte-kit
+    
 # Test artifacts
-src-svelte/test-results
-src-svelte/playwright-report
-src-svelte/coverage
+test-results
+playwright-report
+coverage
 
 # Tauri build artifacts
 src-tauri/target

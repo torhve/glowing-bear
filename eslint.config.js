@@ -27,6 +27,6 @@ export default ts.config(
 		}
 	},
 	{
-		ignores: ['build/', '.svelte-kit/', 'src/lib/weechat.js', 'src/routes/404.html', 'src/routes/index.html']
+		ignores: ['build/', '.svelte-kit/', 'src-svelte/src/lib/weechat.js', 'src-svelte/src/routes/404.html', 'src-svelte/src/routes/index.html']
 	}
 );

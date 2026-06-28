@@ -1,73 +1,154 @@
-# A web client for WeeChat [![Build Status](https://api.travis-ci.org/glowing-bear/glowing-bear.png)](https://travis-ci.org/glowing-bear/glowing-bear?branch=master)
+# Glowing Bear
 
-Glowing Bear is a web frontend for the [WeeChat](https://weechat.org) IRC client and strives to be a modern interface. It relies on WeeChat to do all the heavy lifting and then provides some nice features on top of that, like embedding images, videos, and other content. The best part, however, is that you can use it from any modern internet device -- whether it's a computer, tablet, or smart phone -- and all your stuff is there, wherever you are. You don't have to deal with the messy technical details, and all you need to have installed is a browser or our app.
+A web frontend for the [WeeChat](https://weechat.org) IRC client. Connects directly to WeeChat via WebSocket relay — no backend service required.
 
-## Getting Started
+Requires WeeChat >= 2.9 with the relay plugin configured.
 
-Glowing Bear connects to the WeeChat instance you're already running (version 2.9 or later is required), and you need to be able to establish a connection to the WeeChat host from your device. It makes use of the relay plugin, and therefore you need to set up a relay. If you want to try this out with a local WeeChat instance, use these commands in WeeChat to create an **unencrypted relay** (see the note below):
+## How to Run It
 
-	/relay add weechat 9001
-	/set relay.network.password YOURPASSWORD
+Glowing Bear can be used in several ways:
 
-Now point your browser to the [Glowing Bear](https://www.glowing-bear.org)! If you're having trouble connecting, check that the host and port of your WeeChat host are entered correctly, and that your server's firewall permits incoming connections on the relay port (9001 in this example).
+### In Your Browser
 
-**Please note that the above instructions set up an unencrypted relay, and all your data will be transmitted in clear.** You should not use this over the internet. We strongly recommend that you set up encryption if you want to keep using Glowing Bear. There's a guide on setting it up with Let's Encrypt on the landing page of the [next version of Glowing Bear](https://latest.glowing-bear.org), under "Getting Started". Ask us in `#glowing-bear` on [libera](https://libera.chat) if something is unclear.
+Point any modern browser at a hosted instance and connect to your WeeChat relay. Your browser talks directly to WeeChat; it doesn't matter where Glowing Bear itself is hosted.
 
-You can run Glowing Bear in many ways:
+### Self-Hosted Static Site
 
- * like any other webpage
- * Chrome app ("Tools", then "Create application shortcuts")
- * Android Chrome app, a full-screen experience ("Add to homescreen").
+Build the static site and serve it with any web server (nginx, Caddy, Apache):
 
-## Screenshots
+```bash
+npm install
+npm run build
+```
 
-Running as Chrome application in a separate window on Windows and on Android:
+This produces a `build/` directory containing all the files you need. Point your web server at it. For HTTPS hosting, see the [Getting Started](#getting-started-for-users) section below.
 
-![Glowing bear screenshot](https://4z2.de/glowingbear.png)
+### GitHub Pages
 
-Are you good with design? We'd love your help!
-![Glowing Bear screenshot with lots of Comic Sans MS](https://4z2.de/glowing-bear3.png)
+The static build from `npm run build` outputs a self-contained site that works on GitHub Pages. Deploy the `build/` directory to a `gh-pages` branch.
 
-## How it Works
+### Progressive Web App
 
-What follows is a more technical explanation of how Glowing Bear works, and you don't need to understand it to use it.
+Glowing Bear includes PWA support with auto-update strategy. On supported browsers and devices, you can install it as an app:
 
-Glowing Bear uses WeeChat directly as its backend through the relay plugin. This means that we can connect to WeeChat directly from the browser using WebSockets. Therefore, the client does not need a special "backend service", and you don't have to install anything. A connection is made from your browser to your WeeChat, with no services in between. Thus, Glowing Bear is written purely in client-side JavaScript with a bit of HTML and CSS.
+- **Desktop Chrome/Firefox/Edge** — "Install" option in the address bar or app menu
+- **Android Chrome** — "Add to homescreen" for a full-screen experience
+- **iOS Safari** — "Add to Home Screen" from the share sheet
 
-## FAQ
+Once installed, it runs standalone without browser chrome and caches assets for offline use.
 
-- *Can I use Glowing Bear to access a machine or port not exposed to the internet by passing the connection through my server?* No, that's not what Glowing Bear does. You can use a websocket proxy module for your webserver to forward `/weechat` to your WeeChat instance though. We've got instructions for setting this up [on our wiki](https://github.com/glowing-bear/glowing-bear/wiki/Proxying-WeeChat-relay-with-a-web-server).
-- *How does the encryption work?* TLS is used for securing the connection if you enable encryption. This is handled by your browser, and we have no influence on certificate handling, etc. You can find more detailed instructions on how to communicate securely in the "Getting Started" tab on the [landing page of our development version](https://latest.glowing-bear.org).
-- *Can I make it so that there are no requests to third party servers at all?* Sure, see #1186. More details to follow once it's merged
+### Tauri Desktop App
+
+Glowing Bear can be packaged as a native desktop application via [Tauri 2](https://tauri.app), giving you a custom window, autostart support, system notifications, and persistent window state across sessions. Requires Rust installed.
+
+```bash
+npm install
+npm run tauri:build
+```
+
+Produces installers for Linux (deb), macOS (dmg), and Windows (msi/nsis).
+
+## Getting Started for Users
+
+To connect Glowing Bear to your WeeChat instance, you need a relay. In WeeChat:
+
+```
+/relay add weechat 9001
+/set relay.network.password YOURPASSWORD
+```
+
+Then enter your WeeChat host, port, and password in Glowing Bear's connection form.
+
+**Please note that the above sets up an unencrypted relay.** All data will be transmitted in clear text. Set up TLS encryption (via Let's Encrypt or similar) before using over the internet. See our [wiki](https://github.com/glowing-bear/glowing-bear/wiki/Proxying-WeeChat-relay-with-a-web-server) for proxying and encryption guides.
 
 ## Development
 
+### Prerequisites
+
+- **Node.js** (v20+)
+- **Rust/Cargo** — only needed if building Tauri desktop apps
+
 ### Setup
-Getting started with the development of Glowing Bear requires the installation of [Node.js](https://nodejs.org). All you have to do is clone the repository, install dependencies using command `npm install`, fire up the development webserver using command `npm start`, and start fiddling around. Once a change is made the development server will instruct the Web browser to reload the page for you.
 
-Now you can point your browser to [http://localhost:8000](http://localhost:8000)!
+```bash
+npm install
+npm run dev          # Development server at localhost:8001
+npm run build        # Production static build → build/
+npm run preview      # Preview production build locally
+npm run check        # TypeScript type checking
+npm run lint         # ESLint
+```
 
-If you want to host Glowing Bear yourself, you should use a "proper" webserver like Caddy, nginx, or Apache.  Run `npm run build` to bundle all the resources neded and then point your webserver to the `build/` folder.  This is, in effect, the explicit way of doing what `npm start` does transparently in the background for development.
+### Tech Stack
 
-Remember that **you don't need to host Glowing Bear yourself to use it**, you can just use [our hosted version](https://www.glowing-bear.org) powered by GitHub pages, and we'll take care of updates for you. Your browser connects to WeeChat directly, so it does not matter where Glowing Bear is hosted.
+- [SvelteKit 2.x](https://svelte.dev/docs/kit) + [Svelte 5](https://svelte.dev) (runes)
+- [TypeScript](https://www.typescriptlang.org/) (strict mode)
+- [Tailwind CSS v4](https://tailwindcss.com/)
+- [Tauri 2.x](https://tauri.app) (desktop apps)
+- [@vite-pwa/sveltekit](https://github.com/vike/vite-plugin-pwa) (PWA)
+- [Vitest](https://vitest.dev) (unit tests) + [Playwright](https://playwright.dev) (E2E tests)
 
-You can also use the latest and greatest development version of Glowing Bear at [https://latest.glowing-bear.org/](https://latest.glowing-bear.org/).  For developers, branches of this repository are available at [https://pull.glowing-bear.org/**branchname**/](https://pull.glowing-bear.org/branchname/), and pull requests at [https://pull.glowing-bear.org/**123**/](https://pull.glowing-bear.org/123/)—note the trailing slashes.
+### Testing
 
-### Running the tests
-Glowing Bear uses Karma and Jasmine to run its unit tests. To run the tests locally, you will first need to install `npm` on your machine. Check out the wonderful [nvm](https://github.com/creationix/nvm) if you don't know it already, it's highly recommended.
+```bash
+npm test                        # Run unit tests (Vitest)
+npm run test:e2e                # Run E2E tests (Playwright)
+npm run test:e2e -- --grep "X"  # Run specific E2E tests
+npm run irc:start               # Start gbtest IRC server fixture
+npm run irc:stop                # Stop gbtest IRC server
+```
 
-Once this is done, you will need to retrieve the necessary packages for testing Glowing-Bear (first, you might want to use `npm link` on any packages you have already installed globally) with `npm install`.  Finally, you can run the unit tests with `npm test`, or the end to end tests with `npm run protractor` (note that the end to end tests assume that a web server is hosting Glowing Bear on `localhost:8000` and that a WeeChat relay is configured on port 9001.)
+Unit tests live in `src-svelte/test/unit/`. E2E tests in `src-svelte/e2e/specs/`. The gbtest IRC server (`test/fixtures/gbtest/`) provides a local WeeChat instance for automated testing.
+
+### Themes
+
+Glowing Bear ships with 14 built-in themes:
+
+| Theme | Description |
+|---|---|
+| Dark | Default dark theme |
+| Light | Default light theme |
+| Black | Pure black background |
+| Dark Spacious | Dark theme with extra padding |
+| Blue | Blue-tinted dark theme |
+| Blue Modern | OKLCH-based blue theme |
+| Catppuccin Mocha | Cozy dark purple-blue |
+| Catppuccin Macchiato | Medium contrast soothing |
+| Catppuccin Frappé | Muted, subdued aesthetic |
+| Catppuccin Latte | Light variant |
+| Solarized Dark | Solarized dark palette |
+| Solarized Light | Solarized light palette |
+| Base16 Default | Standard base16 dark |
+| Base16 Mocha | Warm dark base16 |
+| Base16 Light | Standard base16 light |
+| Base16 Ocean Dark | Cool ocean tones |
+
+Custom CSS injection is also available in settings for unlimited personalization.
+
+### Key Features
+
+- **Buffer list** — sortable by number or server, filter unread/pinned, search modal (Alt+G)
+- **Chat view** — scrollable message history with lazy loading, time grouping, nick prefixes
+- **Nicklist** — searchable nickname list with prefix icons; inline on desktop, swipe overlay on mobile
+- **Hotlist bar** — horizontal strip of buffers with unread activity in the top bar; prominent on mobile when buffer list is hidden
+- **Pin/unpin buffers** — pinned buffers always stay visible and sort to the top
+- **Keyboard shortcuts** — Alt+1-9 quick keys, Alt+J two-digit jump-to-buffer, type-to-focus, PageUp/PageDown scroll, Alt+< previous buffer, Alt+L focus input, Alt+n toggle nicklist, Alt+A jump to most urgent buffer, Alt+↑/↓ adjacent buffer, Alt+h clear all unread, double-Escape disconnect
+- **Mobile touch gestures** — swipe right → buffer list, swipe left → nicklist, vertical swipe → switch buffer
+- **Image upload** — drag-and-drop or click to upload images via Imgur
+- **URL embeds** — rich previews for links
+- **Emoji shortcodes** — optional `:beer:` → 🍺 replacement while typing
+- **Desktop notifications** — system notifications and favicon badge for mentions and highlights
+- **KaTeX math rendering** — optional LaTeX math support
+- **Connection stats** — hover the status indicator to see bytes sent/received, message count, uptime, and time since last message
+- **Auto-reconnect** — automatic reconnection with backoff on connection loss
+- **Buffer resume** — restores last active buffer on reconnect
 
 ## Contributing
 
-Whether you are interested in contributing or simply want to talk about the project, join us at **#glowing-bear** on [libera](https://libera.chat)!
+Join us at **#glowing-bear** on [Libera](https://libera.chat) to discuss ideas, ask questions, or just chat about the project.
 
-We appreciate all forms of contributions -- whether you're a coder, designer, or user, we are always curious what you have to say. Whether you have suggestions or already implemented a solution, let us know and we'll try to help. We're also very keen to hear which devices and platforms Glowing Bear works on (or doesn't), as we're a small team and don't have access to the resources we would need to test it everywhere.
+We welcome all contributions — code, design, documentation, testing. Make sure your changes pass the test suite before submitting a pull request.
 
-If you wish to submit code, we try to make the contribution process as simple as possible. Any pull request that is submitted has to go through automatic and manual testing. Please make sure that your changes pass the [Travis](https://travis-ci.org/glowing-bear/glowing-bear) tests before submitting a pull request. Here is how you can run the tests:
+## Legacy AngularJS Code
 
-`$ ./run_tests.sh`
-
- We'd also like to ask you to join our IRC channel, #glowing-bear on libera, so we can discuss your ideas and changes.
-
-If you're curious about the projects we're using, here's a list: [AngularJS](https://angularjs.org/), [Bootstrap](http://getbootstrap.com/), [Underscore](http://underscorejs.org/), [favico.js](http://lab.ejci.net/favico.js/), Emoji provided free by [Emoji One](http://emojione.com/), and [zlib.js](https://github.com/imaya/zlib.js). Technology-wise, [WebSockets](https://en.wikipedia.org/wiki/WebSocket) are the most important part, but we also use [local storage](https://developer.mozilla.org/en-US/docs/Web/Guide/API/DOM/Storage#localStorage), the [Notification Web API](https://developer.mozilla.org/en/docs/Web/API/notification), and last (but not least) [Tauri](https://tauri.app/) for our standalone apps for different platforms.
+The original AngularJS application is preserved in [`src-angular/`](src-angular/) for reference.

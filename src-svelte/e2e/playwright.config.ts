@@ -17,7 +17,7 @@ export default defineConfig({
   globalSetup: path.join(__dirname, 'global-setup.ts'),
   globalTeardown: path.join(__dirname, 'global-teardown.ts'),
   reporter: [
-    ['html', { outputFolder: '../playwright-report' }],
+    ['html', { outputFolder: '../../playwright-report' }],
     ['list'],
   ],
   use: {
@@ -35,6 +35,7 @@ export default defineConfig({
   ],
   webServer: {
     command: 'npm run dev',
+    cwd: '../..',
     url: 'http://localhost:8001',
     reuseExistingServer: !process.env.CI,
     timeout: 120000,

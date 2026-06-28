@@ -4,10 +4,10 @@
   "version": "0.20.0",
   "identifier": "org.glowing-bear",
   "build": {
-    "beforeBuildCommand": "cd src-svelte && npm run build",
-    "beforeDevCommand": "cd src-svelte && npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:8001/",
-    "frontendDist": "../src-svelte/build"
+    "frontendDist": "../build"
   },
   "app": {
     "macOSPrivateApi": true,
@@ -31,11 +31,11 @@
     "category": "SocialNetworking",
     "copyright": "Glowing Bear developers",
     "icon": [
-      "../src-svelte/static/glowing-bear.png",
-      "../src-svelte/static/glowing-bear.icns",
-      "../src-svelte/static/glowing_bear_128x128.ico",
-      "../src-svelte/static/glowing_bear_128x128.png",
-      "../src-svelte/static/favicon.png"
+      "../static/glowing-bear.png",
+      "../static/glowing-bear.icns",
+      "../static/glowing_bear_128x128.ico",
+      "../static/glowing_bear_128x128.png",
+      "../static/favicon.png"
     ],
     "longDescription": "Glowing Bear is a web frontend for the WeeChat IRC client",
     "linux": {

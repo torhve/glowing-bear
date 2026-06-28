@@ -12,11 +12,15 @@ const config = {
 			precompress: false,
 			strict: false
 		}),
+		files: {
+			routes: 'src-svelte/src',
+			lib: 'src-svelte/src/lib',
+		},
 		alias: {
-			'$lib': 'src/lib',
-			'$lib/*': 'src/lib/*',
-			'$components': 'src/components',
-			'$components/*': 'src/components/*',
+			'$lib': 'src-svelte/src/lib',
+			'$lib/*': 'src-svelte/src/lib/*',
+			'$components': 'src-svelte/src/components',
+			'$components/*': 'src-svelte/src/components/*',
 		}
 	}
 };
