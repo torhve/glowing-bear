@@ -268,7 +268,23 @@
         const freshMessages = $currentBuffer?.lines ?? [];
         const freshHasUnread = freshReadEndIndex >= 0 && freshReadEndIndex < freshMessages.length - 1;
 
-        if (!freshHasUnread) {
+            // Detect if the last added line is the user's own echoed message.
+            // We check prefixtext against our own nick using two patterns:
+            // Channel prefixes: "#channel/Nick" — ends with "/myNick"
+            // Query prefixes: "< Nick >" or "<Nick>" — strip brackets/whitespace to get bare nick
+            // WeeChat adds spaces around nicks in query prefixes (e.g., "< testuser >")
+            // When posting, the echo is counted as unread (lastSeen isn't updated for active buffers),
+            // and the new line increases scrollHeight so domAtBottom becomes false.
+            // Without this check, the code falls into "scroll to readmarker" — away from your own message.
+            const lastLine = freshMessages[freshMessages.length - 1];
+            const myNickVal = myNick;
+            const lastPrefix = lastLine?.prefixtext ?? '';
+            const strippedPrefix = lastPrefix.replace(/[<>]/g, '').trim();
+            const isOwnMessage =
+                lastPrefix.endsWith('/' + myNickVal) ||
+                strippedPrefix === myNickVal;
+
+        if (!freshHasUnread || isOwnMessage) {
           // No unread messages — scroll to bottom regardless of scroll position.
           // Covers both "at bottom following" and "buffer just switched, scrollTop=0" cases.
           readmarkerFailures = 0;
@@ -342,8 +358,21 @@
       const freshMessages = $currentBuffer?.lines ?? [];
       const freshHasUnread = freshReadEndIndex >= 0 && freshReadEndIndex < freshMessages.length - 1;
 
-      if (!freshHasUnread) {
-        // No unread messages — scroll to bottom.
+          // Detect if the last line in this buffer is the user's own message.
+          // We check prefixtext against our own nick using two patterns:
+          // Channel prefixes: "#channel/Nick" — ends with "/myNick"
+          // Query prefixes: "< Nick >" or "<Nick>" — strip brackets/whitespace to get bare nick
+          // WeeChat adds spaces around nicks in query prefixes (e.g., "< testuser >")
+          const lastLine = freshMessages[freshMessages.length - 1];
+          const myNickVal = myNick;
+          const lastPrefix = lastLine?.prefixtext ?? '';
+          const strippedPrefix = lastPrefix.replace(/[<>]/g, '').trim();
+          const isOwnMessage =
+              lastPrefix.endsWith('/' + myNickVal) ||
+              strippedPrefix === myNickVal;
+
+      if (!freshHasUnread || isOwnMessage) {
+        // No unread messages or own message at bottom — scroll to bottom.
         readmarkerFailures = 0;
         containerRef!.scrollTop = containerRef!.scrollHeight;
         isAtBottom = true;
