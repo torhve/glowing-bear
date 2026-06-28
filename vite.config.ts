@@ -32,7 +32,36 @@ export default defineConfig({
     tailwindcss(),
     SvelteKitPWA({
       registerType: 'autoUpdate',
-      manifest: false,
+      manifest: {
+        name: 'Glowing Bear',
+        short_name: 'Glowing Bear',
+        lang: 'en-US',
+        description: 'A weechat-websocket frontend',
+        theme_color: '#0a0a0a',
+        background_color: '#0a0a0a',
+        display: 'standalone',
+        orientation: 'portrait-primary',
+        scope: '.',
+        start_url: '.',
+        icons: [
+          { src: 'favicon.png', sizes: '32x32', type: 'image/png' },
+          { src: 'apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+          { src: 'glowing_bear_60x60.png', sizes: '60x60', type: 'image/png' },
+          { src: 'glowing_bear_90x90.png', sizes: '90x90', type: 'image/png' },
+          { src: 'glowing_bear_128x128.png', sizes: '128x128', type: 'image/png' },
+          { src: 'glowing_bear_192x192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'glowing_bear_512x512.png', sizes: '512x512', type: 'image/png' },
+          { src: 'glowing_bear_1024x1024.png', sizes: '1024x1024', type: 'image/png' },
+        ],
+        prefer_related_applications: false,
+        related_applications: [
+          { platform: 'web' },
+          {
+            platform: 'android',
+            url: 'https://play.google.com/store/apps/details?id=com.glowing_bear',
+          },
+        ],
+      },
       kit: {
         adapterFallback: '404.html',
         outDir: path.resolve(__dirname, 'src-svelte/.svelte-kit'),
