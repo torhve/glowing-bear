@@ -7,6 +7,7 @@
   import { isWindowsTauri } from '$lib/tauriWindow';
 
   import { parseRelayUrl, makeKeyboardActivatable } from '$lib/utils';
+  import { base } from '$app/paths';
   import Zap from '@lucide/svelte/icons/zap';
   import Settings2 from '@lucide/svelte/icons/settings-2';
   import Rocket from '@lucide/svelte/icons/rocket';
@@ -167,7 +168,7 @@ import Key from '@lucide/svelte/icons/key';
   <div class="connection-content flex-1 flex items-start justify-center px-4 pt-6">
     <div class="connection-card w-full max-w-lg space-y-6">
       <div class="connection-branding text-center mb-6">
-      <img src="/glowing-bear.svg" alt="logo" class="connection-logo w-20 h-20 mx-auto mb-2" />
+      <img src={`${base}/glowing-bear.svg`} alt="logo" class="connection-logo w-20 h-20 mx-auto mb-2" />
       <h1 class="connection-title text-3xl font-bold text-text">Glowing Bear</h1>
       <p class="connection-subtitle text-sm text-text-secondary mt-1">WeeChat web frontend</p>
     </div>
@@ -338,7 +339,7 @@ import Key from '@lucide/svelte/icons/key';
 <div class="info-accordion-container space-y-2">
       <details open class="info-accordion bg-panel rounded border border-border" data-info-section="about">
         <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white transition-colors">
-          <img src="/glowing-bear.svg" class="w-4 h-4" alt="" />About
+          <img src={`${base}/glowing-bear.svg`} class="w-4 h-4" alt="" />About
         </summary>
         <div class="info-accordion-content px-4 pb-3 text-sm text-text-secondary space-y-2">
           <p>Glowing Bear is a free, open-source web frontend for WeeChat — no backend required.</p>

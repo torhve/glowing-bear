@@ -15,6 +15,7 @@
   import ArrowUp from '@lucide/svelte/icons/arrow-up';
   import ArrowDown from '@lucide/svelte/icons/arrow-down';
   import MessageSquare from '@lucide/svelte/icons/message-square';
+  import { base } from '$app/paths';
 
   let { onBufferSelect = () => {}, onSearchOpen = () => {}, onNicklistToggle = () => {}, bufferListVisible = true } = $props();
 
@@ -34,7 +35,7 @@
   <div class="top-bar-inner h-10 bg-surface-raised border-b border-border flex items-center px-2 space-x-2" data-tauri-drag-region>
     <div class="flex items-center gap-1 flex-1 min-w-0" data-tauri-drag-region>
       <TauriTitlebar variant="inline" />
-      <img src="/glowing-bear.svg" alt="logo" class="app-logo w-5 h-5 flex-shrink-0" />
+      <img src={`${base}/glowing-bear.svg`} alt="logo" class="app-logo w-5 h-5 flex-shrink-0" />
       {#if bufferListVisible}
         <span data-testid="app-title" class="text-sm font-bold text-text">Glowing Bear</span>
         {#if $weechatVersion.length > 0}
