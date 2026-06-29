@@ -707,7 +707,7 @@
 </script>
 
 <div data-testid="input-bar" class="input-bar-container flex-shrink-0">
-  <div class="input-bar-inner bg-panel border-t border-border px-3 py-2"
+  <div class="input-bar-inner bg-panel border-t border-border"
        role="group"
        onmouseenter={() => { isHovered = true; }}
        onmouseleave={() => { if (!showColorPicker) isHovered = false; }}
@@ -717,7 +717,7 @@
 
     <!-- Format toolbar — visible when Ctrl key is held, color picker is open, or input bar is hovered/focused -->
     <div
-      class="format-toolbar transition-all duration-150 ease-in-out overflow-hidden {((_ctrlDown || showColorPicker || isHovered || textareaFocused) ? 'max-h-12 opacity-100 mb-2' : 'max-h-0 opacity-0')}"
+      class="format-toolbar transition-all duration-150 ease-in-out overflow-hidden {((_ctrlDown || showColorPicker || isHovered || textareaFocused) ? 'max-h-12 opacity-100' : 'max-h-0 opacity-0')}"
       role="toolbar"
       aria-label="Text formatting"
     >
@@ -815,7 +815,7 @@
       data-testid="message-input"
       placeholder={$currentBuffer ? `Message ${$currentBuffer.shortName}` : 'Select a buffer to start chatting...'}
       rows={1}
-      class="input-bar-textarea flex-1 bg-input-bg border border-border rounded px-3 py-2 text-text text-sm placeholder-text-muted focus:outline-none focus:border-accent resize-none transition-colors min-h-9 max-h-[150px] {isDraggingFile ? 'border-accent bg-accent/10' : ''}"
+      class="input-bar-textarea flex-1 bg-input-bg border border-border rounded text-text text-sm placeholder-text-muted focus:outline-none focus:border-accent resize-none transition-colors min-h-9 max-h-[150px] {isDraggingFile ? 'border-accent bg-accent/10' : ''}"
       
     ></textarea>
 
@@ -855,3 +855,19 @@
   onInsert={handleInsertUrls}
   onClose={closePreview}
 />
+
+<style>
+  /* Spacing — overridable by themes via --spacing-* vars */
+  .input-bar-inner {
+padding: var(--spacing-input-bar-padding-y, 5px) var(--spacing-input-bar-padding-x, 12px);
+  }
+
+  /* Symmetric vertical padding on the input row — equal space above/below textarea */
+  .input-bar-row {
+padding: var(--spacing-input-bar-row-padding-y, 1px) 0;
+  }
+
+  .input-bar-textarea {
+padding: var(--spacing-textarea-padding-y, 8px) var(--spacing-textarea-padding-x, 12px);
+  }
+</style>

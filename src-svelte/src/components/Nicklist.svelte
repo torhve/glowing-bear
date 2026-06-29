@@ -53,7 +53,7 @@
 
 {#if showNicklist && hasNicklist}
 <div class="w-52 sm:w-28 lg:w-30 bg-panel border-l border-border flex flex-col overflow-hidden" data-testid="nicklist">
-  <div class="nicklist-header h-10 bg-surface-raised border-b border-border flex items-center justify-between px-3">
+  <div class="nicklist-header h-[var(--spacing-nicklist-header-height,40px)] bg-surface-raised border-b border-border flex items-center justify-between px-3">
     <span class="nicklist-title flex items-center gap-1.5"><Users size={14} />Nicklist</span>
     {#if onClose}
       <button
@@ -67,7 +67,7 @@
     {/if}
   </div>
 
-  <div class="nicklist-search-area px-2 py-1 border-b border-border">
+  <div class="nicklist-search-area border-b border-border">
     <div class="relative">
       <Search size={14} class="nicklist-search-icon absolute left-2 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
           <!-- Uncontrolled input: oninput reads from DOM and updates $state.
@@ -91,7 +91,7 @@
         {#each group.nicks as nick (nick.name)}
           <div
             data-testid="nick-item"
-            class="nick-item px-3 py-0.5 flex items-center hover:bg-surface-raised transition-colors"
+            class="nick-item flex items-center hover:bg-surface-raised transition-colors"
             onclick={() => {
               if (DEBUG_NICKLIST) console.log('[nicklist] clicked', nick.name);
               pendingBufferSwitch.set(nick.name);
@@ -114,14 +114,25 @@
             </span>
           </div>
         {/each}
-      </div>
-        {/if}
+    </div>
+    {/if}
+
+    <style>
+      /* Spacing — overridable by themes via --spacing-* vars */
+      .nicklist-search-area {
+        padding: var(--spacing-nick-search-padding, 4px 8px);
+      }
+
+      .nick-item {
+        padding: var(--spacing-nick-item-padding-y, 2px) var(--spacing-nick-item-padding-x, 12px);
+      }
+    </style>
     {/each}
   </div>
 </div>
 {:else if showNicklist && !hasNicklist && onClose}
 <div class="w-52 sm:w-28 lg:w-30 bg-panel border-l border-border flex flex-col overflow-hidden" data-testid="nicklist">
-  <div class="nicklist-header h-10 bg-surface-raised border-b border-border flex items-center justify-between px-3">
+  <div class="nicklist-header h-[var(--spacing-nicklist-header-height,40px)] bg-surface-raised border-b border-border flex items-center justify-between px-3">
     <span class="nicklist-title flex items-center gap-1.5"><Users size={14} />Nicklist</span>
     {#if onClose}
       <button

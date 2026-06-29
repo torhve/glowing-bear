@@ -736,6 +736,7 @@
 }
 
 [data-theme="dark-spacious"] {
+  /* Colors — identical to dark theme */
   --gb-bg: #181818;
   --gb-surface: #222222;
   --gb-surface-raised: #2a2a2a;
@@ -793,6 +794,33 @@
   --gb-cob-gray: #303030;
   --gb-cob-brown: #3b3b00;
   --gb-cob-default: #181818;
+
+  /* Spacing overrides — more breathing room */
+  --spacing-topicbar-height: 36px;
+  --spacing-line-padding-y: 4px;
+  --spacing-line-padding-x: 10px;
+  --spacing-message-padding-left: 8px;
+  --spacing-message-padding-right: 6px;
+  --spacing-bubble-container-padding: 14px 18px;
+  --spacing-bubble-gap: 6px;
+  --spacing-bubble-inner-padding: 10px 18px;
+  --spacing-bubble-meta-gap: 8px;
+  --spacing-date-separator-padding-y: 20px;
+  --spacing-chat-container-padding-bottom: 6px;
+  --spacing-buffer-item-padding-y: 10px;
+  --spacing-buffer-item-padding-x: 16px;
+  --spacing-buffer-group-gap: 4px;
+  --spacing-buffer-group-label-padding: 6px 10px;
+  --spacing-nick-item-padding-y: 4px;
+  --spacing-nick-item-padding-x: 14px;
+  --spacing-nick-search-padding: 6px 10px;
+  --spacing-input-bar-padding-y: 7px;
+  --spacing-input-bar-padding-x: 16px;
+  --spacing-textarea-padding-y: 10px;
+  --spacing-textarea-padding-x: 14px;
+  --spacing-input-bar-row-padding-y: 2px;
+  --spacing-topbar-button-padding-y: 6px;
+  --spacing-topbar-button-padding-x: 10px;
 }
 
 [data-theme="blue"] {
@@ -1635,6 +1663,50 @@
     --gb-repeated-time: #444;
     --gb-repeated-prefix: #555;
     --gb-line-height: 1.2;
+
+    /* Layout heights */
+    --spacing-topbar-height: 40px;
+    --spacing-topicbar-height: 32px;
+    --spacing-buffer-list-header-height: 40px;
+    --spacing-nicklist-header-height: 40px;
+
+    /* Chat line cell padding (table layout) */
+    --spacing-line-padding-y: 0px;
+    --spacing-line-padding-x: 6px;
+    --spacing-message-padding-left: 5px;
+    --spacing-message-padding-right: 4px;
+
+    /* Bubble mode spacing */
+    --spacing-bubble-container-padding: 10px 14px;
+    --spacing-bubble-gap: 2px;
+    --spacing-bubble-inner-padding: 8px 14px;
+    --spacing-bubble-meta-gap: 6px;
+    --spacing-date-separator-padding-y: 14px;
+
+    /* Chat messages container bottom padding (gap between last line and input bar) */
+    --spacing-chat-container-padding-bottom: 4px;
+
+    /* Buffer list item spacing */
+    --spacing-buffer-item-padding-y: 8px;
+    --spacing-buffer-item-padding-x: 12px;
+    --spacing-buffer-group-gap: 2px;
+    --spacing-buffer-group-label-padding: 4px 8px;
+
+    /* Nicklist item spacing */
+    --spacing-nick-item-padding-y: 2px;
+    --spacing-nick-item-padding-x: 12px;
+    --spacing-nick-search-padding: 4px 8px;
+
+    /* Input bar spacing */
+    --spacing-input-bar-padding-y: 5px;
+    --spacing-input-bar-padding-x: 12px;
+    --spacing-textarea-padding-y: 8px;
+    --spacing-textarea-padding-x: 12px;
+    --spacing-input-bar-row-padding-y: 1px;
+
+    /* Top bar button padding */
+    --spacing-topbar-button-padding-y: 4px;
+    --spacing-topbar-button-padding-x: 8px;
   }
 
   body:not([data-app-ready]) {
