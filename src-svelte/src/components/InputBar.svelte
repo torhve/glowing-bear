@@ -140,9 +140,13 @@
 
   // Insert text at current cursor position, then advance cursor past inserted text.
   // Uses lastCaretPos (tracked on input/blur) so it works after textarea loses focus on button click.
-  function insertAtCursor(text: string): void {
+  // When forceFocus is true, focuses the textarea before inserting (used by global paste handler).
+  function insertAtCursor(text: string, forceFocus = false): void {
     const caret = textareaFocused ? getCaretPos() : lastCaretPos;
     message = message.slice(0, caret) + text + message.slice(caret);
+    if (forceFocus) {
+      inputRef?.focus();
+    }
     setTimeout(() => setCaretPos(caret + text.length), 0);
   }
 
@@ -505,7 +509,16 @@
     // Strategy 2+3: clipboardData.items API (Chrome, Safari)
     const items = data.items;
     if (!items) {
-      log('no clipboardData.items');
+      log('no clipboardData.items, falling back to getData');
+      // items API unavailable (e.g. some browser contexts, Playwright DataTransfer).
+      // Fall back to getData for plain text paste.
+      e.preventDefault();
+      const pastedText = data.getData('text/plain') || data.getData('text');
+      if (pastedText) {
+        log('pasted', pastedText.length, 'characters of text via getData fallback');
+        inputRef?.focus();
+        insertAtCursor(pastedText, true);
+      }
       return;
     }
 
@@ -545,7 +558,8 @@
       const pastedText = data.getData('text/plain') || data.getData('text');
       if (pastedText) {
         log('pasted', pastedText.length, 'characters of text');
-        insertAtCursor(pastedText);
+        inputRef?.focus();
+        insertAtCursor(pastedText, true);
       }
       return;
     }
@@ -654,6 +668,41 @@
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
+  });
+
+  // Global paste listener — catches paste events when focus is NOT on the textarea,
+  // inserts plain text at cursor position and focuses the input bar.
+  $effect(() => {
+    function handleGlobalPaste(e: ClipboardEvent) {
+      // Only intercept if focus is NOT on our textarea
+      if (document.activeElement === inputRef) return;
+
+      const data = e.clipboardData;
+      if (!data) return;
+
+      // Check for images first — if clipboard contains images, skip global handling
+      // so the user can paste them into an appropriate target.
+      const allFiles = Array.from(data.files);
+      if (filterImageFiles(allFiles).length > 0) return;
+
+      const items = data.items;
+      if (items) {
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i] as DataTransferItem | undefined;
+          if (item && item.type.startsWith('image/')) return;
+        }
+      }
+
+      // Plain text paste — insert at cursor and focus the textarea
+      const pastedText = data.getData('text/plain') || data.getData('text');
+      if (!pastedText) return;
+
+      e.preventDefault();
+      inputRef?.focus();
+      insertAtCursor(pastedText, true);
+    }
+    document.addEventListener('paste', handleGlobalPaste);
+    return () => document.removeEventListener('paste', handleGlobalPaste);
   });
 </script>
 
