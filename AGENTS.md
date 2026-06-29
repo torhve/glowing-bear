@@ -17,11 +17,13 @@ Source code in `src-svelte/src/` has `components/`, `lib/`, `routes/`. Config fi
 - `settings.ts` — User preferences persisted to localStorage
 - `theme.ts` — Theme configuration and Tailwind token mapping
 - `bufferResume.ts` — Last-active-buffer tracking across sessions
-- `inputHistory.ts`, — Input bar history
+- `inputHistory.ts` — Input bar history
 
 **`src-svelte/src/lib/` (root)** — Core utilities:
 
-- `filters.ts` — Text filters (`sanitizeHtml`, `escapeHtml`, `codify`, `inlinecolour`, `truncate`)
+- `types.ts` — Shared TypeScript type definitions
+- `utils.ts` — Nick completion, buffer search, mention building, relay URL parsing
+- `filters.ts`
 - `linkTokens.ts` — URL/code tokenization (`tokenizeLinks`, `codifyText`, `tokenizeAndCodify`)
 - `notifications.ts` — Desktop notification dispatch (Tauri + Web Notifications API)
 - `toast.ts` — In-app toast notifications
@@ -62,8 +64,8 @@ npm test                       # Vitest unit tests
 npm run test:e2e -- --grep "X" # Targeted E2E tests
 npm run irc:start / irc:stop   # Manual gbtest IRC server
 npm run tauri                 # Tauri CLI (uses @tauri-apps/cli)
-npm run tauri dev             # Tauri desktop dev mode
-npm run tauri build           # Tauri desktop production build
+npm run tauri:dev             # Tauri desktop dev mode
+npm run tauri:build           # Tauri desktop production build
 ```
 
 ## Code Style (CRITICAL)
@@ -119,7 +121,7 @@ Every non-trivial function needs a brief comment above it explaining intent.
 
 ## Tauri Desktop
 
-Wrapped in Tauri 2.x for desktop distribution. Custom titlebar via `TauriTitlebar.svelte`. Plugins: autostart (`@tauri-apps/plugin-autostart`), system notifications (`plugin-notification`), window state persistence (`plugin-window-state`). Window API access via `$lib/tauriWindow`. Tauri config in `src-tauri/tauri.conf.json`.
+Wrapped in Tauri 2.x for desktop distribution. Custom titlebar via `TauriTitlebar.svelte`. Window API access via `$lib/tauriWindow`. Tauri config in `src-tauri/tauri.conf.json`.
 
 ## Testing Framework
 
