@@ -253,6 +253,9 @@
       }
     }
 
+    // If nothing changed, skip scroll operations entirely
+    if (!bufferChanged && !linesAdded) return;
+
         // DEBUG: log scroll state on each effect run
         console.log('[scroll-effect]',
           `buf=${$currentBuffer?.shortName}`, { bufferChanged, linesAdded, wasFollowing,
@@ -263,9 +266,6 @@
           isAtBottom, lastSeen: $currentBuffer?.lastSeen ?? -1,
           lines: curLinesLength },
         );
-
-    // If nothing changed, skip scroll operations entirely
-    if (!bufferChanged && !linesAdded) return;
 
     // Dedup guard: run synchronously to prevent cascading effect re-runs.
     // Bypass when readmarker lookup previously failed, allowing retry.
