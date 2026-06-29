@@ -15,17 +15,10 @@ const gitCommit = process.env.GIT_COMMIT ?? (() => {
   }
 })();
 
-// Aliases managed via svelte.config.js kit.alias (propagated to Vite by SvelteKit)
-// Explicit resolve aliases ensure Vite picks them up when configs are at repo root
+// Aliases are managed in svelte.config.js kit.alias (propagated to Vite by SvelteKit).
 export default defineConfig({
   define: {
     __GIT_COMMIT__: JSON.stringify(gitCommit),
-  },
-  resolve: {
-    alias: {
-      $lib: path.resolve(__dirname, 'src-svelte/src/lib'),
-      $components: path.resolve(__dirname, 'src-svelte/src/components'),
-    },
   },
   plugins: [
     sveltekit(),
