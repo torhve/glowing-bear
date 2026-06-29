@@ -423,8 +423,10 @@ export function getScrollPosition(bufferId: string): number | undefined {
 }
 
 export const currentBuffer = derived(
-    [buffers, activeBufferId],
-    ([$buffers, $activeBufferId]) => $buffers[$activeBufferId] || null,
+    buffers,
+    ($buffers: Record<string, BufferData>, set: (value: BufferData | null) => void) => {
+        set($buffers[get(activeBufferId)] ?? null);
+    },
 );
 
 // Visible buffers: filters out hidden buffers.
