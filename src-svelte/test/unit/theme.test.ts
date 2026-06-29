@@ -28,7 +28,7 @@ describe('themes array', () => {
         expect(themes).toContain('catppuccin-mocha');
         expect(themes).toContain('catppuccin-macchiato');
         expect(themes).toContain('catppuccin-frappe');
-        expect(themes).toContain('catppuccin-latte');
+        expect(themes).toContain('light');
     });
 
     it('has Catppuccin themes grouped at the end', () => {
@@ -52,7 +52,7 @@ describe('themeLabels', () => {
         expect(themeLabels['catppuccin-mocha']).toBe('☕ Catppuccin Mocha');
         expect(themeLabels['catppuccin-macchiato']).toBe('🌿 Catppuccin Macchiato');
         expect(themeLabels['catppuccin-frappe']).toBe('🌺 Catppuccin Frappé');
-        expect(themeLabels['catppuccin-latte']).toBe('🪴 Catppuccin Latte');
+        expect(themeLabels['light']).toBe('Light');
     });
 
     it('maps original themes to simple labels', () => {
@@ -77,7 +77,7 @@ describe('setTheme', () => {
     });
 
     it('cycles through all Catppuccin themes', () => {
-        for (const t of ['catppuccin-mocha', 'catppuccin-macchiato', 'catppuccin-frappe', 'catppuccin-latte']) {
+        for (const t of ['catppuccin-mocha', 'catppuccin-macchiato', 'catppuccin-frappe']) {
             setTheme(t);
             expect(get(themeStore)).toBe(t);
         }
@@ -107,7 +107,7 @@ describe('loadTheme', () => {
     });
 
     it('returns each Catppuccin variant correctly', () => {
-        for (const t of ['catppuccin-mocha', 'catppuccin-macchiato', 'catppuccin-frappe', 'catppuccin-latte']) {
+        for (const t of ['catppuccin-mocha', 'catppuccin-macchiato', 'catppuccin-frappe']) {
             (localStorage.getItem as vi.Mock).mockImplementation((key) => {
                 if (key === 'gb_theme') return t;
                 return null;
