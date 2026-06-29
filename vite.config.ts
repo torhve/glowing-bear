@@ -55,7 +55,6 @@ export default defineConfig({
         ],
         prefer_related_applications: false,
         related_applications: [
-          { platform: 'web' },
           {
             platform: 'android',
             url: 'https://play.google.com/store/apps/details?id=com.glowing_bear',
@@ -65,10 +64,6 @@ export default defineConfig({
       kit: {
         adapterFallback: '404.html',
         outDir: path.resolve(__dirname, 'src-svelte/.svelte-kit'),
-      },
-      workbox: {
-        globPatterns: ['**/*.{js,css,ico,png,svg,webp,webmanifest}'],
-        navigateFallback: '404.html',
       },
     }),
   ],
