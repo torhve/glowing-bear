@@ -8,6 +8,7 @@
   import { emojifyInput } from '$lib/emojify';
   import Camera from '@lucide/svelte/icons/camera';
   import Megaphone from '@lucide/svelte/icons/megaphone';
+  import Type from '@lucide/svelte/icons/type';
   import { get } from 'svelte/store';
   import ImageUploadPreview from './ImageUploadPreview.svelte';
   import { DEBUG_INPUT } from '$lib/debug';
@@ -44,12 +45,10 @@
   let nextImageId = $state(1);
 
   let showColorPicker = $state(false);
-  let isHovered = $state(false);
-  let textareaFocused = $state(false);
+  let showFormatToolbar = $state(false);
   // Last known cursor position — saved on input/blur so format buttons work reliably
   // even when clicking them causes the textarea to lose focus.
   let lastCaretPos = $state(0);
-  let _ctrlDown = $state(false);
 
   // WeeChat standard color palette (IRC color codes 00-15)
   const IRC_COLORS = [
@@ -142,7 +141,7 @@
   // Uses lastCaretPos (tracked on input/blur) so it works after textarea loses focus on button click.
   // When forceFocus is true, focuses the textarea before inserting (used by global paste handler).
   function insertAtCursor(text: string, forceFocus = false): void {
-    const caret = textareaFocused ? getCaretPos() : lastCaretPos;
+    const caret = inputRef === document.activeElement ? getCaretPos() : lastCaretPos;
     message = message.slice(0, caret) + text + message.slice(caret);
     if (forceFocus) {
       inputRef?.focus();
@@ -155,6 +154,7 @@
     if (!$settings.enableFormatting) return;
     const codes = { bold: '\x02', italic: '\x1d', underline: '\x1f' };
     insertAtCursor(codes[attr]);
+    showFormatToolbar = false;
     inputRef?.focus();
   }
 
@@ -163,6 +163,7 @@
     if (!$settings.enableFormatting) return;
     insertAtCursor(`\x03${colorCode}`);
     showColorPicker = false;
+    showFormatToolbar = false;
     inputRef?.focus();
   }
 
@@ -170,6 +171,7 @@
   function insertReset(): void {
     if (!$settings.enableFormatting) return;
     insertAtCursor('\x0f');
+    showFormatToolbar = false;
     inputRef?.focus();
   }
 
@@ -620,6 +622,7 @@
       const inputBar = document.querySelector('[data-testid="input-bar"]');
       if (inputBar && !inputBar.contains(e.target as Node)) {
         showColorPicker = false;
+        showFormatToolbar = false;
         document.removeEventListener('click', handleClickOutside);
       }
     }
@@ -633,40 +636,13 @@
     win.__resetFormattingState = () => {
       message = '';
       showColorPicker = false;
-      _ctrlDown = false;
-      textareaFocused = false;
-      isHovered = false;
+      showFormatToolbar = false;
       if (inputRef) {
         inputRef.value = '';
       }
     };
     return () => {
       delete win.__resetFormattingState;
-    };
-  });
-
-  // Track Ctrl key state globally to show/hide the formatting toolbar
-  // Only shows when input bar is focused — user can't use the keybindings otherwise.
-  // Listens on window (not document) because Playwright dispatches keyboard events at page level,
-  // which may not bubble correctly through document on macOS.
-  $effect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if ((e.key === 'Control' || e.ctrlKey) && document.activeElement === inputRef) {
-        _ctrlDown = true;
-      }
-    }
-    function handleKeyUp(e: KeyboardEvent) {
-      // Only check e.key — the !e.ctrlKey guard causes issues in Playwright
-      // where the browser's modifier state may lag behind the keyup event.
-      if (e.key === 'Control') {
-        _ctrlDown = false;
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
     };
   });
 
@@ -708,16 +684,13 @@
 
 <div data-testid="input-bar" class="input-bar-container flex-shrink-0">
   <div class="input-bar-inner bg-panel border-t border-border"
-       role="group"
-       onmouseenter={() => { isHovered = true; }}
-       onmouseleave={() => { if (!showColorPicker) isHovered = false; }}
-       onfocusin={() => { textareaFocused = true; }}
-       onfocusout={() => { textareaFocused = false; }}
-  >
+        role="group"
+   >
 
-    <!-- Format toolbar — visible when Ctrl key is held, color picker is open, or input bar is hovered/focused -->
+    <!-- Format toolbar — shown via toggle button, hidden on any format action -->
+    {#if showFormatToolbar}
     <div
-      class="format-toolbar transition-all duration-150 ease-in-out overflow-hidden {((_ctrlDown || showColorPicker || isHovered || textareaFocused) ? 'max-h-12 opacity-100' : 'max-h-0 opacity-0')}"
+      class="format-toolbar"
       role="toolbar"
       aria-label="Text formatting"
     >
@@ -725,62 +698,41 @@
         <button
           type="button"
           data-testid="format-bold"
-          onclick={() => toggleFormat('bold')}
+          onclick={() => { toggleFormat('bold'); showFormatToolbar = false; }}
           class="format-btn px-2 py-0.5 text-xs font-bold rounded border transition-colors bg-input-bg border-border text-text-secondary hover:text-text hover:border-text-secondary"
           title="Bold (Ctrl+B)"
         >B</button>
         <button
           type="button"
           data-testid="format-italic"
-          onclick={() => toggleFormat('italic')}
+          onclick={() => { toggleFormat('italic'); showFormatToolbar = false; }}
           class="format-btn px-2 py-0.5 text-xs italic rounded border transition-colors bg-input-bg border-border text-text-secondary hover:text-text hover:border-text-secondary"
           title="Italic (Ctrl+I)"
         >I</button>
         <button
           type="button"
           data-testid="format-underline"
-          onclick={() => toggleFormat('underline')}
+          onclick={() => { toggleFormat('underline'); showFormatToolbar = false; }}
           class="format-btn px-2 py-0.5 text-xs underline rounded border transition-colors bg-input-bg border-border text-text-secondary hover:text-text hover:border-text-secondary"
           title="Underline (Ctrl+_)"
         >U</button>
         <button
           type="button"
           data-testid="format-reset"
-          onclick={insertReset}
+          onclick={() => { insertReset(); showFormatToolbar = false; }}
           class="format-btn px-2 py-0.5 text-xs rounded border transition-colors bg-input-bg border-border text-text-secondary hover:text-text hover:border-text-secondary font-mono"
           title="Reset formatting (Ctrl+Shift+R)"
         >RST</button>
         <button
           type="button"
           data-testid="format-color"
-          onclick={() => showColorPicker = !showColorPicker}
+          onclick={() => { showColorPicker = !showColorPicker; showFormatToolbar = false; }}
           class="format-btn px-2 py-0.5 text-xs font-bold rounded border transition-colors bg-input-bg border-border text-text-secondary hover:text-text hover:border-text-secondary"
           title="Color (Ctrl+K)"
         >C</button>
       </div>
-
-      <!-- Color picker popover -->
-      {#if showColorPicker}
-        <div
-          class="color-picker-popover fixed bottom-20 left-4 p-2 bg-surface border border-border rounded shadow-lg z-50"
-          role="listbox"
-          aria-label="Text color"
-        >
-          <div class="grid grid-cols-8 gap-1">
-            {#each IRC_COLORS as color (color.code)}
-              <button
-                type="button"
-                data-testid="color-{color.code}"
-                onclick={() => applyColor(color.code)}
-                class="color-swatch w-7 h-7 rounded border border-border flex items-center justify-center text-xs font-mono hover:scale-110 transition-transform"
-                style="background-color: {color.css}; color: {color.css === '#FFFFFF' || color.css === '#FFFF00' ? '#000000' : '#FFFFFF'};"
-                title="{color.name} ({color.code})"
-              >{color.code}</button>
-            {/each}
-          </div>
-        </div>
-      {/if}
     </div>
+    {/if}
 
     <div class="input-bar-row flex items-center space-x-2">
 
@@ -807,9 +759,6 @@
       ondragleave={handleDragEnd}
       ondragend={handleDragEnd}
           onblur={() => {
-            // Also set textareaFocused here because the capture-phase onfocusout
-            // on the parent div doesn't fire for programmatic blur() calls.
-            textareaFocused = false;
             lastCaretPos = inputRef?.selectionStart ?? 0;
           }}
       data-testid="message-input"
@@ -818,6 +767,17 @@
       class="input-bar-textarea flex-1 bg-input-bg border border-border rounded text-text text-sm placeholder-text-muted focus:outline-none focus:border-accent resize-none transition-colors min-h-9 max-h-[150px] {isDraggingFile ? 'border-accent bg-accent/10' : ''}"
       
     ></textarea>
+
+    {#if $settings.enableFormatting}
+    <button
+      onclick={() => showFormatToolbar = !showFormatToolbar}
+      data-testid="format-toggle"
+      class="input-bar-format px-2 py-2 text-text-secondary hover:text-text hover:bg-border rounded transition-colors"
+      title="Formatting"
+    >
+      <Type size={18} />
+    </button>
+    {/if}
 
     <button
       onclick={() => fileInputRef?.click()}
@@ -847,6 +807,28 @@
     </button>
     </div>
   </div>
+
+  <!-- Color picker popover — rendered outside toolbar so it stays visible when toolbar hides -->
+  {#if showColorPicker}
+    <div
+      class="color-picker-popover fixed bottom-20 left-4 p-2 bg-surface border border-border rounded shadow-lg z-50"
+      role="listbox"
+      aria-label="Text color"
+    >
+      <div class="grid grid-cols-8 gap-1">
+        {#each IRC_COLORS as color (color.code)}
+          <button
+            type="button"
+            data-testid="color-{color.code}"
+            onclick={() => applyColor(color.code)}
+            class="color-swatch w-7 h-7 rounded border border-border flex items-center justify-center text-xs font-mono hover:scale-110 transition-transform"
+            style="background-color: {color.css}; color: {color.css === '#FFFFFF' || color.css === '#FFFF00' ? '#000000' : '#FFFFFF'};"
+            title="{color.name} ({color.code})"
+          >{color.code}</button>
+        {/each}
+      </div>
+    </div>
+  {/if}
 </div>
 
 <ImageUploadPreview

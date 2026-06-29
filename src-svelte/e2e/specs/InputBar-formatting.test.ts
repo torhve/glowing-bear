@@ -63,10 +63,11 @@ test('Bold button inserts bold control char on click', async () => {
     await clearFormattingState();
     await page.waitForTimeout(50);
 
-    // Hover to show toolbar, then click bold button
-    await page.getByTestId('input-bar').hover();
-    await page.waitForTimeout(100);
-    await page.getByTestId('format-bold').click({ force: true });
+    // Click toggle to show toolbar, then click bold button
+    await page.getByTestId('format-toggle').click();
+    await page.waitForTimeout(50);
+    await expect(page.locator('[role="toolbar"]')).toBeVisible();
+    await page.getByTestId('format-bold').click();
     await page.waitForTimeout(50);
     await input.pressSequentially('bold text');
     await page.waitForTimeout(50);
@@ -111,9 +112,9 @@ test('Italic button inserts italic control char on click', async () => {
     await clearFormattingState();
     await page.waitForTimeout(50);
 
-    await page.getByTestId('input-bar').hover();
-    await page.waitForTimeout(100);
-    await page.getByTestId('format-italic').click({ force: true });
+    await page.getByTestId('format-toggle').click();
+    await page.waitForTimeout(50);
+    await page.getByTestId('format-italic').click();
     await page.waitForTimeout(50);
     await input.pressSequentially('italic');
     await page.waitForTimeout(50);
@@ -157,9 +158,9 @@ test('Underline button inserts underline control char on click', async () => {
     await clearFormattingState();
     await page.waitForTimeout(50);
 
-    await page.getByTestId('input-bar').hover();
-    await page.waitForTimeout(100);
-    await page.getByTestId('format-underline').click({ force: true });
+    await page.getByTestId('format-toggle').click();
+    await page.waitForTimeout(50);
+    await page.getByTestId('format-underline').click();
     await page.waitForTimeout(50);
     await input.pressSequentially('under');
     await page.waitForTimeout(50);
@@ -206,15 +207,17 @@ test('Reset button inserts reset code', async () => {
     await clearFormattingState();
     await page.waitForTimeout(50);
 
-    // Insert bold via button, type text, then reset
-    await page.getByTestId('input-bar').hover();
-    await page.waitForTimeout(200);
+    // Insert bold via button: toggle -> click bold -> toolbar hides
+    await page.getByTestId('format-toggle').click();
+    await page.waitForTimeout(50);
     await page.getByTestId('format-bold').click();
     await page.waitForTimeout(50);
     await input.pressSequentially('bold and reset');
     await page.waitForTimeout(30);
-    await page.getByTestId('input-bar').hover();
-    await page.waitForTimeout(200);
+
+    // Toggle again to show toolbar, then click reset
+    await page.getByTestId('format-toggle').click();
+    await page.waitForTimeout(50);
     await page.getByTestId('format-reset').click();
     await page.waitForTimeout(50);
 
@@ -261,15 +264,19 @@ test('Color button opens color picker on click', async () => {
     await clearFormattingState();
     await page.waitForTimeout(50);
 
-    await page.getByTestId('input-bar').hover();
-    await page.waitForTimeout(100);
-    await page.getByTestId('format-color').click({ force: true });
+    // Click toggle to show toolbar, then click color button
+    await page.getByTestId('format-toggle').click();
+    await page.waitForTimeout(50);
+    await page.getByTestId('format-color').click();
     await page.waitForTimeout(50);
 
     await expect(page.locator('.color-picker-popover')).toBeVisible();
 
-    // Clean up hover state for subsequent tests
-    await page.mouse.move(0, 0);
+    // Toolbar should be hidden after clicking color button
+    await expect(page.locator('[role="toolbar"]')).not.toBeVisible();
+
+    // Close the picker for subsequent tests
+    await page.mouse.click(0, 0);
     await page.waitForTimeout(300);
 });
 
@@ -281,14 +288,14 @@ test('Clicking a color inserts IRC color code (no reset)', async () => {
     await clearFormattingState();
     await page.waitForTimeout(50);
 
-    // Open color picker via Ctrl+K
+    // Open color picker via Ctrl+K shortcut
     await page.keyboard.down('Control');
     await page.keyboard.press('k');
     await page.keyboard.up('Control');
     await page.waitForTimeout(100);
 
     // Click red color (code 04)
-    await page.getByTestId('color-04').click({ force: true });
+    await page.getByTestId('color-04').click();
     await page.waitForTimeout(50);
 
     const value = await getRawInputValue();
@@ -303,82 +310,63 @@ test('Clicking a color inserts IRC color code (no reset)', async () => {
 // Toolbar visibility tests
 
 test('Format toolbar is hidden by default', async () => {
-    // Clear all formatting state from previous tests.
     await clearFormattingState();
-    // Click on buffer list (top of page) to blur textarea and move mouse away from input bar.
-    // User-initiated focus change triggers capture-phase focusout event that Svelte handles.
-    await page.getByTestId('buffer-list-items').click({ force: true });
-    await page.waitForTimeout(500);
-
-    await expect(page.locator('.format-toolbar')).not.toBeVisible();
-});
-
-test('Format toolbar shows when hovering over input bar', async () => {
-    const inputBar = page.getByTestId('input-bar');
-    await inputBar.hover();
     await page.waitForTimeout(100);
 
-    await expect(page.locator('.format-toolbar')).toBeVisible();
+    await expect(page.locator('[role="toolbar"]')).not.toBeVisible();
+});
+
+test('Toggle button click shows format toolbar', async () => {
+    await clearFormattingState();
+    await page.waitForTimeout(50);
+
+    await page.getByTestId('format-toggle').click();
+    await page.waitForTimeout(50);
+
+    await expect(page.locator('[role="toolbar"]')).toBeVisible();
     await expect(page.getByTestId('format-bold')).toBeVisible();
     await expect(page.getByTestId('format-italic')).toBeVisible();
     await expect(page.getByTestId('format-underline')).toBeVisible();
     await expect(page.getByTestId('format-reset')).toBeVisible();
     await expect(page.getByTestId('format-color')).toBeVisible();
 
-    // Clean up hover state for subsequent tests
-    await page.mouse.move(0, 0);
-    await page.waitForTimeout(300);
+    // Click toggle again to hide it for subsequent tests
+    await page.getByTestId('format-toggle').click();
+    await page.waitForTimeout(100);
 });
 
-test('Format toolbar shows when pressing Ctrl key (input focused)', async () => {
+test('Toggle button click toggles visibility', async () => {
+    await clearFormattingState();
+    await page.waitForTimeout(50);
+
+    // First click -> show
+    await page.getByTestId('format-toggle').click();
+    await page.waitForTimeout(50);
+    await expect(page.locator('[role="toolbar"]')).toBeVisible();
+
+    // Second click -> hide
+    await page.getByTestId('format-toggle').click();
+    await page.waitForTimeout(50);
+    await expect(page.locator('[role="toolbar"]')).not.toBeVisible();
+});
+
+test('Format button click hides toolbar', async () => {
     const input = page.getByTestId('message-input');
     await input.focus();
     await page.waitForTimeout(50);
 
-    await page.keyboard.down('Control');
+    await clearFormattingState();
+    await page.waitForTimeout(50);
+
+    // Show toolbar via toggle
+    await page.getByTestId('format-toggle').click();
+    await page.waitForTimeout(50);
+    await expect(page.locator('[role="toolbar"]')).toBeVisible();
+
+    // Click bold -> toolbar hides
+    await page.getByTestId('format-bold').click();
     await page.waitForTimeout(100);
-
-    await expect(page.locator('.format-toolbar')).toBeVisible();
-    await expect(page.getByTestId('format-bold')).toBeVisible();
-    await expect(page.getByTestId('format-italic')).toBeVisible();
-    await expect(page.getByTestId('format-underline')).toBeVisible();
-    await expect(page.getByTestId('format-reset')).toBeVisible();
-    await expect(page.getByTestId('format-color')).toBeVisible();
-
-    await page.keyboard.up('Control');
-    await page.waitForTimeout(300);
-});
-
-test('Format toolbar does not show when Ctrl is pressed without focus', async () => {
-    const input = page.getByTestId('message-input');
-    // Ensure input is blurred
-    await input.blur();
-    await page.waitForTimeout(100);
-
-    await expect(page.locator('.format-toolbar')).not.toBeVisible();
-
-    await page.keyboard.down('Control');
-    await page.waitForTimeout(100);
-
-    await expect(page.locator('.format-toolbar')).not.toBeVisible();
-
-    await page.keyboard.up('Control');
-    await page.waitForTimeout(200);
-});
-
-test('Format toolbar hides when mouse leaves and no picker open', async () => {
-    const inputBar = page.getByTestId('input-bar');
-
-    // Hover to show toolbar
-    await inputBar.hover();
-    await page.waitForTimeout(100);
-    await expect(page.locator('.format-toolbar')).toBeVisible();
-
-    // Move mouse far away from the input bar
-    await page.mouse.move(50, 50);
-    await page.waitForTimeout(200);
-
-    await expect(page.locator('.format-toolbar')).not.toBeVisible();
+    await expect(page.locator('[role="toolbar"]')).not.toBeVisible();
 });
 
 // Settings toggle test
@@ -396,11 +384,9 @@ test('Formatting disabled when setting is off', async () => {
     await clearFormattingState();
     await page.waitForTimeout(50);
 
-    // Hover to show toolbar, then click bold button (should be ignored)
-    await page.getByTestId('input-bar').hover();
-    await page.waitForTimeout(100);
-    await page.getByTestId('format-bold').click({ force: true });
-    await page.waitForTimeout(50);
+    // Format toggle button should not be visible when formatting is disabled
+    await expect(page.getByTestId('format-toggle')).not.toBeVisible();
+
     await input.pressSequentially('should not be bold');
     await page.waitForTimeout(50);
 
