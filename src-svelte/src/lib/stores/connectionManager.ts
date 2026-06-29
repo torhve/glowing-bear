@@ -272,7 +272,7 @@ export async function connect(host: string, port: number, path: string, password
 
                 handleVersionInfo(versionResponse);
 
-                 // Get buffer info
+                // Get buffer info
                 const bufInfoMsg = Protocol.formatHdata({
                     path: 'buffer:gui_buffers(*)',
                     keys: ['local_variables,notify,number,full_name,short_name,title,hidden,type']
@@ -559,8 +559,8 @@ async function fetchConfValue(name: string) {
     handleConfValue(resp);
 }
 
-    // Send a formatted message and await its response via callback
-    function sendAsync(message: string): Promise<ProtocolMessage> {
+// Send a formatted message and await its response via callback
+function sendAsync(message: string): Promise<ProtocolMessage> {
     return new Promise<unknown>((resolve, reject) => {
         if (!ws || ws.readyState !== WebSocket.OPEN) {
             reject(new Error('WebSocket not open'));
@@ -623,8 +623,8 @@ function concatenateTypedArrays(...arrays: Uint8Array[]): Uint8Array<ArrayBuffer
 }
 
 // Central WebSocket send wrapper — logs all outbound WS messages
-    function sendWs(data: string | ArrayBuffer, label = '') {
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
+function sendWs(data: string | ArrayBuffer, label = '') {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
         console.warn('[WS] send skipped — not open');
         return;
     }
@@ -678,7 +678,7 @@ export function sendMessage(message: string) {
         return;
     }
 
-   const msg = Protocol.formatInput({
+    const msg = Protocol.formatInput({
         buffer: '0x' + buffer.id,
         data: message
     });

@@ -360,89 +360,89 @@ export function convertIrcCodes(text: string): string {
         const prevChar = i > 0 ? text[i - 1] : '';
         const isWeechatAttr = prevChar === '\x1a' || prevChar === '\x1b';
         switch (ch) {
-            case '\x19': {
-                // Start of a WeeChat style code — consume entire block via regex
+        case '\x19': {
+            // Start of a WeeChat style code — consume entire block via regex
+            result += ch;
+            const remaining = text.substring(i + 1);
+            const match = remaining.match(weechatStyleRegex);
+            if (match) {
+                result += match[0];
+                i += match[0].length;
+            }
+            break;
+        }
+        case '\x1a': case '\x1b': case '\x1c':
+            // WeeChat control codes — pass through unchanged
+            result += ch;
+            break;
+        case '\x02':
+            result += isWeechatAttr ? ch : '\x1a*';
+            break;   // mIRC bold → WeeChat *
+        case '\x1d':
+            result += isWeechatAttr ? ch : '\x1a/';
+            break;   // mIRC italic → WeeChat /
+        case '\x1f':
+            result += isWeechatAttr ? ch : '\x1a_';
+            break;   // mIRC underline → WeeChat _
+        case '\x16':
+            result += isWeechatAttr ? ch : '\x1a!';
+            break;   // mIRC reverse → WeeChat !
+        case '\x0f':
+            result += isWeechatAttr ? ch : '\x1c';
+            break;   // mIRC reset → WeeChat \x1c
+        case '\x03': {
+            if (isWeechatAttr) {
                 result += ch;
-                const remaining = text.substring(i + 1);
-                const match = remaining.match(weechatStyleRegex);
-                if (match) {
-                    result += match[0];
-                    i += match[0].length;
-                }
                 break;
             }
-            case '\x1a': case '\x1b': case '\x1c':
-                // WeeChat control codes — pass through unchanged
-                result += ch;
-                break;
-            case '\x02':
-                result += isWeechatAttr ? ch : '\x1a*';
-                break;   // mIRC bold → WeeChat *
-            case '\x1d':
-                result += isWeechatAttr ? ch : '\x1a/';
-                break;   // mIRC italic → WeeChat /
-            case '\x1f':
-                result += isWeechatAttr ? ch : '\x1a_';
-                break;   // mIRC underline → WeeChat _
-            case '\x16':
-                result += isWeechatAttr ? ch : '\x1a!';
-                break;   // mIRC reverse → WeeChat !
-            case '\x0f':
-                result += isWeechatAttr ? ch : '\x1c';
-                break;   // mIRC reset → WeeChat \x1c
-            case '\x03': {
-                if (isWeechatAttr) {
-                    result += ch;
-                    break;
+            let j = i + 1;
+            // Parse fg color digits
+            let fg = '';
+            while (j < text.length && text[j]! >= '0' && text[j]! <= '9') {
+                fg += text[j]!;
+                j++;
+            }
+            if (fg.length === 0) {
+                result += '\x1c';
+            } else {
+                // Pad single-digit fg to 2 digits for downstream style matchers
+                if (fg.length === 1) {
+                    fg = '0' + fg;
                 }
-                let j = i + 1;
-                // Parse fg color digits
-                let fg = '';
-                while (j < text.length && text[j]! >= '0' && text[j]! <= '9') {
-                    fg += text[j]!;
+                // Check for optional ,NN (bg color)
+                let bg = '';
+                if (j < text.length && text[j]! === ',') {
                     j++;
-                }
-                if (fg.length === 0) {
-                    result += '\x1c';
-                } else {
-                    // Pad single-digit fg to 2 digits for downstream style matchers
-                    if (fg.length === 1) {
-                        fg = '0' + fg;
-                    }
-                    // Check for optional ,NN (bg color)
-                    let bg = '';
-                    if (j < text.length && text[j]! === ',') {
+                    while (j < text.length && text[j]! >= '0' && text[j]! <= '9') {
+                        bg += text[j]!;
                         j++;
-                        while (j < text.length && text[j]! >= '0' && text[j]! <= '9') {
-                            bg += text[j]!;
-                            j++;
-                        }
-                        // Pad single-digit bg to 2 digits
-                        if (bg.length === 1) {
-                            bg = '0' + bg;
-                        }
-                        // mIRC codes 0-16 map to option indices, not WeeChat palette.
-                        // \x19*fg,bg routes through getColorObj → weechat names.
-                        // For codes ≤ 16, emit separate bare codes so pattern 0
-                        // handles them with option names instead.
-                        if (parseInt(fg, 10) <= 16) {
-                            result += '\x19' + fg + '\x19B' + bg;
-                        } else {
-                            result += '\x19*' + fg + ',' + bg;
-                        }
-                    } else {
-                        result += '\x19' + fg;
                     }
+                    // Pad single-digit bg to 2 digits
+                    if (bg.length === 1) {
+                        bg = '0' + bg;
+                    }
+                    // mIRC codes 0-16 map to option indices, not WeeChat palette.
+                    // \x19*fg,bg routes through getColorObj → weechat names.
+                    // For codes ≤ 16, emit separate bare codes so pattern 0
+                    // handles them with option names instead.
+                    if (parseInt(fg, 10) <= 16) {
+                        result += '\x19' + fg + '\x19B' + bg;
+                    } else {
+                        result += '\x19*' + fg + ',' + bg;
+                    }
+                } else {
+                    result += '\x19' + fg;
                 }
-                i = j - 1;
-                break;
             }
-            case '\x01': case '\x04': case '\x05': case '\x06':
-                // mIRC-style attribute bytes — preserve as-is
-                result += ch;
-                break;
-            default:
-                result += ch;
+            i = j - 1;
+            break;
+        }
+        case '\x01': case '\x04': case '\x05': case '\x06':
+            // mIRC-style attribute bytes — preserve as-is
+            result += ch;
+            break;
+        default:
+            result += ch;
         }
     }
     return result;
@@ -549,24 +549,24 @@ export function richText2Str(parts: RichPart[]): string {
 
         // Foreground color — switch is faster than if/else chain
         switch (part.fgColor.type) {
-            case 'weechat': {
-                const idx = colorNameToIndex.get(part.fgColor.name);
-                if (idx !== undefined) str += '%' + idx.toString().padStart(2, '0');
-                break;
-            }
-            case 'ext': str += '%' + part.fgColor.name; break;
-            case 'option': str += '^' + part.fgColor.name; break;
+        case 'weechat': {
+            const idx = colorNameToIndex.get(part.fgColor.name);
+            if (idx !== undefined) str += '%' + idx.toString().padStart(2, '0');
+            break;
+        }
+        case 'ext': str += '%' + part.fgColor.name; break;
+        case 'option': str += '^' + part.fgColor.name; break;
         }
 
         // Background color
         switch (part.bgColor.type) {
-            case 'weechat': {
-                const idx = colorNameToIndex.get(part.bgColor.name);
-                if (idx !== undefined) str += ',' + idx.toString().padStart(2, '0');
-                break;
-            }
-            case 'ext': str += ',' + part.bgColor.name; break;
-            case 'option': str += ',' + part.bgColor.name; break;
+        case 'weechat': {
+            const idx = colorNameToIndex.get(part.bgColor.name);
+            if (idx !== undefined) str += ',' + idx.toString().padStart(2, '0');
+            break;
+        }
+        case 'ext': str += ',' + part.bgColor.name; break;
+        case 'option': str += ',' + part.bgColor.name; break;
         }
 
         // Attributes

@@ -7,13 +7,21 @@ charset = utf-8
 end_of_line = lf
 insert_final_newline = true
 trim_trailing_whitespace = true
-
-# Indent JS with four spaces
-[*.js]
 indent_style = space
 indent_size = 4
 
-# Indent HTML with two spaces
+# JSON
+[*.json]
+indent_size = 4
+
+# YAML / YML
+[*.{yaml,yml}]
+indent_size = 4
+
+# HTML
 [*.html]
-indent_style = space
-indent_size = 2
+indent_size = 4
+
+# Markdown
+[*.md]
+indent_size = 4
