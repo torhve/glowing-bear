@@ -21,7 +21,7 @@ COPY . .
 RUN GIT_COMMIT=$GIT_COMMIT npm run build:docker
 
 # Production stage: lightweight static web server
-FROM ghcr.io/static-web-server/static-web-server:2-alpine AS production
+FROM ghcr.io/static-web-server/static-web-server:2.43.0-debian AS production
 
 # Default host (all interfaces), port, root, and config path — all overridable via -e or docker-compose env
 ENV SERVER_HOST="::"
@@ -36,7 +36,7 @@ EXPOSE 8080
 
 # Shell-form HEALTHCHECK (CMD /bin/sh -c) expands $SERVER_PORT at runtime
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD /bin/sh -c 'wget -q --spider http://127.0.0.1:$SERVER_PORT/'
+  CMD curl -f http://127.0.0.1:$SERVER_PORT/ || exit 1
 
 USER 1000:1000
 
