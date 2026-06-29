@@ -37,4 +37,9 @@
     color: var(--gb-link-hover);
     text-decoration: underline;
   }
+
+  /* Code segments render in monospace */
+  .linkified-code {
+    font-family: var(--font-mono, monospace);
+  }
 </style>
