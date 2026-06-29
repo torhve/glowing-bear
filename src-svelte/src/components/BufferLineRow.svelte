@@ -363,34 +363,31 @@
   }
 
   /* ===== Mobile responsive overrides ===== */
+  /* Switch from table-cell to inline layout so text wraps under time+nick */
   @media (max-width: 640px) {
     .bufferline {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      width: 100%;
-    }
-
-    .time, .prefix, .message {
-      display: inline-flex;
-      width: auto;
-      max-width: none;
-      padding: 0;
-      vertical-align: top;
-      border: none;
+      display: block;
     }
 
     .time {
-      margin-right: 2px;
+      display: inline-block;
+      padding: 0;
       padding-left: var(--spacing-line-padding-x);
+      vertical-align: top;
+      border: none;
+      margin-right: 2px;
     }
 
     .prefix {
+      display: inline;
+      padding: 0;
+      padding-right: 5px;
       white-space: normal;
       text-align: left;
       overflow: visible;
       text-overflow: clip;
-      margin-right: 3px;
+      max-width: none;
+      border: none;
     }
 
     .prefix .compact-prefix {
@@ -399,11 +396,10 @@
     }
 
     .message {
-      display: flex;
-      flex: 1;
-      min-width: 0;
+      display: inline;
+      padding: 0;
       width: auto;
-      flex-wrap: wrap;
+      max-width: none;
     }
   }
 
@@ -617,4 +613,11 @@
     background-color: transparent !important;
   }
 
-</style>
+      /* Mobile: override desktop flex containers so time+prefix flow inline with message */
+      @media (max-width: 640px) {
+        .time .compact-time,
+        .prefix .compact-prefix {
+          display: inline;
+        }
+      }
+    </style>
