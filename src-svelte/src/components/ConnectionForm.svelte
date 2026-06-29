@@ -15,12 +15,12 @@
   import Keyboard from '@lucide/svelte/icons/keyboard';
   import Download from '@lucide/svelte/icons/download';
   import MessageCircle from '@lucide/svelte/icons/message-circle';
-import Globe from '@lucide/svelte/icons/globe';
-import Eye from '@lucide/svelte/icons/eye';
-import EyeOff from '@lucide/svelte/icons/eye-off';
-import Lock from '@lucide/svelte/icons/lock';
-import Key from '@lucide/svelte/icons/key';
- import Monitor from '@lucide/svelte/icons/monitor';
+  import Globe from '@lucide/svelte/icons/globe';
+  import Eye from '@lucide/svelte/icons/eye';
+  import EyeOff from '@lucide/svelte/icons/eye-off';
+  import Lock from '@lucide/svelte/icons/lock';
+  import Key from '@lucide/svelte/icons/key';
+  import Monitor from '@lucide/svelte/icons/monitor';
   import List from '@lucide/svelte/icons/list';
   import Save from '@lucide/svelte/icons/save';
   import Loader2 from '@lucide/svelte/icons/loader-2';
@@ -363,7 +363,7 @@ import Key from '@lucide/svelte/icons/key';
         <div class="info-accordion-content px-4 pb-3 text-sm text-text-secondary space-y-2">
           <p>Glowing Bear is a free, open-source web frontend for WeeChat — no backend required.</p>
           <p>This is a complete rewrite from the original AngularJS codebase into Svelte 5 + TypeScript. The old version was hard to maintain and had next to no tests. Everything still runs entirely as static files in your browser, connecting directly to your WeeChat instance via WebSocket relay — zero intermediary server.</p>
-          <p>Stack: SvelteKit 2, Svelte 5 runes, TypeScript, Tailwind CSS v4, Vite 6, Vitest, Playwright E2E testing, fflate, DOMPurify</p>
+              <p>Stack: SvelteKit 2, Svelte 5 runes, TypeScript, Tailwind CSS v4, Vite 6, Vitest, Playwright E2E testing, fflate</p>
         </div>
       </details>
       <details class="info-accordion bg-panel rounded border border-border" data-info-section="connection">

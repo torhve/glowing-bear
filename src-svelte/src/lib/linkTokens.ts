@@ -1,4 +1,4 @@
-// Tokenization for safe URL linkification without {@html} or DOMPurify.
+// Tokenization for safe URL linkification without {@html}.
 //
 // Splits text into text/link/code tokens so that Svelte's native escaping handles
 // all non-URL content (including <img>, <script>, javascript:, data:, etc.).
@@ -52,7 +52,7 @@ export function tokenizeLinks(text: string): LinkToken[] {
 
     for (const match of text.matchAll(URL_REGEX)) {
         // Add text before the URL
-        if (match.index > lastIndex) {
+        if (match.index !== null && match.index > lastIndex) {
             const beforeText = text.slice(lastIndex, match.index);
             if (beforeText) {
                 tokens.push({ type: 'text', value: beforeText });
@@ -61,7 +61,7 @@ export function tokenizeLinks(text: string): LinkToken[] {
         // Add the URL as a link token
         const url = match[0].replace(TRAILING_PUNCT, '');
         tokens.push({ type: 'link', value: url });
-        lastIndex = match.index + match[0].length;
+        lastIndex = match.index! + match[0].length;
     }
 
     // Add remaining text after the last URL
@@ -96,7 +96,7 @@ export function codifyText(text: string): (LinkToken | CodeSegment)[] {
     while ((match = re.exec(text)) !== null) {
         // Add text before the code block (including captured whitespace from group 1)
         const ws = match[1] || '';
-        if (match.index > lastIndex) {
+        if (match.index !== null && match.index > lastIndex) {
             const beforeText = text.slice(lastIndex, match.index);
             if (beforeText || ws) {
                 segments.push({ type: 'text', value: beforeText + ws });
@@ -108,7 +108,7 @@ export function codifyText(text: string): (LinkToken | CodeSegment)[] {
 
         // Group 2 is the delimiter (backtick type), group 3 is the code content
         segments.push({ type: 'code', value: match[3]!, delimiter: match[2]! });
-        lastIndex = match.index + match[0].length;
+        lastIndex = match.index! + match[0].length;
     }
 
     // Add remaining text after the last code block

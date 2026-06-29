@@ -113,8 +113,6 @@ Use `untrack()` from `svelte` to read a value inside `$effect` without creating 
 
 The codebase avoids `{@html}` entirely. For messages and topics, use the `<LinkifiedText>` component which internally calls `tokenizeAndCodify()` from `$lib/linkTokens`. This tokenizes URLs and backtick code blocks into safe tokens rendered natively by Svelte, eliminating XSS surface area.
 
-`sanitizeHtml()` in `$lib/filters` exists as a last-resort fallback for content that must use `{@html}` (e.g., plugin embed HTML). Only use it when `<LinkifiedText>` cannot handle the content.
-
 ### Function Comments
 
 Every non-trivial function needs a brief comment above it explaining intent.
