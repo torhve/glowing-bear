@@ -56,6 +56,11 @@ export function updateSettings(partial: Partial<Settings>) {
     }
 }
 
+// Monotonically-increasing store that increments whenever hash params are applied.
+// ConnectionForm.svelte's $effect tracks $hashSyncVersion as a reactive dependency,
+// so the effect re-runs only when hash params change, not on user typing.
+export const hashSyncVersion = writable(0);
+
 // Parse URL hash parameters and apply them to settings (takes precedence over stored settings).
 // Matches AngularJS parseHash() behavior from glowingbear.js:694-720.
 export function applyHashParams(): void {
@@ -97,5 +102,7 @@ export function applyHashParams(): void {
 
     if (Object.keys(updates).length > 0) {
         updateSettings(updates);
+        hashSyncVersion.update(v => v + 1);
     }
 }
+

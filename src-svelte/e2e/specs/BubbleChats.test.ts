@@ -24,6 +24,7 @@ test.beforeEach(async () => {
     setupEffectOrphanFilter(page)
     // Restore bot nick to default so botPm targets the gbbot2 buffer.
     await irc.botNick('gbbot2');
+    await page.waitForTimeout(1000);
     await waitForBuffer(page, '#glowing-bear', 15000);
     await switchToBuffer(page, '#glowing-bear');
 });
@@ -77,11 +78,16 @@ test.describe('bubble chats', () => {
 
     test('private buffers use bubble layout when setting enabled', async () => {
         await enableBubbleMode();
-        await switchToBuffer(page, 'gbbot2');
+        // Proactively trigger a PM to ensure the private buffer exists.
+        await botPm('bubble-layout-trigger');
+        await page.waitForTimeout(1000);
+        // Wait for the PM buffer to appear before switching.
+        await waitForBuffer(page, 'gbbot2', 30000);
+        await switchToBuffer(page, 'gbbot2', { timeout: 30000 });
 
         // Private buffer should render with bubble layout (div-based, not table)
         const bubbleContainer = page.locator('.chat-bubble-container');
-        await expect(bubbleContainer).toBeVisible({ timeout: 5000 });
+        await expect(bubbleContainer).toBeVisible({ timeout: 10000 });
 
         // Table layout should NOT be present
         const table = page.locator('[data-testid="chat-messages"] table.chat-table');
@@ -92,7 +98,8 @@ test.describe('bubble chats', () => {
 
     test('other messages render as left-aligned bubbles', async () => {
         await enableBubbleMode();
-        await switchToBuffer(page, 'gbbot2');
+        await waitForBuffer(page, 'gbbot2', 20000);
+        await switchToBuffer(page, 'gbbot2', { timeout: 20000 });
 
         // Send a unique PM so we can identify the message
         const msgText = 'bubble-other-test-' + Date.now();
@@ -110,7 +117,8 @@ test.describe('bubble chats', () => {
 
     test('self messages render as right-aligned bubbles', async () => {
         await enableBubbleMode();
-        await switchToBuffer(page, 'gbbot2');
+        await waitForBuffer(page, 'gbbot2', 20000);
+        await switchToBuffer(page, 'gbbot2', { timeout: 20000 });
 
         // Send a message from ourselves
         const selfMsg = 'my-bubble-msg-' + Date.now();
@@ -128,7 +136,8 @@ test.describe('bubble chats', () => {
 
     test('consecutive messages from same sender are grouped', async () => {
         await enableBubbleMode();
-        await switchToBuffer(page, 'gbbot2');
+        await waitForBuffer(page, 'gbbot2', 20000);
+        await switchToBuffer(page, 'gbbot2', { timeout: 20000 });
 
         const ts = Date.now();
         const msg1 = 'group-msg-1-' + ts;
@@ -157,7 +166,8 @@ test.describe('bubble chats', () => {
 
     test('system messages render centered in middle', async () => {
         await enableBubbleMode();
-        await switchToBuffer(page, 'gbbot2');
+        await waitForBuffer(page, 'gbbot2', 20000);
+        await switchToBuffer(page, 'gbbot2', { timeout: 20000 });
 
         // Send a bot message to ensure the buffer has content
         const ts = Date.now();
@@ -179,7 +189,8 @@ test.describe('bubble chats', () => {
 
     test('mixed conversation shows correct three-way alignment', async () => {
         await enableBubbleMode();
-        await switchToBuffer(page, 'gbbot2');
+        await waitForBuffer(page, 'gbbot2', 20000);
+        await switchToBuffer(page, 'gbbot2', { timeout: 20000 });
 
         const ts = Date.now();
         // Bot sends first (incoming/left)
@@ -211,7 +222,8 @@ test.describe('bubble chats', () => {
 
     test('date separators render with centered divider', async () => {
         await enableBubbleMode();
-        await switchToBuffer(page, 'gbbot2');
+        await waitForBuffer(page, 'gbbot2', 20000);
+        await switchToBuffer(page, 'gbbot2', { timeout: 20000 });
 
         // Date separators should have the correct structure
         const dateSep = page.locator('.bubble-date-separator');

@@ -132,8 +132,8 @@ test('shows bot nick change', async () => {
     await switchToBuffer(page, '#glowing-bear');
 
     // Use a unique nick to avoid collision with prior serial tests
-    // that may have renamed the bot
-    const newNick = `gbnick${Date.now()}`;
+    const ts = Date.now();
+    const newNick = `gbnick${ts}`;
 
     // First reset bot to known nick so we always produce a visible change
     await irc.botNick('gbbot');
@@ -142,13 +142,23 @@ test('shows bot nick change', async () => {
     // Now change to our unique nick
     await irc.botNick(newNick);
 
-    // Wait for the infoline to render, then verify it's visible
+    // Wait for WeeChat to process the nick change
+    await page.waitForTimeout(2000);
+
+    // Bot sends a message under the new nick to verify the change took effect.
+    // WeeChat does NOT relay _nicklist_diff events or "now known as" infolines
+    // for local nick changes over the relay protocol. The only observable effect
+    // is that subsequent messages show the new nick in their prefix.
+    await irc.sendMessage('#glowing-bear', `nick-changed-${ts}`);
     await expect(async () => {
-        const lines = await page.locator('[data-testid="bufferline-row"]').count();
-        expect(lines).toBeGreaterThan(0);
-        // Nick change infoline contains "is now known as <newNick>"
-        const infoline = page.locator('[data-testid="bufferline-row"]').filter({ hasText: 'now known as' });
-        await expect(infoline.first()).toBeVisible();
+        // Message should appear with the new nick in the prefix
+        const msgRow = page.locator('[data-testid="bufferline-row"]')
+            .filter({ hasText: `nick-changed-${ts}` })
+            .first();
+        await expect(msgRow).toBeVisible();
+        // Prefix should contain new nick (spaces around it are formatting)
+        const prefixText = await msgRow.locator('td.prefix').textContent();
+        expect(prefixText ?? '').toContain(newNick);
     }).toPass({ timeout: 15000, intervals: [500] });
 
     // reset botnick
