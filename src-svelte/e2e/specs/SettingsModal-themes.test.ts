@@ -34,7 +34,6 @@ const catppuccinThemes = [
     { id: 'catppuccin-mocha', label: '☕ Catppuccin Mocha' },
     { id: 'catppuccin-macchiato', label: '🌿 Catppuccin Macchiato' },
     { id: 'catppuccin-frappe', label: '🌺 Catppuccin Frappé' },
-    { id: 'catppuccin-latte', label: '🪴 Catppuccin Latte' },
 ];
 
 test('should list all Catppuccin themes in the theme selector', async () => {
@@ -70,9 +69,9 @@ test('Catppuccin Mocha should apply correct background color', async () => {
     expect(bgColor).toBe('#1e1e2e');
 });
 
-test('Catppuccin Latte should apply correct background color', async () => {
+test('Light theme should apply correct background color', async () => {
     await openSettings(page);
-    await page.getByTestId('theme-selector').selectOption({ value: 'catppuccin-latte' });
+    await page.getByTestId('theme-selector').selectOption({ value: 'light' });
 
     const bgColor = await page.evaluate(() => {
         const root = document.documentElement;
