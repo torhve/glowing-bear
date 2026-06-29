@@ -17,7 +17,7 @@ services:
       - "${HOST_PORT:-8080}:${SERVER_PORT:-8080}"
     restart: unless-stopped
     environment:
-      - SERVER_HOST=${SERVER_HOST:-[::]}
+      - SERVER_HOST=${SERVER_HOST:-::}
       - SERVER_PORT=${SERVER_PORT:-8080}
       - SERVER_ROOT=${SERVER_ROOT:-/var/public}
       - SERVER_CONFIG_FILE=${SERVER_CONFIG_FILE:-/etc/sws.toml}
