@@ -1,8 +1,9 @@
 <script lang="ts">
   import { get } from 'svelte/store';
+  import { untrack } from 'svelte';
   import { connect } from '$lib/stores/connectionManager';
   import { connectionState, setConnectionStatus, setErrors, clearErrors } from '$lib/stores/connectionStore';
-  import { settings, updateSettings } from '$lib/stores/settings';
+  import { settings, updateSettings, hashSyncVersion } from '$lib/stores/settings';
   import { addToast } from '$lib/toast';
   import { isWindowsTauri } from '$lib/tauriWindow';
 
@@ -40,6 +41,21 @@ import Key from '@lucide/svelte/icons/key';
   let savepassword = $state(savedSettings.savepassword || false);
   let autoconnect = $state(savedSettings.autoconnect || false);
   let shakePassword = $state(false);
+
+  // Sync form fields when hash params change the settings store.
+  // $hashSyncVersion is the sole reactive dependency — the effect re-runs only
+  // when hash params are applied. Uses untrack() for settings reads to prevent
+  // the effect from re-running on user typing (which also updates $settings).
+  $effect(() => {
+    $hashSyncVersion;
+    const s = untrack(() => get(settings));
+    hostField = s.hostField;
+    port = s.port;
+    password = s.password;
+    tls = s.tls;
+    savepassword = s.savepassword;
+    autoconnect = s.autoconnect;
+  });
 
   // Autoconnect is handled by +page.svelte's tryAutoConnect(). The ConnectionForm
   // only handles explicit user-initiated connections via handleConnect().

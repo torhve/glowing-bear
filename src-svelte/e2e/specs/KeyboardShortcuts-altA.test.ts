@@ -74,8 +74,8 @@ test('Alt+A prioritizes notification buffers over plain unread buffers', async (
     // Send a PM from gbbot to testuser → generates notification count (PMs are always highlights)
     await botPm('pm-notification-test-' + Date.now());
 
-    // Wait for the PM buffer to appear in the buffer list (relay propagation can be slow)
-    const pmItem = await waitForPmBuffer(20000);
+    // Wait for the PM buffer to appear in the buffer list (relay propagation can be very slow)
+    const pmItem = await waitForPmBuffer(30000);
     expect(pmItem, 'PM buffer should appear').not.toBeNull();
 
     // Wait for hotlist sync to propagate counts (debounced at 2s)

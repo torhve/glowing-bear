@@ -236,6 +236,8 @@ export function updateFavico(): void {
  * Play a notification sound
  */
 export function playNotificationSound(): void {
+    try { ((window as any).__playNotificationSoundCalls = (window as any).__playNotificationSoundCalls || []).push('called'); } catch { /* noop */ }
+
     const s = get(settings);
     if (!s.soundnotification) {
         if (DEBUG_NOTIFICATIONS) console.log('[notification] playNotificationSound skipped: soundnotification disabled');

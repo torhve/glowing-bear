@@ -102,8 +102,8 @@
     const { scrollTop, scrollHeight, clientHeight } = containerRef;
 
     // Update isAtBottom tracking (AngularJS bufferBottom equivalent)
-    // Tolerance of 50px accounts for scroll lag when new lines grow scrollHeight
-    isAtBottom = scrollTop >= scrollHeight - clientHeight - 50;
+    // Tolerance of 10px accounts for sub-pixel scroll lag when new lines grow scrollHeight
+    isAtBottom = scrollTop >= scrollHeight - clientHeight - 10;
 
     if (scrollTop < 50 && !isLoadingMore && $currentBuffer && !$currentBuffer.allLinesFetched) {
       isLoadingMore = true;

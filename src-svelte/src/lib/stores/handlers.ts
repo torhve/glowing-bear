@@ -484,9 +484,14 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                 // Include localUnread — real-time messages received while this
                 // buffer was inactive are not reflected in hotlist counts yet.
                 const unreadSum = buffer.unread + buffer.notification + (buffer.localUnread || 0);
-                if (buffer.lines.length > unreadSum && buffer.lastSeen < 0) {
+                if (buffer.lines.length > unreadSum) {
                     buffer.lastSeen = buffer.lines.length - unreadSum - 1;
                     setSyncing(false);
+                } else {
+                    // Not enough lines to cover stale hotlist counts (e.g., query buffer
+                    // with old notification from previous session). Set lastSeen to 0 so
+                    // subsequent real-time lines are not blocked by the isSyncing() gate.
+                    buffer.lastSeen = 0;
                 }
             }
             // For buffers with lastSeen already set (already synced), apply post-sync logic
@@ -555,7 +560,9 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                     const isHighlight = !!lineMsg.highlight;
                     const isPrivateMessage =
                       lineMsg.tags_array.includes("notify_private");
-                    if (buffer.notify !== 0 && (isHighlight || isPrivateMessage)) {
+                    const isPrivate =
+                      buffer.type === "private" || buffer.type === "query";
+                    if (buffer.notify !== 0 && (isHighlight || isPrivateMessage || isPrivate)) {
                         // Play notification sound for highlights/PMs regardless of window focus.
                         // Sound is a local audio cue that doesn't depend on tab visibility.
                         playNotificationSound();
@@ -1452,11 +1459,64 @@ export function handleNickMessageForSpeakOnBuffers(
     }
 }
 
+// ---- Nick change infoline creation ----
+// Creates "now known as" infolines for every channel buffer containing the old nick.
+// Returns an array of {bufferId, line} pairs to be applied inside buffers.update()
+// so that mutations go through the reactive store, not a stale snapshot.
+function injectNickChangeInfolines(
+    oldName: string,
+    newName: string,
+    affectedBufferIds?: Set<string>,
+): Array<{ bufferId: string; line: BufferLine }> {
+    const allBuffers = get(buffers);
+    const result: Array<{ bufferId: string; line: BufferLine }> = [];
+    for (const bufId in allBuffers) {
+        // If pre-computed buffer list provided, only inject into those buffers.
+        if (affectedBufferIds && !affectedBufferIds.has(bufId)) continue;
+
+        const buf = allBuffers[bufId];
+        if (!buf) continue;
+        // Only inject into channel buffers (type 'channel').
+        if (buf.type !== 'channel') continue;
+
+        // When no pre-computed list is provided, check if this buffer's nicklist
+        // contains the old nick to determine whether to inject.
+        if (!affectedBufferIds) {
+            let found = false;
+            for (const g of Object.values(buf.nicklist)) {
+                if (g.nicks.some(nk => nk.name === oldName)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) continue;
+        }
+
+        // Create "oldNick is now known as newNick" infoline with WeeChat formatting codes.
+        // \u00194 = color code 4 (infoback), \u002D = separator dash.
+        const content = `\u00194\u002D\u00194\u002D ${oldName} is now known as ${newName}`;
+        const infoline = createBufferLine({
+            buffer: buf.id,
+            date: Date.now(),
+            date_long: 0,
+            prefix: '',
+            message: content,
+            tags_array: [],
+            displayed: 1,
+            highlight: 0,
+        });
+        result.push({ bufferId: buf.id, line: infoline });
+    }
+    return result;
+}
+
 // ---- Nicklist diff handler ----
 // Handles incremental nicklist changes from WeeChat (_nicklist_diff event).
 // Operations: _diff=43 (+ add), 45 (- remove), 42 (* update).
-// Same sequential group-tracking pattern as handleNicklist, but resets group
-// when switching buffers to avoid leaking group names across buffers.
+// Uses a two-pass approach: removals first, then additions and updates.
+// This ensures that when processing op=42 (update), any preceding op=45 (remove)
+// has already been applied, so we can detect nick changes by finding the new name
+// in the nicks array after the old one was removed.
 export function handleNicklistDiff(message: ProtocolMessage) {
     const nicklist = message.objects[0]?.content as (
       | NickMessage
@@ -1496,7 +1556,82 @@ export function handleNicklistDiff(message: ProtocolMessage) {
     let currentBufferId: string | null = null;
     let group = "root";
     const modifiedBuffers = new Set<string>();
+    // Track old names from removals to detect nick changes during updates.
+    // Keyed by bufferId for correct scoping across buffers.
+    const removedNicks: Record<string, Set<string>> = {};
+    // Pre-collect channel buffers containing each nick being removed, so that
+    // infoline injection works even after the nick has been removed from nicklists.
+    const affectedBuffersByOldNick: Record<string, Set<string>> = {};
+    // Collect "now known as" infolines to be applied inside buffers.update()
+    // so mutations go through the reactive store instead of a stale snapshot.
+    const pendingInfolines: Array<{ bufferId: string; line: BufferLine }> = [];
 
+    // Pass 0: identify nicks being removed and collect affected channel buffers.
+    for (const n of nicklist) {
+        if ((n as NickGroupMessage).group === 1) continue;
+        if ((n as NickMessage)._diff !== 45) continue;
+        const nickMsg = n as NickMessage;
+        const ptr0 = nickMsg.pointers[0];
+        if (!ptr0) continue;
+        const buffer = getBuffer(ptr0);
+        if (!buffer || !("root" in buffer.nicklist)) continue;
+        // Collect all channel buffers that contain this nick
+        if (!affectedBuffersByOldNick[nickMsg.name]) {
+            affectedBuffersByOldNick[nickMsg.name] = new Set();
+        }
+        const allBuffers = get(buffers);
+        for (const bufId in allBuffers) {
+            const buf = allBuffers[bufId];
+            if (!buf || buf.type !== 'channel') continue;
+            for (const g of Object.values(buf.nicklist)) {
+                if (g.nicks.some(nk => nk.name === nickMsg.name)) {
+                    (affectedBuffersByOldNick[nickMsg.name] ?? new Set()).add(bufId);
+                    break;
+                }
+            }
+        }
+    }
+
+    // First pass: process removals (op=45) and group creation.
+    for (const n of nicklist) {
+        const ptr0 = n.pointers[0];
+        if (!ptr0) continue;
+        const buffer = getBuffer(ptr0);
+        if (!buffer) continue;
+
+        if (currentBufferId !== ptr0) {
+            group = "root";
+            currentBufferId = ptr0;
+        }
+
+        if (!("root" in buffer.nicklist)) continue;
+
+        if ((n as NickGroupMessage).group === 1) {
+            const g = createNickGroup(n as NickGroupMessage);
+            if (!(g.name in buffer.nicklist)) {
+                buffer.nicklist[g.name] = g;
+            }
+            group = g.name;
+        } else if ((n as NickMessage)._diff === 45) {
+            const nickMsg = n as NickMessage;
+            const nickGroup = buffer.nicklist[group];
+            if (!nickGroup) continue;
+            const oldIdx = nickGroup.nicks.findIndex(
+                (nk) => nk.name === nickMsg.name,
+            );
+            if (oldIdx >= 0) {
+                const removed = nickGroup.nicks.splice(oldIdx, 1)[0];
+                if (!removed) continue;
+                if (!removedNicks[ptr0]) removedNicks[ptr0] = new Set();
+                removedNicks[ptr0].add(removed.name);
+                modifiedBuffers.add(ptr0);
+            }
+        }
+    }
+
+    // Second pass: process additions (op=43) and updates (op=42).
+    currentBufferId = null;
+    group = "root";
     for (const n of nicklist) {
         const ptr0 = n.pointers[0];
         if (!ptr0) continue;
@@ -1507,14 +1642,11 @@ export function handleNicklistDiff(message: ProtocolMessage) {
             continue;
         }
 
-        // Reset group tracking when switching between buffers in the same message
         if (currentBufferId !== ptr0) {
             group = "root";
             currentBufferId = ptr0;
         }
 
-        // Skip diffs for buffers that haven't had their nicklist requested yet.
-        // Mirrors AngularJS's addNick/delNick/updateNick guard on nicklistRequested().
         if (!("root" in buffer.nicklist)) {
             if (DEBUG_NICKLIST)
                 console.log(
@@ -1525,6 +1657,14 @@ export function handleNicklistDiff(message: ProtocolMessage) {
             continue;
         }
 
+        if ((n as NickGroupMessage).group === 1) {
+            group = (n as NickGroupMessage).name;
+            continue;
+        }
+
+        const d = n._diff;
+        const op = d === 43 ? "+" : d === 45 ? "-" : d === 42 ? "*" : "?";
+        const nick = createNick(n as NickMessage);
         if (DEBUG_NICKLIST)
             console.log(
                 "[nicklist] processing diff item for",
@@ -1533,61 +1673,84 @@ export function handleNicklistDiff(message: ProtocolMessage) {
                 JSON.stringify(n.pointers),
             );
 
-        if ((n as NickGroupMessage).group === 1) {
-            const g = createNickGroup(n as NickGroupMessage);
-            // Only create the group if it doesn't already exist (prevents overwrites)
-            if (!(g.name in buffer.nicklist)) {
-                buffer.nicklist[g.name] = g;
-                if (DEBUG_NICKLIST)
-                    console.log(
-                        "[nicklist] diff group:",
-                        g.name,
-                        "added to",
-                        buffer.shortName,
-                    );
-            }
-            group = g.name;
-        } else {
-            const d = n._diff;
-            const op = d === 43 ? "+" : d === 45 ? "-" : d === 42 ? "*" : "?";
-            const nick = createNick(n as NickMessage);
+        const nickGroup = buffer.nicklist[group];
+        if (!nickGroup) {
             if (DEBUG_NICKLIST)
                 console.log(
-                    "[nicklist] diff nick:",
-                    nick.name,
-                    "prefix:",
-                    nick.prefix,
-                    "in group",
+                    "[nicklist] group",
                     group,
-                    "op:",
-                    op,
+                    "not found for nick",
+                    nick.name,
                 );
-            const nickGroup = buffer.nicklist[group];
-            if (!nickGroup) {
-                if (DEBUG_NICKLIST)
-                    console.log(
-                        "[nicklist] group",
-                        group,
-                        "not found for nick",
-                        nick.name,
-                    );
-                continue;
-            }
-            if (d === 43) {
-                // + add nick
-                nickGroup.nicks.push(nick);
-            } else if (d === 45) {
-                // - remove nick
-                nickGroup.nicks = nickGroup.nicks.filter((nk) => nk.name !== nick.name);
-            } else if (d === 42) {
-                // * update nick
-                const idx = nickGroup.nicks.findIndex((nk) => nk.name === nick.name);
-                if (idx >= 0) {
-                    nickGroup.nicks[idx] = nick;
+            continue;
+        }
+
+        if (d === 43) {
+            // + add nick — check if this is a rename (old nick was removed in pass 1)
+            const removed = removedNicks[ptr0];
+            if (removed && removed.size > 0 && !nickGroup.nicks.some((nk) => nk.name === nick.name)) {
+                // A nick was removed and this new nick wasn't already present -> treat as rename
+                const oldNames = Array.from(removed);
+                for (const oldName of oldNames) {
+                    const infolines = injectNickChangeInfolines(oldName, nick.name, affectedBuffersByOldNick[oldName]);
+                    pendingInfolines.push(...infolines);
+                    // Ensure infoline-affected buffers are deep-cloned too
+                    for (const { bufferId } of infolines) {
+                        modifiedBuffers.add(bufferId);
+                    }
+                    removed.delete(oldName);
                 }
             }
+            nickGroup.nicks.push(nick);
+            modifiedBuffers.add(ptr0);
+        } else if (d === 42) {
+            // * update nick — try multiple strategies to locate the existing nick entry:
+            // 1. Search by new name (works for mode/prefix changes where name stays same)
+            // 2. Search by visible field (WeeChat sends old name in visible for nick changes)
+            // 3. Fall back to removed nicks from pass 1 (op=45 removal + op=43 addition pattern)
+            const nickMsg = n as NickMessage;
+            let idx = nickGroup.nicks.findIndex((nk) => nk.name === nick.name);
+
+            if (idx < 0 && nickMsg.visible) {
+                // New name not found — try matching by visible (old name for nick changes)
+                idx = nickGroup.nicks.findIndex((nk) => nk.visible === nickMsg.visible);
+            }
+
+            if (idx >= 0) {
+                const oldNick = nickGroup.nicks[idx];
+                nickGroup.nicks[idx] = nick;
+                if (oldNick && oldNick.name !== nick.name) {
+                    const infolines = injectNickChangeInfolines(oldNick.name, nick.name, affectedBuffersByOldNick[oldNick.name]);
+                    pendingInfolines.push(...infolines);
+                    for (const { bufferId } of infolines) {
+                        modifiedBuffers.add(bufferId);
+                    }
+                }
+                modifiedBuffers.add(ptr0);
+            } else if (removedNicks[ptr0]?.has(nick.name)) {
+                // Nick was removed in first pass and now re-added with same name
+                // (not a rename, just a removal followed by re-addition).
+                nickGroup.nicks.push(nick);
+                modifiedBuffers.add(ptr0);
+            } else {
+                // Nick not found by any means — check if any nick was removed that
+                // could be the renamed version.
+                const removed = removedNicks[ptr0];
+                if (removed && removed.size > 0) {
+                    const oldNames = Array.from(removed);
+                    for (const oldName of oldNames) {
+                        const infolines = injectNickChangeInfolines(oldName, nick.name, affectedBuffersByOldNick[oldName]);
+                        pendingInfolines.push(...infolines);
+                        for (const { bufferId } of infolines) {
+                            modifiedBuffers.add(bufferId);
+                        }
+                        removed.delete(oldName);
+                    }
+                }
+                nickGroup.nicks.push(nick);
+                modifiedBuffers.add(ptr0);
+            }
         }
-        modifiedBuffers.add(ptr0);
     }
 
     // Create new references only for affected buffers to trigger reactivity.
@@ -1609,6 +1772,18 @@ export function handleNicklistDiff(message: ProtocolMessage) {
         const merged = { ...c };
         for (const id in updated) {
             if (updated[id]) merged[id] = updated[id];
+        }
+        // Apply pending "now known as" infolines to live store data.
+        // These were collected during pass 1/2 but couldn't be applied directly
+        // because get(buffers) returns a stale snapshot.
+        if (pendingInfolines.length > 0) {
+            for (const { bufferId, line } of pendingInfolines) {
+                const buf = merged[bufferId];
+                if (buf) {
+                    buf.lines.push(line);
+                    buf.requestedLines++;
+                }
+            }
         }
         return merged;
     });
