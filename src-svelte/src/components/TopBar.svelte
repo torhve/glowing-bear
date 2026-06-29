@@ -32,7 +32,7 @@
 </script>
 
 <div data-testid="top-bar" style="padding-top: env(safe-area-inset-top, 0px);">
-  <div class="top-bar-inner h-10 bg-surface-raised border-b border-border flex items-center px-2 space-x-2" data-tauri-drag-region>
+  <div class="top-bar-inner h-[var(--spacing-topbar-height,40px)] bg-surface-raised border-b border-border flex items-center px-2 space-x-2" data-tauri-drag-region>
     <div class="flex items-center gap-1 flex-1 min-w-0" data-tauri-drag-region>
       <TauriTitlebar variant="inline" />
       <img src={`${base}/glowing-bear.svg`} alt="logo" class="app-logo w-5 h-5 flex-shrink-0" />
@@ -84,7 +84,7 @@
           data-tauri-drag-region="false"
           data-testid="connection-status-button"
           popovertarget="connection-stats-popover"
-          class="connection-status-btn flex items-center space-x-1 px-2 py-1 rounded text-xs hover:text-white hover:bg-surface-raised transition-colors"
+          class="top-bar-btn connection-status-btn flex items-center space-x-1 rounded text-xs hover:text-white hover:bg-surface-raised transition-colors"
           type="button"
         >
           <div class="connection-dot w-2 h-2 rounded-full {
@@ -106,7 +106,7 @@
       <button
         data-tauri-drag-region="false"
         popovertarget="buffer-search-modal"
-        class="px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-surface-raised rounded transition-colors"
+        class="top-bar-btn text-sm text-text-secondary hover:text-white hover:bg-surface-raised rounded transition-colors"
         title="Search buffers (Alt+G)"
         data-testid="search-button"
         onclick={() => onSearchOpen()}
@@ -117,7 +117,7 @@
       <button
         data-tauri-drag-region="false"
         onclick={() => onNicklistToggle()}
-        class="px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-surface-raised rounded transition-colors"
+        class="top-bar-btn text-sm text-text-secondary hover:text-white hover:bg-surface-raised rounded transition-colors"
         title="Toggle nicklist (Alt+n)"
         data-testid="nicklist-button"
         class:bg-surface-raised={showNicklist}
@@ -128,7 +128,7 @@
       <button
         data-tauri-drag-region="false"
         popovertarget="settings-modal"
-        class="px-2 py-1 text-sm text-text-secondary hover:text-white hover:bg-surface-raised rounded transition-colors"
+        class="top-bar-btn text-sm text-text-secondary hover:text-white hover:bg-surface-raised rounded transition-colors"
         title="Settings"
         data-testid="settings-button"
       >
@@ -140,7 +140,7 @@
           data-tauri-drag-region="false"
           data-testid="disconnect-button"
           onclick={handleDisconnect}
-          class="px-2 py-1 text-sm text-danger hover:text-danger hover:bg-surface-raised rounded transition-colors"
+          class="top-bar-btn text-sm text-danger hover:text-danger hover:bg-surface-raised rounded transition-colors"
           title="Disconnect"
         >
           <Power size={16} />
@@ -151,5 +151,12 @@
 
 </div>
 
-<BufferSearchModal onBufferSelect={onBufferSelect} />
-<SettingsModal />
+    <BufferSearchModal onBufferSelect={onBufferSelect} />
+    <SettingsModal />
+
+    <style>
+      /* Spacing — overridable by themes via --spacing-* vars */
+      .top-bar-btn {
+        padding: var(--spacing-topbar-button-padding-y, 4px) var(--spacing-topbar-button-padding-x, 8px);
+      }
+    </style>

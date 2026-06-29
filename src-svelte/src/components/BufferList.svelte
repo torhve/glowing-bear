@@ -122,7 +122,7 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
 </script>
 
 <div class="w-56 sm:w-48 lg:w-52 bg-panel border-r border-border flex flex-col" data-testid="buffer-list">
-  <div class="buffer-list-header h-10 bg-surface-raised border-b border-border flex items-center justify-between px-2">
+  <div class="buffer-list-header h-[var(--spacing-buffer-list-header-height,40px)] bg-surface-raised border-b border-border flex items-center justify-between px-2">
     <div class="flex items-center space-x-1">
       <button
         onclick={toggleServers}
@@ -143,11 +143,11 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
      {#each Object.entries(groupedBuffers) as [groupName, groupBufs] (groupName)}
       <div class="buffer-group border-b border-border">
           {#if $settings.orderbyserver}
-            <div class="buffer-group-label px-2 py-1 text-xs font-bold text-text-muted bg-input-bg flex items-center gap-1">
+            <div class="buffer-group-label text-xs font-bold text-text-muted bg-input-bg flex items-center gap-1">
               <Server size={12} />{groupName}
             </div>
          {/if}
-          <div class="space-y-0.5">
+          <div class="buffer-item-list">
           {#each groupBufs as buffer, i (buffer.id)}
                  <div
                      role="button"
@@ -160,7 +160,7 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
                      data-testid="buffer-item"
                      {@attach tooltipAttachment(buffer)}
                      style="--i: {i}"
-                     class="buffer-item-enter group flex items-center gap-0.5 px-3 py-2 sm:px-4 sm:py-2.5 md:px-5 md:py-3 cursor-pointer rounded-r-md hover:bg-surface-raised active:bg-accent/10 transition-colors duration-150 touch-manipulation select-none {buffer.id === $activeBufferId ? 'border-s-[3px] border-s-accent bg-surface-raised' : 'border-s-[3px] border-s-transparent'}"
+                     class="buffer-item-enter buffer-item group flex items-center gap-0.5 cursor-pointer rounded-r-md hover:bg-surface-raised active:bg-accent/10 transition-colors duration-150 touch-manipulation select-none {buffer.id === $activeBufferId ? 'border-s-[3px] border-s-accent bg-surface-raised' : 'border-s-[3px] border-s-transparent'}"
                    >
                   {#if getBufferIcon(buffer)}
                     {@const Icon = getBufferIcon(buffer)}
@@ -191,6 +191,23 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
                           </Badge>
                         {/if}
              </div>
+
+             <style>
+                        /* Spacing — overridable by themes via --spacing-* vars */
+                        .buffer-item {
+                          padding: var(--spacing-buffer-item-padding-y, 8px) var(--spacing-buffer-item-padding-x, 12px);
+                        }
+
+                        .buffer-item-list {
+                          display: flex;
+                          flex-direction: column;
+                          gap: var(--spacing-buffer-group-gap, 2px);
+                        }
+
+                        .buffer-group-label {
+                          padding: var(--spacing-buffer-group-label-padding, 4px 8px);
+                        }
+             </style>
          {/each}
           </div>
       </div>

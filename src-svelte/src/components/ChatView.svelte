@@ -16,7 +16,6 @@
   import X from '@lucide/svelte/icons/x';
 
   let containerRef = $state<HTMLDivElement>();
-  let endOfBufferRef = $state<HTMLSpanElement>();
   let messages = $derived($currentBuffer?.lines ?? []);
   let noembed = $derived($settings.noembed);
   let topicText = $derived($currentBuffer?.title?.map(t => t.text).join('') || '');
@@ -404,7 +403,7 @@
 
 <div class="chat-view-container flex-1 flex flex-col overflow-hidden">
       {#if $currentBuffer}
-        <div class="h-8 bg-input-bg border-b border-border flex items-center px-3 w-full" data-testid="topic-bar-container">
+        <div class="h-[var(--spacing-topicbar-height,32px)] bg-input-bg border-b border-border flex items-center px-3 w-full" data-testid="topic-bar-container">
           <!-- Left zone: clickable to open topic modal -->
           <button
             type="button"
@@ -458,7 +457,7 @@
     bind:this={containerRef}
     onscroll={handleScroll}
     data-testid="chat-messages"
-    class="flex-1 overflow-y-auto overflow-x-hidden bg-bg pb-1"
+    class="chat-messages flex-1 overflow-y-auto overflow-x-hidden bg-bg"
     class:favorite-font={!$currentBuffer || !isFreeBuffer($currentBuffer)}
     class:free-font={$currentBuffer && isFreeBuffer($currentBuffer)}
     class:hideTime={$currentBuffer?.hideBufferLineTimes}
@@ -604,7 +603,7 @@
         </tbody>
       </table>
     {/if}
-    <span bind:this={endOfBufferRef} data-end-of-buffer></span>
+    <span data-end-of-buffer></span>
   </div>
 
 </div>
@@ -651,11 +650,16 @@
   }
 
   .readmarker td {
-    padding: 8px 0;
+    padding-block: var(--spacing-line-padding-y, 8px);
   }
 
   .readmarker {
     height: auto;
+  }
+
+  /* Chat messages container bottom padding (gap between last line and input bar) */
+  .chat-messages {
+    padding-bottom: var(--spacing-chat-container-padding-bottom, 4px);
   }
 
   .readmarker-container {
@@ -689,12 +693,12 @@
     letter-spacing: 0.02em;
   }
 
-  /* Bubble mode layout styles */
+  /* Bubble mode layout styles — overridable by themes via --spacing-* vars */
   .chat-bubble-container {
     display: flex;
     flex-direction: column;
-    padding: 10px 14px;
-    gap: 2px;
+    padding: var(--spacing-bubble-container-padding, 10px 14px);
+    gap: var(--spacing-bubble-gap, 2px);
   }
 
   .bubble-fetchmore-row {
