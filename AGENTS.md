@@ -17,7 +17,7 @@ Source code in `src-svelte/src/` has `components/`, `lib/`, `routes/`. Config fi
 - `settings.ts` — User preferences persisted to localStorage
 - `theme.ts` — Theme configuration and Tailwind token mapping
 - `bufferResume.ts` — Last-active-buffer tracking across sessions
-- `inputHistory.ts`, `inputState.ts` — Input bar state and history
+- `inputHistory.ts`, — Input bar history
 
 **`src-svelte/src/lib/` (root)** — Core utilities:
 
