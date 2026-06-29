@@ -61,7 +61,6 @@
     "@tauri-apps/plugin-notification": "^2.3.3",
     "@tauri-apps/plugin-window-state": "^2.4.1",
     "@vite-pwa/sveltekit": "^1.1.0",
-    "dompurify": "^3.4.11",
     "fflate": "^0.8.3",
     "zlibjs": "^0.3.1"
   }
