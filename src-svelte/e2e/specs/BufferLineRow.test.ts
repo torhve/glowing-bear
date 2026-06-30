@@ -345,3 +345,29 @@ test.describe('vertical alignment', () => {
         expect(prefixStyle).toBe('top');
     });
 });
+
+// ---- Prefix truncation tests ----
+
+test.describe('prefix truncation', () => {
+    test.beforeAll(async () => {
+        await waitForBuffer(page, '#glowing-bear', 15000);
+        await switchToBuffer(page, '#glowing-bear');
+    });
+
+    test('long nick prefixes are truncated with + suffix', async () => {
+        const longNick = 'aaaaaaaaaaverrrrylooooooongnick';
+        const msg = 'trunc-test-' + Date.now();
+
+        await irc.botNick(longNick);
+        await irc.sendMessage('#glowing-bear', msg);
+
+        const row = page.locator('[data-testid="bufferline-row"] td.message').filter({ hasText: msg }).first();
+        await expect(row).toBeVisible({ timeout: 10000 });
+
+        const prefixCell = row.locator('..').locator('td.prefix');
+        const prefixText = await prefixCell.textContent();
+        expect(prefixText ?? '').toContain('+');
+
+        await irc.botNick('ggbbot');
+    });
+});

@@ -44,6 +44,20 @@
   let isHighlight = $derived(message.highlight);
   let metadata = $derived(buildMetadata());
 
+  // Limit total prefix text length to prevent overflow (port of Angular `prefixlimit:25`).
+  const PREFIX_TEXT_LIMIT = 25;
+  let prefixPartsToRender = $derived.by(() => {
+    let totalLen = 0;
+    const result: typeof message.prefix = [];
+    for (const part of message.prefix) {
+      if (totalLen >= PREFIX_TEXT_LIMIT) break;
+      result.push(part);
+      totalLen += (part.text || '').length;
+    }
+    return result;
+  });
+  let isPrefixTruncated = $derived(message.prefixtext.length > PREFIX_TEXT_LIMIT);
+
   // Extract nick from prefix text, stripping angle brackets (e.g. "<gbbot123>" → "gbbot123").
   function extractNick(prefixText: string): string {
     const trimmed = prefixText.trim();
@@ -283,7 +297,7 @@
     </tr>
   {:else}
     <tr class={['bufferline', { highlight: isHighlight }]} data-testid="bufferline-row">
-      <td class="time text-right align-top font-mono" style="width: 80px;">
+      <td class="time text-right align-top font-mono">
         <span class="date inline-flex items-center compact-time" class:repeated-time={isRepeatedTime}>
           {#if message.shortTime.includes(':')}
             {@const parts = message.shortTime.split(':')}
@@ -297,7 +311,7 @@
         <span class="compact-prefix flex justify-end items-center" class:repeated-prefix={isRepeatedPrefix}>
           <span onclick={handleMention} role="button" tabindex="0" class="mention-link" onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleMention(); } }}>
             {#if message.showHiddenBrackets}<span class="hidden-bracket">&lt;</span>{/if}
-            {#each message.prefix as part, pi (pi)}
+            {#each prefixPartsToRender as part, pi (pi)}
               {@const iconType = getIconType(part)}
               {#if iconType}
                 {#if iconType === 'arrow-right'}
@@ -315,6 +329,7 @@
                 <span class="prefix-part {(part.classes || []).join(' ')}">{part.text}</span>
               {/if}
             {/each}
+            {#if isPrefixTruncated}<span class="prefix-part">+</span>{/if}
             {#if message.showHiddenBrackets}<span class="hidden-bracket">&gt;</span>{/if}
           </span>
         </span>
