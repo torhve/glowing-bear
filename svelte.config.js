@@ -20,6 +20,7 @@ const config = {
 			appTemplate: 'src-svelte/src/app.html',
 			routes: 'src-svelte/src/routes',
 			lib: 'src-svelte/src/lib',
+			serviceWorker: 'src-svelte/src/service-worker.ts',
 			hooks: {
 				server: 'src-svelte/src/hooks.server.ts',
 			},

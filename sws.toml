@@ -23,7 +23,7 @@ match = "exact"
 values = { "Cache-Control" = "no-cache, no-store, must-revalidate" }
 
 [[headers]]
-by = "path: /sw.js"
+by = "path: /service-worker.js"
 match = "exact"
 values = { "Cache-Control" = "no-cache, no-store, must-revalidate" }
 

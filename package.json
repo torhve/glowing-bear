@@ -60,7 +60,6 @@
     "@tauri-apps/plugin-autostart": "^2.5.1",
     "@tauri-apps/plugin-notification": "^2.3.3",
     "@tauri-apps/plugin-window-state": "^2.4.1",
-    "@vite-pwa/sveltekit": "^1.1.0",
     "fflate": "^0.8.3",
     "zlibjs": "^0.3.1"
   }
