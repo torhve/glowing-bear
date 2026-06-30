@@ -25,7 +25,7 @@ import {
     maxBufferLines,
     deepCloneBufferLine,
 } from "$lib/stores/models";
-import { lastBufferId, shouldResume } from "$lib/stores/bufferResume";
+import { lastBufferId, shouldResume, shouldResumeByName, getLastBufferName } from "$lib/stores/bufferResume";
 import {
     createHighlight,
     playNotificationSound,
@@ -201,11 +201,11 @@ export function handleBufferInfo(message: ProtocolMessage) {
                 "lines=" + buffer.lines.length,
             );
 
-            // Auto-resume
-            if (shouldResume(buffer.id)) {
+            // Auto-resume — check by pointer (same-session refresh) then by fullName (cross-connection)
+            if (shouldResume(buffer.id) || shouldResumeByName(buffer.fullName)) {
                 setActiveBuffer(buffer.id);
                 resumed = true;
-                console.debug("[handler]   auto-resumed to:", buffer.id);
+                console.debug("[handler]   auto-resumed to:", buffer.id, buffer.fullName);
             }
         }
     }
@@ -222,17 +222,21 @@ export function handleBufferInfo(message: ProtocolMessage) {
         });
     }
 
-    // Check for resume on existing buffers too — on reconnect, buffers already
-    // exist in the store so the per-buffer shouldResume check above was never hit.
-    // Read directly from localStorage (same source as shouldResume) rather than
-    // the store, because the store retains stale values preserved across disconnect.
-    if (!resumed && typeof window !== "undefined") {
-        const savedId = localStorage.getItem("gb-last-buffer");
-        if (savedId && workingBuffers[savedId]) {
-            setActiveBuffer(savedId);
-            lastBufferId.set(savedId);
-            resumed = true;
-            console.debug("[handler]   auto-resumed (existing buffer) to:", savedId);
+    // Fallback: match by fullName for cases where the per-buffer check didn't fire
+    // (e.g., buffers already existed from a prior _buffer_info call within this connection).
+    if (!resumed) {
+        const savedName = getLastBufferName();
+        if (savedName) {
+            for (const id in workingBuffers) {
+                const buf = workingBuffers[id];
+                if (buf && buf.fullName === savedName) {
+                    setActiveBuffer(id);
+                    lastBufferId.set(id);
+                    resumed = true;
+                    console.debug("[handler]   auto-resumed (by fullName) to:", id, savedName);
+                    break;
+                }
+            }
         }
     }
 

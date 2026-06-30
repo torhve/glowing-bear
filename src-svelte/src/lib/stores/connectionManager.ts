@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
 import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, incrementReconnectAttempts } from '$lib/stores/connectionStore';
-import { buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer, clearAllUnread, localUnreadBuffers, hotlistClearedBuffers, bufferBottom, previousBufferId, pendingBufferSwitch, isSyncing } from '$lib/stores/models';
+import { buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer, localUnreadBuffers, hotlistClearedBuffers, bufferBottom, previousBufferId, pendingBufferSwitch, isSyncing } from '$lib/stores/models';
 import { settings } from '$lib/stores/settings';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist, setOnUpgrade, setOnUpgradeEnded } from '$lib/stores/handlers';
 import { addToast, removeToast, clearToasts, toastStore } from '$lib/toast';
@@ -26,14 +26,16 @@ let connecting = false;
 let manualReconnectRequested = false;
 let connectionGeneration = 0;
 
-// Reset connection state after WebSocket close — rejects pending callbacks,
-// clears timers and tracking sets, updates stores. Preserves activeBufferId
-// and previousBufferId for reconnect recovery.
-function resetConnectionState() {
+// Comprehensive cleanup for any disconnection path.
+// Clears all app state (buffers, servers, unread tracking, timers, callbacks).
+// Does NOT touch connectionData (needed by scheduleReconnect / handleReconnectDecision)
+// and does NOT set connection status (caller decides based on context).
+function resetAllState() {
+    // Reject all pending callbacks
     Object.keys(callbacks).forEach(k => {
         const id = parseInt(k, 10);
         if (callbacks[id]) {
-            callbacks[id].reject(new Error('WebSocket closed'));
+            callbacks[id].reject(new Error('Connection closed'));
         }
         delete callbacks[id];
     });
@@ -51,14 +53,17 @@ function resetConnectionState() {
         hotlistDebounceTimer = null;
     }
     pendingFetchBuffers.clear();
-    bufferBottom.set(true);
     pendingBufferSwitch.set(null);
-    setConnectionStatus('disconnected');
+    bufferBottom.set(true);
+    // Clear all buffer/server state — no stale entries accumulate across reconnects.
+    buffers.set({});
+    servers.set({});
+    localUnreadBuffers.update(() => new Set());
+    hotlistClearedBuffers.update(() => new Set());
+    activeBufferId.set('');
+    previousBufferId.set('');
     connected.set(false);
-    if (get(connectionState).wasEverConnected) {
-        clearAllUnread();
-        onDisconnect();
-    }
+    onDisconnect();
 }
 
 // Detect error type from close event for initial connection failures.
@@ -355,7 +360,8 @@ export async function connect(host: string, port: number, path: string, password
             // If connection generation has changed, connect() replaced this WS — ignore
             if (genAtConnect !== connectionGeneration) return;
             if (DEBUG_CONNECTION) console.log('[connect] WebSocket close code=' + evt.code + ' reason=' + evt.reason);
-            resetConnectionState();
+            resetAllState();
+            setConnectionStatus('disconnected');
             const shouldReject = detectError(evt);
             handleReconnectDecision(evt);
             if (shouldReject && rejectPromise) {
@@ -539,12 +545,7 @@ function scheduleReconnect() {
     reconnectingTimer = setTimeout(() => {
         reconnectingTimer = null;
         setConnectionStatus('reconnecting');
-        // Clear buffers and unread tracking sets so hotlist can't restore stale unreads for cleared buffers
-        buffers.set({});
-        servers.set({});
-        localUnreadBuffers.update(() => new Set());
-        hotlistClearedBuffers.update(() => new Set());
-
+        resetAllState();
         connect(host, port, path, password, tls, noCompression);
     }, delay);
 }
@@ -686,26 +687,8 @@ export function sendMessage(message: string) {
 }
 
 export function disconnect() {
-    // Always reset stores regardless of ws state — onclose may not fire for failed connections
+    // Mark as user-initiated so the onclose handler doesn't auto-reconnect.
     disconnectStore();
-    connected.set(false);
-    if (hotlistInterval) clearInterval(hotlistInterval);
-    hotlistInterval = null;
-    if (hotlistDebounceTimer) {
-        clearTimeout(hotlistDebounceTimer);
-        hotlistDebounceTimer = null;
-    }
-    if (reconnectingTimer) {
-        clearTimeout(reconnectingTimer);
-        reconnectingTimer = null;
-    }
-    // Clear tracking sets and reset buffer state on disconnect
-    pendingFetchBuffers.clear();
-    bufferBottom.set(true);
-    activeBufferId.set('');
-    previousBufferId.set('');
-    pendingBufferSwitch.set(null);
-
     connectionData = null;
     // Close ALL tracked WebSocket instances (including orphaned ones from previous connections)
     if (webSockets.size > 0) {
@@ -716,13 +699,10 @@ export function disconnect() {
         }
         webSockets.clear();
         ws = null;
-    } else {
-        // No active WebSockets — ensure stores are synchronized after failed/stale connection
-        setConnectionStatus('disconnected');
     }
-    // Clear unread counts, reset document title, and cancel notifications for all disconnect paths
-    clearAllUnread();
-    onDisconnect();
+    // Clear all app state — buffers, servers, timers, callbacks, notifications.
+    resetAllState();
+    setConnectionStatus('disconnected');
 }
 
 export async function requestNicklist(bufferId: string) {
