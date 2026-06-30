@@ -283,7 +283,7 @@
     </tr>
   {:else}
     <tr class={['bufferline', { highlight: isHighlight }]} data-testid="bufferline-row">
-      <td class="time text-right align-top font-mono">
+      <td class="time text-right align-top font-mono" style="width: 80px;">
         <span class="date inline-flex items-center compact-time" class:repeated-time={isRepeatedTime}>
           {#if message.shortTime.includes(':')}
             {@const parts = message.shortTime.split(':')}
@@ -490,7 +490,7 @@
   }
 
   :global(.bubble-self-bg .irc-link) {
-    color: var(--gb-link-bubble-self);
+    color: var(--gb-link-bubble-self, var(--gb-bubble-self-text));
   }
 
   :global(.bubble .irc-code) {
