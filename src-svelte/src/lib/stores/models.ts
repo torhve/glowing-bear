@@ -647,7 +647,7 @@ export function setActiveBuffer(bufferId: string): boolean {
         });
     }
     // Record the last-viewed buffer for reconnect auto-resume recovery.
-    recordBuffer(bufferId);
+    recordBuffer(bufferId, buffer.fullName);
     return true;
 }
 
