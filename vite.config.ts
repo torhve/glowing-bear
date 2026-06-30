@@ -36,6 +36,9 @@ export default defineConfig({
   },
   server: {
     port: 8001,
+    fs: {
+      allow: ['src-svelte/src'],
+    },
     watch: {
       ignored: [
         '**/build/**',
