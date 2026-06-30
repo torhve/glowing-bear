@@ -628,7 +628,6 @@
   --gb-link: #5a88b2;
   --gb-link-hover: #6a98c2;
   --gb-link-bubble: #5a88b2;
-  --gb-link-bubble-self: #5a88b2;
   --gb-ribbon: #f0ad4e;
   --gb-ribbon-light: rgba(240, 173, 78, 0.15);
   --gb-danger: #d9534f;
@@ -688,7 +687,6 @@
   --gb-link: #5a88b2;
   --gb-link-hover: #6a98c2;
   --gb-link-bubble: #5a88b2;
-  --gb-link-bubble-self: #5a88b2;
   --gb-ribbon: #f0ad4e;
   --gb-ribbon-light: rgba(240, 173, 78, 0.15);
   --gb-danger: #d9534f;
@@ -749,7 +747,6 @@
   --gb-link: #5a88b2;
   --gb-link-hover: #6a98c2;
   --gb-link-bubble: #5a88b2;
-  --gb-link-bubble-self: #5a88b2;
   --gb-ribbon: #f0ad4e;
   --gb-ribbon-light: rgba(240, 173, 78, 0.15);
   --gb-danger: #d9534f;
@@ -836,7 +833,6 @@
   --gb-link: #5a88b2;
   --gb-link-hover: #6a98c2;
   --gb-link-bubble: #5a88b2;
-  --gb-link-bubble-self: #5a88b2;
   --gb-ribbon: #f39c12;
   --gb-ribbon-light: rgba(243, 156, 18, 0.15);
   --gb-danger: #e74c3c;
@@ -896,7 +892,6 @@
   --gb-link: oklch(0.52 0.10 255);
   --gb-link-hover: oklch(0.57 0.12 255);
   --gb-link-bubble: oklch(0.52 0.10 255);
-  --gb-link-bubble-self: oklch(0.52 0.10 255);
   --gb-ribbon: oklch(0.65 0.16 50);
   --gb-ribbon-light: oklch(0.65 0.16 50 / 0.2);
   --gb-danger: oklch(0.6 0.18 30);
@@ -956,7 +951,6 @@
   --gb-link: #85a0b5;
   --gb-link-hover: #95afc5;
   --gb-link-bubble: #85a0b5;
-  --gb-link-bubble-self: #85a0b5;
   --gb-ribbon: #cc6666;
   --gb-ribbon-light: rgba(204, 102, 102, 0.15);
   --gb-danger: #cc6666;
@@ -1016,7 +1010,6 @@
   --gb-link: #5a88b2;
   --gb-link-hover: #6a98c2;
   --gb-link-bubble: #5a88b2;
-  --gb-link-bubble-self: #5a88b2;
   --gb-ribbon: #eab700;
   --gb-ribbon-light: rgba(234, 183, 0, 0.12);
   --gb-danger: #c82829;
@@ -1076,7 +1069,6 @@
   --gb-link: #85a0b5;
   --gb-link-hover: #95afc5;
   --gb-link-bubble: #85a0b5;
-  --gb-link-bubble-self: #85a0b5;
   --gb-ribbon: #cc6666;
   --gb-ribbon-light: rgba(204, 102, 102, 0.15);
   --gb-danger: #cc6666;
@@ -1136,7 +1128,6 @@
     --gb-link: #6a98b8;
     --gb-link-hover: #7aa8c8;
     --gb-link-bubble: #6a98b8;
-    --gb-link-bubble-self: #6a98b8;
    --gb-ribbon: #fac863;
    --gb-ribbon-light: rgba(250, 200, 99, 0.15);
    --gb-danger: #ec5f67;
@@ -1196,7 +1187,6 @@
     --gb-link: #5a88b8;
     --gb-link-hover: #6a98c2;
     --gb-link-bubble: #5a88b8;
-    --gb-link-bubble-self: #5a88b8;
     --gb-ribbon: #b58900;
     --gb-ribbon-light: rgba(181, 137, 0, 0.2);
    --gb-danger: #dc322f;
@@ -1256,7 +1246,6 @@
     --gb-link: #5a88b8;
     --gb-link-hover: #6a98c2;
     --gb-link-bubble: #5a88b8;
-    --gb-link-bubble-self: #5a88b8;
     --gb-ribbon: #b58900;
     --gb-ribbon-light: rgba(181, 137, 0, 0.15);
    --gb-danger: #dc322f;
@@ -1317,7 +1306,6 @@
   --gb-link: #89dceb;
   --gb-link-hover: #74c7ec;
   --gb-link-bubble: #89dceb;
-  --gb-link-bubble-self: #89dceb;
   --gb-ribbon: #fab387;
   --gb-ribbon-light: rgba(250, 179, 135, 0.15);
   --gb-danger: #f38ba8;
@@ -1378,7 +1366,6 @@
   --gb-link: #91d7e3;
   --gb-link-hover: #7dc4e4;
   --gb-link-bubble: #91d7e3;
-  --gb-link-bubble-self: #91d7e3;
   --gb-ribbon: #f5a97f;
   --gb-ribbon-light: rgba(245, 169, 127, 0.15);
   --gb-danger: #ed8796;
@@ -1439,7 +1426,6 @@
   --gb-link: #99d1db;
   --gb-link-hover: #85c1dc;
   --gb-link-bubble: #99d1db;
-  --gb-link-bubble-self: #99d1db;
   --gb-ribbon: #ef9f76;
   --gb-ribbon-light: rgba(239, 159, 118, 0.15);
   --gb-danger: #e78284;
@@ -1500,7 +1486,6 @@
   --gb-link: #04a5e5;
   --gb-link-hover: #209fb5;
   --gb-link-bubble: #04a5e5;
-  --gb-link-bubble-self: #04a5e5;
   --gb-ribbon: #fe640b;
   --gb-ribbon-light: rgba(254, 100, 11, 0.12);
   --gb-danger: #d20f39;
