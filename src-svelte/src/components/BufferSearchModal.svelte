@@ -79,6 +79,10 @@
       input?.focus();
       input?.select();
     }
+    else if (event.newState === 'closed') {
+      bufferSearchQuery = '';
+      selectedIndex = 0;
+    }
   }
 
   $effect(() => {
