@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import type { HTMLInputTypeAttribute, KeyboardEventHandler, EventHandler } from 'svelte/elements';
 
   let { 
@@ -44,7 +45,7 @@
   }
 
   // Local state for one-way value binding (avoids bind:value issues with Playwright .fill()).
-  let internalValue = $state(value ?? '');
+  let internalValue = $state(untrack(() => value ?? ''));
 
   // Sync from parent prop when it changes externally (e.g. reset).
   $effect(() => {
