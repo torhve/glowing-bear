@@ -538,7 +538,7 @@
     touchStartTime = Date.now();
     touchStartTarget = e.target as HTMLElement | null;
     // Track if touch originated inside the mobile nicklist overlay
-    touchStartedInNicklist = !!touchStartTarget?.closest('.mobile-nicklist-overlay');
+    touchStartedInNicklist = touchStartTarget instanceof Element && !!touchStartTarget.closest('.mobile-nicklist-overlay');
   }
 
   function handleTouchMove(e: TouchEvent) {
