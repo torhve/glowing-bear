@@ -1,26 +1,17 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, clearSettings, setSettings, waitForAppReady, reconnect, fillPortInput } from '../helpers/connection';
+import { reconnect, fillPortInput } from '../helpers/connection';
 import { switchToBuffer, switchToBufferMobile } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
-
-import { setupEffectOrphanFilter } from '../helpers/pageerror';
+import { createConnectedPage } from '../fixtures/auth';
 
 let page: import('@playwright/test').Page;
 
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
-    page = await browser.newPage();
-    await page.route('**/cdnjs.cloudflare.com/**', (route) => route.abort());
-    await page.goto('http://localhost:8001/');
-    await waitForAppReady(page);
-    await clearSettings(page);
-    await setSettings(page, {
-        savepassword: false,
-        autoconnect: false,
+    page = await createConnectedPage(browser, {
+        settings: { savepassword: false, autoconnect: false },
     });
-    setupEffectOrphanFilter(page)
-    await connectToWeechat(page);
 });
 
 test.afterAll(async () => {
@@ -28,7 +19,6 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async () => {
-    setupEffectOrphanFilter(page)
 });
 
 

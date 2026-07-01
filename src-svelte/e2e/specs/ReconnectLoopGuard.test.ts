@@ -1,22 +1,17 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, waitForAppReady, setSettings } from '../helpers/connection';
-
-import { setupEffectOrphanFilter } from '../helpers/pageerror';
+import { setSettings } from '../helpers/connection';
+import { createConnectedPage } from '../fixtures/auth';
 
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Reconnect loop guard', () => {
-    test.beforeEach(async ({ page }) => {
-        setupEffectOrphanFilter(page)
-        await page.goto('http://localhost:8001/');
-        await page.evaluate(() => localStorage.removeItem('gb-settings'));
-        await page.reload();
-        await waitForAppReady(page);
+    let page: import('@playwright/test').Page;
+
+    test.beforeEach(async ({ browser }) => {
+        page = await createConnectedPage(browser);
     });
 
-    test('should stop auto-reconnecting after max attempts and show error toast', async ({ page }) => {
-        // Connect first so wasEverConnected is true
-        await connectToWeechat(page);
+    test('should stop auto-reconnecting after max attempts and show error toast', async () => {
         await expect(page.getByTestId('chat-view')).toBeVisible();
 
         // Enable autoconnect so disconnect triggers scheduleReconnect instead of toast
@@ -50,9 +45,7 @@ test.describe('Reconnect loop guard', () => {
         expect(state?.reconnectAttempts).toBe(9);
     });
 
-    test('retry button resets counter and reconnects', async ({ page }) => {
-        // Connect first
-        await connectToWeechat(page);
+    test('retry button resets counter and reconnects', async () => {
         await expect(page.getByTestId('chat-view')).toBeVisible();
 
         // Enable autoconnect
@@ -89,9 +82,7 @@ test.describe('Reconnect loop guard', () => {
         expect(state?.reconnectAttempts).toBe(0);
     });
 
-    test('should not show exhausted toast before max attempts reached', async ({ page }) => {
-        // Connect first
-        await connectToWeechat(page);
+    test('should not show exhausted toast before max attempts reached', async () => {
         await expect(page.getByTestId('chat-view')).toBeVisible();
 
         // Enable autoconnect

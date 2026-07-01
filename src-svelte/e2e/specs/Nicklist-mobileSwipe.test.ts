@@ -1,10 +1,8 @@
 import { test, expect } from "@playwright/test";
 import {
   connectToWeechat,
-  clearSettings,
   disconnect,
   setSettings,
-  waitForAppReady,
 } from "../helpers/connection";
 import {
   waitForBuffer,
@@ -14,7 +12,7 @@ import {
   closeMobileOverlay,
 } from "../helpers/buffers";
 
-import { setupEffectOrphanFilter } from "../helpers/pageerror";
+import { createConnectedPage } from '../fixtures/auth';
 
 // Inject touch event dispatcher into the page for swipe simulation.
 async function injectSwipeDispatcher(page: import("@playwright/test").Page) {
@@ -95,20 +93,10 @@ let browserPage: import("@playwright/test").Page;
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async ({ browser }) => {
-  browserPage = await browser.newPage();
-  await browserPage.route("**/cdnjs.cloudflare.com/**", (route) =>
-  	route.abort(),
-  );
-  await browserPage.goto("http://localhost:8001/");
-  await waitForAppReady(browserPage);
-  await clearSettings(browserPage);
-  await setSettings(browserPage, {
-  	savepassword: false,
-  	autoconnect: false,
-  	showNicklist: true,
+  browserPage = await createConnectedPage(browser, {
+    settings: { savepassword: false, autoconnect: false, showNicklist: true },
+    beforeConnect: async (p) => { await injectSwipeDispatcher(p); },
   });
-  await injectSwipeDispatcher(browserPage);
-  setupEffectOrphanFilter(browserPage);
 });
 
 test.afterAll(async () => {
@@ -118,7 +106,6 @@ test.afterAll(async () => {
 // Reset page state between serial tests: close overlays, restore desktop viewport,
 // so each test starts from a known baseline.
 test.beforeEach(async () => {
-  setupEffectOrphanFilter(browserPage);
   await closeMobileOverlay(browserPage);
 
   // Restore desktop viewport — tests set their own viewport size as needed
@@ -127,8 +114,6 @@ test.beforeEach(async () => {
 });
 
 test("nicklist is visible on desktop", async () => {
-  await setSettings(browserPage, { showNicklist: true });
-  await connectToWeechat(browserPage);
   // Switch to #glowing-bear which has nick data (required for nicklist to render)
   await waitForBuffer(browserPage, "#glowing-bear", 10000);
   await switchToBuffer(browserPage, "#glowing-bear");

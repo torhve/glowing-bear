@@ -47,6 +47,7 @@
   // when hash params are applied. Uses untrack() for settings reads to prevent
   // the effect from re-running on user typing (which also updates $settings).
   $effect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
     $hashSyncVersion;
     const s = untrack(() => get(settings));
     hostField = s.hostField;
@@ -208,6 +209,7 @@
                   value={hostField}
                   oninput={(e: Event) => { hostField = (e.target as HTMLInputElement).value; validateHost(); handleHostChange(); }}
                   onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') { e.preventDefault(); handleConnect(); } }}
+                  onblur={() => validateHost()}
                   placeholder="Address"
                   extraClass={`pl-9 pr-3 ${hostInvalid ? 'border-danger' : ''}`}
                   autocapitalize="off"

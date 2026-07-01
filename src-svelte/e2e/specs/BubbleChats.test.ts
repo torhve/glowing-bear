@@ -5,15 +5,12 @@ import { botPm } from '../helpers/messages';
 import { irc } from '../helpers/irc-control';
 import { openSettings, closeSettings } from '../helpers/settings';
 
-import { setupEffectOrphanFilter } from '../helpers/pageerror';
-
 let page: import('@playwright/test').Page;
 
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
     page = await createConnectedPage(browser);
-    setupEffectOrphanFilter(page)
 });
 
 test.afterAll(async () => {
@@ -21,7 +18,6 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async () => {
-    setupEffectOrphanFilter(page)
     // Restore bot nick to default so botPm targets the gbbot2 buffer.
     await irc.botNick('gbbot2');
     await page.waitForTimeout(1000);

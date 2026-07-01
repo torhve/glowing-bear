@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { fillPortInput, waitForAppReady, clearSettings } from '../helpers/connection';
+import { fillInput } from '../helpers/input';
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
 
 // Tests that verify typed password isn't overwritten by other field edits.
@@ -14,16 +15,16 @@ test.describe('Connection Form password handling', () => {
   });
 
   test('typed password is not overwritten when editing host field', async ({ page }) => {
-  	await page.getByTestId('host-input').fill('localhost');
-  	await fillPortInput(page, '9001');
-  	await page.getByTestId('password-input').fill('my_secret_password');
+  	await fillInput(page, 'host-input', 'localhost');
+  	await fillInput(page, 'port-input', '9001');
+  	await fillInput(page, 'password-input', 'my_secret_password');
 
   	const passwordBefore = await page.getByTestId('password-input').inputValue();
   	expect(passwordBefore).toBe('my_secret_password');
 
   	// Edit host field — triggers handleHostChange() → updateSettings()
   	// In old code this would re-run the $effect and overwrite typed password
-  	await page.getByTestId('host-input').fill('example.com');
+  	await fillInput(page, 'host-input', 'example.com');
 
   	await page.getByTestId('password-input').focus();
   	const passwordAfter = await page.getByTestId('password-input').inputValue();
@@ -31,9 +32,9 @@ test.describe('Connection Form password handling', () => {
   });
 
   test('typed password is not overwritten when toggling TLS', async ({ page }) => {
-  	await page.getByTestId('host-input').fill('localhost');
-  	await fillPortInput(page, '9001');
-  	await page.getByTestId('password-input').fill('another_secret');
+  	await fillInput(page, 'host-input', 'localhost');
+  	await fillInput(page, 'port-input', '9001');
+  	await fillInput(page, 'password-input', 'another_secret');
 
   	const passwordBefore = await page.getByTestId('password-input').inputValue();
   	expect(passwordBefore).toBe('another_secret');
@@ -65,11 +66,11 @@ test.describe('Connection Form password handling', () => {
   	await expect(page.getByTestId('password-input')).toHaveValue('wrong_password');
 
   	// Type the correct password (overwriting the wrong one)
-  	await page.getByTestId('password-input').fill('testpassword123');
+  	await fillInput(page, 'password-input', 'testpassword123');
   	expect(await page.getByTestId('password-input').inputValue()).toBe('testpassword123');
 
   	// Edit another field to trigger any potential re-sync bug
-  	await page.getByTestId('host-input').fill('localhost');
+  	await fillInput(page, 'host-input', 'localhost');
   	expect(await page.getByTestId('password-input').inputValue()).toBe('testpassword123');
 
   	// Click connect — should succeed with typed password

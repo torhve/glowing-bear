@@ -1,7 +1,7 @@
 import { writable, get, derived } from "svelte/store";
 
 export const activeBufferChanged = writable(0);
-import { recordBuffer } from "$lib/stores/bufferResume";
+import { recordLastBuffer } from "$lib/stores/bufferResume";
 import { settings } from "$lib/stores/settings";
 import type {
     BufferData,
@@ -647,7 +647,7 @@ export function setActiveBuffer(bufferId: string): boolean {
         });
     }
     // Record the last-viewed buffer for reconnect auto-resume recovery.
-    recordBuffer(bufferId, buffer.fullName);
+    recordLastBuffer(buffer.fullName);
     return true;
 }
 

@@ -550,7 +550,8 @@ function scheduleReconnect() {
     }, delay);
 }
 
-async function fetchConfValue(name: string) {
+// Fetch a single WeeChat config option via infolist and update wconfig store.
+export async function fetchConfValue(name: string) {
     const msg = Protocol.formatInfolist({
         name: 'option',
         pointer: 0,

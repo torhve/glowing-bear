@@ -1,20 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, clearSettings, waitForAppReady, fillPortInput } from '../helpers/connection';
+import { connectToWeechat, clearSettings, waitForAppReady } from '../helpers/connection';
 import { switchToBuffer, waitForBuffer } from '../helpers/buffers';
 
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
-
-async function connect(page: import('@playwright/test').Page) {
-    // Clear settings to ensure consistent state (nicklist visible, quick keys enabled)
-    await clearSettings(page);
-    await page.getByTestId('host-input').clear();
-    await page.getByTestId('host-input').fill('localhost');
-    await fillPortInput(page, '9001');
-    await page.getByTestId('password-input').clear();
-    await page.getByTestId('password-input').fill('testpassword123');
-    await page.getByTestId('connect-button').click();
-    await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 15000 });
-}
 
 async function getCaretPosition(page: import('@playwright/test').Page): Promise<number> {
     return await page.evaluate(() => {
@@ -46,7 +34,8 @@ test.describe('Keyboard Shortcuts', () => {
 
     test.describe('Input Bar (connected)', () => {
         test.beforeEach(async ({ page }) => {
-            await connect(page);
+            await clearSettings(page);
+            await connectToWeechat(page);
             await expect(page.getByTestId('message-input')).toBeVisible({ timeout: 5000 });
         });
 
@@ -160,7 +149,8 @@ test.describe('Keyboard Shortcuts', () => {
 
     test.describe('Alt+[0-9] Quick Keys (connected)', () => {
         test.beforeEach(async ({ page }) => {
-            await connect(page);
+            await clearSettings(page);
+            await connectToWeechat(page);
             await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 5000 });
         });
 
@@ -191,7 +181,8 @@ test.describe('Keyboard Shortcuts', () => {
 
     test.describe('Settings-Dependent Shortcuts', () => {
         test.beforeEach(async ({ page }) => {
-            await connect(page);
+            await clearSettings(page);
+            await connectToWeechat(page);
             await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 5000 });
         });
 
@@ -237,7 +228,8 @@ test.describe('Keyboard Shortcuts', () => {
 
     test.describe('Buffer Search Shortcuts (connected)', () => {
         test.beforeEach(async ({ page }) => {
-            await connect(page);
+            await clearSettings(page);
+            await connectToWeechat(page);
             await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 5000 });
         });
 
@@ -259,7 +251,8 @@ test.describe('Keyboard Shortcuts', () => {
 
     test.describe('Buffer Search Enter', () => {
         test.beforeEach(async ({ page }) => {
-            await connect(page);
+            await clearSettings(page);
+            await connectToWeechat(page);
             await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 5000 });
         });
 
@@ -321,7 +314,8 @@ test.describe('Keyboard Shortcuts', () => {
 
     test.describe('Modal Escape Close', () => {
         test.beforeEach(async ({ page }) => {
-            await connect(page);
+            await clearSettings(page);
+            await connectToWeechat(page);
             await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 5000 });
         });
 
@@ -342,7 +336,8 @@ test.describe('Keyboard Shortcuts', () => {
 
     test.describe('Disconnect via Escape', () => {
         test.beforeEach(async ({ page }) => {
-            await connect(page);
+            await clearSettings(page);
+            await connectToWeechat(page);
         });
 
         test('should blur input on single Escape without disconnecting', async ({ page }) => {

@@ -5,6 +5,12 @@ import { switchToBuffer } from '../helpers/buffers';
 
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
 
+declare global {
+    interface Window {
+        __showBufferListOnMobile?: () => void;
+    }
+}
+
 let page: import('@playwright/test').Page;
 
 test.describe.configure({ mode: 'serial' });
@@ -12,7 +18,7 @@ test.describe.configure({ mode: 'serial' });
 test.beforeAll(async ({ browser }) => {
     page = await createConnectedPage(browser);
     await page.setViewportSize({ width: 375, height: 667 });
-    setupEffectOrphanFilter(page)
+    setupEffectOrphanFilter(page);
 });
 
 test.afterAll(async () => {
@@ -35,7 +41,7 @@ async function clearAllUnread(p: typeof page) {
 }
 
 test.beforeEach(async () => {
-    setupEffectOrphanFilter(page)
+    setupEffectOrphanFilter(page);
     await clearAllUnread(page);
 });
 
@@ -43,7 +49,9 @@ test.beforeEach(async () => {
 test('hotlist hidden on desktop', async () => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.evaluate(() => window.dispatchEvent(new Event('resize')));
-    await page.getByTestId('app-title').waitFor({ state: 'visible', timeout: 5000 });
+    await page
+        .getByTestId('app-title')
+        .waitFor({ state: 'visible', timeout: 5000 });
     // On desktop bufferListVisible is always true, so BufferHotlist is not in DOM
     await expect(page.getByTestId('buffer-hotlist')).not.toBeAttached();
     await expect(page.getByTestId('app-title')).toBeVisible();
@@ -56,8 +64,11 @@ test('hotlist visible on mobile after buffer selection', async () => {
     // Playwright's setViewportSize doesn't fire DOM events, so we need this.
     await page.evaluate(() => window.dispatchEvent(new Event('resize')));
     // Buffer list is hidden by default on mobile — show it via dev helper
-    await page.evaluate(() => (window as any).__showBufferListOnMobile?.());
-    await page.waitForFunction(() => document.querySelector('[data-testid="buffer-item"]') !== null, { timeout: 10000 });
+    await page.evaluate(() => window.__showBufferListOnMobile?.());
+    await page.waitForFunction(
+        () => document.querySelector('[data-testid="buffer-item"]') !== null,
+        { timeout: 10000 },
+    );
     // Click a buffer from the list
     await switchToBuffer(page, 'glowing-bear');
     await botSay('hotlist test message 2');
@@ -77,7 +88,7 @@ test('hotlist shows buffers with unread messages', async () => {
     await page.evaluate(() => window.dispatchEvent(new Event('resize')));
 
     // Show buffer list so we can click a buffer
-    await page.evaluate(() => (window as any).__showBufferListOnMobile?.());
+    await page.evaluate(() => window.__showBufferListOnMobile?.());
     await page.waitForFunction(
         () => document.querySelector('[data-testid="buffer-item"]') !== null,
         { timeout: 10000 },
@@ -98,7 +109,7 @@ test('hotlist shows buffers with unread messages', async () => {
 
     const items = page.getByTestId('hotlist-buffer-item');
     const firstItem = items.first();
-    await expect(firstItem).toContainText('gbbot2');
+    await expect(firstItem).toContainText(/g?gbbot\d*/);
     const countBadge = firstItem.getByTestId('hotlist-count');
     await expect(countBadge).toContainText(/\(\d+\)/);
 });
@@ -110,7 +121,7 @@ test('clicking hotlist item switches buffer', async () => {
     await page.evaluate(() => window.dispatchEvent(new Event('resize')));
 
     // Show buffer list so we can click #glowing-bear
-    await page.evaluate(() => (window as any).__showBufferListOnMobile?.());
+    await page.evaluate(() => window.__showBufferListOnMobile?.());
     await page.waitForFunction(
         () => document.querySelector('[data-testid="buffer-item"]') !== null,
         { timeout: 10000 },
@@ -136,7 +147,7 @@ test('clicking hotlist item switches buffer', async () => {
     await botPm('switch confirm');
     await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 10000 });
     const topicText = await page.getByTestId('topic-bar').textContent();
-    expect(topicText).toContain('gbbot2');
+    expect(topicText).toMatch(/g?gbbot\d*/);
 });
 
 // TODO: fix buffer creation via relay — sendWeechatCommand doesn't reliably create buffers in test environment

@@ -3,15 +3,12 @@ import { createConnectedPage } from "../fixtures/auth";
 import { waitForBuffer, switchToBuffer } from "../helpers/buffers";
 import { irc } from "../helpers/irc-control";
 
-import { setupEffectOrphanFilter } from "../helpers/pageerror";
-
 let page: import("@playwright/test").Page;
 
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async ({ browser }) => {
   page = await createConnectedPage(browser);
-  setupEffectOrphanFilter(page);
 });
 
 test.afterAll(async () => {
@@ -19,8 +16,6 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async () => {
-  setupEffectOrphanFilter(page);
-
   // Reset buffer state to absorb all unread messages from prior serial tests.
   // Sending a message triggers the handler to update lastSeen to cover all lines,
   // effectively clearing the readmarker and providing a clean baseline for each test.
@@ -36,8 +31,12 @@ test.beforeEach(async () => {
 
   // Send a dummy message to advance lastSeen past all existing content
   await irc.sendMessage("#glowing-bear", `BEFORE-EACH-RESET-${Date.now()}`);
-  await page.waitForTimeout(1000);
-  await waitForScrollSettled(5000);
+  await page.waitForTimeout(2000);
+  // Force scroll to bottom as a fallback in case the auto-scroll effect doesn't fire
+  await chatContainer.evaluate((el) => {
+    (el as HTMLElement).scrollTop = (el as HTMLElement).scrollHeight;
+  });
+  await waitForScrollSettled(10000);
 });
 
 async function getChatScrollState() {

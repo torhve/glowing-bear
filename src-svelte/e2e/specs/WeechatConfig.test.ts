@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { createConnectedPage } from '../fixtures/auth';
-import { getConfigValue, setSettings } from '../helpers/connection';
+import { getConfigValue, setSettings, sendWeechatCommand } from '../helpers/connection';
 
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
 
@@ -31,15 +31,17 @@ test('should have wconfig populated after connect', async () => {
     }).toPass({ timeout: 10000, intervals: [500] });
 });
 
-test.skip('should set a weechat option via relay and reflect in wconfig', async ({ page: p }) => {
-    // Complex test requiring disconnect/reconnect cycle - skipped due to flaky disconnect behavior
-    // The /set command is verified working via the persist test below
+// Skipped: requires Promise-based command response handling that doesn't work
+// across Playwright's page.evaluate boundary (WS callbacks resolve inside browser
+// but can't be awaited from the test runner). Needs architecture change: expose
+// fetchConfValue results via window-level flags or use REST API polling.
+test.skip('should set a weechat option via relay and reflect in wconfig', async () => {
 });
 
-test.skip('should persist setting across reconnect', async ({ page: p }) => {
-    // Complex test requiring disconnect/reconnect cycle - skipped due to flaky disconnect behavior
+// Skipped: same reason as above, plus flaky disconnect/reconnect behavior
+test.skip('should persist setting across reconnect', async () => {
 });
 
-test.skip('should handle invalid option gracefully', async ({ page: p }) => {
-    // Requires connected state which beforeEach doesn't provide - skipped
+// Skipped: same reason as above — need to verify error handling on invalid /set
+test.skip('should handle invalid option gracefully', async () => {
 });

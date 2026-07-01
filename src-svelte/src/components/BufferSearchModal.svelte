@@ -41,8 +41,9 @@
     }, [])
   );
 
-  function handleBufferClick(buffer: BufferData) {
-    switchBuffer(buffer.id);
+  async function handleBufferClick(buffer: BufferData) {
+    const switched = await switchBuffer(buffer.id);
+    if (!switched) return;
     bufferSearchQuery = '';
     selectedIndex = 0;
     (document.getElementById('buffer-search-modal') as HTMLElement)?.hidePopover();
@@ -63,10 +64,12 @@
       return;
     }
 
-    if (key === 'Enter' && groupedBuffers.length > 0) {
+    if (key === 'Enter') {
       e.preventDefault();
-      const selectedGroup = groupedBuffers[selectedIndex]!;
-      handleBufferClick(selectedGroup.buffers[0]!);
+      if (groupedBuffers.length > 0) {
+        const selectedGroup = groupedBuffers[selectedIndex]!;
+        handleBufferClick(selectedGroup.buffers[0]!);
+      }
     }
   }
 

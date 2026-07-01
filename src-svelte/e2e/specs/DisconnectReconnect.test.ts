@@ -1,24 +1,15 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, clearSettings, setSettings, waitForAppReady, reconnect, fillPortInput } from '../helpers/connection';
-
-import { setupEffectOrphanFilter } from '../helpers/pageerror';
+import { setSettings, reconnect } from '../helpers/connection';
+import { createConnectedPage } from '../fixtures/auth';
 
 let page: import('@playwright/test').Page;
 
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
-    page = await browser.newPage();
-    await page.route('**/cdnjs.cloudflare.com/**', (route) => route.abort());
-    await page.goto('http://localhost:8001/');
-    await waitForAppReady(page);
-    await clearSettings(page);
-    await setSettings(page, {
-        savepassword: false,
-        autoconnect: false,
+    page = await createConnectedPage(browser, {
+        settings: { savepassword: false, autoconnect: false },
     });
-    setupEffectOrphanFilter(page)
-    await connectToWeechat(page);
 });
 
 test.afterAll(async () => {
@@ -26,7 +17,6 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async () => {
-    setupEffectOrphanFilter(page)
 });
 
 
@@ -56,7 +46,7 @@ test('reconnect preserves settings and reconnects successfully', async () => {
     // Ensure connected state (previous serial test may have disconnected)
     if (!(await page.getByTestId('disconnect-button').isVisible())) {
         await page.getByTestId('host-input').fill('localhost');
-        await fillPortInput(page, '9001');
+        await page.getByTestId('port-input').fill('9001');
         await page.getByTestId('password-input').fill('testpassword123');
         await page.getByTestId('connect-button').click();
         await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
@@ -66,7 +56,7 @@ test('reconnect preserves settings and reconnects successfully', async () => {
     await expect(page.getByTestId('host-input')).toBeVisible({ timeout: 15000 });
 
     await page.getByTestId('host-input').fill('localhost');
-    await fillPortInput(page, '9001');
+    await page.getByTestId('port-input').fill('9001');
     await page.getByTestId('password-input').fill('testpassword123');
     await page.getByTestId('connect-button').click();
 
@@ -78,7 +68,7 @@ test('disconnect toast shows reconnect button when autoconnect disabled', async 
     // Ensure connected state (previous serial test may have disconnected)
     if (!(await page.getByTestId('disconnect-button').isVisible())) {
         await page.getByTestId('host-input').fill('localhost');
-        await fillPortInput(page, '9001');
+        await page.getByTestId('port-input').fill('9001');
         await page.getByTestId('password-input').fill('testpassword123');
         await page.getByTestId('connect-button').click();
         await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
@@ -98,7 +88,7 @@ test('disconnect toast shows reconnect button when autoconnect disabled', async 
 
     // Reconnect by filling in credentials and connecting
     await page.getByTestId('host-input').fill('localhost');
-    await fillPortInput(page, '9001');
+    await page.getByTestId('port-input').fill('9001');
     await page.getByTestId('password-input').fill('testpassword123');
     await page.getByTestId('connect-button').click();
 

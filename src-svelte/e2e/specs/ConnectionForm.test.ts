@@ -117,6 +117,7 @@ test.describe('Features', () => {
         await portInput.pressSequentially('9001', { delay: 50 });
         await savePasswordCheck.check();
         await page.reload();
+        await waitForAppReady(page);
         await expect(hostInput).toHaveValue('localhost');
         await expect(portInput).toHaveValue('9001');
         await expect(savePasswordCheck).toBeChecked();

@@ -42,7 +42,7 @@ vi.mock('$lib/stores/bufferResume', () => ({
         subscribe: (fn: (val: string) => void) => { fn(''); return () => {}; },
         set: vi.fn(),
     },
-    recordBuffer: vi.fn(),
+    recordLastBuffer: vi.fn(),
     shouldResume: vi.fn().mockReturnValue(false),
 }));
 

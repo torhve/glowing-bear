@@ -4,18 +4,14 @@ import { irc } from '../helpers/irc-control';
 import { switchToBuffer, waitForBuffer } from '../helpers/buffers';
 
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
+import { createConnectedPage } from '../fixtures/auth';
 
 let page: import('@playwright/test').Page;
 
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
-    page = await browser.newPage();
-    await page.goto('http://localhost:8001/');
-    await waitForAppReady(page);
-    await clearSettings(page);
-    setupEffectOrphanFilter(page)
-    await connectToWeechat(page);
+    page = await createConnectedPage(browser);
 });
 
 test.afterAll(async () => {

@@ -1,25 +1,16 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, clearSettings, setSettings, waitForAppReady, reconnect, disconnect, fillPortInput } from '../helpers/connection';
+import { setSettings, reconnect, disconnect } from '../helpers/connection';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
-
-import { setupEffectOrphanFilter } from '../helpers/pageerror';
+import { createConnectedPage } from '../fixtures/auth';
 
 let page: import('@playwright/test').Page;
 
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
-    page = await browser.newPage();
-    await page.route('**/cdnjs.cloudflare.com/**', (route) => route.abort());
-    await page.goto('http://localhost:8001/');
-    await waitForAppReady(page);
-    await clearSettings(page);
-    await setSettings(page, {
-        savepassword: false,
-        autoconnect: false,
+    page = await createConnectedPage(browser, {
+        settings: { savepassword: false, autoconnect: false },
     });
-    setupEffectOrphanFilter(page)
-    await connectToWeechat(page);
 });
 
 test.afterAll(async () => {
@@ -27,7 +18,6 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async () => {
-    setupEffectOrphanFilter(page)
 });
 
 test('should restore last viewed buffer after reconnect', async () => {
@@ -39,9 +29,10 @@ test('should restore last viewed buffer after reconnect', async () => {
     await switchToBuffer(page, '#glowing-bear');
     await expect(page.getByTestId('topic-bar')).toContainText('glowing-bear');
 
-    // Verify gb-last-buffer was saved
+    // Verify gb-last-buffer was saved (stores fullName, e.g. "irc.gbtest.#glowing-bear")
     const savedBuffer = await page.evaluate(() => localStorage.getItem('gb-last-buffer'));
     expect(savedBuffer).not.toBeNull();
+    expect(savedBuffer).toContain('glowing-bear');
 
     // Disconnect and reconnect, preserving gb-last-buffer
     await disconnect(page);
@@ -50,7 +41,7 @@ test('should restore last viewed buffer after reconnect', async () => {
     // Reconnect while preserving the saved last buffer
     await setSettings(page, { savepassword: false, autoconnect: false });
     await page.getByTestId('host-input').fill('localhost');
-    await fillPortInput(page, '9001');
+    await page.getByTestId('port-input').fill('9001');
     await page.getByTestId('password-input').fill('testpassword123');
     await page.getByTestId('connect-button').click();
     await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
@@ -85,7 +76,7 @@ test('should restore last viewed buffer after disconnect/reconnect via helper', 
 });
 
 test('should fall back to weechat core when last viewed buffer no longer exists', async () => {
-    // First do a clean reconnect (clearing gb-last-buffer) to establish known state
+    // First do a clean reconnect (clearing saved last buffer) to establish known state
     await reconnect(page);
     await waitForBuffer(page, 'gbtest', 15000);
 
@@ -93,16 +84,16 @@ test('should fall back to weechat core when last viewed buffer no longer exists'
     await switchToBuffer(page, '#glowing-bear');
     await expect(page.getByTestId('topic-bar')).toContainText('glowing-bear');
 
-    // Manually set a non-existent buffer ID in localStorage to simulate
+    // Manually set a non-existent fullName in localStorage to simulate
     // the case where the last-viewed buffer was closed/removed
-    await page.evaluate(() => localStorage.setItem('gb-last-buffer', 'nonexistent-buffer-id-12345'));
+    await page.evaluate(() => localStorage.setItem('gb-last-buffer', 'irc.nonexistent.#channel-12345'));
 
     // Disconnect and reconnect manually (not using helper, to preserve our fake value)
     await disconnect(page);
     await expect(page.getByTestId('host-input')).toBeVisible({ timeout: 15000 });
     await setSettings(page, { savepassword: false, autoconnect: false });
     await page.getByTestId('host-input').fill('localhost');
-    await fillPortInput(page, '9001');
+    await page.getByTestId('port-input').fill('9001');
     await page.getByTestId('password-input').fill('testpassword123');
     await page.getByTestId('connect-button').click();
     await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });

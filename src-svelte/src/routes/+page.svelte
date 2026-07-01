@@ -14,7 +14,7 @@
   import { get } from 'svelte/store';
   import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig, sortedVisibleBuffers, checkAndNavigatePendingNotificationBuffer } from '$lib/stores/models';
   import { connectionState, setReconnectAttempts, setErrors } from '$lib/stores/connectionStore';
-  import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer, getWs } from '$lib/stores/connectionManager';
+  import { connect, fetchConfValue, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer, getWs } from '$lib/stores/connectionManager';
   import { Protocol } from '$lib/weechat';
   import { initNotifications, updateTitle, updateFavico, onDisconnect } from '$lib/notifications';
   import { parseRelayUrl, isPopoverOpen, bufferHasNicklist, modifyTextareaValue } from '$lib/utils';
@@ -26,6 +26,7 @@
     (window as any).__connected = connected;
     (window as any).__connectionState = connectionState;
     (window as any).__sendWeechatCommand = sendWeeChatCommand;
+    (window as any).__fetchConfValue = fetchConfValue;
     (window as any).__setGbSettings = updateSettings;
     (window as any).__setReconnectAttempts = setReconnectAttempts;
     (window as any).__Protocol = Protocol;

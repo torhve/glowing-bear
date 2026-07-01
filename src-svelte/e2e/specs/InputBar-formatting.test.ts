@@ -1,27 +1,16 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, clearSettings, setSettings, waitForAppReady, reconnect } from '../helpers/connection';
+import { setSettings, reconnect } from '../helpers/connection';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
-
-import { setupEffectOrphanFilter } from '../helpers/pageerror';
+import { createConnectedPage } from '../fixtures/auth';
 
 let page: import('@playwright/test').Page;
 
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
-    page = await browser.newPage();
-    await page.route('**/cdnjs.cloudflare.com/**', (route) => route.abort());
-    await page.goto('http://localhost:8001/');
-    await waitForAppReady(page);
-    await clearSettings(page);
-    await setSettings(page, {
-        savepassword: false,
-        autoconnect: false,
-        enableEmojify: true,
-        enableFormatting: true,
+    page = await createConnectedPage(browser, {
+        settings: { savepassword: false, autoconnect: false, enableEmojify: true, enableFormatting: true },
     });
-    setupEffectOrphanFilter(page)
-    await connectToWeechat(page);
     await waitForBuffer(page, '#glowing-bear', 15000);
     await switchToBuffer(page, '#glowing-bear');
 });
@@ -31,7 +20,6 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async () => {
-    setupEffectOrphanFilter(page)
 });
 
 // Helper: read the raw DOM value of the textarea

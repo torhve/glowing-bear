@@ -1,20 +1,15 @@
 import { test, expect } from '@playwright/test';
-import { clearSettings, connectToWeechat, waitForAppReady } from '../helpers/connection';
+import { connectToWeechat, waitForAppReady } from '../helpers/connection';
 import { openSettings, closeSettings } from '../helpers/settings';
 
-import { setupEffectOrphanFilter } from '../helpers/pageerror';
+import { createConnectedPage } from '../fixtures/auth';
 
 let page: import('@playwright/test').Page;
 
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
-    page = await browser.newPage();
-    await page.goto('http://localhost:8001/');
-    await waitForAppReady(page);
-    await clearSettings(page);
-    setupEffectOrphanFilter(page)
-    await connectToWeechat(page);
+    page = await createConnectedPage(browser);
 });
 
 test.afterAll(async () => {
@@ -22,7 +17,6 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async () => {
-    setupEffectOrphanFilter(page)
     const modalVisible = await page.getByTestId('settings-modal').isVisible().catch(() => false);
     if (modalVisible) {
         await closeSettings(page);
@@ -103,7 +97,7 @@ test('should update text field when slider moves', async () => {
     const textInput = page.getByTestId('font-size-input');
 
     // Type a new value into the text field first to set initial state
-    await textInput.fill('20px');
+    await textInput.pressSequentially('20px', { delay: 10 });
 
     // Wait for the effect to sync the slider position
     await expect(async () => {
@@ -111,8 +105,8 @@ test('should update text field when slider moves', async () => {
         expect(val).toBe('20');
     }).toPass({ timeout: 2000, intervals: [50] });
 
-    // Now move the slider to 28
-    await slider.evaluate((el) => { (el as HTMLInputElement).value = '28'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+    // Now move the slider to 28 by filling the slider value
+    await slider.fill('28');
 
     // Wait for text field to update
     await expect(textInput).toHaveValue('28px', { timeout: 2000 });

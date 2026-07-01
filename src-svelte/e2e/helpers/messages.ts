@@ -7,17 +7,17 @@ export async function sendMessage(page: Page, message: string) {
   await input.press('Enter');
 }
 
-// sends a message from ggbbot to the channel #glowing-bear
+// sends a message from gbbot to the channel #glowing-bear
 export async function botSay(text: string) {
   await irc.sendMessage('#glowing-bear', text);
 }
 
-// sends a message from ggbbot to the channel #glowing-bear
+// sends a message from gbbot to the channel #glowing-bear
 export async function botNotice(text: string) {
   await irc.sendNotice('#glowing-bear', text);
 }
 
-// sends a message from ggbbot to the channel #glowing-bear
+// sends a message from gbbot to the channel #glowing-bear
 export async function botSayColored(text: string, fg?: string, bg?: string) {
   await irc.sendColored('#glowing-bear', text, fg, bg);
 }
