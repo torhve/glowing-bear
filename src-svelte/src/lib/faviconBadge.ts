@@ -145,3 +145,65 @@ export function resetBadge(): void {
         }
     }
 }
+
+/**
+ * Generate a standalone badge PNG for Windows taskbar overlay icons.
+ * Renders a colored circle with count text on a transparent 32x32 canvas,
+ * then returns raw PNG bytes as Uint8Array for Tauri's setOverlayIcon API.
+ */
+export async function createOverlayBadgePNG(
+    count: number,
+    type: 'notification' | 'unread',
+): Promise<Uint8Array> {
+    const canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas 2D context unavailable');
+
+    // Transparent background — Win32 composites over the taskbar icon
+    ctx.clearRect(0, 0, 32, 32);
+
+    // Get colors from CSS variables
+    let bgColor: string;
+    let textColor: string;
+    try {
+        const computedStyle = getComputedStyle(document.documentElement || document.body);
+        const rawBg = type === 'notification'
+            ? computedStyle.getPropertyValue('--gb-danger').trim()
+            : computedStyle.getPropertyValue('--gb-success').trim();
+        bgColor = rawBg || (type === 'notification' ? '#e06c75' : '#7fd88f');
+        textColor = lightenColor(bgColor, 0.2);
+    } catch {
+        bgColor = type === 'notification' ? '#e06c75' : '#7fd88f';
+        textColor = '#ffffff';
+    }
+
+    // Draw badge circle — centered on canvas for overlay positioning
+    const radius = 9;
+    const cx = 16;
+    const cy = 16;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fillStyle = bgColor;
+    ctx.fill();
+
+    // Draw count text
+    const formatted = formatCount(count);
+    const fontSize = formatted.length > 2 ? 9 : 11;
+    ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = textColor;
+    ctx.fillText(formatted, cx, cy + 0.5);
+
+    // Convert to PNG bytes via data URL
+    const dataUrl = canvas.toDataURL('image/png');
+    const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+}

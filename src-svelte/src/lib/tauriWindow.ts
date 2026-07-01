@@ -1,5 +1,7 @@
 // Tauri window utilities — lazy-loaded to avoid import errors in browser context
 
+import { createOverlayBadgePNG } from './faviconBadge';
+
 let tauriWindow: typeof import('@tauri-apps/api/window') | null = null;
 
 // Detect whether we are running inside a Tauri webview
@@ -81,14 +83,16 @@ async function closeWindow(): Promise<void> {
     }
 }
 
-// Set the OS/taskbar badge count (no-op outside Tauri, no-op on Linux)
-// On macOS, uses setBadgeLabel(string) since setBadgeCount displays "0" instead of clearing.
-async function setBadgeCount(count: number): Promise<void> {
+// Set the OS/taskbar badge count (no-op outside Tauri)
+// macOS: setBadgeLabel, Windows: setOverlayIcon with generated PNG, Linux: setBadgeCount
+async function setBadgeCount(opts: { count: number; type: 'notification' | 'unread' }): Promise<void> {
     if (!isTauri()) return;
     await ensureTauriWindow();
     if (!tauriWindow) return;
     try {
         const win = tauriWindow.getCurrentWindow();
+        const { count, type } = opts;
+
         if (isMacOSPlatform()) {
             // macOS: use setBadgeLabel — pass undefined to clear the badge
             if (count > 0) {
@@ -96,8 +100,16 @@ async function setBadgeCount(count: number): Promise<void> {
             } else {
                 await win.setBadgeLabel(undefined);
             }
+        } else if (isWindowsPlatform()) {
+            // Windows: setBadgeCount unsupported — use setOverlayIcon with numbered badge PNG
+            if (count > 0) {
+                const pngBytes = await createOverlayBadgePNG(count, type);
+                await win.setOverlayIcon(pngBytes);
+            } else {
+                await win.setOverlayIcon(undefined);
+            }
         } else {
-            // Windows/Linux: use setBadgeCount (number-based)
+            // Linux: use setBadgeCount (number-based)
             await win.setBadgeCount(count);
         }
     } catch (e) {

@@ -220,15 +220,15 @@ export function updateFavico(): void {
     if (totalNotifications > 0) {
         void drawBadge(totalNotifications, 'notification');
         try { navigator.setAppBadge(totalNotifications); } catch { /* not supported */ }
-        void setBadgeCount(totalNotifications);
+        void setBadgeCount({ count: totalNotifications, type: 'notification' });
     } else if (totalUnread > 0) {
         void drawBadge(totalUnread, 'unread');
         try { navigator.setAppBadge(totalUnread); } catch { /* not supported */ }
-        void setBadgeCount(totalUnread);
+        void setBadgeCount({ count: totalUnread, type: 'unread' });
     } else {
         resetBadge();
         try { navigator.clearAppBadge(); } catch { /* not supported */ }
-        void setBadgeCount(0);
+        void setBadgeCount({ count: 0, type: 'unread' });
     }
 }
 
@@ -283,7 +283,7 @@ export async function initNotifications(): Promise<void> {
 export function onDisconnect(): void {
     cancelAll();
     resetBadge();
-    void setBadgeCount(0);
+    void setBadgeCount({ count: 0, type: 'unread' });
     if (typeof document !== 'undefined') {
         document.title = 'Glowing Bear';
     }
