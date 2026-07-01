@@ -30,12 +30,10 @@ export default defineConfig({
   },
   build: {
     target: 'es2022',
-    commonjsOptions: {
-      include: [/node_modules/],
-    },
   },
   server: {
     port: 8001,
+    forwardConsole: true,
     fs: {
       allow: ['src-svelte/src'],
     },
