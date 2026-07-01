@@ -1,59 +1,45 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, clearSettings, setSettings, waitForAppReady, reconnect, fillPortInput } from '../helpers/connection';
+import { setSettings, reconnect } from '../helpers/connection';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
 
-import { setupEffectOrphanFilter } from '../helpers/pageerror';
+import { createConnectedPage } from '../fixtures/auth';
 
 let page: import('@playwright/test').Page;
 
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
-    page = await browser.newPage();
-    await page.route('**/cdnjs.cloudflare.com/**', (route) => route.abort());
-
-    // Mock Audio to capture constructor calls for sound notification tests
-    await page.addInitScript(() => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (window as any).__audioCalls = [];
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const OrigAudio = (window as any).Audio || function () {};
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (window as any).Audio = function (src: unknown) {
+    page = await createConnectedPage(browser, {
+        initScript: () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (window as any).__audioCalls.push(src);
-            return new OrigAudio(src);
-        };
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (window as any).Audio.prototype.play = function () {};
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (window as any).Audio.prototype.pause = function () {};
-
-        // Force document.hidden = true so playNotificationSound triggers in headless
-        try { Object.defineProperty(document, 'hidden', { value: true, writable: false, configurable: true }); } catch { /* noop */ }
-
-        // Mock playNotificationSound to log and call Audio
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (window as any).__playNotificationSound = function () {
+            (window as any).__audioCalls = [];
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (window as any).__audioCalls.push('playNotificationSound');
-            console.log('[notification] playing notification sound');
-        };
-    });
+            const OrigAudio = (window as any).Audio || function () {};
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (window as any).Audio = function (src: unknown) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (window as any).__audioCalls.push(src);
+                return new OrigAudio(src);
+            };
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (window as any).Audio.prototype.play = function () {};
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (window as any).Audio.prototype.pause = function () {};
 
-    await page.goto('http://localhost:8001/');
-    await waitForAppReady(page);
-    await clearSettings(page);
-    await setSettings(page, {
-        savepassword: false,
-        autoconnect: false,
-        soundnotification: true,
+            // Force document.hidden = true so playNotificationSound triggers in headless
+            try { Object.defineProperty(document, 'hidden', { value: true, writable: false, configurable: true }); } catch { /* noop */ }
+
+            // Mock playNotificationSound to log and call Audio
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (window as any).__playNotificationSound = function () {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (window as any).__audioCalls.push('playNotificationSound');
+                console.log('[notification] playing notification sound');
+            };
+        },
+        settings: { savepassword: false, autoconnect: false, soundnotification: true },
     });
-    setupEffectOrphanFilter(page)
-    await connectToWeechat(page);
-    await waitForBuffer(page, '#glowing-bear', 15000);
-    await switchToBuffer(page, '#glowing-bear');
 });
 
 test.afterAll(async () => {
@@ -61,7 +47,6 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async () => {
-    setupEffectOrphanFilter(page)
     await page.evaluate(() => {
         const w = window as unknown as Record<string, unknown>;
         w.__audioCalls = [];

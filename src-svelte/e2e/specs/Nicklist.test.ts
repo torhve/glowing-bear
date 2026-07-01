@@ -1,27 +1,17 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, clearSettings, setSettings, waitForAppReady } from '../helpers/connection';
+import { setSettings } from '../helpers/connection';
 import { openSettings, closeSettings } from '../helpers/settings';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
-
-import { setupEffectOrphanFilter } from '../helpers/pageerror';
+import { createConnectedPage } from '../fixtures/auth';
 
 let page: import('@playwright/test').Page;
 
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
-    page = await browser.newPage();
-    await page.route('**/cdnjs.cloudflare.com/**', (route) => route.abort());
-    await page.goto('http://localhost:8001/');
-    await waitForAppReady(page);
-    await clearSettings(page);
-    await setSettings(page, {
-        savepassword: false,
-        autoconnect: false,
-        showNicklist: true,
+    page = await createConnectedPage(browser, {
+        settings: { savepassword: false, autoconnect: false, showNicklist: true },
     });
-    setupEffectOrphanFilter(page)
-    await connectToWeechat(page);
     // Switch to #glowing-bear which has nick data (required for nicklist to render on desktop)
     await waitForBuffer(page, '#glowing-bear', 15000);
     await switchToBuffer(page, '#glowing-bear');
@@ -33,7 +23,6 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async () => {
-    setupEffectOrphanFilter(page)
 });
 
 test('should show nicklist button in topbar', async () => {

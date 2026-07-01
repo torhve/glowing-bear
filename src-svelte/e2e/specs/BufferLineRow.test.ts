@@ -368,6 +368,6 @@ test.describe('prefix truncation', () => {
         const prefixText = await prefixCell.textContent();
         expect(prefixText ?? '').toContain('+');
 
-        await irc.botNick('ggbbot');
+        await irc.botNick('gbbot');
     });
 });

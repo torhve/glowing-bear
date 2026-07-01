@@ -236,6 +236,7 @@ export function updateFavico(): void {
  * Play a notification sound
  */
 export function playNotificationSound(): void {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     try { ((window as any).__playNotificationSoundCalls = (window as any).__playNotificationSoundCalls || []).push('called'); } catch { /* noop */ }
 
     const s = get(settings);

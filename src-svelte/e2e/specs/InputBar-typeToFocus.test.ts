@@ -1,7 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, clearSettings, waitForAppReady, fillPortInput } from '../helpers/connection';
-
-import { setupEffectOrphanFilter } from '../helpers/pageerror';
+import { createConnectedPage } from '../fixtures/auth';
 
 // Simulate the type-to-focus behavior: blur any focused element, then focus the input and insert a character.
 // This replicates what handleTypeToFocus does in +page.svelte since Playwright's keyboard events
@@ -21,25 +19,14 @@ async function simulateTypeToFocus(page: import('@playwright/test').Page, key: s
     }, key);
 }
 
-async function connect(page: import('@playwright/test').Page) {
-    await page.getByTestId('host-input').clear();
-    await page.getByTestId('host-input').fill('localhost');
-    await fillPortInput(page, '9001');
-    await page.getByTestId('password-input').clear();
-    await page.getByTestId('password-input').fill('testpassword123');
-    await page.getByTestId('connect-button').click();
-    await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 15000 });
-}
+let page: import('@playwright/test').Page;
 
 test.describe('Type to Focus (Slack-style input capture)', () => {
-    test.beforeEach(async ({ page }) => {
-        setupEffectOrphanFilter(page)
-        await page.goto('http://localhost:8001/');
-        await waitForAppReady(page);
+    test.beforeEach(async ({ browser }) => {
+        page = await createConnectedPage(browser);
     });
 
-    test('should focus input and insert character when typing outside the input', async ({ page }) => {
-        await connect(page);
+    test('should focus input and insert character when typing outside the input', async () => {
         await expect(page.getByTestId('message-input')).toBeVisible({ timeout: 5000 });
 
         const input = page.getByTestId('message-input');
@@ -55,8 +42,7 @@ test.describe('Type to Focus (Slack-style input capture)', () => {
         await expect(input).toHaveValue('h');
     });
 
-    test('should insert character at cursor position when typing outside the input', async ({ page }) => {
-        await connect(page);
+    test('should insert character at cursor position when typing outside the input', async () => {
         const input = page.getByTestId('message-input');
         await expect(input).toBeVisible({ timeout: 5000 });
 
@@ -92,8 +78,7 @@ test.describe('Type to Focus (Slack-style input capture)', () => {
         await expect(input).toHaveValue(/^helloaworld$/);
     });
 
-    test('should not double-insert when already focused in the input', async ({ page }) => {
-        await connect(page);
+    test('should not double-insert when already focused in the input', async () => {
         const input = page.getByTestId('message-input');
         await expect(input).toBeVisible({ timeout: 5000 });
 
@@ -105,8 +90,7 @@ test.describe('Type to Focus (Slack-style input capture)', () => {
         await expect(input).toHaveValue('ab');
     });
 
-    test('should not capture when modifier key is held', async ({ page }) => {
-        await connect(page);
+    test('should not capture when modifier key is held', async () => {
         const input = page.getByTestId('message-input');
         await expect(input).toBeVisible({ timeout: 5000 });
 
@@ -122,8 +106,7 @@ test.describe('Type to Focus (Slack-style input capture)', () => {
         await expect(input).not.toBeFocused();
     });
 
-    test('should not capture non-printable keys', async ({ page }) => {
-        await connect(page);
+    test('should not capture non-printable keys', async () => {
         const input = page.getByTestId('message-input');
         await expect(input).toBeVisible({ timeout: 5000 });
 
@@ -139,9 +122,9 @@ test.describe('Type to Focus (Slack-style input capture)', () => {
         await expect(input).not.toBeFocused();
     });
 
-    test('should not capture on mobile viewport sizes', async ({ page }) => {
+    test('should not capture on mobile viewport sizes', async () => {
         await page.setViewportSize({ width: 375, height: 667 });
-        await connect(page);
+        await page.waitForTimeout(500);
 
         const input = page.getByTestId('message-input');
         await expect(input).toBeVisible({ timeout: 5000 });
@@ -154,8 +137,7 @@ test.describe('Type to Focus (Slack-style input capture)', () => {
         await expect(input).not.toBeFocused();
     });
 
-    test('should handle multiple sequential keystrokes outside the input', async ({ page }) => {
-        await connect(page);
+    test('should handle multiple sequential keystrokes outside the input', async () => {
         const input = page.getByTestId('message-input');
         await expect(input).toBeVisible({ timeout: 5000 });
 

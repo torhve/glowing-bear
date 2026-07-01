@@ -11,6 +11,7 @@
     autocapitalize = 'off',
     onkeydown = undefined,
     oninput = undefined,
+    onblur = undefined,
     size = 'md',
     variant = 'default',
     'data-testid': dataTestId = ''
@@ -24,6 +25,7 @@
     autocapitalize?: string;
     onkeydown?: KeyboardEventHandler<HTMLInputElement>;
     oninput?: EventHandler<Event, HTMLInputElement>;
+    onblur?: EventHandler<FocusEvent, HTMLInputElement>;
     size?: 'sm' | 'md' | 'lg';
     variant?: 'default' | 'search';
     'data-testid'?: string;
@@ -41,18 +43,33 @@
     return v === 'search' ? 'pl-8' : 'pl-3';
   }
 
+  // Local state for one-way value binding (avoids bind:value issues with Playwright .fill()).
+  let internalValue = $state(value ?? '');
+
+  // Sync from parent prop when it changes externally (e.g. reset).
+  $effect(() => {
+if (internalValue !== value) internalValue = value ?? '';
+  });
+
   const combinedClass = $derived(`form-input w-full bg-input-bg border border-border rounded text-text focus:outline-none focus:border-accent hover:border-text-muted placeholder-text-muted transition-colors ${getSizeClass(size)} ${getVariantClass(variant)} ${extraClass}`);
+
+  function handleInput(e: Event) {
+const target = e.target as HTMLInputElement;
+internalValue = target.value;
+oninput?.(e);
+  }
 </script>
 
 <input
   {id}
   {type}
-  {value}
+   value={internalValue}
   {placeholder}
   {disabled}
   autocapitalize={autocapitalize}
   onkeydown={onkeydown}
-  oninput={oninput}
+  oninput={handleInput}
+  onblur={onblur}
   class={combinedClass}
   data-testid={dataTestId || id}
 />

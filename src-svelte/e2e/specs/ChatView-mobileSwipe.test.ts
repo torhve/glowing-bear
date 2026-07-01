@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, clearSettings, disconnect, reconnect, setSettings, waitForAppReady } from '../helpers/connection';
+import { connectToWeechat, disconnect, reconnect, clearSettings, setSettings, waitForAppReady } from '../helpers/connection';
 import { switchToBuffer, waitForBuffer } from '../helpers/buffers';
 
-import { setupEffectOrphanFilter } from '../helpers/pageerror';
+import { createConnectedPage } from '../fixtures/auth';
 
 // Inject touch event dispatcher into the page for reuse across swipe functions.
 async function injectTouchDispatcher(page: import('@playwright/test').Page) {
@@ -68,21 +68,13 @@ let page: import('@playwright/test').Page;
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
-    page = await browser.newPage();
-    await page.route('**/cdnjs.cloudflare.com/**', (route) => route.abort());
-    await page.goto('http://localhost:8001/');
-    await waitForAppReady(page);
-    await clearSettings(page);
-    await injectTouchDispatcher(page);
-    setupEffectOrphanFilter(page)
+    page = await createConnectedPage(browser, {
+        beforeConnect: async (p) => { await injectTouchDispatcher(p); },
+    });
 });
 
 test.afterAll(async () => {
     await page.close();
-});
-
-test.beforeEach(async () => {
-    setupEffectOrphanFilter(page)
 });
 
 // Get the current active buffer's short name from the topic bar

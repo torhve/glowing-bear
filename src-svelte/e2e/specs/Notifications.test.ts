@@ -2,65 +2,58 @@ import { test, expect } from '@playwright/test';
 import { connectToWeechat, clearSettings, setSettings, waitForAppReady } from '../helpers/connection';
 import { switchToBuffer, waitForBuffer } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
-
-import { setupEffectOrphanFilter } from '../helpers/pageerror';
+import { createConnectedPage } from '../fixtures/auth';
 
 let page: import('@playwright/test').Page;
 
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
-    page = await browser.newPage();
-    // Inject mocks before any app code runs
-    await page.addInitScript(() => {
-        (window as any).__notificationCalls = [];
-        (window as any).Notification = class MockNotification {
-            static permission = 'granted';
-            static requestPermission = async () => 'granted';
-            constructor(title: string, options?: Record<string, unknown>) {
-                (window as any).__notificationCalls.push({ title, options });
-            }
-        } as any;
+    page = await createConnectedPage(browser, {
+        initScript: () => {
+            (window as any).__notificationCalls = [];
+            (window as any).Notification = class MockNotification {
+                static permission = 'granted';
+                static requestPermission = async () => 'granted';
+                constructor(title: string, options?: Record<string, unknown>) {
+                    (window as any).__notificationCalls.push({ title, options });
+                }
+            } as any;
 
-        // Mock Audio constructor to capture calls for sound tests
-        (window as any).__audioCalls = [];
-        const OrigAudio = (window as any).Audio;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (window as any).Audio = function (this: any, src: string) {
-            (window as any).__audioCalls.push(src);
-            if (OrigAudio) {
-                const instance = new OrigAudio(src);
-                if (instance && typeof instance.play === 'function') {
-                    instance.play = () => Promise.resolve();
-                }
-                if (instance && typeof instance.pause === 'function') {
-                    instance.pause = () => Promise.resolve();
-                }
-                return instance;
-            }
-            // No native Audio — return a minimal mock
-            return { play: () => Promise.resolve(), pause: () => Promise.resolve() };
-        } as any;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if (OrigAudio?.prototype) {
+            // Mock Audio constructor to capture calls for sound tests
+            (window as any).__audioCalls = [];
+            const OrigAudio = (window as any).Audio;
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (window as any).Audio.prototype = OrigAudio.prototype;
-        }
+            (window as any).Audio = function (this: any, src: string) {
+                (window as any).__audioCalls.push(src);
+                if (OrigAudio) {
+                    const instance = new OrigAudio(src);
+                    if (instance && typeof instance.play === 'function') {
+                        instance.play = () => Promise.resolve();
+                    }
+                    if (instance && typeof instance.pause === 'function') {
+                        instance.pause = () => Promise.resolve();
+                    }
+                    return instance;
+                }
+                // No native Audio — return a minimal mock
+                return { play: () => Promise.resolve(), pause: () => Promise.resolve() };
+            } as any;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            if (OrigAudio?.prototype) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (window as any).Audio.prototype = OrigAudio.prototype;
+            }
 
-    // Force document.hidden = true so playNotificationSound triggers in headless Playwright.
-    // In headless Chromium, document.hidden is always false, which suppresses sounds/notifications.
-    try {
-        Object.defineProperty(document, 'hidden', { value: true, writable: false });
-    } catch {
-        /* property may already be defined; will be re-set by page.evaluate in beforeEach */
-    }
+        // Force document.hidden = true so playNotificationSound triggers in headless Playwright.
+        // In headless Chromium, document.hidden is always false, which suppresses sounds/notifications.
+        try {
+            Object.defineProperty(document, 'hidden', { value: true, writable: false });
+        } catch {
+            /* property may already be defined; will be re-set by page.evaluate in beforeEach */
+        }
+        },
     });
-    await page.route('**/cdnjs.cloudflare.com/**', (route) => route.abort());
-    await page.goto('http://localhost:8001/');
-    await waitForAppReady(page);
-    await clearSettings(page);
-    setupEffectOrphanFilter(page)
-    await connectToWeechat(page);
 });
 
 test.afterAll(async () => {
@@ -68,7 +61,6 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async () => {
-    setupEffectOrphanFilter(page)
     await page.evaluate(() => {
         (window as any).__notificationCalls = [];
         (window as any).__audioCalls = [];
@@ -122,6 +114,7 @@ test('toggling sound notification setting persists', async () => {
     // Start with defaults
     await clearSettings(page);
     await page.reload();
+    await waitForAppReady(page);
     await connectToWeechat(page);
 
     await openSettings();
@@ -200,7 +193,7 @@ test('sound plays when soundnotification is enabled', async () => {
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ]);
         route.fulfill({
-            body: mp3Bytes,
+            body: Buffer.from(mp3Bytes),
             contentType: 'audio/mpeg',
             status: 200,
         });

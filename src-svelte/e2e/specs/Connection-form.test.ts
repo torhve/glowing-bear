@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { connectToWeechat, disconnect, fillPortInput, waitForAppReady, setSettings } from '../helpers/connection';
+import { fillInput } from '../helpers/input';
 
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
 
@@ -30,11 +31,9 @@ test.describe('Connection Form', () => {
     });
 
     test('should show connecting state while connecting', async ({ page }) => {
-        await page.getByTestId('host-input').clear();
-        await page.getByTestId('host-input').fill('localhost');
-        await fillPortInput(page, '9001');
-        await page.getByTestId('password-input').clear();
-        await page.getByTestId('password-input').fill('testpassword123');
+        await fillInput(page, 'host-input', 'localhost');
+        await fillInput(page, 'port-input', '9001');
+        await fillInput(page, 'password-input', 'testpassword123');
         await page.getByTestId('connect-button').click();
         // Connection is fast in test environment — button becomes disabled immediately
         await expect(page.getByTestId('connect-button')).toBeDisabled({ timeout: 5000 });
@@ -42,22 +41,18 @@ test.describe('Connection Form', () => {
     });
 
     test('should show error message on connection failure', async ({ page }) => {
-        await page.getByTestId('host-input').clear();
-        await page.getByTestId('host-input').fill('localhost');
-        await fillPortInput(page, '9999');
-        await page.getByTestId('password-input').clear();
-        await page.getByTestId('password-input').fill('wrongpassword');
+        await fillInput(page, 'host-input', 'localhost');
+        await fillInput(page, 'port-input', '9999');
+        await fillInput(page, 'password-input', 'wrongpassword');
         await page.getByTestId('connect-button').click();
         await expect(page.getByTestId('error-message').first()).toBeVisible({ timeout: 15000 });
     });
 
   test('should show error on wrong password', async ({ page }) => {
         // Use invalid port to force connection failure (test server doesn't validate passwords)
-        await page.getByTestId('host-input').clear();
-        await page.getByTestId('host-input').fill('localhost');
-        await fillPortInput(page, '19999');
-        await page.getByTestId('password-input').clear();
-        await page.getByTestId('password-input').fill('wrongpassword');
+        await fillInput(page, 'host-input', 'localhost');
+        await fillInput(page, 'port-input', '19999');
+        await fillInput(page, 'password-input', 'wrongpassword');
         await page.getByTestId('connect-button').click();
         
         // Wait for error message to appear
@@ -96,9 +91,9 @@ test.describe('Connection Form', () => {
     });
 
     test('should disable connect button while connecting', async ({ page }) => {
-        await page.getByTestId('host-input').fill('localhost');
-        await fillPortInput(page, '9001');
-        await page.getByTestId('password-input').fill('testpassword123');
+        await fillInput(page, 'host-input', 'localhost');
+        await fillInput(page, 'port-input', '9001');
+        await fillInput(page, 'password-input', 'testpassword123');
         await page.getByTestId('connect-button').click();
         await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
     });
@@ -127,9 +122,9 @@ test.describe('Connection Form', () => {
     });
 
     test('should connect when pressing Enter with focus off the form', async ({ page }) => {
-        await page.getByTestId('host-input').fill('localhost');
-        await fillPortInput(page, '9001');
-        await page.getByTestId('password-input').fill('testpassword123');
+        await fillInput(page, 'host-input', 'localhost');
+        await fillInput(page, 'port-input', '9001');
+        await fillInput(page, 'password-input', 'testpassword123');
         // Move focus off the form by clicking an accordion summary outside the form
         await page.locator('summary').nth(1).click();
         await page.keyboard.press('Enter');
@@ -138,9 +133,9 @@ test.describe('Connection Form', () => {
     });
 
     test('should connect when pressing Enter while password field is focused', async ({ page }) => {
-        await page.getByTestId('host-input').fill('localhost');
-        await fillPortInput(page, '9001');
-        await page.getByTestId('password-input').fill('testpassword123');
+        await fillInput(page, 'host-input', 'localhost');
+        await fillInput(page, 'port-input', '9001');
+        await fillInput(page, 'password-input', 'testpassword123');
         // Focus the password input, then press Enter
         await page.getByTestId('password-input').focus();
         await page.keyboard.press('Enter');

@@ -135,7 +135,7 @@ test('arrow keys are no-op when no results match', async () => {
     await openBufferSearch(page);
 
     const searchInput = page.locator('#buffer-search');
-    await searchInput.fill('zzzzz_no_match_zzzzz');
+    await searchInput.pressSequentially('zzzzz_no_match_zzzzz');
     await waitForSearchResults(false);
 
     await searchInput.press('ArrowDown');

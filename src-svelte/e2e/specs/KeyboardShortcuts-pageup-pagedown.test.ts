@@ -1,18 +1,7 @@
 import { test, expect } from "@playwright/test";
-import {
-  connectToWeechat,
-  clearSettings,
-  waitForAppReady,
-} from "../helpers/connection";
+import { createConnectedPage } from "../fixtures/auth";
 import { waitForBuffer, switchToBuffer } from "../helpers/buffers";
 import { irc } from "../helpers/irc-control";
-
-import { setupEffectOrphanFilter } from "../helpers/pageerror";
-
-async function connect(page: import("@playwright/test").Page) {
-  await clearSettings(page);
-  await connectToWeechat(page);
-}
 
 async function getChatScrollState(page: import("@playwright/test").Page) {
   return await page.evaluate(() => {
@@ -77,14 +66,14 @@ async function waitForAtBottom(
     await page.waitForTimeout(500);
 }
 
+let page: import("@playwright/test").Page;
+
 test.describe.configure({ mode: "serial" });
 
   test.describe("PageUp/PageDown Global Scroll", () => {
-  test.beforeEach(async ({ page }) => {
-  	setupEffectOrphanFilter(page);
-  	await page.goto("http://localhost:8001/");
-  	await waitForAppReady(page);
-  	await connect(page);
+  	test.beforeEach(async ({ browser }) => {
+  		if (page) await page.close().catch(() => {});
+  		page = await createConnectedPage(browser);
   	await waitForBuffer(page, "#glowing-bear", 15000);
   	await switchToBuffer(page, "#glowing-bear");
   	// Absorb any existing unread from cross-test pollution by sending a message.
@@ -97,9 +86,7 @@ test.describe.configure({ mode: "serial" });
   	await waitForAtBottom(page, 60000);
   });
 
-  test("PageUp should scroll chat up when focus is outside input", async ({
-  	page,
-  }) => {
+  test("PageUp should scroll chat up when focus is outside input", async () => {
   	// Send enough messages to have content to scroll
   	for (let i = 0; i < 20; i++) {
   		await irc.sendMessage("#glowing-bear", `pageup-test-${Date.now()}-${i}`);
@@ -124,9 +111,7 @@ test.describe.configure({ mode: "serial" });
   	expect(stateAfter!.scrollTop).toBeLessThan(stateBefore!.scrollTop);
   });
 
-  test("PageDown should scroll chat down when focus is outside input", async ({
-  	page,
-  }) => {
+  test("PageDown should scroll chat down when focus is outside input", async () => {
   	// Send enough messages to have content
   	for (let i = 0; i < 30; i++) {
   		await irc.sendMessage(
@@ -157,9 +142,7 @@ test.describe.configure({ mode: "serial" });
   	expect(stateAfter!.scrollTop).toBeGreaterThan(stateBefore!.scrollTop);
   });
 
-  test("PageUp should still work when focus is in message input", async ({
-  	page,
-  }) => {
+  test("PageUp should still work when focus is in message input", async () => {
   	for (let i = 0; i < 20; i++) {
   		await irc.sendMessage(
   			"#glowing-bear",
@@ -189,7 +172,7 @@ test.describe.configure({ mode: "serial" });
   	expect(stateAfter!.scrollTop).toBeLessThan(stateBefore!.scrollTop);
   });
 
-  test("PageUp should work when focus is on nicklist", async ({ page }) => {
+  test("PageUp should work when focus is on nicklist", async () => {
   	for (let i = 0; i < 15; i++) {
   		await irc.sendMessage(
   			"#glowing-bear",
@@ -214,9 +197,7 @@ test.describe.configure({ mode: "serial" });
   	expect(stateAfter!.scrollTop).toBeLessThan(stateBefore!.scrollTop);
   });
 
-  test("PageUp should not scroll when focus is in a native INPUT element", async ({
-  	page,
-  }) => {
+  test("PageUp should not scroll when focus is in a native INPUT element", async () => {
   	for (let i = 0; i < 15; i++) {
   		await irc.sendMessage(
   			"#glowing-bear",
@@ -253,9 +234,7 @@ test.describe.configure({ mode: "serial" });
   	});
   });
 
-  test("PageUp with Ctrl modifier should not scroll via global handler", async ({
-  	page,
-  }) => {
+  test("PageUp with Ctrl modifier should not scroll via global handler", async () => {
   	for (let i = 0; i < 15; i++) {
   		await irc.sendMessage(
   			"#glowing-bear",

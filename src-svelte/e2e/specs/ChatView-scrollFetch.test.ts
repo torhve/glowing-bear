@@ -8,21 +8,12 @@ test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
     page = await createConnectedPage(browser);
-    page.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
     await waitForBuffer(page, '#glowing-bear', 15000);
     await switchToBuffer(page, '#glowing-bear');
 });
 
 test.afterAll(async () => {
     await page.close();
-});
-
-test.beforeEach(async () => {
-    page.on('pageerror', (error) => {
-        if (error.message?.includes('effect_orphan')) return;
-    });
 });
 
 // Note: The "Fetch more lines" button requires hdata support (real WeeChat relay).

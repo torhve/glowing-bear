@@ -25,7 +25,7 @@ import {
     maxBufferLines,
     deepCloneBufferLine,
 } from "$lib/stores/models";
-import { shouldResume, getLastBuffer } from "$lib/stores/bufferResume";
+import { shouldResume, getLastBuffer, recordLastBuffer } from "$lib/stores/bufferResume";
 import {
     createHighlight,
     playNotificationSound,
@@ -155,9 +155,10 @@ export function handleBufferInfo(message: ProtocolMessage) {
     // Track pending server unread adjustments for batch update.
     const serverDeltas: Record<string, number> = {};
 
-    // Track whether any buffer was auto-resumed during this loop.
-    // If so, skip the fallback (weechat core / first buffer) below.
-    let resumed = false;
+    // Track the buffer ID that should be active after publish.
+    // We mutate workingBuffers directly during the loop (avoiding race conditions
+    // with setActiveBuffer), then apply active state after buffers.update().
+    let resumedBufferId: string | null = null;
 
     for (const bufferMsg of bufferInfos) {
         const bufferId = bufferMsg.pointers[0];
@@ -201,11 +202,10 @@ export function handleBufferInfo(message: ProtocolMessage) {
                 "lines=" + buffer.lines.length,
             );
 
-            // Auto-resume — check by fullName (cross-connection)
-            if (shouldResume(buffer.fullName)) {
-                setActiveBuffer(buffer.id);
-                resumed = true;
-                console.debug("[handler]   auto-resumed to:", buffer.id, buffer.fullName);
+            // Remember matching buffer for switch after publish.
+            if (!resumedBufferId && shouldResume(buffer.fullName)) {
+                resumedBufferId = bufferId;
+                console.debug("[handler]   auto-resumed to:", bufferId, buffer.fullName);
             }
         }
     }
@@ -224,14 +224,13 @@ export function handleBufferInfo(message: ProtocolMessage) {
 
     // Fallback: match by fullName for cases where the per-buffer check didn't fire
     // (e.g., buffers already existed from a prior _buffer_info call within this connection).
-    if (!resumed) {
+    if (!resumedBufferId) {
         const savedName = getLastBuffer();
         if (savedName) {
             for (const id in workingBuffers) {
                 const buf = workingBuffers[id];
                 if (buf && buf.fullName === savedName) {
-                    setActiveBuffer(id);
-                    resumed = true;
+                    resumedBufferId = id;
                     console.debug("[handler]   auto-resumed (by fullName) to:", id, savedName);
                     break;
                 }
@@ -241,7 +240,7 @@ export function handleBufferInfo(message: ProtocolMessage) {
 
     // Publish changed buffers to the store using update() to merge with
     // current state, preventing overwrites of concurrent changes from other
-    // handlers (e.g., setActiveBuffer called during auto-resume above).
+    // handlers.
     const changedBuffers: Record<string, BufferData> = {};
     for (const id in workingBuffers) {
         const oldBuf = currentBuffers[id];
@@ -262,8 +261,15 @@ export function handleBufferInfo(message: ProtocolMessage) {
         });
     }
 
+    // Switch to the auto-resumed buffer after publish.
+    if (resumedBufferId) {
+        setActiveBuffer(resumedBufferId);
+        const resumedBuf = getBuffer(resumedBufferId);
+        if (resumedBuf) recordLastBuffer(resumedBuf.fullName);
+        return;
+    }
+
     // If no buffer was auto-resumed, prefer weechat.core before falling back to first buffer.
-    if (resumed) return;
     let targetBufferId: string | null = null;
     const allBuffers = get(buffers);
     for (const id in allBuffers) {
