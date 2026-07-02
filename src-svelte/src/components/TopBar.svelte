@@ -31,7 +31,7 @@
   });
 </script>
 
-<div data-testid="top-bar" style="padding-top: max(20px, env(safe-area-inset-top, 0px)); padding-left: max(env(safe-area-inset-left), env(safe-area-inset-right), 4px); padding-right: max(env(safe-area-inset-left), env(safe-area-inset-right), 4px);">
+<div data-testid="top-bar" class="top-bar-safe">
   <div class="top-bar-inner h-[var(--spacing-topbar-height,40px)] bg-surface-raised border-b border-border flex items-center px-2 space-x-2" data-tauri-drag-region>
     <div class="flex items-center gap-1 flex-1 min-w-0" data-tauri-drag-region>
       <TauriTitlebar variant="inline" />
@@ -155,6 +155,18 @@
 <SettingsModal />
 
 <style>
+      /* Safe-area insets — only applies on browsers that support env() (iOS Safari, Chrome Android) */
+      .top-bar-safe {
+        padding: 0;
+      }
+      @supports (padding: max(0px, env(safe-area-inset-top))) {
+        .top-bar-safe {
+          padding-top: env(safe-area-inset-top);
+          padding-left: max(env(safe-area-inset-left), env(safe-area-inset-right));
+          padding-right: max(env(safe-area-inset-left), env(safe-area-inset-right));
+        }
+      }
+
       /* Spacing — overridable by themes via --spacing-* vars */
       .top-bar-btn {
         padding: var(--spacing-topbar-button-padding-y, 4px) var(--spacing-topbar-button-padding-x, 8px);
