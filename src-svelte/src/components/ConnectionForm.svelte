@@ -18,6 +18,7 @@
   import Globe from '@lucide/svelte/icons/globe';
   import Eye from '@lucide/svelte/icons/eye';
   import EyeOff from '@lucide/svelte/icons/eye-off';
+  import { Kbd, KbdGroup, Sep } from '$components';
   import Lock from '@lucide/svelte/icons/lock';
   import Key from '@lucide/svelte/icons/key';
   import Monitor from '@lucide/svelte/icons/monitor';
@@ -403,12 +404,12 @@
               <p class="font-medium text-text mb-1">Navigation</p>
               <table class="w-full text-xs">
                 <tbody>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Alt+0–9</td><td class="py-0.5">Quick switch buffer (0 = buffer 10)</td></tr>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Alt+J + 2 digits</td><td class="py-0.5">Jump to buffer by number</td></tr>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Alt+`</td><td class="py-0.5">Previous buffer</td></tr>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Alt+A</td><td class="py-0.5">Next buffer with activity</td></tr>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Alt+↑/↓</td><td class="py-0.5">Adjacent buffer</td></tr>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Escape</td><td class="py-0.5">Blur input / double-tap to disconnect</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap"><KbdGroup><Kbd>Alt</Kbd><Sep /><Kbd>0–9</Kbd></KbdGroup></td><td class="py-0.5">Quick switch buffer (0 = buffer 10)</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap"><KbdGroup><Kbd>Alt</Kbd><Sep /><Kbd>J</Kbd></KbdGroup> + 2 digits</td><td class="py-0.5">Jump to buffer by number</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap"><KbdGroup><Kbd>Alt</Kbd><Sep /><Kbd>`</Kbd></KbdGroup></td><td class="py-0.5">Previous buffer</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap"><KbdGroup><Kbd>Alt</Kbd><Sep /><Kbd>A</Kbd></KbdGroup></td><td class="py-0.5">Next buffer with activity</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap"><KbdGroup><Kbd>Alt</Kbd><Sep /><Kbd>↑/↓</Kbd></KbdGroup></td><td class="py-0.5">Adjacent buffer</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap"><Kbd>Esc</Kbd></td><td class="py-0.5">Blur input / double-tap to disconnect</td></tr>
                 </tbody>
               </table>
             </div>
@@ -416,12 +417,12 @@
               <p class="font-medium text-text mb-1">Panels &amp; Search</p>
               <table class="w-full text-xs">
                 <tbody>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Alt+n</td><td class="py-0.5">Toggle nicklist</td></tr>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Alt+L</td><td class="py-0.5">Focus input bar</td></tr>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Alt+G / Ctrl+G</td><td class="py-0.5">Search buffers</td></tr>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Ctrl+F</td><td class="py-0.5">Search buffer content (requires <code>/grep</code> script)</td></tr>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Alt+h</td><td class="py-0.5">Clear all unread</td></tr>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Hold Alt</td><td class="py-0.5">Show quick keys legend</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap"><KbdGroup><Kbd>Alt</Kbd><Sep /><Kbd>n</Kbd></KbdGroup></td><td class="py-0.5">Toggle nicklist</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap"><KbdGroup><Kbd>Alt</Kbd><Sep /><Kbd>L</Kbd></KbdGroup></td><td class="py-0.5">Focus input bar</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap"><KbdGroup><Kbd>Alt</Kbd><Sep /><Kbd>G</Kbd></KbdGroup> / <KbdGroup><Kbd>Ctrl</Kbd><Sep /><Kbd>G</Kbd></KbdGroup></td><td class="py-0.5">Search buffers</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap"><KbdGroup><Kbd>Ctrl</Kbd><Sep /><Kbd>F</Kbd></KbdGroup></td><td class="py-0.5">Search buffer content (requires <code>/grep</code> script)</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap"><KbdGroup><Kbd>Alt</Kbd><Sep /><Kbd>h</Kbd></KbdGroup></td><td class="py-0.5">Clear all unread</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap">Hold <Kbd>Alt</Kbd></td><td class="py-0.5">Show quick keys legend</td></tr>
                 </tbody>
               </table>
             </div>
@@ -429,11 +430,11 @@
               <p class="font-medium text-text mb-1">Input bar</p>
               <table class="w-full text-xs">
                 <tbody>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Enter</td><td class="py-0.5">Send message</td></tr>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Shift+Enter</td><td class="py-0.5">Newline</td></tr>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Tab</td><td class="py-0.5">Nick completion</td></tr>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">↑ / ↓</td><td class="py-0.5">Message history</td></tr>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Page Up/Down</td><td class="py-0.5">Scroll chat</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap"><Kbd>Enter</Kbd></td><td class="py-0.5">Send message</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap"><KbdGroup><Kbd>Shift</Kbd><Sep /><Kbd>Enter</Kbd></KbdGroup></td><td class="py-0.5">Newline</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap"><Kbd>Tab</Kbd></td><td class="py-0.5">Nick completion</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap"><KbdGroup><Kbd>↑</Kbd><Kbd>↓</Kbd></KbdGroup></td><td class="py-0.5">Message history</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap"><KbdGroup><Kbd>Page Up</Kbd><Kbd>Page Down</Kbd></KbdGroup></td><td class="py-0.5">Scroll chat</td></tr>
                 </tbody>
               </table>
             </div>
@@ -441,11 +442,11 @@
               <p class="font-medium text-text mb-1">Readline bindings</p>
               <table class="w-full text-xs">
                 <tbody>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Ctrl+A/E</td><td class="py-0.5">Start/end of line</td></tr>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Ctrl+U</td><td class="py-0.5">Delete from start of line to cursor</td></tr>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Ctrl+W</td><td class="py-0.5">Delete word before cursor</td></tr>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Ctrl+B/F</td><td class="py-0.5">Move back/forward one char</td></tr>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Ctrl+H</td><td class="py-0.5">Backspace</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap"><KbdGroup><Kbd>Ctrl</Kbd><Sep /><Kbd>A</Kbd></KbdGroup> / <KbdGroup><Kbd>Ctrl</Kbd><Sep /><Kbd>E</Kbd></KbdGroup></td><td class="py-0.5">Start/end of line</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap"><KbdGroup><Kbd>Ctrl</Kbd><Sep /><Kbd>U</Kbd></KbdGroup></td><td class="py-0.5">Delete from start of line to cursor</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap"><KbdGroup><Kbd>Ctrl</Kbd><Sep /><Kbd>W</Kbd></KbdGroup></td><td class="py-0.5">Delete word before cursor</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap"><KbdGroup><Kbd>Ctrl</Kbd><Sep /><Kbd>B</Kbd></KbdGroup> / <KbdGroup><Kbd>Ctrl</Kbd><Sep /><Kbd>F</Kbd></KbdGroup></td><td class="py-0.5">Move back/forward one char</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap"><KbdGroup><Kbd>Ctrl</Kbd><Sep /><Kbd>H</Kbd></KbdGroup></td><td class="py-0.5">Backspace</td></tr>
                 </tbody>
               </table>
             </div>
@@ -453,10 +454,10 @@
               <p class="font-medium text-text mb-1">Text formatting</p>
               <table class="w-full text-xs">
                 <tbody>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Ctrl+B/I</td><td class="py-0.5">Bold / Italic</td></tr>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Ctrl+_</td><td class="py-0.5">Underline</td></tr>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Ctrl+Shift+R</td><td class="py-0.5">Reset formatting</td></tr>
-                  <tr><td class="py-0.5 pr-3 font-mono text-text-secondary whitespace-nowrap">Ctrl+K</td><td class="py-0.5">Color picker</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap"><KbdGroup><Kbd>Ctrl</Kbd><Sep /><Kbd>B</Kbd></KbdGroup> / <KbdGroup><Kbd>Ctrl</Kbd><Sep /><Kbd>I</Kbd></KbdGroup></td><td class="py-0.5">Bold / Italic</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap"><KbdGroup><Kbd>Ctrl</Kbd><Sep /><Kbd>_</Kbd></KbdGroup></td><td class="py-0.5">Underline</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap"><KbdGroup><Kbd>Ctrl</Kbd><Sep /><Kbd>Shift</Kbd><Sep /><Kbd>R</Kbd></KbdGroup></td><td class="py-0.5">Reset formatting</td></tr>
+                  <tr><td class="py-0.5 pr-3 whitespace-nowrap"><KbdGroup><Kbd>Ctrl</Kbd><Sep /><Kbd>K</Kbd></KbdGroup></td><td class="py-0.5">Color picker</td></tr>
                 </tbody>
               </table>
             </div>
