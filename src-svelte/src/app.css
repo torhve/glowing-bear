@@ -1710,13 +1710,9 @@
   }
 
   body {
-    margin: 0;
-    padding: 0;
     background-color: var(--gb-bg);
     color: var(--gb-text);
     font-family: var(--font-mono);
-    overflow: hidden;
-    height: 100vh;
   }
 
   #svelte {
