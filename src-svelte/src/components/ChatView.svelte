@@ -256,17 +256,6 @@
     // If nothing changed, skip scroll operations entirely
     if (!bufferChanged && !linesAdded) return;
 
-    // DEBUG: log scroll state on each effect run
-    console.log('[scroll-effect]',
-      `buf=${$currentBuffer?.shortName}`, { bufferChanged, linesAdded, wasFollowing,
-        scrollTop: containerRef?.scrollTop ?? '?',
-        scrollHeight: containerRef?.scrollHeight ?? '?',
-        clientHeight: containerRef?.clientHeight ?? '?',
-        threshold: containerRef ? containerRef.scrollHeight - containerRef.clientHeight - 3 : '?',
-        isAtBottom, lastSeen: $currentBuffer?.lastSeen ?? -1,
-        lines: curLinesLength },
-    );
-
     // Dedup guard: run synchronously to prevent cascading effect re-runs.
     // Bypass when readmarker lookup previously failed, allowing retry.
     const scrollKey = `${currentBufferId}-${curLinesLength}`;
@@ -299,12 +288,8 @@
             buffers.set({ ...get(buffers), [buf.id]: { ...buf } });
           }
         } else {
-          // User manually scrolled away from bottom - do nothing.
-              // Preserve their reading position; unread accumulates behind readmarker.
-          console.log('[scroll-effect SKIP]',
-            `buf=${$currentBuffer?.shortName}`,
-            'wasFollowing=false, not scrolling',
-          );
+        // User manually scrolled away from bottom - do nothing.
+        // Preserve their reading position; unread accumulates behind readmarker.
         }
       });
       return;
