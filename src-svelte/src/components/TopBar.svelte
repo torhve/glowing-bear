@@ -31,7 +31,7 @@
   });
 </script>
 
-<div data-testid="top-bar" style="padding-top: env(safe-area-inset-top, 0px);">
+<div data-testid="top-bar" style="padding-top: max(20px, env(safe-area-inset-top, 0px)); padding-left: max(env(safe-area-inset-left), env(safe-area-inset-right), 4px); padding-right: max(env(safe-area-inset-left), env(safe-area-inset-right), 4px);">
   <div class="top-bar-inner h-[var(--spacing-topbar-height,40px)] bg-surface-raised border-b border-border flex items-center px-2 space-x-2" data-tauri-drag-region>
     <div class="flex items-center gap-1 flex-1 min-w-0" data-tauri-drag-region>
       <TauriTitlebar variant="inline" />
