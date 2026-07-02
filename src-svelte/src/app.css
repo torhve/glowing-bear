@@ -1701,6 +1701,13 @@
   body[data-app-ready] {
     visibility: visible !important;
   }
+  html {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    height: 100vh;
+    overscroll-behavior: none;
+  }
 
   body {
     margin: 0;
