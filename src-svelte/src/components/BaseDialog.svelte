@@ -21,7 +21,7 @@
   );
 
   let dialogRef = $state<HTMLDialogElement>();
-export { dialogRef as dialog };
+  export { dialogRef as dialog };
 </script>
 
 <dialog

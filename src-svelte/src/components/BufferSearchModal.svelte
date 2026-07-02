@@ -22,9 +22,9 @@
       if (!bufferSearchQuery) return true;
       const query = bufferSearchQuery.toLowerCase();
       return buf.shortName.toLowerCase().includes(query) ||
-             buf.fullName.toLowerCase().includes(query) ||
-             (buf.rtitle || '').toLowerCase().includes(query) ||
-             String(buf.number).includes(query);
+        buf.fullName.toLowerCase().includes(query) ||
+        (buf.rtitle || '').toLowerCase().includes(query) ||
+        String(buf.number).includes(query);
     })
   );
 

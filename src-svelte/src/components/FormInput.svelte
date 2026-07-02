@@ -2,12 +2,12 @@
   import { untrack } from 'svelte';
   import type { HTMLInputTypeAttribute, KeyboardEventHandler, EventHandler } from 'svelte/elements';
 
-  let { 
-    id, 
-    value = '', 
-    type = 'text', 
-    placeholder = '', 
-    extraClass = '', 
+  let {
+    id,
+    value = '',
+    type = 'text',
+    placeholder = '',
+    extraClass = '',
     disabled = false,
     autocapitalize = 'off',
     onkeydown = undefined,
@@ -49,22 +49,22 @@
 
   // Sync from parent prop when it changes externally (e.g. reset).
   $effect(() => {
-if (internalValue !== value) internalValue = value ?? '';
+    if (internalValue !== value) internalValue = value ?? '';
   });
 
   const combinedClass = $derived(`form-input w-full bg-input-bg border border-border rounded text-text focus:outline-none focus:border-accent hover:border-text-muted placeholder-text-muted transition-colors ${getSizeClass(size)} ${getVariantClass(variant)} ${extraClass}`);
 
   function handleInput(e: Event) {
-const target = e.target as HTMLInputElement;
-internalValue = target.value;
-oninput?.(e);
+    const target = e.target as HTMLInputElement;
+    internalValue = target.value;
+    oninput?.(e);
   }
 </script>
 
 <input
   {id}
   {type}
-   value={internalValue}
+  value={internalValue}
   {placeholder}
   {disabled}
   autocapitalize={autocapitalize}

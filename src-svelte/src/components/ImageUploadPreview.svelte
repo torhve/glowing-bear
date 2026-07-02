@@ -32,7 +32,7 @@
   // Hold ref to BaseDialog component to access its <dialog> element
   let baseDialogRef = $state<{ dialog: HTMLDialogElement | undefined }>();
   let dialog = $derived(baseDialogRef?.dialog);
-export { dialog };
+  export { dialog };
 
   let isUploading = $state(false);
   let currentUploadIndex = $state(0);
@@ -70,10 +70,10 @@ export { dialog };
       img.status = 'uploading';
       img.progress = 0;
 
-       try {
-         const result = await uploadImage(img.file || img.dataUrl, (pct: number) => {
-           img.progress = pct;
-         });
+      try {
+        const result = await uploadImage(img.file || img.dataUrl, (pct: number) => {
+          img.progress = pct;
+        });
         img.status = 'success';
         img.result = result;
       } catch (err) {
@@ -120,10 +120,10 @@ export { dialog };
     isUploading
       ? 'uploading'
       : images.some(i => i.status === 'loading')
-        ? 'loading'
-        : images.some(i => i.status !== 'preview')
-          ? 'complete'
-          : 'preview'
+      ? 'loading'
+      : images.some(i => i.status !== 'preview')
+      ? 'complete'
+      : 'preview'
   );
 </script>
 

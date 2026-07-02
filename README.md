@@ -127,6 +127,7 @@ Custom CSS injection is also available in settings for unlimited personalization
 ### Key Features
 
 - **Buffer list** — sortable by number or server, filter unread/pinned, search modal (Alt+G)
+- **Content search** — Ctrl+F to search buffer content (requires WeeChat `/grep` script)
 - **Chat view** — scrollable message history with lazy loading, time grouping, nick prefixes
 - **Nicklist** — searchable nickname list with prefix icons; inline on desktop, swipe overlay on mobile
 - **Hotlist bar** — horizontal strip of buffers with unread activity in the top bar; prominent on mobile when buffer list is hidden

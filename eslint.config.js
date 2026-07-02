@@ -24,6 +24,10 @@ export default ts.config(
       parserOptions: {
         parser: ts.parser
       }
+    },
+    rules: {
+      'svelte/indent': ['error', { indent: 2 }],
+      'svelte/no-trailing-spaces': 'error',
     }
   },
   {

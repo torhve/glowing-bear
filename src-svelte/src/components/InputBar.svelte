@@ -337,28 +337,28 @@
         setTimeout(() => setCaretPos(lastSpace));
         return true;
       }
-     // Ctrl-h: backspace
-        if (code === 72) {
-          e.preventDefault();
-          if (caretPos > 0) {
-            message = message.substring(0, caretPos - 1) + message.substring(caretPos - 1);
-            setTimeout(() => setCaretPos(caretPos - 1));
-          }
-          return true;
+      // Ctrl-h: backspace
+      if (code === 72) {
+        e.preventDefault();
+        if (caretPos > 0) {
+          message = message.substring(0, caretPos - 1) + message.substring(caretPos - 1);
+          setTimeout(() => setCaretPos(caretPos - 1));
         }
-        // Ctrl-b: disabled — Ctrl+B is used for bold formatting
+        return true;
+      }
+      // Ctrl-b: disabled — Ctrl+B is used for bold formatting
         // if (code === 66) {
         //   e.preventDefault();
         //   setCaretPos(Math.max(0, caretPos - 1));
         //   return true;
         // }
         // Ctrl-f: move forward one character
-        if (code === 70) {
-          e.preventDefault();
-          setCaretPos(Math.min(message.length, caretPos + 1));
-          return true;
-        }
-        return false;
+      if (code === 70) {
+        e.preventDefault();
+        setCaretPos(Math.min(message.length, caretPos + 1));
+        return true;
+      }
+      return false;
     }
 
     // Page up -> scroll up
@@ -650,6 +650,10 @@
   // inserts plain text at cursor position and focuses the input bar.
   $effect(() => {
     function handleGlobalPaste(e: ClipboardEvent) {
+      // Skip if a popover/modal is open — let paste reach its natural target
+      // (e.g. content search input, buffer search input, etc.)
+      if (isPopoverOpen()) return;
+
       // Only intercept if focus is NOT on our textarea
       if (document.activeElement === inputRef) return;
 
@@ -684,127 +688,127 @@
 
 <div data-testid="input-bar" class="input-bar-container flex-shrink-0">
   <div class="input-bar-inner bg-panel border-t border-border"
-        role="group"
-   >
+    role="group"
+  >
 
     <!-- Format toolbar — shown via toggle button, hidden on any format action -->
     {#if showFormatToolbar}
-    <div
-      class="format-toolbar"
-      role="toolbar"
-      aria-label="Text formatting"
-    >
-      <div class="flex items-center gap-1 px-1">
-        <button
-          type="button"
-          data-testid="format-bold"
-          onclick={() => { toggleFormat('bold'); showFormatToolbar = false; }}
-          class="format-btn px-2 py-0.5 text-xs font-bold rounded border transition-colors bg-input-bg border-border text-text-secondary hover:text-text hover:border-text-secondary"
-          title="Bold (Ctrl+B)"
-        >B</button>
-        <button
-          type="button"
-          data-testid="format-italic"
-          onclick={() => { toggleFormat('italic'); showFormatToolbar = false; }}
-          class="format-btn px-2 py-0.5 text-xs italic rounded border transition-colors bg-input-bg border-border text-text-secondary hover:text-text hover:border-text-secondary"
-          title="Italic (Ctrl+I)"
-        >I</button>
-        <button
-          type="button"
-          data-testid="format-underline"
-          onclick={() => { toggleFormat('underline'); showFormatToolbar = false; }}
-          class="format-btn px-2 py-0.5 text-xs underline rounded border transition-colors bg-input-bg border-border text-text-secondary hover:text-text hover:border-text-secondary"
-          title="Underline (Ctrl+_)"
-        >U</button>
-        <button
-          type="button"
-          data-testid="format-reset"
-          onclick={() => { insertReset(); showFormatToolbar = false; }}
-          class="format-btn px-2 py-0.5 text-xs rounded border transition-colors bg-input-bg border-border text-text-secondary hover:text-text hover:border-text-secondary font-mono"
-          title="Reset formatting (Ctrl+Shift+R)"
-        >RST</button>
-        <button
-          type="button"
-          data-testid="format-color"
-          onclick={() => { showColorPicker = !showColorPicker; showFormatToolbar = false; }}
-          class="format-btn px-2 py-0.5 text-xs font-bold rounded border transition-colors bg-input-bg border-border text-text-secondary hover:text-text hover:border-text-secondary"
-          title="Color (Ctrl+K)"
-        >C</button>
+      <div
+        class="format-toolbar"
+        role="toolbar"
+        aria-label="Text formatting"
+      >
+        <div class="flex items-center gap-1 px-1">
+          <button
+            type="button"
+            data-testid="format-bold"
+            onclick={() => { toggleFormat('bold'); showFormatToolbar = false; }}
+            class="format-btn px-2 py-0.5 text-xs font-bold rounded border transition-colors bg-input-bg border-border text-text-secondary hover:text-text hover:border-text-secondary"
+            title="Bold (Ctrl+B)"
+          >B</button>
+          <button
+            type="button"
+            data-testid="format-italic"
+            onclick={() => { toggleFormat('italic'); showFormatToolbar = false; }}
+            class="format-btn px-2 py-0.5 text-xs italic rounded border transition-colors bg-input-bg border-border text-text-secondary hover:text-text hover:border-text-secondary"
+            title="Italic (Ctrl+I)"
+          >I</button>
+          <button
+            type="button"
+            data-testid="format-underline"
+            onclick={() => { toggleFormat('underline'); showFormatToolbar = false; }}
+            class="format-btn px-2 py-0.5 text-xs underline rounded border transition-colors bg-input-bg border-border text-text-secondary hover:text-text hover:border-text-secondary"
+            title="Underline (Ctrl+_)"
+          >U</button>
+          <button
+            type="button"
+            data-testid="format-reset"
+            onclick={() => { insertReset(); showFormatToolbar = false; }}
+            class="format-btn px-2 py-0.5 text-xs rounded border transition-colors bg-input-bg border-border text-text-secondary hover:text-text hover:border-text-secondary font-mono"
+            title="Reset formatting (Ctrl+Shift+R)"
+          >RST</button>
+          <button
+            type="button"
+            data-testid="format-color"
+            onclick={() => { showColorPicker = !showColorPicker; showFormatToolbar = false; }}
+            class="format-btn px-2 py-0.5 text-xs font-bold rounded border transition-colors bg-input-bg border-border text-text-secondary hover:text-text hover:border-text-secondary"
+            title="Color (Ctrl+K)"
+          >C</button>
+        </div>
       </div>
-    </div>
     {/if}
 
     <div class="input-bar-row flex items-center space-x-2">
 
-    <input
-      id="upload-image-file"
-      type="file"
-      accept="image/*"
-      multiple
-      bind:this={fileInputRef}
-      onchange={handleFileInputChange}
-      class="hidden"
-    />
+      <input
+        id="upload-image-file"
+        type="file"
+        accept="image/*"
+        multiple
+        bind:this={fileInputRef}
+        onchange={handleFileInputChange}
+        class="hidden"
+      />
 
-    <textarea
-      id="message-input"
-      name="message"
-      bind:this={inputRef}
-      bind:value={message}
-      onkeydown={handleKeyDown}
-      oninput={handleInput}
-      onpaste={handlePaste}
-      ondrop={handleDrop}
-      ondragover={handleDragOver}
-      ondragleave={handleDragEnd}
-      ondragend={handleDragEnd}
-          onblur={() => {
-            lastCaretPos = inputRef?.selectionStart ?? 0;
-          }}
-      data-testid="message-input"
-      placeholder={$currentBuffer ? `Message ${$currentBuffer.shortName}` : 'Select a buffer to start chatting...'}
-      rows={1}
-      class="input-bar-textarea flex-1 bg-input-bg border border-border rounded text-text text-sm placeholder-text-muted focus:outline-none focus:border-accent resize-none transition-colors min-h-9 max-h-[150px] {isDraggingFile ? 'border-accent bg-accent/10' : ''}"
+      <textarea
+        id="message-input"
+        name="message"
+        bind:this={inputRef}
+        bind:value={message}
+        onkeydown={handleKeyDown}
+        oninput={handleInput}
+        onpaste={handlePaste}
+        ondrop={handleDrop}
+        ondragover={handleDragOver}
+        ondragleave={handleDragEnd}
+        ondragend={handleDragEnd}
+        onblur={() => {
+          lastCaretPos = inputRef?.selectionStart ?? 0;
+        }}
+        data-testid="message-input"
+        placeholder={$currentBuffer ? `Message ${$currentBuffer.shortName}` : 'Select a buffer to start chatting...'}
+        rows={1}
+        class="input-bar-textarea flex-1 bg-input-bg border border-border rounded text-text text-sm placeholder-text-muted focus:outline-none focus:border-accent resize-none transition-colors min-h-9 max-h-[150px] {isDraggingFile ? 'border-accent bg-accent/10' : ''}"
 
-    ></textarea>
+      ></textarea>
 
-    {#if $settings.enableFormatting}
-    <button
-      onclick={() => showFormatToolbar = !showFormatToolbar}
-      data-testid="format-toggle"
-      class="input-bar-format px-2 py-2 text-text-secondary hover:text-text hover:bg-border rounded transition-colors"
-      title="Formatting"
-    >
-      <Type size={18} />
-    </button>
-    {/if}
+      {#if $settings.enableFormatting}
+        <button
+          onclick={() => showFormatToolbar = !showFormatToolbar}
+          data-testid="format-toggle"
+          class="input-bar-format px-2 py-2 text-text-secondary hover:text-text hover:bg-border rounded transition-colors"
+          title="Formatting"
+        >
+          <Type size={18} />
+        </button>
+      {/if}
 
-    <button
-      onclick={() => fileInputRef?.click()}
-      data-testid="upload-image-button"
-      class="input-bar-upload px-2 py-2 text-text-secondary hover:text-text hover:bg-border rounded transition-colors"
-      title="Upload image"
-    >
-      <Camera size={18} />
-    </button>
+      <button
+        onclick={() => fileInputRef?.click()}
+        data-testid="upload-image-button"
+        class="input-bar-upload px-2 py-2 text-text-secondary hover:text-text hover:bg-border rounded transition-colors"
+        title="Upload image"
+      >
+        <Camera size={18} />
+      </button>
 
-    <button
-      onclick={() => { if (inputRef) { const caret = getCaretPos(); const result = completeNick(message, caret, _iterCandidate); if (result) { message = result.text; _iterCandidate = result.iterCandidate; setTimeout(() => setCaretPos(result.cursor), 0); } } }}
-      data-testid="nick-complete-button"
-      class="input-bar-nickcomplete px-2 py-2 text-text-secondary hover:text-text hover:bg-border rounded transition-colors"
-      title="Complete nick"
-    >
-      <Megaphone size={18} />
-    </button>
+      <button
+        onclick={() => { if (inputRef) { const caret = getCaretPos(); const result = completeNick(message, caret, _iterCandidate); if (result) { message = result.text; _iterCandidate = result.iterCandidate; setTimeout(() => setCaretPos(result.cursor), 0); } } }}
+        data-testid="nick-complete-button"
+        class="input-bar-nickcomplete px-2 py-2 text-text-secondary hover:text-text hover:bg-border rounded transition-colors"
+        title="Complete nick"
+      >
+        <Megaphone size={18} />
+      </button>
 
-    <button
-      onclick={handleSend}
-      disabled={!canSend}
-      data-testid="send-button"
-      class="input-bar-send px-3 py-2 bg-accent hover:bg-accent-hover disabled:bg-border disabled:cursor-not-allowed text-white rounded transition-colors btn-glow"
-    >
-      <Send size={16} />
-    </button>
+      <button
+        onclick={handleSend}
+        disabled={!canSend}
+        data-testid="send-button"
+        class="input-bar-send px-3 py-2 bg-accent hover:bg-accent-hover disabled:bg-border disabled:cursor-not-allowed text-white rounded transition-colors btn-glow"
+      >
+        <Send size={16} />
+      </button>
     </div>
   </div>
 

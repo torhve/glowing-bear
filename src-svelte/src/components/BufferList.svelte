@@ -13,10 +13,10 @@
   import Server from '@lucide/svelte/icons/server';
   import Monitor from '@lucide/svelte/icons/monitor';
   import Square from '@lucide/svelte/icons/square';
-import Copy from '@lucide/svelte/icons/copy';
-import Badge from './Badge.svelte';
+  import Copy from '@lucide/svelte/icons/copy';
+  import Badge from './Badge.svelte';
 
-let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
+  let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
 
   let sortedBuffers = $derived(
     $sortedVisibleBuffers.filter(buf => !$settings.onlyUnread || getEffectiveUnread(buf) > 0 || buf.id === $activeBufferId || buf.pinned)
@@ -85,40 +85,40 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
     clearLongPress();
   }
 
-    // Text color follows Tailwind nav pattern: active = full brightness,
+  // Text color follows Tailwind nav pattern: active = full brightness,
     // inactive = muted, hover brightens. Notifications still use accent.
-    function getNotifyClass(buffer: BufferData): string {
-        if (buffer.id === $activeBufferId) return 'text-text font-semibold';
-        const eff = getEffectiveUnread(buffer);
-        if (buffer.notification >= 3) return 'text-accent font-bold';
-        if (eff > 0) return 'text-accent font-medium';
-        return 'text-text-secondary font-medium group-hover:text-text';
-    }
+  function getNotifyClass(buffer: BufferData): string {
+    if (buffer.id === $activeBufferId) return 'text-text font-semibold';
+    const eff = getEffectiveUnread(buffer);
+    if (buffer.notification >= 3) return 'text-accent font-bold';
+    if (eff > 0) return 'text-accent font-medium';
+    return 'text-text-secondary font-medium group-hover:text-text';
+  }
 
-    // Return icon color class — follows active/hover state for visual cohesion
+  // Return icon color class — follows active/hover state for visual cohesion
     // Active icons use full opacity; inactive icons are slightly muted
-    function getIconClass(buffer: BufferData): string {
-        if (buffer.id === $activeBufferId) return 'text-accent opacity-100';
-        return 'text-text-muted opacity-75 group-hover:opacity-100 transition-colors';
-    }
+  function getIconClass(buffer: BufferData): string {
+    if (buffer.id === $activeBufferId) return 'text-accent opacity-100';
+    return 'text-text-muted opacity-75 group-hover:opacity-100 transition-colors';
+  }
 
 
-   function getQuickKeyIndex(buffer: BufferData): number | null {
-      if (!altKeyPressed && (!$settings.showQuickKeys || !$settings.enableQuickKeys)) return null;
-       const sorted = get(sortedVisibleBuffers) as BufferData[];
-      const idx = sorted.findIndex(b => b.id === buffer.id);
-      if (idx === -1 || idx >= 9) return null;
-      return idx + 1;
-    }
+  function getQuickKeyIndex(buffer: BufferData): number | null {
+    if (!altKeyPressed && (!$settings.showQuickKeys || !$settings.enableQuickKeys)) return null;
+    const sorted = get(sortedVisibleBuffers) as BufferData[];
+    const idx = sorted.findIndex(b => b.id === buffer.id);
+    if (idx === -1 || idx >= 9) return null;
+    return idx + 1;
+  }
 
-    function getBufferIcon(buffer: BufferData) {
-      const iconName = getBufferIconName(buffer);
-      if (iconName === 'hash') return Hash;
-      if (iconName === 'user') return User;
-      if (iconName === 'server') return Server;
-      if (iconName === 'monitor') return Monitor;
-      return Square;
-    }
+  function getBufferIcon(buffer: BufferData) {
+    const iconName = getBufferIconName(buffer);
+    if (iconName === 'hash') return Hash;
+    if (iconName === 'user') return User;
+    if (iconName === 'server') return Server;
+    if (iconName === 'monitor') return Monitor;
+    return Square;
+  }
 </script>
 
 <div class="w-56 sm:w-48 lg:w-52 bg-panel border-r border-border flex flex-col" data-testid="buffer-list">
@@ -139,60 +139,60 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
     </div>
   </div>
 
- <div class="flex-1 overflow-y-auto" data-testid="buffer-list-items">
-     {#each Object.entries(groupedBuffers) as [groupName, groupBufs] (groupName)}
+  <div class="flex-1 overflow-y-auto" data-testid="buffer-list-items">
+    {#each Object.entries(groupedBuffers) as [groupName, groupBufs] (groupName)}
       <div class="buffer-group border-b border-border">
-          {#if $settings.orderbyserver}
-            <div class="buffer-group-label text-xs font-bold text-text-muted bg-input-bg flex items-center gap-1">
-              <Server size={12} />{groupName}
-            </div>
-         {/if}
-          <div class="buffer-item-list">
+        {#if $settings.orderbyserver}
+          <div class="buffer-group-label text-xs font-bold text-text-muted bg-input-bg flex items-center gap-1">
+            <Server size={12} />{groupName}
+          </div>
+        {/if}
+        <div class="buffer-item-list">
           {#each groupBufs as buffer, i (buffer.id)}
-                 <div
-                     role="button"
-                     tabindex="0"
-                     onclick={() => handleBufferClick(buffer.id)}
-                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleBufferClick(buffer.id); }}
-                     ontouchstart={(e) => handleLongPressStart(buffer.id, e)}
-                     ontouchend={handleLongPressEnd}
-                     ontouchcancel={handleLongPressEnd}
-                     data-testid="buffer-item"
+            <div
+              role="button"
+              tabindex="0"
+              onclick={() => handleBufferClick(buffer.id)}
+              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleBufferClick(buffer.id); }}
+              ontouchstart={(e) => handleLongPressStart(buffer.id, e)}
+              ontouchend={handleLongPressEnd}
+              ontouchcancel={handleLongPressEnd}
+              data-testid="buffer-item"
                      {@attach tooltipAttachment(buffer)}
-                     style="--i: {i}"
-                     class="buffer-item-enter buffer-item group flex items-center gap-0.5 cursor-pointer rounded-r-md hover:bg-surface-raised active:bg-accent/10 transition-colors duration-150 touch-manipulation select-none {buffer.id === $activeBufferId ? 'border-s-[3px] border-s-accent bg-surface-raised' : 'border-s-[3px] border-s-transparent'}"
-                   >
-                  {#if getBufferIcon(buffer)}
-                    {@const Icon = getBufferIcon(buffer)}
-                   <div class="w-5 flex-shrink-0 inline-flex items-center justify-center">
-                     <Icon size={18} class="-translate-y-[1px] {getIconClass(buffer)}" />
-                   </div>
-                 {/if}
-<span class="buffer-name align-middle text-sm sm:text-xs {getNotifyClass(buffer)} min-w-0 truncate">
-                      {getDisplayName(buffer)}
-                    </span>
-{#if getEffectiveUnread(buffer) > 0}
-                          <Badge
-                            variant={buffer.notification > 0 ? 'danger' : 'warning'}
-                            mode="subtle"
-                            class="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold"
-                            data-testid="unread-badge"
-                          >
-                            {getEffectiveUnread(buffer)}
-                          </Badge>
-                        {/if}
-{#if getQuickKeyIndex(buffer) !== null}
-                          <Badge
-                            mode="bright"
-                            class="absolute left-1 top-1/2 -translate-y-1/2 h-4 text-[10px] font-bold shadow-sm px-1"
-                            data-testid="quick-key"
-                          >
-                            {getQuickKeyIndex(buffer)}
-                          </Badge>
-                        {/if}
-             </div>
+              style="--i: {i}"
+              class="buffer-item-enter buffer-item group flex items-center gap-0.5 cursor-pointer rounded-r-md hover:bg-surface-raised active:bg-accent/10 transition-colors duration-150 touch-manipulation select-none {buffer.id === $activeBufferId ? 'border-s-[3px] border-s-accent bg-surface-raised' : 'border-s-[3px] border-s-transparent'}"
+            >
+              {#if getBufferIcon(buffer)}
+                {@const Icon = getBufferIcon(buffer)}
+                <div class="w-5 flex-shrink-0 inline-flex items-center justify-center">
+                  <Icon size={18} class="-translate-y-[1px] {getIconClass(buffer)}" />
+                </div>
+              {/if}
+              <span class="buffer-name align-middle text-sm sm:text-xs {getNotifyClass(buffer)} min-w-0 truncate">
+                {getDisplayName(buffer)}
+              </span>
+              {#if getEffectiveUnread(buffer) > 0}
+                <Badge
+                  variant={buffer.notification > 0 ? 'danger' : 'warning'}
+                  mode="subtle"
+                  class="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold"
+                  data-testid="unread-badge"
+                >
+                  {getEffectiveUnread(buffer)}
+                </Badge>
+              {/if}
+              {#if getQuickKeyIndex(buffer) !== null}
+                <Badge
+                  mode="bright"
+                  class="absolute left-1 top-1/2 -translate-y-1/2 h-4 text-[10px] font-bold shadow-sm px-1"
+                  data-testid="quick-key"
+                >
+                  {getQuickKeyIndex(buffer)}
+                </Badge>
+              {/if}
+            </div>
 
-             <style>
+            <style>
                         /* Spacing — overridable by themes via --spacing-* vars */
                         .buffer-item {
                           padding: var(--spacing-buffer-item-padding-y, 8px) var(--spacing-buffer-item-padding-x, 12px);
@@ -208,8 +208,8 @@ let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
                           padding: var(--spacing-buffer-group-label-padding, 4px 8px);
                         }
              </style>
-         {/each}
-          </div>
+          {/each}
+        </div>
       </div>
     {/each}
   </div>
