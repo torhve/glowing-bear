@@ -45,8 +45,8 @@
     ($currentBuffer ? (
       Object.values(get(buffers)).find(b =>
         b.type === 'server' &&
-        b.plugin === $currentBuffer.plugin &&
-        b.server === $currentBuffer.server
+          b.plugin === $currentBuffer.plugin &&
+          b.server === $currentBuffer.server
       )?.localVariables?.nick ?? ''
     ) : '')
   );
@@ -256,16 +256,16 @@
     // If nothing changed, skip scroll operations entirely
     if (!bufferChanged && !linesAdded) return;
 
-        // DEBUG: log scroll state on each effect run
-        console.log('[scroll-effect]',
-          `buf=${$currentBuffer?.shortName}`, { bufferChanged, linesAdded, wasFollowing,
-          scrollTop: containerRef?.scrollTop ?? '?',
-          scrollHeight: containerRef?.scrollHeight ?? '?',
-          clientHeight: containerRef?.clientHeight ?? '?',
-          threshold: containerRef ? containerRef.scrollHeight - containerRef.clientHeight - 3 : '?',
-          isAtBottom, lastSeen: $currentBuffer?.lastSeen ?? -1,
-          lines: curLinesLength },
-        );
+    // DEBUG: log scroll state on each effect run
+    console.log('[scroll-effect]',
+      `buf=${$currentBuffer?.shortName}`, { bufferChanged, linesAdded, wasFollowing,
+        scrollTop: containerRef?.scrollTop ?? '?',
+        scrollHeight: containerRef?.scrollHeight ?? '?',
+        clientHeight: containerRef?.clientHeight ?? '?',
+        threshold: containerRef ? containerRef.scrollHeight - containerRef.clientHeight - 3 : '?',
+        isAtBottom, lastSeen: $currentBuffer?.lastSeen ?? -1,
+        lines: curLinesLength },
+    );
 
     // Dedup guard: run synchronously to prevent cascading effect re-runs.
     // Bypass when readmarker lookup previously failed, allowing retry.
@@ -298,14 +298,14 @@
             buf.lastSeen = buf.lines.length - 1;
             buffers.set({ ...get(buffers), [buf.id]: { ...buf } });
           }
-            } else {
-              // User manually scrolled away from bottom - do nothing.
+        } else {
+          // User manually scrolled away from bottom - do nothing.
               // Preserve their reading position; unread accumulates behind readmarker.
-              console.log('[scroll-effect SKIP]',
-                `buf=${$currentBuffer?.shortName}`,
-                'wasFollowing=false, not scrolling',
-              );
-            }
+          console.log('[scroll-effect SKIP]',
+            `buf=${$currentBuffer?.shortName}`,
+            'wasFollowing=false, not scrolling',
+          );
+        }
       });
       return;
     }
@@ -402,56 +402,56 @@
 </script>
 
 <div class="chat-view-container flex-1 flex flex-col overflow-hidden">
-      {#if $currentBuffer}
-        <div class="h-[var(--spacing-topicbar-height,32px)] bg-input-bg border-b border-border flex items-center px-3 w-full" data-testid="topic-bar-container">
-          <!-- Left zone: clickable to open topic modal -->
+  {#if $currentBuffer}
+    <div class="h-[var(--spacing-topicbar-height,32px)] bg-input-bg border-b border-border flex items-center px-3 w-full" data-testid="topic-bar-container">
+      <!-- Left zone: clickable to open topic modal -->
+      <button
+        type="button"
+        data-testid="topic-bar"
+        popovertarget="topic-modal"
+        class="flex items-center flex-1 min-w-0 text-left text-sm hover:bg-surface transition-colors rounded py-1"
+        title="Click to view topic"
+      >
+        <FileText size={14} class="text-text-muted mr-1 flex-shrink-0" />
+        <span class="topic-channel-name text-text flex-shrink-0 whitespace-nowrap">{$currentBuffer.shortName}</span>
+        <span class="topic-separator text-text-muted mx-2 flex-shrink-0">-</span>
+        <span class="topic-text text-text-secondary truncate overflow-hidden min-w-0">
+          <LinkifiedText text={topicText} />
+        </span>
+      </button>
+
+      <!-- Right zone: action controls (always visible) -->
+      <div class="flex items-center gap-0.5 flex-shrink-0 ml-2" data-testid="topic-controls">
+        <!-- Pin/Unpin button -->
+        <button
+          type="button"
+          onclick={handleTogglePin}
+          class="text-text-muted hover:text-text p-1 rounded transition-colors"
+          data-testid="pin-buffer"
+          title={$currentBuffer.pinned ? 'Unpin buffer' : 'Pin buffer'}
+        >
+          {#if $currentBuffer.pinned}
+            <PinOff size={16} />
+          {:else}
+            <Pin size={16} />
+          {/if}
+        </button>
+
+        <!-- Close button — only show if buffer has no activity (no unread/notification) -->
+        {#if $currentBuffer.notification === 0 && $currentBuffer.unread === 0}
           <button
             type="button"
-            data-testid="topic-bar"
-            popovertarget="topic-modal"
-            class="flex items-center flex-1 min-w-0 text-left text-sm hover:bg-surface transition-colors rounded py-1"
-            title="Click to view topic"
+            onclick={handleCloseBuffer}
+            class="text-text-muted hover:text-danger p-1 rounded transition-colors"
+            data-testid="close-buffer"
+            title="Close buffer"
           >
-            <FileText size={14} class="text-text-muted mr-1 flex-shrink-0" />
-            <span class="topic-channel-name text-text flex-shrink-0 whitespace-nowrap">{$currentBuffer.shortName}</span>
-            <span class="topic-separator text-text-muted mx-2 flex-shrink-0">-</span>
-            <span class="topic-text text-text-secondary truncate overflow-hidden min-w-0">
-              <LinkifiedText text={topicText} />
-            </span>
+            <X size={16} />
           </button>
-
-          <!-- Right zone: action controls (always visible) -->
-          <div class="flex items-center gap-0.5 flex-shrink-0 ml-2" data-testid="topic-controls">
-            <!-- Pin/Unpin button -->
-            <button
-              type="button"
-              onclick={handleTogglePin}
-              class="text-text-muted hover:text-text p-1 rounded transition-colors"
-              data-testid="pin-buffer"
-              title={$currentBuffer.pinned ? 'Unpin buffer' : 'Pin buffer'}
-            >
-              {#if $currentBuffer.pinned}
-                <PinOff size={16} />
-              {:else}
-                <Pin size={16} />
-              {/if}
-            </button>
-
-            <!-- Close button — only show if buffer has no activity (no unread/notification) -->
-            {#if $currentBuffer.notification === 0 && $currentBuffer.unread === 0}
-              <button
-                type="button"
-                onclick={handleCloseBuffer}
-                class="text-text-muted hover:text-danger p-1 rounded transition-colors"
-                data-testid="close-buffer"
-                title="Close buffer"
-              >
-                <X size={16} />
-              </button>
-            {/if}
-          </div>
-        </div>
-      {/if}
+        {/if}
+      </div>
+    </div>
+  {/if}
 
   <div
     bind:this={containerRef}
@@ -546,10 +546,10 @@
           {#if !$currentBuffer.allLinesFetched && messages.length > 0}
             <tr class="bufferline fetchmore-row">
               <td class="text-center py-1" colspan=3>
-                 <button type="button" class="fetchmorelines flex items-center gap-1 px-3 py-1 rounded text-xs font-medium text-text-secondary hover:text-text hover:bg-surface-raised transition-colors" onclick={handleFetchMore}>
-                    <ChevronUp size={14} class="text-text-muted" />
-                    Fetch more lines
-                  </button>
+                <button type="button" class="fetchmorelines flex items-center gap-1 px-3 py-1 rounded text-xs font-medium text-text-secondary hover:text-text hover:bg-surface-raised transition-colors" onclick={handleFetchMore}>
+                  <ChevronUp size={14} class="text-text-muted" />
+                  Fetch more lines
+                </button>
                 <span class={['loading-spinner', { hidden: !isLoadingMore }]}>
                   Fetching more lines<span class="loading-dots"><span>.</span><span>.</span><span>.</span></span>
                 </span>

@@ -202,26 +202,26 @@
 
   // Build token groups from message content for rendering.
   function getMessageTokenGroups(): TokenGroup[] {
-      if (!message.content || message.content.length === 0) {
-          const text = message.text || '';
-          return text ? [{ classes: '', tokens: tokenizeAndCodify(text) }] : [];
-      }
-      return message.content.map(part => ({
-          classes: (part.classes || []).join(' '),
-          tokens: tokenizeAndCodify(part.text || '')
-      })).filter(group => group.tokens.length > 0);
+    if (!message.content || message.content.length === 0) {
+      const text = message.text || '';
+      return text ? [{ classes: '', tokens: tokenizeAndCodify(text) }] : [];
+    }
+    return message.content.map(part => ({
+      classes: (part.classes || []).join(' '),
+      tokens: tokenizeAndCodify(part.text || '')
+    })).filter(group => group.tokens.length > 0);
   }
 
   let tokenGroups = $derived(getMessageTokenGroups());
 
   function handleMention() {
-      if (onMention) {
-          onMention(message);
-      }
+    if (onMention) {
+      onMention(message);
+    }
   }
 
   function getIconType(part: { text: string }): PrefixIconType | null {
-      return detectPrefixIcon(part.text);
+    return detectPrefixIcon(part.text);
   }
 
 </script>

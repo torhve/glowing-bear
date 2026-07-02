@@ -8,6 +8,7 @@
   import BufferList from '$components/BufferList.svelte';
   import Nicklist from '$components/Nicklist.svelte';
   import Toast from '$components/Toast.svelte';
+  import ContentSearchModal from '$components/ContentSearchModal.svelte';
   import X from '@lucide/svelte/icons/x';
   import { settings, updateSettings, applyHashParams } from '$lib/stores/settings';
   import { initTheme } from '$lib/stores/theme';
@@ -90,9 +91,9 @@
         (e as BeforeUnloadEvent).returnValue = '';
       }
     };
-    
+
     document.addEventListener('beforeunload', handleBeforeUnload);
-    
+
     return () => {
       document.removeEventListener('beforeunload', handleBeforeUnload);
     };
@@ -147,7 +148,7 @@
           await fetchMoreLines(100);
         } catch (err) {
           console.error('[+page] fetchMoreLines failed:', err);
-          // Silently ignore fetch failures on buffer switch
+        // Silently ignore fetch failures on buffer switch
         }
       })();
     }
@@ -377,9 +378,16 @@
       toggleBufferSearchGlobal();
       return;
     }
+
+    // Ctrl+F -> content search
+    if (e.ctrlKey && (code === 70 || code === 102)) {
+      e.preventDefault();
+      openContentSearch();
+      return;
+    }
   }
 
- function handleGlobalKeyDown(e: KeyboardEvent) {
+  function handleGlobalKeyDown(e: KeyboardEvent) {
     handleGlobalKeyboard(e);
     // Use get() to avoid $effect dependency on $settings (prevents listener re-registration)
     const s = get(settings);
@@ -402,6 +410,28 @@
     showBufferListOnMobile();
     const modal = document.getElementById('buffer-search-modal');
     modal?.showPopover();
+  }
+
+  function openContentSearch() {
+    showBufferListOnMobile();
+    const modal = document.getElementById('content-search-modal');
+    modal?.showPopover();
+  }
+
+  async function executeContentSearch(query: string) {
+    // Send /grep scoped to the current buffer so WeeChat searches the right one
+    const bufId = get(activeBufferId);
+    sendWeeChatCommand(`/grep ${query}`, bufId);
+    // Wait for WeeChat to process — the *grep buffer may already exist
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    const allBuffers = Object.values(get(buffers)) as BufferData[];
+    // WeeChat's grep buffer shortName is 'grep' (fullName: 'python.grep')
+    const grepBuffer = allBuffers.find(b => b.shortName === 'grep');
+    if (grepBuffer) {
+      await switchBuffer(grepBuffer.id);
+    } else {
+      addToast('No results found', { type: 'info', duration: 2000 });
+    }
   }
 
   let _altKeyPressed = $state(false);
@@ -628,7 +658,7 @@
   <ConnectionForm />
 {:else}
   <div class="main-layout h-dvh flex flex-col bg-bg" data-testid="chat-view">
-        <TopBar bufferListVisible={showBufferList || !isMobileState} onBufferSelect={hideBufferListOnMobile} onSearchOpen={showBufferListOnMobile} onNicklistToggle={() => { if (isMobile()) { nicklistOpenOnMobile = !nicklistOpenOnMobile; if (nicklistOpenOnMobile) showBufferList = false; } else updateSettings({ showNicklist: !$settings.showNicklist }); }} />
+    <TopBar bufferListVisible={showBufferList || !isMobileState} onBufferSelect={hideBufferListOnMobile} onSearchOpen={showBufferListOnMobile} onNicklistToggle={() => { if (isMobile()) { nicklistOpenOnMobile = !nicklistOpenOnMobile; if (nicklistOpenOnMobile) showBufferList = false; } else updateSettings({ showNicklist: !$settings.showNicklist }); }} />
     <div class="main-content flex-1 flex overflow-hidden">
       {#if showBufferList || !isMobileState}
         <BufferList altKeyPressed={_altKeyPressed} onBufferSelect={hideBufferListOnMobile} />
@@ -661,3 +691,5 @@
 {/if}
 
 <Toast />
+
+<ContentSearchModal onSearch={executeContentSearch} />

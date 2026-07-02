@@ -1,10 +1,10 @@
 <script lang="ts">
   import { settings, updateSettings } from '$lib/stores/settings';
-    import { get } from 'svelte/store';
+  import { get } from 'svelte/store';
   import { requestNotificationPermission, isNotificationSupported } from '$lib/notifications';
   import { themeStore, setTheme, themes, themeLabels } from '$lib/stores/theme';
   import { weechatVersion } from '$lib/stores/models';
-import BaseDialog from '$components/BaseDialog.svelte';
+  import BaseDialog from '$components/BaseDialog.svelte';
   import Palette from '@lucide/svelte/icons/palette';
   import Monitor from '@lucide/svelte/icons/monitor';
   import Bell from '@lucide/svelte/icons/bell';
@@ -77,7 +77,7 @@ import BaseDialog from '$components/BaseDialog.svelte';
       iAlb: '',
       onlyUnread: false,
       noembed: true,
-    orderbyserver: true,
+      orderbyserver: true,
       useFavico: true,
       soundnotification: true,
       enableMathjax: false,
@@ -130,8 +130,8 @@ import BaseDialog from '$components/BaseDialog.svelte';
             <select
               id="theme-selector"
               data-testid="theme-selector"
-    value={$themeStore}
-    onchange={(e) => handleThemeChange(e.currentTarget.value)}
+              value={$themeStore}
+              onchange={(e) => handleThemeChange(e.currentTarget.value)}
               class="w-full px-3 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent"
             >
               {#each themes as theme (theme)}
@@ -366,29 +366,29 @@ import BaseDialog from '$components/BaseDialog.svelte';
           </label>
 
           {#if notifSupported}
-              {#if notifPermissionStatus === 'granted'}
-                <div class="notification-status granted flex items-center gap-2 py-1">
-                  <span         class="text-xs text-success font-medium transition-opacity">✓ Granted</span>
+            {#if notifPermissionStatus === 'granted'}
+              <div class="notification-status granted flex items-center gap-2 py-1">
+                <span         class="text-xs text-success font-medium transition-opacity">✓ Granted</span>
+              </div>
+            {:else if notifPermissionStatus === 'denied'}
+              <div class="notification-status denied space-y-1">
+                <div class="flex items-center gap-2 py-1">
+                  <span class="text-xs text-danger font-medium">✕ Denied</span>
                 </div>
-              {:else if notifPermissionStatus === 'denied'}
-                <div class="notification-status denied space-y-1">
-                  <div class="flex items-center gap-2 py-1">
-                    <span class="text-xs text-danger font-medium">✕ Denied</span>
-                  </div>
-                 <p class="text-xs text-text-secondary">Permission was denied. Please enable notifications in your browser settings.</p>
-               </div>
-             {:else}
-               <button
-                  type="button"
-                  onclick={handleNotificationPermission}
-                  data-testid="request-notification-permission-button"
-                  class="px-3 py-1.5 bg-accent hover:bg-accent-hover text-white text-sm rounded transition-colors"
-                >
-                  <Bell size={16} class="inline-block mr-1" />
-                  Request Notification Permission
-                </button>
-             {/if}
-           {/if}
+                <p class="text-xs text-text-secondary">Permission was denied. Please enable notifications in your browser settings.</p>
+              </div>
+            {:else}
+              <button
+                type="button"
+                onclick={handleNotificationPermission}
+                data-testid="request-notification-permission-button"
+                class="px-3 py-1.5 bg-accent hover:bg-accent-hover text-white text-sm rounded transition-colors"
+              >
+                <Bell size={16} class="inline-block mr-1" />
+                Request Notification Permission
+              </button>
+            {/if}
+          {/if}
         </div>
       </section>
 
@@ -408,27 +408,27 @@ import BaseDialog from '$components/BaseDialog.svelte';
             />
           </label>
 
-         <div>
-             <label for="imgur-token" class="block text-sm text-text-secondary mb-1 flex items-center gap-1"><Image size={14} class="shrink-0" />Imgur API Token</label>
-             <FormInput
-               id="imgur-token"
-               type="text"
-               value={$settings.iToken}
-               oninput={(e: Event) => updateSettings({ iToken: (e.target as HTMLInputElement).value })}
-               placeholder="Your Imgur API token"
-             />
-           </div>
+          <div>
+            <label for="imgur-token" class="block text-sm text-text-secondary mb-1 flex items-center gap-1"><Image size={14} class="shrink-0" />Imgur API Token</label>
+            <FormInput
+              id="imgur-token"
+              type="text"
+              value={$settings.iToken}
+              oninput={(e: Event) => updateSettings({ iToken: (e.target as HTMLInputElement).value })}
+              placeholder="Your Imgur API token"
+            />
+          </div>
 
-           <div>
-             <label for="imgur-album" class="block text-sm text-text-secondary mb-1 flex items-center gap-1"><Image size={14} class="shrink-0" />Imgur Album Hash</label>
-             <FormInput
-               id="imgur-album"
-               type="text"
-               value={$settings.iAlb}
-               oninput={(e: Event) => updateSettings({ iAlb: (e.target as HTMLInputElement).value })}
-               placeholder="Imgur album hash"
-             />
-           </div>
+          <div>
+            <label for="imgur-album" class="block text-sm text-text-secondary mb-1 flex items-center gap-1"><Image size={14} class="shrink-0" />Imgur Album Hash</label>
+            <FormInput
+              id="imgur-album"
+              type="text"
+              value={$settings.iAlb}
+              oninput={(e: Event) => updateSettings({ iAlb: (e.target as HTMLInputElement).value })}
+              placeholder="Imgur album hash"
+            />
+          </div>
         </div>
       </section>
 

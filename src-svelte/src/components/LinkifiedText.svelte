@@ -13,18 +13,18 @@
 </script>
 
 <span class="linkified-text">
-{#each tokens as token, ti (ti)}
-  {#if token.type === 'link'}
-    <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-    <a href={token.value} target="_blank" rel="noopener noreferrer" class="linkified-link {linkClass}">{token.value}</a>
-  {:else if token.type === 'code'}
-    <span class="hidden-bracket">{token.delimiter}</span>
-    <code class="linkified-code">{token.value}</code>
-    <span class="hidden-bracket">{token.delimiter}</span>
-  {:else}
-    {token.value}
-  {/if}
-{/each}
+  {#each tokens as token, ti (ti)}
+    {#if token.type === 'link'}
+      <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+      <a href={token.value} target="_blank" rel="noopener noreferrer" class="linkified-link {linkClass}">{token.value}</a>
+    {:else if token.type === 'code'}
+      <span class="hidden-bracket">{token.delimiter}</span>
+      <code class="linkified-code">{token.value}</code>
+      <span class="hidden-bracket">{token.delimiter}</span>
+    {:else}
+      {token.value}
+    {/if}
+  {/each}
 </span>
 
 <style>

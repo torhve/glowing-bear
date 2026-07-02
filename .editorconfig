@@ -25,3 +25,6 @@ indent_size = 4
 # Markdown
 [*.md]
 indent_size = 4
+
+[*.svelte]
+indent_size = 2

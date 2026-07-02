@@ -89,16 +89,16 @@
         >
           <div class="connection-dot w-2 h-2 rounded-full {
             $connectionState.status === 'connected' ? 'bg-success' :
-            $connectionState.status === 'connecting' || $connectionState.status === 'reconnecting' ? 'bg-warning animate-pulse' :
-            $connectionState.status === 'error' || $connectionState.status === 'disconnected' ? 'bg-danger' :
-            'bg-text-muted'
+              $connectionState.status === 'connecting' || $connectionState.status === 'reconnecting' ? 'bg-warning animate-pulse' :
+                $connectionState.status === 'error' || $connectionState.status === 'disconnected' ? 'bg-danger' :
+                'bg-text-muted'
           }"></div>
           <span class="connection-status-text text-text-secondary">
             {$connectionState.status === 'connected' ? '' :
-             $connectionState.status === 'connecting' ? 'Connecting...' :
-             $connectionState.status === 'reconnecting' ? 'Reconnecting...' :
-             $connectionState.status === 'error' ? 'Error' :
-             'Disconnected'}
+              $connectionState.status === 'connecting' ? 'Connecting...' :
+                $connectionState.status === 'reconnecting' ? 'Reconnecting...' :
+                $connectionState.status === 'error' ? 'Error' :
+                'Disconnected'}
           </span>
         </button>
       </div>
@@ -151,10 +151,10 @@
 
 </div>
 
-    <BufferSearchModal onBufferSelect={onBufferSelect} />
-    <SettingsModal />
+<BufferSearchModal onBufferSelect={onBufferSelect} />
+<SettingsModal />
 
-    <style>
+<style>
       /* Spacing — overridable by themes via --spacing-* vars */
       .top-bar-btn {
         padding: var(--spacing-topbar-button-padding-y, 4px) var(--spacing-topbar-button-padding-x, 8px);
