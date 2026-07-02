@@ -2,7 +2,7 @@ import { get } from 'svelte/store';
 import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, incrementReconnectAttempts } from '$lib/stores/connectionStore';
 import { buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer, localUnreadBuffers, hotlistClearedBuffers, bufferBottom, previousBufferId, pendingBufferSwitch, isSyncing } from '$lib/stores/models';
 import { settings } from '$lib/stores/settings';
-import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist, setOnUpgrade, setOnUpgradeEnded } from '$lib/stores/handlers';
+import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist, flushLineBatch, setOnUpgrade, setOnUpgradeEnded } from '$lib/stores/handlers';
 import { addToast, removeToast, clearToasts, toastStore } from '$lib/toast';
 import { onDisconnect } from '$lib/notifications';
 import { Protocol } from '$lib/weechat';
@@ -31,6 +31,9 @@ let connectionGeneration = 0;
 // Does NOT touch connectionData (needed by scheduleReconnect / handleReconnectDecision)
 // and does NOT set connection status (caller decides based on context).
 function resetAllState() {
+    // Flush any pending line batches before clearing state to avoid losing data.
+    flushLineBatch();
+
     // Reject all pending callbacks
     Object.keys(callbacks).forEach(k => {
         const id = parseInt(k, 10);
