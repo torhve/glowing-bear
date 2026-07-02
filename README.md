@@ -23,7 +23,6 @@ npm run build
 
 This produces a `build/` directory containing all the files you need. Point your web server at it. For HTTPS hosting, see the [Getting Started](#getting-started-for-users) section below.
 
-
 ### Progressive Web App
 
 Glowing Bear includes PWA support with auto-update strategy. On supported browsers and devices, you can install it as an app:
@@ -43,8 +42,6 @@ npm install
 npm run tauri:build
 ```
 
-Uses the project-bundled `@tauri-apps/cli` (v2) rather than a globally installed `cargo tauri`, ensuring version consistency with Rust dependencies.
-
 Produces installers for Linux (deb), macOS (dmg), and Windows (msi/nsis).
 
 ## Getting Started for Users
@@ -62,22 +59,6 @@ Then enter your WeeChat host, port, and password in Glowing Bear's connection fo
 
 ## Development
 
-### Prerequisites
-
-- **Node.js** (v20+)
-- **Rust/Cargo** — only needed if building Tauri desktop apps
-
-### Setup
-
-```bash
-npm install
-npm run dev          # Development server at localhost:8001
-npm run build        # Production static build → build/
-npm run preview      # Preview production build locally
-npm run check        # TypeScript type checking
-npm run lint         # ESLint
-```
-
 ### Tech Stack
 
 - [SvelteKit 2.x](https://svelte.dev/docs/kit) + [Svelte 5](https://svelte.dev) (runes)
@@ -87,41 +68,65 @@ npm run lint         # ESLint
 - [@vite-pwa/sveltekit](https://github.com/vike/vite-plugin-pwa) (PWA)
 - [Vitest](https://vitest.dev) (unit tests) + [Playwright](https://playwright.dev) (E2E tests)
 
+### Prerequisites
+
+- **Node.js** (v20+)
+- **Rust/Cargo** — only needed if building Tauri desktop apps
+
+### Daily Development
+
+```bash
+npm install
+npm run dev          # Development server at localhost:8001
+npm run check        # TypeScript type checking
+npm run lint         # ESLint
+npm run knip         # Detect unused dependencies and exports
+```
+
+### Building
+
+```bash
+npm run build        # Production static build → build/
+npm run preview      # Preview production build locally
+npm run tauri:build  # Tauri desktop production build (requires Rust)
+```
+
 ### Testing
 
 ```bash
-npm test                        # Run unit tests (Vitest)
-npm run test:e2e                # Run E2E tests (Playwright)
-npm run test:e2e -- --grep "X"  # Run specific E2E tests
-npm run irc:start               # Start gbtest IRC server fixture
-npm run irc:stop                # Stop gbtest IRC server
+npm test                         # Run unit tests (Vitest)
+npm run test:watch               # Unit tests in watch mode
+npm run test:e2e                 # Run E2E tests (Playwright)
+npm run test:e2e -- --grep "X"   # Run specific E2E tests
+npm run test:e2e:watch           # E2E tests in Playwright UI mode
+npm run test:e2e:debug           # E2E tests in debug mode
+npm run irc:start                # Start gbtest IRC server fixture
+npm run irc:stop                 # Stop gbtest IRC server
 ```
 
 Unit tests live in `src-svelte/test/unit/`. E2E tests in `src-svelte/e2e/specs/`. The gbtest IRC server (`test/fixtures/gbtest/`) provides a local WeeChat instance for automated testing.
 
+### Tauri Desktop
+
+```bash
+npm run tauri      # Tauri CLI
+npm run tauri:dev  # Tauri desktop dev mode (requires Rust)
+```
+
+Uses the project-bundled `@tauri-apps/cli` (v2) rather than a globally installed `cargo tauri`, ensuring version consistency with Rust dependencies.
+
+### Utilities
+
+```bash
+npm run generate-icons  # Generate PWA icons from source SVG
+npm run generate-icns   # Generate macOS .icns icon file
+npm run irc:server      # Run the IRC server fixture directly via tsx
+```
+
+
 ### Themes
 
-Glowing Bear ships with 14 built-in themes:
-
-| Theme | Description |
-|---|---|
-| Dark | Default dark theme |
-| Light | Default light theme |
-| Black | Pure black background |
-| Dark Spacious | Dark theme with extra padding |
-| Blue | Blue-tinted dark theme |
-| Blue Modern | OKLCH-based blue theme |
-| Catppuccin Mocha | Cozy dark purple-blue |
-| Catppuccin Macchiato | Medium contrast soothing |
-| Catppuccin Frappé | Muted, subdued aesthetic |
-| Catppuccin Latte | Light variant |
-| Solarized Dark | Solarized dark palette |
-| Solarized Light | Solarized light palette |
-| Base16 Default | Standard base16 dark |
-| Base16 Mocha | Warm dark base16 |
-| Base16 Light | Standard base16 light |
-| Base16 Ocean Dark | Cool ocean tones |
-
+Glowing Bear ships with built-in themes (Dark, Light, Black, Catppuccin variants, Base16 variants, and more).
 Custom CSS injection is also available in settings for unlimited personalization.
 
 ### Key Features
