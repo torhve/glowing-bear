@@ -44,6 +44,45 @@ import type {
     BufferType,
 } from "$lib/types";
 
+// ---- Batched line addition handling ----
+// During rapid message bursts, WeeChat sends many _buffer_line_added messages
+// in quick succession. Processing each one immediately triggers reactive cascades.
+// This queue accumulates messages and flushes via microtask so that messages
+// arriving in the same synchronous processing pass are merged into one store update,
+// while still being available for downstream logic (readmarker, setActiveBuffer) before
+// the next macrotask runs.
+const pendingLineMessages: ProtocolMessage[] = [];
+let flushScheduled = false;
+
+// Flushes all accumulated _buffer_line_added messages through handleBufferLineAdded
+// as a single batch, then clears the queue. Called from microtask or on disconnect.
+export function flushLineBatch(): void {
+    if (pendingLineMessages.length === 0) return;
+    const batch = pendingLineMessages.splice(0);
+    flushScheduled = false;
+
+    // Process entire batch through handleBufferLineAdded which already does
+    // its own batching of lines into a single buffers.update() call.
+    // For multiple messages, merge their objects[0].content arrays first.
+    if (batch.length === 1) {
+        handleBufferLineAdded(batch[0]!);
+    } else {
+        // Merge all line arrays into a single message for efficient processing
+        const mergedLines: BufferLineMessage[] = [];
+        for (const msg of batch) {
+            const lines = msg.objects[0]?.content as BufferLineMessage[] | undefined;
+            if (lines) mergedLines.push(...lines);
+        }
+        if (mergedLines.length > 0) {
+            const firstMsg = batch[0]!;
+            handleBufferLineAdded({
+                id: firstMsg.id,
+                objects: [{ pointer: firstMsg.objects[0]?.pointer ?? '', content: mergedLines }],
+            });
+        }
+    }
+}
+
 /**
  * Trims buffer lines to the given limit, adjusting lastSeen and requestedLines
  * to preserve readmarker position relative to visible content.
@@ -1831,6 +1870,17 @@ const eventHandlers: Record<string, (msg: ProtocolMessage) => void> = {
 };
 
 export function handleEvent(event: ProtocolMessage) {
+    // Batch _buffer_line_added events to reduce reactive cascades during bursts.
+    // Queue messages and flush via microtask to merge rapid arrivals into one update.
+    if (event.id === '_buffer_line_added') {
+        pendingLineMessages.push(event);
+        if (!flushScheduled) {
+            flushScheduled = true;
+            queueMicrotask(flushLineBatch);
+        }
+        return;
+    }
+
     const handler = eventHandlers[event.id];
     if (handler) {
         console.debug(
