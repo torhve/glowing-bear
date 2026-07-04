@@ -9,6 +9,8 @@ export interface ConnectionState {
     // Reconnect loop guard
     reconnectAttempts: number;
     lastReconnectAt: number;
+    // Timestamp for next scheduled reconnect attempt (ms since epoch)
+    nextReconnectAt?: number;
 }
 
 interface ConnectionStats {
@@ -36,7 +38,8 @@ const initialState: ConnectionState = {
     userDisconnect: false,
     wasEverConnected: false,
     reconnectAttempts: 0,
-    lastReconnectAt: 0
+    lastReconnectAt: 0,
+    nextReconnectAt: undefined
 };
 
 const initialStats: ConnectionStats = {
@@ -76,7 +79,8 @@ export function disconnect() {
         wasEverConnected: false,
         errors: { ...initialState.errors },
         reconnectAttempts: 0,
-        lastReconnectAt: 0
+        lastReconnectAt: 0,
+        nextReconnectAt: undefined
     });
     connectionStats.set(initialStats);
 }
@@ -134,7 +138,7 @@ export function formatDuration(ms: number): string {
 
 // Reset reconnect attempt counter on successful connection
 export function resetReconnectAttempts() {
-    connectionState.update(current => ({ ...current, reconnectAttempts: 0, lastReconnectAt: 0 }));
+    connectionState.update(current => ({ ...current, reconnectAttempts: 0, lastReconnectAt: 0, nextReconnectAt: undefined }));
 }
 
 // Set reconnect attempt count to a specific value (used by tests)
@@ -152,5 +156,10 @@ export function incrementReconnectAttempts(): number {
         return { ...current };
     });
     return attempts;
+}
+
+// Set the timestamp for next scheduled reconnect attempt.
+export function setNextReconnectAt(ts: number | undefined) {
+    connectionState.update(current => ({ ...current, nextReconnectAt: ts }));
 }
 

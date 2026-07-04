@@ -11,8 +11,14 @@
   // Map of toast ID -> toast data for toasts currently playing exit animation
   let _removing: Map<number, import('$lib/toast').Toast> = $state(new Map());
 
+  // Ticking counter to force re-render of toasts with dynamic messageFn (countdown)
+  let _tick = $state(0);
+
   $effect(() => {
-    return toastStore.subscribe(value => {
+    const tickInterval = setInterval(() => {
+      _tick++;
+    }, 1000);
+    const unsub = toastStore.subscribe(value => {
       untrack(() => {
         const prevActive = _active;
         const newIds = new Set(value.map(t => t.id));
@@ -30,6 +36,10 @@
         _active = value;
       });
     });
+    return () => {
+      clearInterval(tickInterval);
+      unsub();
+    };
   });
 
   function scheduleCleanup(id: number) {
@@ -94,7 +104,15 @@
         {:else if toast.type === 'warning'}
           <AlertTriangle size={16} class="toast-icon text-black flex-shrink-0 mt-0.5" />
         {/if}
-        <span class="toast-message flex-1 text-sm">{toast.message}</span>
+        <div class="flex-1 min-w-0">
+          <span class="toast-message text-sm">{toast.message}</span>
+          {#if toast.messageFn}
+            <!-- _tick creates reactive dependency for second-by-second countdown updates -->
+            <!-- eslint-disable-next-line @typescript-eslint/no-unused-vars -->
+            {@const _ = _tick}
+            <span class="block text-xs opacity-70 mt-0.5">Reconnecting in {toast.messageFn()}...</span>
+          {/if}
+        </div>
         <button
           onclick={() => handleClose(toast.id)}
           class="text-text-secondary/60 hover:text-text flex-shrink-0 transition-colors"
