@@ -1,9 +1,9 @@
 import { get } from 'svelte/store';
-import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, incrementReconnectAttempts } from '$lib/stores/connectionStore';
+import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, incrementReconnectAttempts, setNextReconnectAt } from '$lib/stores/connectionStore';
 import { buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer, localUnreadBuffers, hotlistClearedBuffers, bufferBottom, previousBufferId, pendingBufferSwitch, isSyncing } from '$lib/stores/models';
 import { settings } from '$lib/stores/settings';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist, flushLineBatch, setOnUpgrade, setOnUpgradeEnded } from '$lib/stores/handlers';
-import { addToast, removeToast, clearToasts, toastStore } from '$lib/toast';
+import { addToast, removeToast, clearToasts, updateToast, toastStore } from '$lib/toast';
 import { onDisconnect } from '$lib/notifications';
 import { Protocol } from '$lib/weechat';
 import { sha256, pbkdf2 as nativePbkdf2, toHexString } from '$lib/utils/crypto';
@@ -88,26 +88,21 @@ function detectError(evt: CloseEvent): boolean {
 }
 
 // Decide whether to auto-reconnect or show a toast after WebSocket close.
-// Handles user disconnect, focus state, first-connection failure, and
+// Handles user disconnect, TOTP guard, first-connection failure, and
 // unexpected close codes. Delegates to scheduleReconnect for auto-retry.
 function handleReconnectDecision(evt: CloseEvent) {
     const state = get(connectionState);
     if (state.userDisconnect) {
         connectionData = null;
-    } else if (typeof document !== 'undefined' && !document.hasFocus()) {
-        if (state.wasEverConnected && connectionData) {
-            showDisconnectToast(connectionData);
-        }
     } else if (!state.wasEverConnected) {
         // First connection failed — errors already set by detectError
-    } else if (evt.code === 1005 || evt.code === 1006 || evt.code === 1011) {
-        if (connectionData) showDisconnectToast(connectionData);
-        scheduleReconnect();
     } else if (evt.code === 403 || evt.code === 401) {
         setErrors({ passwordError: true });
         if (connectionData) showDisconnectToast(connectionData);
-    } else {
-        if (connectionData) showDisconnectToast(connectionData);
+    } else if (connectionData) {
+        showDisconnectToast(connectionData);
+        // Don't auto-reconnect for TOTP connections — tokens expire and cannot be reused
+        if (get(settings).useTotp) return;
         scheduleReconnect();
     }
 }
@@ -484,7 +479,7 @@ function showDisconnectToast(connInfo: [string, number, string, string, boolean,
     );
 }
 
-// Manual reconnect triggered by toast button — shared between disconnect toast and max-attempts error toast.
+// Manual reconnect triggered by toast button — resets backoff timer and tries immediately.
 function triggerManualReconnect(resetAttempts = false) {
     const toasts = get(toastStore);
     const lastToast = toasts[toasts.length - 1];
@@ -493,25 +488,28 @@ function triggerManualReconnect(resetAttempts = false) {
         clearTimeout(reconnectingTimer);
         reconnectingTimer = null;
     }
+    setNextReconnectAt(undefined);
     if (resetAttempts) resetReconnectAttempts();
     manualReconnectRequested = true;
     const [h, p, path, pw, tls, noComp] = connectionData!;
     connect(h, p, path, pw, tls, noComp);
 }
 
-// Max consecutive reconnection attempts before showing user a toast and stopping
-const maxReconnectAttempts = 8;
-// Minimum delay between reconnect attempts (ms)
-const minReconnectDelay = 10_000;
-// Maximum backoff delay (ms)
-const maxReconnectDelay = 60_000;
+// Initial delay before first reconnect attempt (ms)
+const initialReconnectDelay = 30_000;
+// Backoff multiplier for subsequent attempts
+const reconnectBackoffMultiplier = 1.5;
+// Maximum backoff delay cap (ms) — retries continue indefinitely beyond this
+const maxReconnectDelay = 300_000;
 
 // Calculate exponential backoff delay based on attempt number.
-// Starts at minReconnectDelay, increases by 5s per attempt, capped at maxReconnectDelay.
+// Starts at initialReconnectDelay, multiplies by reconnectBackoffMultiplier each attempt, capped at maxReconnectDelay.
 function reconnectDelay(attempts: number): number {
-    return Math.min(minReconnectDelay + (attempts - 1) * 5000, maxReconnectDelay);
+    return Math.min(initialReconnectDelay * Math.pow(reconnectBackoffMultiplier, attempts - 1), maxReconnectDelay);
 }
 
+// Schedule the next reconnect attempt with countdown toast.
+// Uses exponential backoff starting at 30s, capped at 5 min. Retries indefinitely.
 function scheduleReconnect() {
     if (!connectionData) return;
     // Don't auto-reconnect if user has disabled autoconnect in settings
@@ -523,34 +521,54 @@ function scheduleReconnect() {
     }
 
     const attempts = incrementReconnectAttempts();
+    const delay = reconnectDelay(attempts);
+    const nextAt = Date.now() + delay;
+    setNextReconnectAt(nextAt);
 
-    if (attempts > maxReconnectAttempts) {
-        // Max retries exhausted — stop auto-reconnecting, show persistent toast
+    if (DEBUG_CONNECTION) console.log(`[reconnect] attempt ${attempts}, retrying in ${(delay / 1000).toFixed(1)}s`);
+
+    const [host, port] = connectionData;
+
+    // Create or update countdown toast
+    const existingToast = findToastForDisconnect(host, port);
+    if (existingToast) {
+        updateToast(existingToast.id, {
+            messageFn: () => {
+                const remaining = Math.max(0, Math.ceil((nextAt - Date.now()) / 1000));
+                return `${remaining}s`;
+            },
+        });
+    } else {
         addToast(
-            `Connection lost after ${attempts - 1} failed reconnect attempts.`,
+            `Disconnected from ${host}:${port}`,
             {
-                type: 'error',
+                type: 'warning',
                 duration: 0,
+                messageFn: () => {
+                    const remaining = Math.max(0, Math.ceil((nextAt - Date.now()) / 1000));
+                    return `${remaining}s`;
+                },
                 buttons: [{
-                    text: 'Retry',
-                    action: () => triggerManualReconnect(true)
+                    text: 'Reconnect',
+                    action: () => triggerManualReconnect(false)
                 }]
             }
         );
-        return;
     }
 
-    const delay = reconnectDelay(attempts);
-    if (DEBUG_CONNECTION) console.log(`[reconnect] attempt ${attempts}/${maxReconnectAttempts}, retrying in ${delay / 1000}s`);
-
-    const [host, port, path, password, tls, noCompression] = connectionData;
+    const [h, p, path, password, tls, noCompression] = connectionData;
 
     reconnectingTimer = setTimeout(() => {
         reconnectingTimer = null;
         setConnectionStatus('reconnecting');
         resetAllState();
-        connect(host, port, path, password, tls, noCompression);
+        connect(h, p, path, password, tls, noCompression);
     }, delay);
+}
+
+// Find an existing disconnect toast for the given host:port.
+function findToastForDisconnect(host: string, port: number) {
+    return get(toastStore).find(t => t.type === 'warning' && t.message?.includes(`Disconnected from ${host}:${port}`)) ?? undefined;
 }
 
 // Fetch a single WeeChat config option via infolist and update wconfig store.
