@@ -6,52 +6,11 @@ Browser frontend for WeeChat IRC via WebSockets — **no backend**. Client-side 
 
 Source code in `src-svelte/src/` has `components/`, `lib/`, `routes/`. Config files (`package.json`, `svelte.config.js`, `vite.config.ts`, `vitest.config.ts`, `eslint.config.js`, `tsconfig.json`) live at repo root. Static assets in `static/`. Test suites in `src-svelte/test/unit/` and `src-svelte/e2e/specs/`. Gbtest environment in `test/fixtures/gbtest/`.
 
-### Key modules by directory
-
-**`src-svelte/src/lib/stores/`** — Reactive state management:
-
-- `connectionManager.ts` — WebSocket connection lifecycle, reconnection logic
-- `connectionStore.ts` — Current connection state
-- `handlers.ts` — WeeChat protocol message handlers
-- `models.ts` — Buffer, line, nick data models and mutations
-- `settings.ts` — User preferences persisted to localStorage
-- `theme.ts` — Theme configuration and Tailwind token mapping
-- `bufferResume.ts` — Last-active-buffer tracking across sessions
-- `inputHistory.ts` — Input bar history
-
-**`src-svelte/src/lib/` (root)** — Core utilities:
-
-- `types.ts` — Shared TypeScript type definitions
-- `utils.ts` — Nick completion, buffer search, mention building, relay URL parsing
-- `filters.ts`
-- `linkTokens.ts` — URL/code tokenization (`tokenizeLinks`, `codifyText`, `tokenizeAndCodify`)
-- `notifications.ts` — Desktop notification dispatch (Tauri + Web Notifications API)
-- `toast.ts` — In-app toast notifications
-- `emojify.ts` — Emoji shortcode replacement
-- `faviconBadge.ts` — Favicon hotlist badge updates
-- `weechat.ts` — WeeChat relay WebSocket protocol (handshake, compression, messaging)
-- `weechat-rest.ts`, `weechat-rest-types.ts` — WeeChat REST API client
-- `tauriWindow.ts` — Tauri window API wrapper
-- `debug.ts` — Debug logging utilities
-- `imgur.ts` — Imgur image upload integration
-
-**`src-svelte/src/lib/utils/`** — Helper utilities:
-
-- `bufferTooltip.ts` — Buffer tooltip content generation
-- `crypto.ts` — Password hashing (PBKDF2, native crypto)
-- `mediaExtensions.ts` — Media file type detection
-- `prefixIcons.ts` — IRC prefix icon mapping
-- `urlEmbeds.ts` — URL embed/rich preview generation
-
-**`src-svelte/src/components/`** — UI components:
-
-- `BufferList`, `BufferLineRow`, `BufferHotlist`, `BufferSearchModal` — Buffer navigation
-- `ChatView`, `InputBar` — Chat display and input
-- `Nicklist` — Nickname list with search
-- `LinkifiedText`, `TokenGroupRenderer` — Token-based text rendering
-- `TopicModal`, `TopBar`, `SettingsModal`, `ConnectionForm` — Modals and dialogs
-- `TauriTitlebar` — Custom Tauri window titlebar
-- `Badge`, `Toast`, `Tooltip`, `BaseDialog`, `ImageUploadPreview`, `PluginEmbed` — Shared UI
+- **`lib/stores/`** — Reactive state (buffers, connection, settings, theme, handlers)
+- **`lib/`** — Core utilities (types, linkTokens, weechat protocol, notifications, etc.)
+- **`lib/utils/`** — Helper utilities (bufferTooltip, crypto, mediaExtensions, etc.)
+- **`components/`** — UI components (chat, buffers, nicklist, modals, shared UI)
+- **`routes/`** — SvelteKit routes (+layout, +page, 404)
 
 ## Commands
 
@@ -83,9 +42,11 @@ To prevent effects from re-running on every store update, use `get(store)` insid
 
 ```ts
 $effect(() => {
-  const settings = get(settings);
-  const unsub = someSource.subscribe(value => { /* handle */ });
-  return () => unsub();  // cleanup on re-run
+    const settings = get(settings);
+    const unsub = someSource.subscribe((value) => {
+        /* handle */
+    });
+    return () => unsub(); // cleanup on re-run
 });
 ```
 
