@@ -127,13 +127,11 @@
     }
   });
 
+  // Control page scrolling: scrollable on front page, locked when connected.
   $effect(() => {
     void $connected;
-    const svelteEl = document.getElementById('svelte');
     const overflow = $connected ? 'hidden' : 'auto';
-    if (svelteEl) {
-      svelteEl.style.overflow = overflow;
-    }
+    document.documentElement.style.overflow = overflow;
     document.body.style.overflow = overflow;
   });
 
