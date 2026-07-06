@@ -15,7 +15,7 @@
   import { get } from 'svelte/store';
   import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig, sortedVisibleBuffers, checkAndNavigatePendingNotificationBuffer } from '$lib/stores/models';
   import { connectionState, setReconnectAttempts, setNextReconnectAt, setErrors } from '$lib/stores/connectionStore';
-  import { connect, fetchConfValue, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer, getWs } from '$lib/stores/connectionManager';
+  import { connect, fetchConfValue, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer, getWs, initFocusReconnect, cleanupFocusReconnect } from '$lib/stores/connectionManager';
   import { Protocol } from '$lib/weechat';
   import { initNotifications, updateTitle, updateFavico, onDisconnect } from '$lib/notifications';
   import { parseRelayUrl, isPopoverOpen, bufferHasNicklist, modifyTextareaValue } from '$lib/utils';
@@ -69,6 +69,7 @@
     initTheme();
     void initNotifications();
     initTouchGestures();
+    initFocusReconnect();
     void tryAutoConnect();
     checkAndNavigatePendingNotificationBuffer();
     document.body.setAttribute('data-app-ready', 'true');
@@ -80,6 +81,7 @@
 
     return () => {
       cleanupTouchGestures();
+      cleanupFocusReconnect();
       onDisconnect();
       window.onhashchange = null;
     };
