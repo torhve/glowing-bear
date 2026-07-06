@@ -103,7 +103,7 @@ Wrapped in Tauri 2.x for desktop distribution. Custom titlebar via `TauriTitleba
 
 ### Git
 
-After code changing is completed -> offer a choice to the user to git commit.
+After code changing is completed -> a choice to the user to git commit.
 Do NOT push.
 
 ## Legacy AngularJS Code
