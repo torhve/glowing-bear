@@ -555,7 +555,7 @@
             {/each}
             <!-- Readmarker row between read and unread -->
             <tr class="readmarker" data-testid="readmarker">
-              <td colspan="3" class="py-2">
+              <td colspan="3">
                 <div class="readmarker-container">
                   <div class="readmarker-line"></div>
                   <span class="readmarker-badge">{unreadCount} new</span>
@@ -616,6 +616,32 @@
     tbody,
     .chat-tbody {
       display: block;
+      width: 100%;
+    }
+
+    /* Readmarker in table mode: make row + cell block-level so they span full table width */
+    .readmarker,
+    .readmarker td {
+      display: block;
+      width: 100%;
+    }
+
+    .readmarker td {
+      padding-block: var(--spacing-line-padding-y, 8px);
+    }
+
+    /* Readmarker container: fill available width with badge centered */
+    .readmarker .readmarker-container {
+      width: 100%;
+    }
+
+    /* Readmarker in bubble mode: break out of parent's horizontal padding */
+    .readmarker:not(tr) {
+      margin-inline: -18px;
+      padding: 8px 0;
+    }
+
+    .readmarker:not(tr) .readmarker-container {
       width: 100%;
     }
   }
