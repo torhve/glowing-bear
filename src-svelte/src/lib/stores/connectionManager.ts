@@ -566,6 +566,47 @@ function scheduleReconnect() {
     }, delay);
 }
 
+// Threshold (ms): only trigger immediate reconnect if remaining delay exceeds this
+const focusReconnectThresholdMs = 10_000;
+
+let focusReconnectCleanup: (() => void) | null = null;
+
+// Register a visibilitychange listener that triggers immediate reconnect when the tab
+// regains focus and a reconnect timer has significant delay remaining (>10s).
+export function initFocusReconnect() {
+    if (typeof document === 'undefined') return;
+    // Guard against double-registration
+    if (focusReconnectCleanup) return;
+
+    const handler = () => {
+        if (document.visibilityState !== 'visible') return;
+        if (!reconnectingTimer) return;
+        if (!connectionData) return;
+        if (get(settings).useTotp) return;
+
+        // Check remaining delay on the pending timer via nextReconnectAt
+        const state = get(connectionState);
+        const remaining = (state.nextReconnectAt || 0) - Date.now();
+        if (remaining <= focusReconnectThresholdMs) return;
+
+        // Remaining delay is significant — reconnect immediately, reset backoff.
+        triggerManualReconnect(true);
+    };
+
+    document.addEventListener('visibilitychange', handler);
+    focusReconnectCleanup = () => {
+        document.removeEventListener('visibilitychange', handler);
+        focusReconnectCleanup = null;
+    };
+}
+
+// Remove the visibilitychange listener (called on page unmount).
+export function cleanupFocusReconnect() {
+    if (focusReconnectCleanup) {
+        focusReconnectCleanup();
+    }
+}
+
 // Find an existing disconnect toast for the given host:port.
 function findToastForDisconnect(host: string, port: number) {
     return get(toastStore).find(t => t.type === 'warning' && t.message?.includes(`Disconnected from ${host}:${port}`)) ?? undefined;
