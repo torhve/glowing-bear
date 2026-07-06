@@ -740,7 +740,7 @@
       </div>
     {/if}
 
-    <div class="input-bar-row flex items-center space-x-2">
+    <div class="input-bar-row flex items-center space-x-2 sm:space-x-1">
 
       <input
         id="upload-image-file"
@@ -770,7 +770,7 @@
         data-testid="message-input"
         placeholder={$currentBuffer ? `Message ${$currentBuffer.shortName}` : 'Select a buffer to start chatting...'}
         rows={1}
-        class="input-bar-textarea flex-1 bg-input-bg border border-border rounded text-text text-sm placeholder-text-muted focus:outline-none focus:border-accent resize-none transition-colors min-h-9 max-h-[150px] {isDraggingFile ? 'border-accent bg-accent/10' : ''}"
+        class="input-bar-textarea flex-1 min-w-0 bg-input-bg border border-border rounded text-text text-sm placeholder-text-muted focus:outline-none focus:border-accent resize-none transition-colors min-h-9 max-h-[150px] {isDraggingFile ? 'border-accent bg-accent/10' : ''}"
 
       ></textarea>
 
@@ -778,7 +778,7 @@
         <button
           onclick={() => showFormatToolbar = !showFormatToolbar}
           data-testid="format-toggle"
-          class="input-bar-format px-2 py-2 text-text-secondary hover:text-text hover:bg-border rounded transition-colors"
+          class="input-bar-format flex-shrink-0 hidden sm:inline-flex px-2 py-2 text-text-secondary hover:text-text hover:bg-border rounded transition-colors"
           title="Formatting"
         >
           <Type size={18} />
@@ -788,7 +788,7 @@
       <button
         onclick={() => fileInputRef?.click()}
         data-testid="upload-image-button"
-        class="input-bar-upload px-2 py-2 text-text-secondary hover:text-text hover:bg-border rounded transition-colors"
+        class="input-bar-upload flex-shrink-0 px-2 py-2 text-text-secondary hover:text-text hover:bg-border rounded transition-colors"
         title="Upload image"
       >
         <Camera size={18} />
@@ -797,7 +797,7 @@
       <button
         onclick={() => { if (inputRef) { const caret = getCaretPos(); const result = completeNick(message, caret, _iterCandidate); if (result) { message = result.text; _iterCandidate = result.iterCandidate; setTimeout(() => setCaretPos(result.cursor), 0); } } }}
         data-testid="nick-complete-button"
-        class="input-bar-nickcomplete px-2 py-2 text-text-secondary hover:text-text hover:bg-border rounded transition-colors"
+        class="input-bar-nickcomplete flex-shrink-0 hidden md:inline-flex px-2 py-2 text-text-secondary hover:text-text hover:bg-border rounded transition-colors"
         title="Complete nick"
       >
         <Megaphone size={18} />
@@ -807,7 +807,7 @@
         onclick={handleSend}
         disabled={!canSend}
         data-testid="send-button"
-        class="input-bar-send px-3 py-2 bg-accent hover:bg-accent-hover disabled:bg-border disabled:cursor-not-allowed text-white rounded transition-colors btn-glow"
+        class="input-bar-send flex-shrink-0 px-3 py-2 bg-accent hover:bg-accent-hover disabled:bg-border disabled:cursor-not-allowed text-white rounded transition-colors btn-glow"
       >
         <Send size={16} />
       </button>
@@ -857,5 +857,16 @@ padding: var(--spacing-input-bar-row-padding-y, 1px) 0;
 
   .input-bar-textarea {
 padding: var(--spacing-textarea-padding-y, 8px) var(--spacing-textarea-padding-x, 12px);
+  }
+
+  /* Reduced padding on small screens to prevent icon clipping */
+  @media (max-width: 639px) {
+    .input-bar-inner {
+padding: var(--spacing-input-bar-padding-y, 3px) var(--spacing-input-bar-padding-x, 6px);
+    }
+
+    .input-bar-textarea {
+padding: var(--spacing-textarea-padding-y, 6px) var(--spacing-textarea-padding-x, 8px);
+    }
   }
 </style>
