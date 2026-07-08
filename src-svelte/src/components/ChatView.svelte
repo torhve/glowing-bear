@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { BufferLine } from '$lib/types';
   import { get } from 'svelte/store';
-  import { currentBuffer, saveScrollPosition, activeBufferId, bufferBottom, buffers, recalculateLinesPerScreen } from '$lib/stores/models';
+  import { currentBuffer, activeBufferId, bufferBottom, buffers, recalculateLinesPerScreen } from '$lib/stores/models';
   import { settings } from '$lib/stores/settings';
   import { fetchMoreLines, closeBufferOnWeeChat, pinBuffer, unpinBuffer } from '$lib/stores/connectionManager';
   import { buildMentionText, isFreeBuffer, modifyTextareaValue } from '$lib/utils';
@@ -53,6 +53,9 @@
 
   let isLoadingMore = $state(false);
   let maxScrollValBeforeFetch = $state(0);
+  // Distance from the bottom (in px) within which we consider the chat "at bottom".
+  // Shared by handleScroll and the auto-scroll effect so tolerances never diverge.
+  const SCROLL_BOTTOM_TOLERANCE = 10;
   // Tracks whether the chat is scrolled to the bottom (AngularJS bufferBottom equivalent).
   // Used to avoid unnecessary scroll operations when already at bottom.
   let isAtBottom = $state(true);
@@ -101,9 +104,9 @@
     if (!containerRef) return;
     const { scrollTop, scrollHeight, clientHeight } = containerRef;
 
-    // Update isAtBottom tracking (AngularJS bufferBottom equivalent)
-    // Tolerance of 10px accounts for sub-pixel scroll lag when new lines grow scrollHeight
-    isAtBottom = scrollTop >= scrollHeight - clientHeight - 10;
+    // Update isAtBottom tracking (AngularJS bufferBottom equivalent).
+    // Tolerance accounts for sub-pixel scroll lag when new lines grow scrollHeight.
+    isAtBottom = scrollTop >= scrollHeight - clientHeight - SCROLL_BOTTOM_TOLERANCE;
 
     if (scrollTop < 50 && !isLoadingMore && $currentBuffer && !$currentBuffer.allLinesFetched) {
       isLoadingMore = true;
@@ -134,13 +137,6 @@
       })();
     }
   }
-
-  $effect(() => {
-    // Save scroll position when leaving a buffer
-    if (prevActiveBufferId && containerRef) {
-      saveScrollPosition(prevActiveBufferId, containerRef.scrollTop);
-    }
-  });
 
   $effect(() => {
     // Sync local isAtBottom state to shared bufferBottom store
@@ -240,13 +236,14 @@
     const bufferChanged = prevActiveBufferId !== currentBufferId;
     const linesAdded = curLinesLength > prevLinesLength;
 
-    // Initialize from scroll handler's authoritative state (50px tolerance).
-    // Only attempt synchronous re-check if scroll handler hasn't detected "following".
-    // $effect runs AFTER Svelte renders new rows, so scrollHeight has already grown —
-    // a fresh scrollTop check would falsely report "not at bottom".
+    // Trust the scroll handler's authoritative state. handleScroll already captured
+    // the user's last deliberate scroll position, so isAtBottom is accurate for
+    // genuinely-following users. The re-check below only runs when !wasFollowing, and
+    // uses the shared tolerance, so there is no risk of a false negative for users
+    // who are actually at the bottom.
     let wasFollowing = isAtBottom;
     if (containerRef && linesAdded && !wasFollowing) {
-      wasFollowing = containerRef.scrollTop >= containerRef.scrollHeight - containerRef.clientHeight - 3;
+      wasFollowing = containerRef.scrollTop >= containerRef.scrollHeight - containerRef.clientHeight - SCROLL_BOTTOM_TOLERANCE;
       if (isAtBottom !== wasFollowing) {
         isAtBottom = wasFollowing;
         bufferBottom.set(wasFollowing);
@@ -271,9 +268,10 @@
     // wasFollowing is authoritative - captured synchronously before render.
     if (!bufferChanged && linesAdded) {
       requestAnimationFrame(() => {
-        // Auto-scroll if either pre-capture or continuous scroll handler says 'following'.
-        // Pre-capture uses strict 3px tolerance; handleScroll uses generous 50px.
-        // Using OR ensures we don't miss cases where user is near-bottom but outside 3px.
+        // Auto-scroll if the pre-capture check (wasFollowing) OR the continuous
+        // scroll handler (isAtBottom) says we're following. Both use the same
+        // SCROLL_BOTTOM_TOLERANCE, so OR simply covers the case where the handler
+        // hasn't fired since the last user scroll.
         if (wasFollowing || isAtBottom) {
           readmarkerFailures = 0;
           isAtBottom = true;
@@ -307,9 +305,8 @@
       const freshReadEndIndex = $currentBuffer?.lastSeen ?? -1;
       const freshMessages = $currentBuffer?.lines ?? [];
       const freshHasUnread = freshReadEndIndex >= 0 && freshReadEndIndex < freshMessages.length - 1;
-
       if (!freshHasUnread) {
-        // No unread messages - scroll to bottom.
+        // No unread messages - scroll to the bottom.
         readmarkerFailures = 0;
         containerRef!.scrollTop = containerRef!.scrollHeight;
         isAtBottom = true;

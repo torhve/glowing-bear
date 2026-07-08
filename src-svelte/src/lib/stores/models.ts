@@ -352,9 +352,6 @@ export const pendingBufferSwitch: Writable<string | null> = writable<
 
 export const previousBufferId = writable<string>("");
 
-// Tracks scroll Y position per buffer for read marker restoration
-export const bufferScrollPositions = writable<Record<string, number>>({});
-
 // Tracks which buffers have local-only unread messages (not reported by WeeChat).
 // Used by setActiveBuffer to preserve lastSeen when switching back to buffers with unreads.
 export const localUnreadBuffers = writable<Set<string>>(new Set());
@@ -406,20 +403,6 @@ export function setSyncing(value: boolean) {
 
 export function isSyncing(): boolean {
     return syncing;
-}
-
-export function saveScrollPosition(bufferId: string, scrollTop: number) {
-    bufferScrollPositions.update((pos) => ({ ...pos, [bufferId]: scrollTop }));
-}
-
-// Save scroll position and line count when leaving a buffer (called before switching).
-// Line count is captured at this moment to know how far the user had read.
-export function saveBufferState(bufferId: string, scrollTop: number) {
-    bufferScrollPositions.update((pos) => ({ ...pos, [bufferId]: scrollTop }));
-}
-
-export function getScrollPosition(bufferId: string): number | undefined {
-    return get(bufferScrollPositions)[bufferId];
 }
 
 export const currentBuffer = derived(
