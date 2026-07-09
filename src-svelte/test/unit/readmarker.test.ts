@@ -36,6 +36,12 @@ vi.mock('$lib/notifications', () => ({
     updateFavico: mockUpdateFavico,
 }));
 
+// Mock windowFocus so tests can control focus via document.hidden
+vi.mock('$lib/windowFocus', () => ({
+    initWindowFocusTracking: vi.fn(() => Promise.resolve(() => {})),
+    isWindowFocused: () => typeof document !== 'undefined' && !document.hidden,
+}));
+
 // Mock bufferResume store — models.ts now imports recordBuffer for auto-resume.
 vi.mock('$lib/stores/bufferResume', () => ({
     lastBufferId: {

@@ -38,6 +38,12 @@ vi.mock('$lib/notifications', () => ({
     updateFavico: mockUpdateFavico,
 }));
 
+// Mock windowFocus so tests can control focus via document.hidden
+vi.mock('$lib/windowFocus', () => ({
+    initWindowFocusTracking: vi.fn(() => Promise.resolve(() => {})),
+    isWindowFocused: () => typeof document !== 'undefined' && !document.hidden,
+}));
+
 // Import handlers AFTER mocking settings and notifications
 const { handleBufferLineAdded } = await import('$lib/stores/handlers');
 

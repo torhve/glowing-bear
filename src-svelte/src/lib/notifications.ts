@@ -7,6 +7,7 @@ import { get } from 'svelte/store';
 import type { BufferData } from './types';
 import { initFavicon, drawBadge, resetBadge } from './faviconBadge';
 import { isTauri, setBadgeCount } from './tauriWindow';
+import { initWindowFocusTracking } from './windowFocus';
 import { DEBUG_NOTIFICATIONS } from '$lib/debug';
 
 // Calculate total unread and notification counts across all buffers.
@@ -107,6 +108,10 @@ export async function createHighlight(buffer: BufferData, message: string): Prom
     await ensureTauriNotification();
 
     if (tauriNotif) {
+        if (notificationPermission !== 'granted') {
+            if (DEBUG_NOTIFICATIONS) console.log('[notification] Tauri notification skipped: permission not granted');
+            return;
+        }
         const bufferName = buffer.shortName || buffer.fullName;
         try {
             if (DEBUG_NOTIFICATIONS) console.log('[notification] sending Tauri notification:', `[${bufferName}]`, message.substring(0, 50));
@@ -267,6 +272,9 @@ export async function initNotifications(): Promise<void> {
     if (s.notificationPermission && s.notificationPermission !== 'default') {
         notificationPermission = s.notificationPermission;
     }
+
+    // Initialize window focus tracking (generic web listeners + Tauri native events)
+    void initWindowFocusTracking();
 
     // Set up Tauri native notifications if running in Tauri
     if (isTauri()) {

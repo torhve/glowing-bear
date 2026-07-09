@@ -32,6 +32,7 @@ import {
     updateTitle,
     updateFavico,
 } from "$lib/notifications";
+import { isWindowFocused } from "$lib/windowFocus";
 import { DEBUG_NICKLIST, DEBUG_HANDLERS, DEBUG_HOTLIST } from "$lib/debug";
 import type {
     ProtocolMessage,
@@ -422,9 +423,8 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
 
     const currentBuffers = get(buffers);
     const activeId = get(activeBufferId);
-    // Use Page Visibility API (same as AngularJS $rootScope.isWindowFocused).
-    // document.hidden is more reliable than hasFocus() for detecting tab-inactive periods.
-    const isWindowFocused = typeof document !== "undefined" && !document.hidden;
+    // Window focus state tracked by windowFocus module (web listeners + Tauri native events).
+    const focused = isWindowFocused();
 
     // Accumulate server unread deltas for batch-apply at the end.
     const serverDeltas: Record<string, number> = {};
@@ -616,7 +616,7 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                         playNotificationSound();
 
                         // Desktop popup only when window is not focused
-                        if (!isWindowFocused) {
+                        if (!focused) {
                             // Strip WeeChat formatting codes from message/prefix for notification display
                             const notificationBody = formatNotificationBody(lineMsg);
 
