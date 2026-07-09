@@ -47,6 +47,12 @@ vi.mock('$lib/notifications', () => ({
     updateFavico: vi.fn()
 }));
 
+// Mock windowFocus so handlers module loads without runtime errors
+vi.mock('$lib/windowFocus', () => ({
+    initWindowFocusTracking: vi.fn(() => Promise.resolve(() => {})),
+    isWindowFocused: () => typeof document !== 'undefined' && !document.hidden,
+}));
+
 const { injectDateChangeMessageIfNeeded } = await import('$lib/stores/handlers');
 
 describe('Date change injection', () => {
