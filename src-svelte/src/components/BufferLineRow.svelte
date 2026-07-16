@@ -248,16 +248,16 @@
       {#if isGroupStart}
         <div class="bubble-meta flex items-baseline pr-1.5 justify-end">
           <span class="bubble-nick font-semibold">{message.prefixtext}</span>
-          <span class="bubble-time opacity-80">{message.shortTime}</span>
+<!---->          <span class="bubble-time opacity-80">{message.shortTime}</span>
         </div>
-      {/if}
+      {/if}<!---->
 
       <div class={['bubble max-w-[85%] rounded-[20px] leading-[1.45] text-[0.95em] relative break-words', { 'bubble-tail': isGroupStart }, { 'bubble-highlight': isHighlight }, 'bubble-self-bg']}>
         {#if metadata.length > 0}
           {#each metadata as meta, i (i)}
             <PluginEmbed plugin={meta} />
-          {/each}
-        {/if}
+          {/each}<!---->
+        {/if}<!---->
 
         <span dir="auto" class="message-content whitespace-pre-wrap break-words">
           <TokenGroupRenderer groups={tokenGroups} />
@@ -270,23 +270,23 @@
       {#if isGroupStart}
         <div class="bubble-meta flex items-baseline pl-1.5">
           <span class="bubble-nick font-semibold">{message.prefixtext}</span>
-          <span class="bubble-time opacity-80">{message.shortTime}</span>
+<!---->          <span class="bubble-time opacity-80">{message.shortTime}</span>
         </div>
-      {/if}
+      {/if}<!---->
 
       <div class={['bubble max-w-[85%] rounded-[20px] leading-[1.45] text-[0.95em] relative break-words', { 'bubble-tail': isGroupStart }, { 'bubble-highlight': isHighlight }, 'bubble-other-bg']}>
         {#if metadata.length > 0}
           {#each metadata as meta, i (i)}
             <PluginEmbed plugin={meta} />
-          {/each}
-        {/if}
+          {/each}<!---->
+        {/if}<!---->
 
         <span dir="auto" class="message-content whitespace-pre-wrap break-words">
           <TokenGroupRenderer groups={tokenGroups} />
         </span>
       </div>
     </div>
-  {/if}
+  {/if}<!---->
 {:else}
   <!-- Traditional table layout for channels/servers -->
   {#if isDateChange}
@@ -301,37 +301,35 @@
         <span class="date inline-flex items-center compact-time" class:repeated-time={isRepeatedTime}>
           {#if message.shortTime.includes(':')}
             {@const parts = message.shortTime.split(':')}
-            {parts[0]}<span class="time-delimiter text-amber-400">:</span>{parts.slice(1).join(':')}
+            {parts[0]}<!----><span class="time-delimiter text-amber-400">:</span><!-- -->{parts.slice(1).join(':')}<!---->
           {:else}
-            {message.shortTime}
-          {/if}
-        </span>
+            {message.shortTime}<!---->
+          {/if}</span>
       </td>
       <td class="prefix max-w-[120px] align-top whitespace-nowrap text-right overflow-hidden truncate font-mono">
         <span class="compact-prefix flex justify-end items-center" class:repeated-prefix={isRepeatedPrefix}>
           <span onclick={handleMention} role="button" tabindex="0" class="mention-link" onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleMention(); } }}>
-            {#if message.showHiddenBrackets}<span class="hidden-bracket">&lt;</span>{/if}
+            {#if message.showHiddenBrackets}<span class="hidden-bracket">&lt;</span>{/if}<!---->
             {#each prefixPartsToRender as part, pi (pi)}
               {@const iconType = getIconType(part)}
               {#if iconType}
                 {#if iconType === 'arrow-right'}
-                  <ArrowRight class={(part.classes || []).join(' ')} width={12} height={12} />
+                  <ArrowRight class={(part.classes || []).join(' ')} width={12} height={12} /><!---->
                 {:else if iconType === 'arrow-left'}
-                  <ArrowLeft class={(part.classes || []).join(' ')} width={12} height={12} />
+                  <ArrowLeft class={(part.classes || []).join(' ')} width={12} height={12} /><!---->
                 {:else if iconType === 'chevron-left'}
-                  <ChevronLeft class={(part.classes || []).join(' ')} width={12} height={12} />
+                  <ChevronLeft class={(part.classes || []).join(' ')} width={12} height={12} /><!---->
                 {:else if iconType === 'chevron-right'}
-                  <ChevronRight class={(part.classes || []).join(' ')} width={12} height={12} />
+                  <ChevronRight class={(part.classes || []).join(' ')} width={12} height={12} /><!---->
                 {:else if iconType === 'minus'}
-                  <Minus class={(part.classes || []).join(' ')} width={12} height={12} />
+                  <Minus class={(part.classes || []).join(' ')} width={12} height={12} /><!---->
                 {/if}
               {:else}
                 <span class="prefix-part {(part.classes || []).join(' ')}">{part.text}</span>
-              {/if}
-            {/each}
-            {#if isPrefixTruncated}<span class="prefix-part">+</span>{/if}
-            {#if message.showHiddenBrackets}<span class="hidden-bracket">&gt;</span>{/if}
-          </span>
+              {/if}<!---->
+            {/each}<!---->
+            {#if isPrefixTruncated}<span class="prefix-part">+</span>{/if}<!---->
+            {#if message.showHiddenBrackets}<span class="hidden-bracket">&gt;</span>{/if}<!----></span>
         </span>
       </td>
       <td class="message align-middle font-mono" data-message={message.text}>
@@ -339,9 +337,8 @@
         {#if metadata.length > 0}
           {#each metadata as meta, i (i)}
             <PluginEmbed plugin={meta} />
-          {/each}
-        {/if}
-
+          {/each}<!---->
+        {/if}<!---->
         <!-- Message content -->
         <span dir="auto" class="message-content whitespace-pre-wrap break-words">
           <TokenGroupRenderer groups={tokenGroups} />
