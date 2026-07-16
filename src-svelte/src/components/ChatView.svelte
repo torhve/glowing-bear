@@ -537,7 +537,7 @@
                 </span>
               </td>
             </tr>
-          {/if}
+          {/if}<!---->
 
           {#if readEndIndex >= 0 && readEndIndex < messages.length - 1}
             <!-- Read lines (up to and including readEndIndex) -->
@@ -549,7 +549,7 @@
                 {noembed}
                 onMention={handleMention}
               />
-            {/each}
+            {/each}<!---->
             <!-- Readmarker row between read and unread -->
             <tr class="readmarker" data-testid="readmarker">
               <td colspan="3">
@@ -559,7 +559,7 @@
                   <div class="readmarker-line"></div>
                 </div>
               </td>
-            </tr>
+            </tr><!---->
             <!-- Unread lines (after readEndIndex) -->
             {#each messages.slice(readEndIndex + 1) as message, i (readEndIndex + 1 + i)}
               <BufferLineRow
@@ -569,7 +569,7 @@
                 {noembed}
                 onMention={handleMention}
               />
-            {/each}
+            {/each}<!---->
           {:else}
             <!-- All lines visible (no readmarker needed) -->
             {#each messages as message, i (i)}
@@ -580,11 +580,11 @@
                 {noembed}
                 onMention={handleMention}
               />
-            {/each}
-          {/if}
+            {/each}<!---->
+          {/if}<!---->
         </tbody>
       </table>
-    {/if}
+    {/if}<!---->
     <span data-end-of-buffer></span>
   </div>
 
@@ -600,6 +600,12 @@
   .chat-table {
     width: 100%;
     border-collapse: collapse;
+    white-space-collapse: collapse;
+  }
+
+  tbody,
+  .chat-tbody {
+    white-space-collapse: collapse;
   }
 
   @media (max-width: 640px) {
