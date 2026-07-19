@@ -277,7 +277,7 @@
           isAtBottom = true;
           // Double-rAF: first after Svelte renders, second after layout computes.
           requestAnimationFrame(() => {
-            if (containerRef) containerRef.scrollTop = containerRef.scrollHeight;
+            if (containerRef) containerRef.scrollTop = containerRef.scrollHeight - containerRef.clientHeight;
           });
           // Absorb unread by updating lastSeen since user caught up.
           const buf = get(currentBuffer);
@@ -308,12 +308,12 @@
       if (!freshHasUnread) {
         // No unread messages - scroll to the bottom.
         readmarkerFailures = 0;
-        containerRef!.scrollTop = containerRef!.scrollHeight;
+        containerRef!.scrollTop = containerRef!.scrollHeight - containerRef!.clientHeight;
         isAtBottom = true;
       } else if (readmarkerFailures >= 2) {
         // Readmarker fallback - scroll to bottom after repeated failures.
         readmarkerFailures = 0;
-        containerRef!.scrollTop = containerRef!.scrollHeight;
+        containerRef!.scrollTop = containerRef!.scrollHeight - containerRef!.clientHeight;
         isAtBottom = true;
       } else {
         // Unread messages present - scroll to readmarker.
@@ -336,7 +336,7 @@
           const remainingScroll = containerRef!.scrollHeight - containerRef!.scrollTop;
           if (rmRect.bottom <= containerRect.bottom && remainingScroll <= containerRef!.clientHeight) {
             // Readmarker + unread fit in viewport and everything below fits - scroll to bottom.
-            containerRef!.scrollTop = containerRef!.scrollHeight;
+            containerRef!.scrollTop = containerRef!.scrollHeight - containerRef!.clientHeight;
             isAtBottom = true;
           } else if (rmRect.bottom <= containerRect.bottom) {
             // Readmarker visible but many unread below - position readmarker at ~45%.
