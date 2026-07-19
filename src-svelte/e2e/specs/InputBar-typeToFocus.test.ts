@@ -110,8 +110,11 @@ test.describe('Type to Focus (Slack-style input capture)', () => {
         const input = page.getByTestId('message-input');
         await expect(input).toBeVisible({ timeout: 5000 });
 
-        // Click elsewhere to ensure input is not focused
-        await page.getByTestId('topic-bar').click();
+        // Blur input and click on inert chat area (not a focusable element)
+        await input.blur();
+        await page.getByTestId('chat-view').click();
+        await page.waitForTimeout(50);
+        await expect(input).not.toBeFocused();
 
         // Press ArrowUp — should NOT focus input
         await page.keyboard.press('ArrowUp');
@@ -129,12 +132,18 @@ test.describe('Type to Focus (Slack-style input capture)', () => {
         const input = page.getByTestId('message-input');
         await expect(input).toBeVisible({ timeout: 5000 });
 
-        // Click elsewhere to ensure input is not focused
-        await page.getByTestId('topic-bar').click();
+        // Blur input and click on inert area
+        await input.blur();
+        await page.getByTestId('chat-view').click();
+        await page.waitForTimeout(50);
+        await expect(input).not.toBeFocused();
 
         // Type a letter — should NOT focus input (mobile mode)
         await page.keyboard.press('a');
         await expect(input).not.toBeFocused();
+
+        // Reset viewport for subsequent tests
+        await page.setViewportSize({ width: 1280, height: 720 });
     });
 
     test('should handle multiple sequential keystrokes outside the input', async () => {

@@ -96,8 +96,8 @@ test('should update text field when slider moves', async () => {
     const slider = page.getByTestId('font-size-slider');
     const textInput = page.getByTestId('font-size-input');
 
-    // Type a new value into the text field first to set initial state
-    await textInput.pressSequentially('20px', { delay: 10 });
+    // Set initial value in the text field
+    await textInput.fill('20px');
 
     // Wait for the effect to sync the slider position
     await expect(async () => {

@@ -66,6 +66,8 @@ test.describe('Connection Form', () => {
         await connectToWeechat(page);
         await expect(page.getByTestId('chat-view')).toBeVisible();
         await disconnect(page);
+        // Ensure connection form is fully visible before reconnecting
+        await expect(page.getByTestId('host-input')).toBeVisible({ timeout: 15000 });
         await connectToWeechat(page);
         await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
     });
