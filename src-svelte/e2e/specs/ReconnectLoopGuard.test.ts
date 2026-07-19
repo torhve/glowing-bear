@@ -113,27 +113,42 @@ test.describe('Auto reconnect with countdown toast', () => {
             if (ws) ws.close(3000, 'test disconnect');
         });
 
-        // Wait for toast to appear and extract countdown
+        // Wait for toast to appear and extract first countdown
         await expect(page.getByTestId('toast').first()).toBeVisible({ timeout: 10000 });
-        let countdownText = await page.getByText(/Reconnecting in (\d+s)/).first().textContent();
+        let countdownText = await page.getByText(/Reconnecting in \d+s/).first().textContent();
         let firstSeconds = parseInt(countdownText?.match(/in (\d+)/)?.[1] || '0', 10);
         expect(firstSeconds).toBeCloseTo(30, 0);
 
-        // Set nextReconnectAt to past so the timer fires immediately (simulates time passing)
+        // Intercept WebSocket so the manual reconnect attempt fails immediately
         await page.evaluate(() => {
-            (window as any).__setNextReconnectAt?.(Date.now() - 1000);
+            const OriginalWebSocket = window.WebSocket;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const wrapper: any = function (this: WebSocket, url: string | URL, protocols?: string | string[]) {
+                const ws = new OriginalWebSocket(url, protocols);
+                ws.addEventListener('open', () => {
+                    ws.close(3000, 'intercepted');
+                });
+                return ws;
+            };
+            wrapper.prototype = OriginalWebSocket.prototype;
+            (window as any).WebSocket = wrapper;
         });
 
-        // The reconnect timer should fire, attempt will fail (no server), 
-        // triggering another disconnect with increased backoff.
-        // Wait for the reconnect cycle to complete
-        await new Promise(r => setTimeout(r, 5000));
+        // Click Reconnect button — triggers immediate connect attempt, which will fail
+        await page.getByTestId('toast-reconnect-button').click();
 
-        // New countdown should show increased delay (45s for attempt 2)
+        // Wait for the failed reconnect to trigger a new countdown with increased backoff
         await expect(async () => {
             const newCountdown = await page.getByText(/Reconnecting in \d+s/).first().textContent();
             const newSeconds = parseInt(newCountdown?.match(/in (\d+)/)?.[1] || '0', 10);
             expect(newSeconds).toBeGreaterThan(firstSeconds);
-        }).toPass({ timeout: 10000, intervals: [1000] });
+        }).toPass({ timeout: 10000, intervals: [500] });
+
+        // Verify reconnectAttempts increased
+        const state = await page.evaluate(() => {
+            const store = (window as any).__connectionState;
+            return store?.get?.() ?? store;
+        });
+        expect(state?.reconnectAttempts).toBeGreaterThanOrEqual(2);
     });
 });
