@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { currentBuffer, buffers } from '$lib/stores/models';
+  import { currentBuffer, buffers, pendingBufferSwitch, setActiveBuffer, findBufferByShortName } from '$lib/stores/models';
   import { sendMessage, sendWeeChatCommand } from '$lib/stores/connectionManager';
   import { settings } from '$lib/stores/settings';
   import { addToHistory, getHistoryUp, getHistoryDown } from '$lib/stores/inputHistory';
@@ -106,6 +106,21 @@
       if (line === '/quit' || line.indexOf('/quit ') === 0) {
         if (!window.confirm("Are you sure you want to quit WeeChat? This will prevent you from connecting with Glowing Bear until you restart WeeChat on the command line!")) {
           continue;
+        }
+      }
+
+      // Handle /q and /query: switch to existing buffer or set pending for new buffer
+      const queryMatch = line.match(/^\/(?:q|query)\s+(\S+)/i);
+      if (queryMatch) {
+        const nick = queryMatch[1] ?? '';
+        // Find existing query/private buffer matching the nick (case-insensitive)
+        const existingBuf = findBufferByShortName(nick, ['query', 'private']);
+        if (existingBuf) {
+          // Buffer exists — switch immediately
+          setActiveBuffer(existingBuf.id);
+        } else {
+          // Buffer doesn't exist yet — set pending so handler auto-switches on _buffer_opened
+          pendingBufferSwitch.set(nick || null);
         }
       }
 
