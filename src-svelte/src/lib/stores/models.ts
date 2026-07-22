@@ -6,6 +6,7 @@ import { settings } from "$lib/stores/settings";
 import type {
     BufferData,
     BufferLine,
+    BufferType,
     Nick,
     NickGroup,
     RichTextPart,
@@ -439,9 +440,21 @@ export function getBuffer(bufferId: string): BufferData | undefined {
 }
 
 /**
- * Shallow-copy a single buffer with partial field overrides.
- * Returns a new BufferData object — caller must apply via `buffers.update()` merge.
+ * Find a buffer by short name and type filter (case-insensitive).
+ * Used for /query to locate existing PM buffers before creating new ones.
  */
+export function findBufferByShortName(
+    name: string,
+    types?: BufferType[]
+): BufferData | undefined {
+    const lower = name.toLowerCase();
+    return Object.values(get(buffers)).find((b) => {
+        if (b.shortName.toLowerCase() !== lower) return false;
+        if (types && types.length > 0 && !types.includes(b.type as BufferType)) return false;
+        return true;
+    });
+}
+
 /**
  * Shallow-copy a single buffer with partial field overrides.
  * Returns a new BufferData object — caller must apply via `buffers.update()` merge.
