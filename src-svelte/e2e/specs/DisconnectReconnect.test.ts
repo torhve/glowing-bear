@@ -110,3 +110,43 @@ test('no-op when pressing Escape while already disconnected', async () => {
     const isVisible = await disconnectBtn.isVisible().catch(() => false);
     expect(isVisible).toBe(false);
 });
+
+test('no error message shown after intentional disconnect via double Escape', async () => {
+    // Ensure connected state
+    if (!(await page.getByTestId('disconnect-button').isVisible())) {
+        await page.getByTestId('host-input').fill('localhost');
+        await page.getByTestId('port-input').fill('9001');
+        await page.getByTestId('password-input').fill('testpassword123');
+        await page.getByTestId('connect-button').click();
+        await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
+    }
+
+    // Disconnect via double Escape
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+
+    // ConnectionForm should appear
+    await expect(page.getByTestId('host-input')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId('chat-view')).not.toBeVisible();
+
+    // No error message should be visible — user initiated disconnect is not an error
+    await expect(page.getByTestId('error-message')).not.toBeVisible();
+});
+
+test('no error message shown after intentional disconnect via TopBar button', async () => {
+    // Reconnect first (previous test disconnected)
+    await reconnect(page);
+    await expect(page.getByTestId('chat-view')).toBeVisible();
+
+    // Disconnect via TopBar button
+    const disconnectBtn = page.getByTestId('disconnect-button');
+    await expect(disconnectBtn).toBeVisible();
+    await disconnectBtn.click();
+
+    // ConnectionForm should appear
+    await expect(page.getByTestId('host-input')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId('chat-view')).not.toBeVisible();
+
+    // No error message should be visible — user initiated disconnect is not an error
+    await expect(page.getByTestId('error-message')).not.toBeVisible();
+});
