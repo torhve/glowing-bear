@@ -48,7 +48,7 @@ test.describe('Connection Form', () => {
         await expect(page.getByTestId('error-message').first()).toBeVisible({ timeout: 15000 });
     });
 
-  test('should show error on wrong password', async ({ page }) => {
+    test('should show error on wrong password', async ({ page }) => {
         // Use invalid port to force connection failure (test server doesn't validate passwords)
         await fillInput(page, 'host-input', 'localhost');
         await fillInput(page, 'port-input', '19999');

@@ -7,7 +7,7 @@ import { Protocol as NewProtocol, ParsedMessage } from '$lib/weechat';
 
 // Import the OLD AngularJS parser — dynamically import to avoid bundler issues with zlibjs
 async function loadOldProtocol() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const mod = await import('../fixtures/weechat-old.js');
     return (mod as any).Protocol;
 }

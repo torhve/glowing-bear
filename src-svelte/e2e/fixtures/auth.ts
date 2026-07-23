@@ -18,39 +18,39 @@ export interface CreateConnectedPageOptions {
  *  setupEffectOrphanFilter is baked in — callers no longer need to import it.
  *  CDN blocking is on by default. */
 export async function createConnectedPage(
-  browserOrContext: Browser | BrowserContext,
-  options?: CreateConnectedPageOptions,
+    browserOrContext: Browser | BrowserContext,
+    options?: CreateConnectedPageOptions,
 ): Promise<Page> {
-  const isBrowser = 'newContext' in browserOrContext;
-  const ctx = isBrowser
-    ? await (browserOrContext as Browser).newContext()
-    : browserOrContext;
-  const page = await ctx.newPage();
+    const isBrowser = 'newContext' in browserOrContext;
+    const ctx = isBrowser
+        ? await (browserOrContext as Browser).newContext()
+        : browserOrContext;
+    const page = await ctx.newPage();
 
-  if (options?.initScript) {
-    await page.addInitScript(options.initScript);
-  }
+    if (options?.initScript) {
+        await page.addInitScript(options.initScript);
+    }
 
-  if (options?.blockCdn !== false) {
-    await page.route('**/cdnjs.cloudflare.com/**', (route: Route) => route.abort());
-  }
+    if (options?.blockCdn !== false) {
+        await page.route('**/cdnjs.cloudflare.com/**', (route: Route) => route.abort());
+    }
 
-  await page.goto('http://localhost:8001/');
-  await waitForAppReady(page);
-  setupEffectOrphanFilter(page);
-  await clearSettings(page);
+    await page.goto('http://localhost:8001/');
+    await waitForAppReady(page);
+    setupEffectOrphanFilter(page);
+    await clearSettings(page);
 
-  if (options?.settings) {
-    await page.evaluate(
-      (s: Record<string, unknown>) => (window as any).__setGbSettings?.(s),
-      options.settings,
-    );
-  }
+    if (options?.settings) {
+        await page.evaluate(
+            (s: Record<string, unknown>) => (window as any).__setGbSettings?.(s),
+            options.settings,
+        );
+    }
 
-  if (options?.beforeConnect) {
-    await options.beforeConnect(page);
-  }
+    if (options?.beforeConnect) {
+        await options.beforeConnect(page);
+    }
 
-  await connectToWeechat(page);
-  return page;
+    await connectToWeechat(page);
+    return page;
 }

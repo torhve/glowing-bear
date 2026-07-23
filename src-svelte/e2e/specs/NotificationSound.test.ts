@@ -12,28 +12,28 @@ test.describe.configure({ mode: 'serial' });
 test.beforeAll(async ({ browser }) => {
     page = await createConnectedPage(browser, {
         initScript: () => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             (window as any).__audioCalls = [];
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             const OrigAudio = (window as any).Audio || function () {};
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             (window as any).Audio = function (src: unknown) {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                 
                 (window as any).__audioCalls.push(src);
                 return new OrigAudio(src);
             };
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             (window as any).Audio.prototype.play = function () {};
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             (window as any).Audio.prototype.pause = function () {};
 
             // Force document.hidden = true so playNotificationSound triggers in headless
             try { Object.defineProperty(document, 'hidden', { value: true, writable: false, configurable: true }); } catch { /* noop */ }
 
             // Mock playNotificationSound to log and call Audio
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             (window as any).__playNotificationSound = function () {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                 
                 (window as any).__audioCalls.push('playNotificationSound');
                 console.log('[notification] playing notification sound');
             };

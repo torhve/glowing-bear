@@ -23,7 +23,7 @@ test.beforeAll(async ({ browser }) => {
             // Mock Audio constructor to capture calls for sound tests
             (window as any).__audioCalls = [];
             const OrigAudio = (window as any).Audio;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             (window as any).Audio = function (this: any, src: string) {
                 (window as any).__audioCalls.push(src);
                 if (OrigAudio) {
@@ -39,19 +39,19 @@ test.beforeAll(async ({ browser }) => {
                 // No native Audio — return a minimal mock
                 return { play: () => Promise.resolve(), pause: () => Promise.resolve() };
             } as any;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             if (OrigAudio?.prototype) {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                 
                 (window as any).Audio.prototype = OrigAudio.prototype;
             }
 
-        // Force document.hidden = true so playNotificationSound triggers in headless Playwright.
-        // In headless Chromium, document.hidden is always false, which suppresses sounds/notifications.
-        try {
-            Object.defineProperty(document, 'hidden', { value: true, writable: false });
-        } catch {
+            // Force document.hidden = true so playNotificationSound triggers in headless Playwright.
+            // In headless Chromium, document.hidden is always false, which suppresses sounds/notifications.
+            try {
+                Object.defineProperty(document, 'hidden', { value: true, writable: false });
+            } catch {
             /* property may already be defined; will be re-set by page.evaluate in beforeEach */
-        }
+            }
         },
     });
 });

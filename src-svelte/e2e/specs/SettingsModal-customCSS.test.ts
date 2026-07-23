@@ -131,7 +131,7 @@ test('should remove injected CSS when custom CSS is cleared', async () => {
     await expect(textarea).toHaveValue('.temp { margin: 0; }');
 
     // Verify it was injected
-    let injectedCss = await page.evaluate(() => {
+    const injectedCss = await page.evaluate(() => {
         const tag = document.getElementById('custom-css-tag');
         return tag ? tag.textContent : '';
     });

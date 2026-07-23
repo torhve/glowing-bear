@@ -248,9 +248,9 @@
       {#if isGroupStart}
         <div class="bubble-meta flex items-baseline pr-1.5 justify-end">
           <span class="bubble-nick font-semibold">{message.prefixtext}</span>
-<!---->          <span class="bubble-time opacity-80">{message.shortTime}</span>
+          <span class="bubble-time opacity-80">{message.shortTime}</span>
         </div>
-      {/if}<!---->
+      {/if}
 
       <div class={['bubble max-w-[85%] rounded-[20px] leading-[1.45] text-[0.95em] relative break-words', { 'bubble-tail': isGroupStart }, { 'bubble-highlight': isHighlight }, 'bubble-self-bg']}>
         {#if metadata.length > 0}
@@ -270,9 +270,9 @@
       {#if isGroupStart}
         <div class="bubble-meta flex items-baseline pl-1.5">
           <span class="bubble-nick font-semibold">{message.prefixtext}</span>
-<!---->          <span class="bubble-time opacity-80">{message.shortTime}</span>
+          <span class="bubble-time opacity-80">{message.shortTime}</span>
         </div>
-      {/if}<!---->
+      {/if}
 
       <div class={['bubble max-w-[85%] rounded-[20px] leading-[1.45] text-[0.95em] relative break-words', { 'bubble-tail': isGroupStart }, { 'bubble-highlight': isHighlight }, 'bubble-other-bg']}>
         {#if metadata.length > 0}

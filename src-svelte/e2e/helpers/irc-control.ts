@@ -10,57 +10,57 @@ interface ControlResponse {
 }
 
 function sendCommand(data: Record<string, unknown>): Promise<ControlResponse> {
-  return new Promise((resolve, reject) => {
-    const client = new net.Socket();
-    const timeout = setTimeout(() => {
-      client.destroy();
-      reject(new Error('Control API timeout'));
-    }, 5000);
-    client.connect(CONTROL_PORT, CONTROL_HOST, () => {
-      client.end(JSON.stringify(data) + '\n');
+    return new Promise((resolve, reject) => {
+        const client = new net.Socket();
+        const timeout = setTimeout(() => {
+            client.destroy();
+            reject(new Error('Control API timeout'));
+        }, 5000);
+        client.connect(CONTROL_PORT, CONTROL_HOST, () => {
+            client.end(JSON.stringify(data) + '\n');
+        });
+        let buf = '';
+        client.on('data', (chunk) => { buf += chunk.toString(); });
+        client.on('end', () => {
+            clearTimeout(timeout);
+            try { resolve(JSON.parse(buf)); }
+            catch { reject(new Error('Invalid response: ' + buf)); }
+        });
+        client.on('error', (err) => { clearTimeout(timeout); reject(err); });
     });
-    let buf = '';
-    client.on('data', (chunk) => { buf += chunk.toString(); });
-    client.on('end', () => {
-      clearTimeout(timeout);
-      try { resolve(JSON.parse(buf)); }
-      catch { reject(new Error('Invalid response: ' + buf)); }
-    });
-    client.on('error', (err) => { clearTimeout(timeout); reject(err); });
-  });
 }
 
 export const irc = {
-  sendMessage: (channel: string, text: string) =>
-    sendCommand({ cmd: 'send_message', channel, text }),
+    sendMessage: (channel: string, text: string) =>
+        sendCommand({ cmd: 'send_message', channel, text }),
 
-  sendNotice: (channel: string, text: string) =>
-    sendCommand({ cmd: 'send_notice', channel, text }),
+    sendNotice: (channel: string, text: string) =>
+        sendCommand({ cmd: 'send_notice', channel, text }),
 
-  sendColored: (channel: string, text: string, fg?: string, bg?: string) =>
-    sendCommand({ cmd: 'colored_message', channel, text, fg, bg }),
+    sendColored: (channel: string, text: string, fg?: string, bg?: string) =>
+        sendCommand({ cmd: 'colored_message', channel, text, fg, bg }),
 
-  botJoin: (channel: string) =>
-    sendCommand({ cmd: 'join', channel }),
+    botJoin: (channel: string) =>
+        sendCommand({ cmd: 'join', channel }),
 
-  botPart: (channel: string) =>
-    sendCommand({ cmd: 'part', channel }),
+    botPart: (channel: string) =>
+        sendCommand({ cmd: 'part', channel }),
 
-  botQuit: () =>
-    sendCommand({ cmd: 'quit' }),
+    botQuit: () =>
+        sendCommand({ cmd: 'quit' }),
 
-  botNick: (nickname: string) =>
-    sendCommand({ cmd: 'nick', nickname }),
+    botNick: (nickname: string) =>
+        sendCommand({ cmd: 'nick', nickname }),
 
-  setTopic: (channel: string, text: string) =>
-    sendCommand({ cmd: 'topic', channel, text }),
+    setTopic: (channel: string, text: string) =>
+        sendCommand({ cmd: 'topic', channel, text }),
 
-  raw: (raw: string) =>
-    sendCommand({ cmd: 'raw', raw }),
+    raw: (raw: string) =>
+        sendCommand({ cmd: 'raw', raw }),
 
-  waitForChannel: (channel: string) =>
-    sendCommand({ cmd: 'wait_for_channel', channel }),
+    waitForChannel: (channel: string) =>
+        sendCommand({ cmd: 'wait_for_channel', channel }),
 
-  sendPm: (nick: string, text: string) =>
-    sendCommand({ cmd: 'send_pm', nick, text }),
+    sendPm: (nick: string, text: string) =>
+        sendCommand({ cmd: 'send_pm', nick, text }),
 };

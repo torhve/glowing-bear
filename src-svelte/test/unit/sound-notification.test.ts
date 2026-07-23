@@ -34,21 +34,21 @@ describe('Sound Notification', () => {
     beforeEach(() => {
         mockAudioPlay = vi.fn().mockReturnValue(Promise.resolve());
 
-            AudioMock = vi.fn(function () {
-                return {
-                    volume: 0.5,
-                    play: mockAudioPlay,
-                };
-            });
+        AudioMock = vi.fn(function () {
+            return {
+                volume: 0.5,
+                play: mockAudioPlay,
+            };
+        });
 
         vi.stubGlobal('Audio', AudioMock);
     });
 
-        afterEach(() => {
-            vi.unstubAllGlobals();
-            vi.clearAllMocks();
-            vi.resetAllMocks();
-        });
+    afterEach(() => {
+        vi.unstubAllGlobals();
+        vi.clearAllMocks();
+        vi.resetAllMocks();
+    });
 
     it('creates Audio with correct source path', () => {
         playNotificationSound();

@@ -13,7 +13,7 @@
     "generate-icns": "node static/generate-icns.mjs",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.app.json",
-    "lint": "eslint src-svelte/src",
+    "lint": "eslint src-svelte/src src-svelte/test src-svelte/e2e",
     "knip": "knip",
     "test": "vitest run",
     "test:watch": "vitest",

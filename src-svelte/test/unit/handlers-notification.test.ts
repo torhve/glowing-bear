@@ -13,7 +13,7 @@ vi.mock('$lib/stores/settings', () => ({
                 savepassword: false, autoconnect: false, useTotp: false,
                 theme: 'dark', fontfamily: '', fontsize: '', customCSS: '',
                 iToken: '', iAlb: '', onlyUnread: false, noembed: false,
-              alwaysnicklist: false, orderbyserver: false,
+                alwaysnicklist: false, orderbyserver: false,
                 readlineBindings: false, useFavico: false, soundnotification: false,
                 enableMathjax: false, enableQuickKeys: false, showNicklist: true,
                 showQuickKeys: false, showJumpKeys: false, highlightWords: '', hotlistsync: true

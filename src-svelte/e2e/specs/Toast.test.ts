@@ -98,7 +98,7 @@ test('toast renders action button with correct testid', async () => {
 });
 
 test('toast action button is clickable', async () => {
-    let clicked = false;
+    const clicked = false;
     await page.evaluate(() => {
         (window as any).__addToast?.('Clickable', { type: 'info', duration: 5000, buttons: [{ text: 'Retry', action: () => { (window as any).__retryClicked = true; } }] });
     });
