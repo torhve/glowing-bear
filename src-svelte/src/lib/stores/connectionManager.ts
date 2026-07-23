@@ -71,8 +71,11 @@ function resetAllState() {
 
 // Detect error type from close event for initial connection failures.
 // Uses close codes to distinguish auth errors from server unreachable.
+// Skips on user-initiated disconnect — no error to report.
 function detectError(evt: CloseEvent): boolean {
-    if (get(connectionState).wasEverConnected) return false;
+    const state = get(connectionState);
+    if (state.userDisconnect) return false;
+    if (state.wasEverConnected) return false;
     if (evt.code === 403 || evt.code === 401) {
         setErrors({ passwordError: true });
         return true;
