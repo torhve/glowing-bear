@@ -129,7 +129,7 @@ describe('formatHandshake parity: new vs old parser', () => {
     beforeEach(async () => {
         if (!OldProtocol) {
             try {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                 
                 const mod = await import('../fixtures/weechat-old.js');
                 OldProtocol = (mod as any).Protocol;
             } catch {
@@ -166,7 +166,7 @@ describe('formatInit parity: new vs old parser', () => {
     beforeEach(async () => {
         if (!OldProtocol) {
             try {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                 
                 const mod = await import('../fixtures/weechat-old.js');
                 OldProtocol = (mod as any).Protocol;
             } catch {

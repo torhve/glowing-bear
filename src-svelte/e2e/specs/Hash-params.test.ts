@@ -9,8 +9,8 @@ test.describe('Hash params', () => {
         // Clear settings on the base page before navigating to hash URL
         await page.goto('http://localhost:8001/');
         await page.evaluate(() => {
-            try { localStorage.removeItem('gb-settings'); } catch {}
-            try { localStorage.removeItem('gb-last-buffer'); } catch {}
+            try { localStorage.removeItem('gb-settings'); } catch { /* ignore */ }
+            try { localStorage.removeItem('gb-last-buffer'); } catch { /* ignore */ }
         });
     });
 

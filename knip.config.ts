@@ -19,11 +19,6 @@ const config = {
         'static/**',
         // Tauri backend config
         'src-tauri/**',
-        // Documentation and planning docs
-        'doc/**',
-        'plans/**',
-        'specs/**',
-        'library/**',
     ],
     // Import alias resolution ($lib handled by SvelteKit plugin)
     paths: {

@@ -115,14 +115,14 @@ test.describe('Auto reconnect with countdown toast', () => {
 
         // Wait for toast to appear and extract first countdown
         await expect(page.getByTestId('toast').first()).toBeVisible({ timeout: 10000 });
-        let countdownText = await page.getByText(/Reconnecting in \d+s/).first().textContent();
-        let firstSeconds = parseInt(countdownText?.match(/in (\d+)/)?.[1] || '0', 10);
+        const countdownText = await page.getByText(/Reconnecting in \d+s/).first().textContent();
+        const firstSeconds = parseInt(countdownText?.match(/in (\d+)/)?.[1] || '0', 10);
         expect(firstSeconds).toBeCloseTo(30, 0);
 
         // Intercept WebSocket so the manual reconnect attempt fails immediately
         await page.evaluate(() => {
             const OriginalWebSocket = window.WebSocket;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             const wrapper: any = function (this: WebSocket, url: string | URL, protocols?: string | string[]) {
                 const ws = new OriginalWebSocket(url, protocols);
                 ws.addEventListener('open', () => {

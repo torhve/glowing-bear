@@ -35,7 +35,18 @@ export default ts.config(
     rules: {
       indent: ['error', 4],
       'no-tabs': 'error',
-    },
+    }
+  },
+  {
+    files: ['src-svelte/**/*.test.ts', 'src-svelte/e2e/**/*.ts', 'src-svelte/test/**/*'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+      '@typescript-eslint/no-this-alias': 'off',
+      'no-control-regex': 'off',
+      'no-useless-escape': 'off',
+      'no-empty': 'warn'
+    }
   },
   {
     ignores: ['build/', '.svelte-kit/', 'src-svelte/src/lib/weechat.js', 'src-svelte/src/routes/404.html', 'src-svelte/src/routes/index.html']

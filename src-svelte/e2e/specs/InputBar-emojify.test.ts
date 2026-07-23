@@ -33,7 +33,7 @@ test('emoji shortcode converts to unicode while typing', async () => {
     await page.evaluate(() => new Promise(requestAnimationFrame));
 
     // Partial should not convert yet (must be complete :shortcode:)
-    let value = await input.inputValue();
+    const value = await input.inputValue();
     expect(value).toContain(':smi');
 
     // Complete the shortcode
