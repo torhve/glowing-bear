@@ -25,13 +25,13 @@ This produces a `build/` directory containing all the files you need. Point your
 
 ### Progressive Web App
 
-Glowing Bear includes PWA support with auto-update strategy. On supported browsers and devices, you can install it as an app:
+Glowing Bear includes a basic service worker (via SvelteKit's `$service-worker`). On supported browsers and devices, you can install it as an app:
 
 - **Desktop Chrome/Firefox/Edge** — "Install" option in the address bar or app menu
 - **Android Chrome** — "Add to homescreen" for a full-screen experience
 - **iOS Safari** — "Add to Home Screen" from the share sheet
 
-Once installed, it runs standalone without browser chrome and caches assets for offline use.
+Once installed, it runs standalone without browser chrome.
 
 ### Tauri Desktop App
 
@@ -65,7 +65,7 @@ Then enter your WeeChat host, port, and password in Glowing Bear's connection fo
 - [TypeScript](https://www.typescriptlang.org/) (strict mode)
 - [Tailwind CSS v4](https://tailwindcss.com/)
 - [Tauri 2.x](https://tauri.app) (desktop apps)
-- [@vite-pwa/sveltekit](https://github.com/vike/vite-plugin-pwa) (PWA)
+- [SvelteKit service worker](https://svelte.dev/docs/kit/service-workers) (PWA)
 - [Vitest](https://vitest.dev) (unit tests) + [Playwright](https://playwright.dev) (E2E tests)
 
 ### Prerequisites
