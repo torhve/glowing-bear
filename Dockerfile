@@ -34,11 +34,14 @@ COPY --from=builder /app/build/ /var/public/
 
 EXPOSE 8080
 
+# Install curl for HEALTHCHECK (not included in static-web-server debian image)
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+USER 1000:1000
+
 # Shell-form HEALTHCHECK (CMD /bin/sh -c) expands $SERVER_PORT at runtime
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD curl -f http://127.0.0.1:$SERVER_PORT/ || exit 1
-
-USER 1000:1000
 
 ENTRYPOINT ["static-web-server"]
 CMD ["--config-file", "/etc/sws.toml"]
