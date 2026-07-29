@@ -1,6 +1,6 @@
 # Glowing Bear Svelte — Agent Guide
 
-Browser frontend for WeeChat IRC via WebSockets — **no backend**. Client-side SvelteKit 2.x + Svelte 5 + TypeScript (strict) + Tailwind CSS v4. Wrapped in Tauri 2.x for desktop. Includes PWA support via `@vite-pwa/sveltekit` (auto-update strategy). Requires WeeChat >= 2.9.
+Browser frontend for WeeChat IRC via WebSockets — **no backend**. Client-side SvelteKit 2.x + Svelte 5 + TypeScript (strict) + Tailwind CSS v4. Wrapped in Tauri 2.x for desktop. Includes basic PWA via SvelteKit's native `$service-worker` (fetch-through, no caching). Requires WeeChat >= 2.9.
 
 ## Project Structure
 
@@ -18,7 +18,7 @@ Source code in `src-svelte/src/` has `components/`, `lib/`, `routes/`. Config fi
 npm run dev                    # Dev server (localhost:8001)
 npm run build                  # Production build (static output to build/)
 npm run check                  # svelte-check
-npm run lint                   # eslint src-svelte/src
+npm run lint                   # eslint src-svelte/src src-svelte/test src-svelte/e2e
 npm test                       # Vitest unit tests
 npm run test:e2e -- --grep "X" # Targeted E2E tests
 npm run irc:start / irc:stop   # Manual gbtest IRC server
@@ -53,6 +53,13 @@ $effect(() => {
 Do NOT initialize `$state` with a store value if you also subscribe to it in an effect — the `$state` initialization creates an unwanted reactive dependency that causes the effect to re-run on every store change.
 
 Use `untrack()` from `svelte` to read a value inside `$effect` without creating a reactive dependency:
+
+```ts
+$effect(() => {
+    const staticVal = untrack(() => get(settings)); // won't re-trigger effect
+    // ...
+});
+```
 
 ### Reactivity
 
