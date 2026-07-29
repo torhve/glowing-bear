@@ -906,19 +906,12 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
             return { ...current, [bufferId]: updated };
         });
     } catch (err) {
-        // Don't mark allLinesFetched=true for connection failures — those are transient.
-        // Only give up on actual protocol errors (timeout, parse failure, etc.).
+        // Don't mark allLinesFetched=true for any errors — they're transient.
+        // Timeouts, protocol errors, connection drops should not permanently block
+        // future fetch attempts. Only set allLinesFetched when WeeChat explicitly
+        // returns fewer lines than requested (beginning of history reached).
         const msg = String(err);
-        if (msg.includes('WebSocket not open') || msg.includes('Connection closed')) {
-            console.warn('[fetchMoreLines] connection lost during fetch, aborting');
-            return;  // finally block handles pendingFetchBuffers cleanup
-        }
-        console.warn('[fetchMoreLines] fetch failed, marking allLinesFetched:', err);
-        buffers.update(current => {
-            const buf = current[bufferId];
-            if (!buf) return current;
-            return { ...current, [bufferId]: { ...buf, lines: [...buf.lines], allLinesFetched: true } };
-        });
+        console.warn('[fetchMoreLines] fetch failed, will retry on next attempt:', msg);
     } finally {
         pendingFetchBuffers.delete(bufferIdStr);
     }
