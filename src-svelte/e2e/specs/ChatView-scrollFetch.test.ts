@@ -17,14 +17,12 @@ test.afterAll(async () => {
 });
 
 // Note: The "Fetch more lines" button requires hdata support (real WeeChat relay).
-// Against the test IRC server, allLinesFetched is set to true after fetchMoreLines()
-// times out (0 lines received < numLines requested), so the button doesn't render.
+// Timeouts no longer set allLinesFetched=true (transient error fix in connectionManager).
 // These tests verify the scroll handler logic and graceful error handling.
 
 test('"Fetch more lines" button not visible with test server (no hdata)', async () => {
     // Test server doesn't implement hdata protocol, so fetchMoreLines times out.
-    // connectionManager sets allLinesFetched = true when linesReceived (0) < numLines.
-    // Button condition: !$currentBuffer.allLinesFetched && messages.length > 0
+    // Timeouts no longer set allLinesFetched=true (fix above).
     // NOTE: Skipped in serial mode because prior tests may accumulate >210 lines,
     // which resets allLinesFetched to false in models.ts line truncation logic.
     test.skip();

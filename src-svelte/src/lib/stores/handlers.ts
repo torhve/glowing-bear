@@ -664,7 +664,12 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
     buffers.update((current) => {
         const merged = { ...current };
         for (const id in updatedBuffers) {
-            if (updatedBuffers[id]) merged[id] = updatedBuffers[id];
+            if (updatedBuffers[id]) {
+                // Reset allLinesFetched when new real-time lines arrive —
+                // more history may be available now that the buffer has grown.
+                const buf = updatedBuffers[id]!;
+                merged[id] = { ...buf, allLinesFetched: false };
+            }
         }
         return merged;
     });
