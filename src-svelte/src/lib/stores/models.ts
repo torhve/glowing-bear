@@ -35,22 +35,6 @@ export function deepCloneBufferLine(l: BufferLine): BufferLine {
     };
 }
 
-// ---- Utility: convert rich text parts to HTML ----
-export function richTextToHtml(parts: RichTextPart[]): string {
-    if (!parts || parts.length === 0) return "";
-    return parts
-        .map((part) => {
-            const escaped = part.text
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;");
-            const classes = part.classes ? part.classes.join(" ") : "";
-            return classes ? `<span class="${classes}">${escaped}</span>` : escaped;
-        })
-        .join("");
-}
-
 // ---- Utility: parse rich text (delegates to Protocol.rawText2Rich) ----
 function buildClasses(part: {
   fgColor: { type: string; name: string };
