@@ -4,7 +4,7 @@ Glowing Bear is a web frontend for the [WeeChat](https://weechat.org) IRC client
 
 ## Getting Started
 
-Glowing Bear connects to the WeeChat instance you're already running (version 0.4.2 or later is required), and you need to be able to establish a connection to the WeeChat host from your device. It makes use of the relay plugin, and therefore you need to set up a relay. If you want to try this out with a local WeeChat instance, use these commands in WeeChat to create an **unencrypted relay** (see the note below):
+Glowing Bear connects to the WeeChat instance you're already running (version 2.9 or later is required), and you need to be able to establish a connection to the WeeChat host from your device. It makes use of the relay plugin, and therefore you need to set up a relay. If you want to try this out with a local WeeChat instance, use these commands in WeeChat to create an **unencrypted relay** (see the note below):
 
 	/relay add weechat 9001
 	/set relay.network.password YOURPASSWORD
