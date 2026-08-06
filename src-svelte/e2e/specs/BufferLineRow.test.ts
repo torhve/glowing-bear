@@ -227,12 +227,15 @@ test.describe('codify', () => {
     });
 
     test('does NOT codify backticks without preceding space', async () => {
+        const id = Date.now();
+        const msg = `gb-${id}weird\`sadsd\`stuff`;
         const { botSay } = await import('../helpers/messages');
-        await botSay('weird`sadsd`stuff');
-        const targetRow = page.locator('[data-testid="bufferline-row"]').filter({ hasText: 'weird' }).first();
+        await botSay(msg);
+        const targetRow = page.locator('[data-testid="bufferline-row"]').filter({ hasText: msg }).first();
+        await expect(targetRow).toBeVisible({ timeout: 5000 });
         const codeEls = targetRow.locator('td.message code');
         await expect(codeEls).toHaveCount(0);
-        await expect(targetRow.locator('td.message')).toContainText('weird`sadsd`stuff');
+        await expect(targetRow.locator('td.message')).toContainText(msg);
     });
 
     test('renders hidden brackets around code in bufferlines', async () => {

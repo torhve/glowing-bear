@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { createConnectedPage } from '../fixtures/auth';
+import { connectToWeechat, clearSettings, waitForAppReady } from '../helpers/connection';
+import { setupEffectOrphanFilter } from '../helpers/pageerror';
 
 // Simulate the type-to-focus behavior: blur any focused element, then focus the input and insert a character.
 // This replicates what handleTypeToFocus does in +page.svelte since Playwright's keyboard events
@@ -22,8 +24,22 @@ async function simulateTypeToFocus(page: import('@playwright/test').Page, key: s
 let page: import('@playwright/test').Page;
 
 test.describe('Type to Focus (Slack-style input capture)', () => {
+    let context: import('@playwright/test').BrowserContext;
+
     test.beforeEach(async ({ browser }) => {
-        page = await createConnectedPage(browser);
+        // Close any existing context from previous test
+        if (context) await context.close();
+        context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+        page = await context.newPage();
+        await page.goto('http://localhost:8001/');
+        await waitForAppReady(page);
+        setupEffectOrphanFilter(page);
+        await clearSettings(page);
+        await connectToWeechat(page);
+    });
+
+    test.afterEach(async () => {
+        if (context) await context.close();
     });
 
     test('should focus input and insert character when typing outside the input', async () => {
