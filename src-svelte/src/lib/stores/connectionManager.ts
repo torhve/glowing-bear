@@ -158,7 +158,10 @@ export async function connect(host: string, port: number, path: string, password
     setOnUpgradeEnded(() => {
         const [h, p, path, pw, tls, noComp] = connectionData || [null, 0, '', '', false, false];
         if (h !== null) {
-            connect(h, p, path, pw, tls, noComp).catch(() => {});
+            connect(h, p, path, pw, tls, noComp).catch((err) => {
+                console.warn('[reconnect after upgrade] failed:', err.message);
+                setErrors({ serverUnreachable: true });
+            });
         }
     });
 
