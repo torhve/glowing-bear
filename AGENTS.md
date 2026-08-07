@@ -108,9 +108,8 @@ Wrapped in Tauri 2.x for desktop distribution. Custom titlebar via `TauriTitleba
 - **Test user-visible behavior, not implementation details.** DOM output, UI state, user flows.
 - **Prefer user-facing locators.** `getByRole()`/`getByText()` first. `data-testid` only when no semantic role or stable text fits.
 
-### Git
+## Git
 
-After code changing is completed -> a choice to the user to git commit.
 Do NOT push.
 
 ## Legacy AngularJS Code
