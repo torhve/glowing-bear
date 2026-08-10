@@ -10,7 +10,7 @@ const gitCommit =
     process.env.GIT_COMMIT ??
     (() => {
         try {
-            return execSync('git rev-parse --short HEAD', { cwd: __dirname })
+            return execSync('git rev-parse --short HEAD', { cwd: import.meta.dirname })
                 .toString()
                 .trim();
         } catch {
