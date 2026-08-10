@@ -20,6 +20,7 @@
   import { initNotifications, updateTitle, updateFavico, onDisconnect } from '$lib/notifications';
   import { parseRelayUrl, isPopoverOpen, bufferHasNicklist, modifyTextareaValue } from '$lib/utils';
   import { addToast, toastStore } from '$lib/toast';
+  import { showWindow } from '$lib/tauriWindow';
 
   /* eslint-disable @typescript-eslint/no-explicit-any -- dev-time debug globals on window */
   if (typeof window !== 'undefined' && import.meta.env.DEV) {
@@ -73,6 +74,7 @@
     void tryAutoConnect();
     checkAndNavigatePendingNotificationBuffer();
     document.body.setAttribute('data-app-ready', 'true');
+    void showWindow();
 
     // Re-apply hash params when URL fragment changes (e.g. user modifies bookmark)
     window.onhashchange = () => {
