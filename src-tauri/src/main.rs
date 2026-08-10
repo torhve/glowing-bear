@@ -8,10 +8,13 @@ use tauri::Manager;
 fn main() {
   tauri::Builder::default()
     .setup(|app| {
+      let window = app.get_webview_window("main").unwrap();
       if cfg!(target_os = "windows") || cfg!(target_os = "macos") {
-        let window = app.get_webview_window("main").unwrap();
         window.set_decorations(false)?;
       }
+      // Hide window until frontend signals ready — prevents white flash on Windows WebView2 bootstrap
+      #[cfg(target_os = "windows")]
+      window.hide()?;
       Ok(())
     })
     .plugin(tauri_plugin_window_state::Builder::new().build())

@@ -20,13 +20,14 @@ function isMacOSPlatform(): boolean {
     return typeof navigator !== 'undefined' && /macintosh|mac\sos\sx/i.test(navigator.userAgent);
 }
 
-async function ensureTauriWindow(): Promise<void> {
-    if (tauriWindow !== null || !isTauri()) return;
+async function ensureTauriWindow(): Promise<typeof import('@tauri-apps/api/window') | null> {
+    if (tauriWindow !== null || !isTauri()) return tauriWindow;
     try {
         tauriWindow = await import('@tauri-apps/api/window');
     } catch (e) {
         console.warn('Tauri window API unavailable:', e);
     }
+    return tauriWindow;
 }
 
 // Check if we are running on Windows inside Tauri
@@ -83,6 +84,20 @@ async function closeWindow(): Promise<void> {
     }
 }
 
+// Show the current window (no-op outside Tauri)
+// Used to unhide the window after frontend has finished loading
+async function showWindow(): Promise<void> {
+    if (!isTauri()) return;
+    await ensureTauriWindow();
+    if (!tauriWindow) return;
+    try {
+        const win = tauriWindow.getCurrentWindow();
+        await win.show();
+    } catch (e) {
+        console.warn('Failed to show window:', e);
+    }
+}
+
 // Set the OS/taskbar badge count (no-op outside Tauri)
 // macOS: setBadgeLabel, Windows: setOverlayIcon with generated PNG, Linux: setBadgeCount
 async function setBadgeCount(opts: { count: number; type: 'notification' | 'unread' }): Promise<void> {
@@ -117,4 +132,4 @@ async function setBadgeCount(opts: { count: number; type: 'notification' | 'unre
     }
 }
 
-export { isTauri, isWindowsTauri, isMacOSTauri, minimizeWindow, toggleMaximizeWindow, closeWindow, setBadgeCount, isMacOSPlatform };
+export { isTauri, isWindowsTauri, isMacOSTauri, ensureTauriWindow, minimizeWindow, toggleMaximizeWindow, closeWindow, showWindow, setBadgeCount, isMacOSPlatform };

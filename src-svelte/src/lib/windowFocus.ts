@@ -2,7 +2,7 @@
 // In Tauri's WKWebView, `document.hidden` does not reliably reflect whether the native
 // window lost focus, so Tauri's onFocus/onBlur events are used as a correction layer.
 
-import { isTauri } from './tauriWindow';
+import { isTauri, ensureTauriWindow } from './tauriWindow';
 
 // Current focus state — true means window is in front/visible
 let focused: boolean = typeof document !== 'undefined' && !document.hidden;
@@ -43,21 +43,16 @@ export async function initWindowFocusTracking(): Promise<() => void> {
 
     // Augment with Tauri native focus events when available
     if (isTauri()) {
-        try {
-            const tauriWindow = await import('@tauri-apps/api/window');
-            const win = tauriWindow.getCurrentWindow();
+        const tauriWin = await ensureTauriWindow();
+        if (tauriWin) {
+            const win = tauriWin.getCurrentWindow();
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const winAny = win as any;
-            const [unlistenFocus, unlistenBlur] = await Promise.all([
-                winAny.onFocus(() => { focused = true; }),
-                winAny.onBlur(() => { focused = false; }),
-            ]);
-            tauriUnlisten = () => {
-                unlistenFocus();
-                unlistenBlur();
-            };
-        } catch (e) {
-            console.warn('Failed to set up Tauri window focus tracking:', e);
+            if (typeof winAny.onFocusChanged === 'function') {
+                tauriUnlisten = await winAny.onFocusChanged((event: { payload: boolean }) => {
+                    focused = event.payload;
+                });
+            }
         }
     }
 
