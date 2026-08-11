@@ -16,6 +16,7 @@ export const themes = [
     'catppuccin-mocha',
     'catppuccin-macchiato',
     'catppuccin-frappe',
+    'cendre',
 ] as const;
 
 export type Theme = typeof themes[number];
@@ -37,6 +38,7 @@ export const themeLabels: Record<Theme, string> = {
     'catppuccin-mocha': '☕ Catppuccin Mocha',
     'catppuccin-macchiato': '🌿 Catppuccin Macchiato',
     'catppuccin-frappe': '🌺 Catppuccin Frappé',
+    'cendre': '🔥 Cendre',
 };
 
 export const themeStore = writable<Theme>('dark');
