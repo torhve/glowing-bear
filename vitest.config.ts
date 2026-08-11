@@ -10,7 +10,7 @@ export default defineConfig({
     alias: {
       $lib: path.resolve('./src-svelte/src/lib'),
       $components: path.resolve('./src-svelte/src/components'),
-      '@tauri-apps/plugin-notification': path.resolve('./src-svelte/test/unit/mocks/tauri-plugin-notification.js'),
+      '@tauri-apps/plugin-notification': path.resolve('./src-svelte/test/unit/mocks/tauri-plugin-notification.ts'),
     },
   },
   test: {
