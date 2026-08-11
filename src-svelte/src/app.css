@@ -539,7 +539,7 @@
 .a-no-d { opacity: 1; }
 .a-reset { font-weight: normal; font-style: normal; text-decoration: none; filter: none; opacity: 1; }
 /* WeeChat protocol color rules — base 16 palette for dark themes */
-[data-theme="dark"], [data-theme="black"], [data-theme="dark-spacious"], [data-theme="blue"], [data-theme="blue-modern"], [data-theme="base16-default"], [data-theme="base16-mocha"], [data-theme="base16-ocean-dark"], [data-theme="base16-solarized-dark"], [data-theme="catppuccin-mocha"], [data-theme="catppuccin-macchiato"], [data-theme="catppuccin-frappe"] {
+[data-theme="dark"], [data-theme="black"], [data-theme="dark-spacious"], [data-theme="blue"], [data-theme="blue-modern"], [data-theme="base16-default"], [data-theme="base16-mocha"], [data-theme="base16-ocean-dark"], [data-theme="base16-solarized-dark"], [data-theme="catppuccin-mocha"], [data-theme="catppuccin-macchiato"], [data-theme="catppuccin-frappe"], [data-theme="cendre"] {
   .cef-0 { color: #000000; }
   .cef-1 { color: #7f0000; }
   .cef-2 { color: #00cd00; }
@@ -1470,6 +1470,70 @@
   --gb-cob-gray: #303446;
   --gb-cob-brown: #3d2a1a;
   --gb-cob-default: #303446;
+}
+
+/* Cendre theme — MIT © 2026 aejkatappaja
+   Derived from https://github.com/Aejkatappaja/cendre
+   https://cendretheme.com/
+   Palette used under MIT license. Copyright notice retained.
+*/
+[data-theme="cendre"] {
+  --gb-bg: #171311;
+  --gb-surface: #201b19;
+  --gb-surface-raised: #2a2422;
+  --gb-border: #362f2c;
+  --gb-text: #e6d5c2;
+  --gb-text-secondary: #a09384;
+  --gb-text-muted: #73665b;
+  --gb-accent: #ea9875;
+  --gb-accent-hover: #fcba81;
+  --gb-link: #4e89a2;
+  --gb-link-hover: #58bdff;
+  --gb-link-bubble: #4e89a2;
+  --gb-ribbon: #d1766e;
+  --gb-ribbon-light: rgba(209,118,110,0.15);
+  --gb-danger: #d25780;
+  --gb-success: #43b16a;
+  --gb-warning: #f4a21c;
+  --gb-unread: #ea9875;
+  --gb-notification: #d25780;
+  --gb-highlight: #2a2422;
+  --gb-input-bg: #201b19;
+  --gb-panel: #201b19;
+  --gb-cof-black: #000000;
+  --gb-cof-red: #cd3131;
+  --gb-cof-green: #00bf00;
+  --gb-cof-yellow: #bfbf00;
+  --gb-cof-blue: #00b1f9;
+  --gb-cof-magenta: #e954ac;
+  --gb-cof-cyan: #5ac4e1;
+  --gb-cof-white: #e5e5e5;
+  --gb-cof-darkgray: #555555;
+  --gb-cof-lightred: #f06c46;
+  --gb-cof-lightgreen: #33ff33;
+  --gb-cof-lightblue: #6f6f6f;
+  --gb-cof-lightmagenta: #bc6fc4;
+  --gb-cof-lightcyan: #76d7e6;
+  --gb-cof-gray: #c0c0c0;
+  --gb-cof-brown: #cde4cd;
+  --gb-cof-default: #ddd;
+  --gb-cob-black: #000000;
+  --gb-cob-red: #5f0000;
+  --gb-cob-green: #003300;
+  --gb-cob-yellow: #333300;
+  --gb-cob-blue: #00008b;
+  --gb-cob-magenta: #3b003b;
+  --gb-cob-cyan: #003b3b;
+  --gb-cob-white: #2c2c2c;
+  --gb-cob-darkgray: #000000;
+  --gb-cob-lightred: #7f0000;
+  --gb-cob-lightgreen: #005f00;
+  --gb-cob-lightblue: #00005f;
+  --gb-cob-lightmagenta: #3b003b;
+  --gb-cob-lightcyan: #003b3b;
+  --gb-cob-gray: #303030;
+  --gb-cob-brown: #3b3b00;
+  --gb-cob-default: #171311;
 }
 
 /* Light theme — Catppuccin Latte palette */
