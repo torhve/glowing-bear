@@ -702,7 +702,7 @@
 </script>
 
 <div data-testid="input-bar" class="input-bar-container flex-shrink-0"
-  style="padding-bottom: max(4px, env(safe-area-inset-bottom, 0px));">
+  style="padding-bottom: env(safe-area-inset-bottom, 0px);">
 
   <div class="input-bar-inner bg-panel border-t border-border"
     role="group"
