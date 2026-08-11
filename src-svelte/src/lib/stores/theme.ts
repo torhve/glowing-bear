@@ -13,10 +13,10 @@ export const themes = [
     'base16-ocean-dark',
     'base16-solarized-dark',
     'base16-solarized-light',
+    'cendre',
     'catppuccin-mocha',
     'catppuccin-macchiato',
     'catppuccin-frappe',
-    'cendre',
 ] as const;
 
 export type Theme = typeof themes[number];
