@@ -44,7 +44,7 @@ async function ensureTauriNotification(): Promise<void> {
 async function setupTauriNotificationListener(): Promise<void> {
     if (!isTauri() || !tauriNotif) return;
     try {
-        await tauriNotif.onAction((notification: { extra?: Record<string, unknown> }) => {
+        await tauriNotif.onAction((notification: import('@tauri-apps/plugin-notification').Options) => {
             const bufferId = notification.extra?.bufferId as string | undefined;
             if (bufferId) {
                 setActiveBuffer(bufferId);
@@ -182,8 +182,9 @@ export function cancelAll(): void {
         notification.close();
     });
     activeNotifications.clear();
-    if (tauriNotif?.cancelAll) {
+    if (tauriNotif) {
         tauriNotif.cancelAll().catch(() => {});
+        tauriNotif.removeAllActive().catch(() => {});
     }
 }
 
