@@ -44,19 +44,6 @@
   let isHighlight = $derived(message.highlight);
   let metadata = $derived(buildMetadata());
 
-  // Limit total prefix text length to prevent overflow (port of Angular `prefixlimit:25`).
-  const PREFIX_TEXT_LIMIT = 25;
-  let prefixPartsToRender = $derived.by(() => {
-    let totalLen = 0;
-    const result: typeof message.prefix = [];
-    for (const part of message.prefix) {
-      if (totalLen >= PREFIX_TEXT_LIMIT) break;
-      result.push(part);
-      totalLen += (part.text || '').length;
-    }
-    return result;
-  });
-  let isPrefixTruncated = $derived(message.prefixtext.length > PREFIX_TEXT_LIMIT);
 
   // Extract nick from prefix text, stripping angle brackets (e.g. "<gbbot123>" → "gbbot123").
   function extractNick(prefixText: string): string {
@@ -306,11 +293,11 @@
             {message.shortTime}<!---->
           {/if}</span>
       </td>
-      <td class="prefix max-w-[120px] align-top whitespace-nowrap text-right overflow-hidden truncate font-mono">
+      <td class="prefix max-w-[130px] align-top whitespace-nowrap text-right overflow-hidden font-mono">
         <span class="compact-prefix flex justify-end items-center" class:repeated-prefix={isRepeatedPrefix}>
-          <span onclick={handleMention} role="button" tabindex="0" class="mention-link" onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleMention(); } }}>
+          <span onclick={handleMention} role="button" tabindex="0" title={extractNick(message.prefixtext)} class="mention-link" onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleMention(); } }}>
             {#if message.showHiddenBrackets}<span class="hidden-bracket">&lt;</span>{/if}<!---->
-            {#each prefixPartsToRender as part, pi (pi)}
+            {#each message.prefix as part, pi (pi)}
               {@const iconType = getIconType(part)}
               {#if iconType}
                 {#if iconType === 'arrow-right'}
@@ -328,7 +315,6 @@
                 <span class="prefix-part {(part.classes || []).join(' ')}">{part.text}</span>
               {/if}<!---->
             {/each}<!---->
-            {#if isPrefixTruncated}<span class="prefix-part">+</span>{/if}<!---->
             {#if message.showHiddenBrackets}<span class="hidden-bracket">&gt;</span>{/if}<!----></span>
         </span>
       </td>
@@ -407,6 +393,14 @@
       align-items: center;
     }
 
+    .prefix .mention-link {
+      display: inline;
+      max-width: none;
+      overflow: visible;
+      text-overflow: clip;
+      white-space: normal;
+    }
+
     .message {
       display: inline;
       padding: 0;
@@ -429,6 +423,17 @@
     display: flex;
     justify-content: flex-end;
     align-items: center;
+  }
+
+  /* Long nicks: clip with ellipsis inside the capped column. The ellipsis must live on an
+     inline-level box — text-overflow never fires on a flex item overflowing its container.
+     Full nick stays in the DOM (copy/paste) and in the title tooltip. */
+  .prefix .mention-link {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   /* ===== Theme-aware colors — fallbacks are dark-theme values ===== */
