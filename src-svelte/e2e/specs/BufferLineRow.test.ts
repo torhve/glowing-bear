@@ -357,7 +357,7 @@ test.describe('prefix truncation', () => {
         await switchToBuffer(page, '#glowing-bear');
     });
 
-    test('long nick prefixes are truncated with + suffix', async () => {
+    test('long nick prefixes are truncated with ellipsis', async () => {
         const longNick = 'aaaaaaaaaaverrrrylooooooongnick';
         const msg = 'trunc-test-' + Date.now();
 
@@ -368,8 +368,35 @@ test.describe('prefix truncation', () => {
         await expect(row).toBeVisible({ timeout: 10000 });
 
         const prefixCell = row.locator('..').locator('td.prefix');
-        const prefixText = await prefixCell.textContent();
-        expect(prefixText ?? '').toContain('+');
+        const link = prefixCell.locator('.mention-link');
+
+        // Full nick available via title tooltip
+        const title = await link.getAttribute('title');
+        expect(title ?? '').toContain(longNick);
+
+        // Nick overflows the capped cell and is clipped with an ellipsis
+        const metrics = await link.evaluate((el) => {
+            const s = window.getComputedStyle(el);
+            return { scrollW: el.scrollWidth, clientW: el.clientWidth, textOverflow: s.textOverflow };
+        });
+        expect(metrics.textOverflow).toBe('ellipsis');
+        expect(metrics.scrollW).toBeGreaterThan(metrics.clientW);
+
+        // Regression: prefix column stays within its cap and the nick box must not
+        // extend left of the cell into the time column
+        const geom = await page.evaluate((m) => {
+            const cell = Array.from(document.querySelectorAll('td.message')).find(td => (td.dataset.message ?? '').includes(m));
+            const tr = cell?.closest('tr');
+            const prefixTd = tr?.querySelector('td.prefix');
+            const link = tr?.querySelector('.mention-link');
+            if (!prefixTd || !link) return null;
+            const p = prefixTd.getBoundingClientRect();
+            const l = link.getBoundingClientRect();
+            return { prefixWidth: p.width, prefixLeft: p.left, linkLeft: l.left };
+        }, msg);
+        expect(geom).not.toBeNull();
+        expect(geom!.prefixWidth).toBeLessThanOrEqual(131);
+        expect(geom!.linkLeft).toBeGreaterThanOrEqual(geom!.prefixLeft - 1);
 
         await irc.botNick('gbbot');
     });
