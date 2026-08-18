@@ -59,6 +59,14 @@
   // Tracks whether the chat is scrolled to the bottom (AngularJS bufferBottom equivalent).
   // Used to avoid unnecessary scroll operations when already at bottom.
   let isAtBottom = $state(true);
+  // Timestamp (performance.now()) of the last time we actively pinned the scroll to the
+  // bottom while following. While within FOLLOW_SETTLE_MS of this, handleScroll will not
+  // allow a stray/mid-layout scroll event to flip isAtBottom back to false. WebKit
+  // reflows wrapping lines across several frames and fires scroll events against
+  // transient layouts, which otherwise poisons isAtBottom and strands the view above
+  // the true bottom (see Tauri repro: FAIL-echo-not-at-bottom).
+  const FOLLOW_SETTLE_MS = 250;
+  let lastFollowPinAt = 0;
   let prevActiveBufferId = $state<string>('');
   let prevLinesLength = $state(0);
   let prevScrollKey = $state<string>('');
@@ -71,7 +79,6 @@
   // Do NOT depend on effectiveUnread — that value can be cleared by hotlist sync
   // while lastSeen (and thus the readmarker) correctly persists for active buffers.
   let unreadCount = $derived(readEndIndex >= 0 ? messages.length - readEndIndex - 1 : 0);
-
   // Toggle pin/unpin for the currently active buffer via WeeChat localvar_set.
   function handleTogglePin() {
     const bufId = get(activeBufferId);
@@ -106,7 +113,16 @@
 
     // Update isAtBottom tracking (AngularJS bufferBottom equivalent).
     // Tolerance accounts for sub-pixel scroll lag when new lines grow scrollHeight.
-    isAtBottom = scrollTop >= scrollHeight - clientHeight - SCROLL_BOTTOM_TOLERANCE;
+    // Sticky during the follow-settle window: a stray/mid-layout scroll event fired
+    // while we are actively pinning to the bottom must not flip isAtBottom to false,
+    // or the next effect run will stop following and strand the view above the bottom.
+    const atBottomNow = scrollTop >= scrollHeight - clientHeight - SCROLL_BOTTOM_TOLERANCE;
+    const inSettleWindow = performance.now() - lastFollowPinAt < FOLLOW_SETTLE_MS;
+    if (atBottomNow || (inSettleWindow && isAtBottom)) {
+      isAtBottom = true;
+    } else {
+      isAtBottom = false;
+    }
 
     if (scrollTop < 50 && !isLoadingMore && $currentBuffer && !$currentBuffer.allLinesFetched) {
       isLoadingMore = true;
@@ -275,10 +291,29 @@
         if (wasFollowing || isAtBottom) {
           readmarkerFailures = 0;
           isAtBottom = true;
-          // Double-rAF: first after Svelte renders, second after layout computes.
-          requestAnimationFrame(() => {
-            if (containerRef) containerRef.scrollTop = containerRef.scrollHeight - containerRef.clientHeight;
-          });
+          // Pin to the bottom until layout settles. WebKit reflows a wrapping line
+          // across several frames (scrollHeight bounces), so a single double-rAF can
+          // land on a transient layout and strand the view above the true bottom.
+          // Keep pinning each frame until scrollHeight is stable for a couple of
+          // frames OR a short hard cap elapses, whichever comes first.
+          lastFollowPinAt = performance.now();
+          const pinStart = lastFollowPinAt;
+          const PIN_CAP_MS = 400;
+          const PIN_SETTLE_FRAMES = 2;
+          let lastScrollHeight = -1;
+          let stableFrames = 0;
+          const pinToBottom = () => {
+            if (!containerRef) return;
+            containerRef.scrollTop = containerRef.scrollHeight - containerRef.clientHeight;
+            lastFollowPinAt = performance.now();
+            const sh = containerRef.scrollHeight;
+            if (sh === lastScrollHeight) stableFrames++;
+            else stableFrames = 0;
+            lastScrollHeight = sh;
+            const settled = stableFrames >= PIN_SETTLE_FRAMES || performance.now() - pinStart > PIN_CAP_MS;
+            if (!settled) requestAnimationFrame(pinToBottom);
+          };
+          requestAnimationFrame(pinToBottom);
           // Absorb unread by updating lastSeen since user caught up.
           const buf = get(currentBuffer);
           if (buf && buf.lastSeen >= 0) {
