@@ -77,9 +77,10 @@ async function waitForScrollStable(timeout = 5000) {
 }
 
 test.beforeEach(async () => {
-    // Reset buffer state: absorb all unread and scroll to bottom for a clean baseline
+    // Reset buffer state: scroll to the true bottom for a clean baseline.
+    // (Do NOT wait for "settled at bottom" before scrolling — the buffer may be
+    // scrollable and the view starts wherever it was left, so that wait would time out.)
     await switchToBuffer(page, "#glowing-bear");
-    await waitForScrollSettled(3000);
 
     const chatContainer = page.locator('[data-testid="chat-messages"]');
     await chatContainer.evaluate((el) => {
