@@ -103,15 +103,17 @@ test('pasting text at cursor position inserts mid-content', async () => {
     expect(value).toBe('Hello [pasted]world');
 });
 
-test('pasting multi-line text preserves newlines', async () => {
+test('pasting multi-line text under the threshold preserves newlines', async () => {
     const input = page.getByTestId('message-input');
     await input.focus();
     await page.waitForTimeout(50);
 
-    await simulatePaste('line1\nline2\nline3');
+    // 2 lines is below the 3-line threshold — inserted as-is, no confirmation dialog
+    await simulatePaste('line1\nline2');
 
     const value = await getRawInputValue();
-    expect(value).toBe('line1\nline2\nline3');
+    expect(value).toBe('line1\nline2');
+    await expectMultiLineDialogVisible(false);
 });
 
 test('pasting when focus is NOT on input bar still inserts text', async () => {
@@ -156,4 +158,104 @@ test('pasting empty text does nothing', async () => {
 
     const value = await getRawInputValue();
     expect(value).toBe('original');
+});
+
+// Helper: wait until the multi-line paste dialog is in the given visibility state
+async function expectMultiLineDialogVisible(visible: boolean) {
+    await page.waitForFunction((v) => {
+        const el = document.querySelector('[data-testid="multiline-paste-dialog"]') as HTMLDialogElement | null;
+        if (!el) return v === false;
+        const isShown = getComputedStyle(el).display !== 'none';
+        return isShown === v;
+    }, visible, { timeout: 5000 });
+}
+
+test('pasting 3+ lines shows the confirmation dialog; Join merges into one message', async () => {
+    const input = page.getByTestId('message-input');
+    await input.focus();
+    await page.waitForTimeout(50);
+
+    await simulatePaste('line1\nline2\nline3');
+
+    await expectMultiLineDialogVisible(true);
+    await page.getByTestId('multiline-paste-join').click();
+
+    const value = await getRawInputValue();
+    expect(value).toBe('line1 line2 line3');
+    await expectMultiLineDialogVisible(false);
+});
+
+test('pasting 3+ lines with "Paste each line separately" inserts text as-is', async () => {
+    const input = page.getByTestId('message-input');
+    await input.focus();
+    await page.waitForTimeout(50);
+
+    await simulatePaste('line1\nline2\nline3');
+
+    await expectMultiLineDialogVisible(true);
+    await page.getByTestId('multiline-paste-separate').click();
+
+    const value = await getRawInputValue();
+    expect(value).toBe('line1\nline2\nline3');
+    await expectMultiLineDialogVisible(false);
+});
+
+test('pasting 3+ lines and clicking Cancel leaves the input unchanged', async () => {
+    const input = page.getByTestId('message-input');
+    await input.focus();
+    await page.waitForTimeout(50);
+
+    // Type some text naturally so we can verify it is left untouched
+    await input.pressSequentially('keep ');
+    await page.waitForTimeout(50);
+
+    await simulatePaste('line1\nline2\nline3');
+
+    await expectMultiLineDialogVisible(true);
+    await page.getByTestId('multiline-paste-cancel').click();
+
+    const value = await getRawInputValue();
+    expect(value).toBe('keep ');
+    await expectMultiLineDialogVisible(false);
+});
+
+test('pasting 3+ lines and pressing Enter uses the default action (paste separately)', async () => {
+    const input = page.getByTestId('message-input');
+    await input.focus();
+    await page.waitForTimeout(50);
+
+    await simulatePaste('line1\nline2\nline3');
+
+    await expectMultiLineDialogVisible(true);
+
+    // The default action (Paste each line separately) has initial focus, so Enter confirms it
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(100);
+
+    const value = await getRawInputValue();
+    expect(value).toBe('line1\nline2\nline3');
+    await expectMultiLineDialogVisible(false);
+});
+
+test('pasting 3+ lines while unfocused shows the dialog (global paste handler)', async () => {
+    // Click on the chat view to move focus away from the textarea
+    await page.getByTestId('chat-view').click();
+    await page.waitForTimeout(100);
+
+    await simulateGlobalPaste('l1\nl2\nl3');
+
+    await expectMultiLineDialogVisible(true);
+    await page.getByTestId('multiline-paste-join').click();
+
+    const value = await getRawInputValue();
+    expect(value).toBe('l1 l2 l3');
+    await expectMultiLineDialogVisible(false);
+
+    // And the textarea should now be focused
+    await page.evaluate(() => {
+        const el = document.querySelector('[data-testid="message-input"]') as HTMLTextAreaElement;
+        if (document.activeElement !== el) {
+            throw new Error('textarea should be focused after paste');
+        }
+    });
 });
