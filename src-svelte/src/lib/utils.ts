@@ -373,4 +373,17 @@ export function modifyTextareaValue(
     input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+/** Number of pasted lines (after splitting on newlines) at or above which the
+ * multi-line paste confirmation dialog appears. */
+export const MULTILINE_PASTE_THRESHOLD = 3;
+
+/** Join a multi-line paste into a single message: split on newlines, trim each
+ * line, drop empty lines, join with a single space. */
+export function joinMultilineToSingle(text: string): string {
+    return text
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(line => line.length > 0)
+        .join(' ');
+}
 

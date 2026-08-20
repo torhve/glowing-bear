@@ -3,7 +3,7 @@
   import { sendMessage, sendWeeChatCommand } from '$lib/stores/connectionManager';
   import { settings } from '$lib/stores/settings';
   import { addToHistory, getHistoryUp, getHistoryDown } from '$lib/stores/inputHistory';
-  import { completeNick, isPopoverOpen, filterImageFiles } from '$lib/utils';
+  import { completeNick, isPopoverOpen, filterImageFiles, joinMultilineToSingle, MULTILINE_PASTE_THRESHOLD } from '$lib/utils';
   import Send from '@lucide/svelte/icons/send';
   import { emojifyInput } from '$lib/emojify';
   import Camera from '@lucide/svelte/icons/camera';
@@ -11,6 +11,7 @@
   import Type from '@lucide/svelte/icons/type';
   import { get } from 'svelte/store';
   import ImageUploadPreview from './ImageUploadPreview.svelte';
+  import MultiLinePasteDialog from './MultiLinePasteDialog.svelte';
   import { DEBUG_INPUT } from '$lib/debug';
 
   interface PreviewItem {
@@ -42,6 +43,10 @@
   let previewImages = $state<PreviewItem[]>([]);
   // Ref to ImageUploadPreview component for programmatic dialog show/hide
   let previewDialogRef = $state<{ dialog: HTMLDialogElement | undefined }>();
+  // Pending text shown in the multi-line paste confirmation dialog (null = closed)
+  let pendingMultiLineText = $state<string | null>(null);
+  // Ref to MultiLinePasteDialog component for programmatic dialog show/hide
+  let multiLinePasteDialogRef = $state<{ dialog: HTMLDialogElement | undefined }>();
   let nextImageId = $state(1);
 
   let showColorPicker = $state(false);
@@ -485,6 +490,33 @@
     previewImages.splice(0);
     inputRef?.focus();
   }
+  // True when a paste should trigger the multi-line confirmation dialog (threshold or more lines)
+  function isMultiLinePaste(pastedText: string): boolean {
+    return pastedText.split(/\r?\n/).length >= MULTILINE_PASTE_THRESHOLD;
+  }
+
+  // Show the multi-line paste confirmation dialog for the given pasted text
+  function showMultiLinePasteDialog(pastedText: string) {
+    pendingMultiLineText = pastedText;
+    multiLinePasteDialogRef?.dialog?.showPopover();
+  }
+
+  // Handle the user's choice in the multi-line paste dialog, then close it and refocus the input
+  function finishMultiLinePaste(action: 'join' | 'separate' | 'cancel') {
+    const text = pendingMultiLineText;
+    pendingMultiLineText = null;
+    multiLinePasteDialogRef?.dialog?.hidePopover();
+    if (text === null) return;
+    if (action === 'join') {
+      const joined = joinMultilineToSingle(text);
+      if (joined.length > 0) {
+        insertAtCursor(joined, true);
+      }
+    } else if (action === 'separate') {
+      insertAtCursor(text, true);
+    }
+    inputRef?.focus();
+  }
 
   // Handle paste events — detect images from clipboard.
   // Tries multiple browser strategies in order:
@@ -534,6 +566,10 @@
       if (pastedText) {
         log('pasted', pastedText.length, 'characters of text via getData fallback');
         inputRef?.focus();
+        if (isMultiLinePaste(pastedText)) {
+          showMultiLinePasteDialog(pastedText);
+          return;
+        }
         insertAtCursor(pastedText, true);
       }
       return;
@@ -576,6 +612,10 @@
       if (pastedText) {
         log('pasted', pastedText.length, 'characters of text');
         inputRef?.focus();
+        if (isMultiLinePaste(pastedText)) {
+          showMultiLinePasteDialog(pastedText);
+          return;
+        }
         insertAtCursor(pastedText, true);
       }
       return;
@@ -650,6 +690,8 @@
     const win = window as typeof window & { __resetFormattingState?: () => void };
     win.__resetFormattingState = () => {
       message = '';
+      pendingMultiLineText = null;
+      multiLinePasteDialogRef?.dialog?.hidePopover();
       showColorPicker = false;
       showFormatToolbar = false;
       if (inputRef) {
@@ -694,6 +736,10 @@
 
       e.preventDefault();
       inputRef?.focus();
+      if (isMultiLinePaste(pastedText)) {
+        showMultiLinePasteDialog(pastedText);
+        return;
+      }
       insertAtCursor(pastedText, true);
     }
     document.addEventListener('paste', handleGlobalPaste);
@@ -857,6 +903,14 @@
   images={previewImages}
   onInsert={handleInsertUrls}
   onClose={closePreview}
+/>
+
+<MultiLinePasteDialog
+  bind:this={multiLinePasteDialogRef}
+  text={pendingMultiLineText ?? ''}
+  onJoin={() => finishMultiLinePaste('join')}
+  onSeparate={() => finishMultiLinePaste('separate')}
+  onCancel={() => finishMultiLinePaste('cancel')}
 />
 
 <style>
