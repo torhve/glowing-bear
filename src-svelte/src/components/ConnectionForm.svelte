@@ -333,7 +333,7 @@
         {/if}
         {#if $connectionState.errors.oldWeechatError}
           <div data-testid="error-message" data-error-type="old-weechat" class="connection-error bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
-            WeeChat version error: WeeChat version must be 2.9 or later
+            WeeChat version error: WeeChat version must be 3.x or later
           </div>
         {/if}
         {#if $connectionState.errors.hashAlgorithmDisagree}
@@ -382,7 +382,7 @@
             <Rocket size={14} />Getting Started
           </summary>
           <div class="info-accordion-content px-4 pb-3 text-sm text-text-secondary">
-            WeeChat 2.9+ is required. Set up an encrypted relay with /relay add tls.weechat 9001
+            WeeChat 3.x+ is required. Set up an encrypted relay with /relay add tls.weechat 9001
           </div>
         </details>
         {#if isWindowsTauri()}

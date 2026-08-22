@@ -1,3 +1,5 @@
+import { hdataKeyTypes } from '$lib/weechat';
+
 // Builds WeeChat relay protocol binary messages for unit testing.
 // Format: [4B length][1B compression][ID: 4B+len+str][objects...]
 
@@ -34,6 +36,61 @@ function buildStrNumber(obj: string | number): [Uint8Array, Uint8Array] {
     const s = String(obj);
     const bytes = strToBytes(s);
     return [new Uint8Array([bytes.length]), bytes];
+}
+
+/**
+ * Encode a single value per its declared relay wire type (str, buf, int, chr,
+ * lon, ptr, tim). Used by hda items, htb entries, and inl fields so the byte
+ * layout always matches Protocol.parse. undefined/null becomes the zero/NULL
+ * value for the type (no stream desync).
+ */
+function encodeTypedValue(type: string, value: unknown, parts: Uint8Array[]): void {
+    if (value === undefined || value === null) {
+        if (type === 'int') { parts.push(buildUint32BE(0)); return; }
+        if (type === 'chr') { parts.push(new Uint8Array([0])); return; }
+        if (type === 'lon' || type === 'ptr' || type === 'tim') { parts.push(new Uint8Array([0])); return; }
+        parts.push(buildUint32BE(0xFFFFFFFF)); // NULL string (str/buf/other)
+        return;
+    }
+    switch (type) {
+        case 'str': case 'buf': {
+            const [l, d] = buildStr(String(value));
+            parts.push(l, d);
+            break;
+        }
+        case 'int': {
+            parts.push(buildUint32BE(valueAsNumber(value)));
+            break;
+        }
+        case 'chr': {
+            parts.push(new Uint8Array([valueAsNumber(value) & 0xff]));
+            break;
+        }
+        case 'lon': case 'ptr': {
+            const [l, d] = buildStrNumber(String(value));
+            parts.push(l, d);
+            break;
+        }
+        case 'tim': {
+            const [l, d] = buildStrNumber(valueAsSeconds(value));
+            parts.push(l, d);
+            break;
+        }
+        default:
+            throw new Error(`buildMessage: unsupported wire type '${type}'`);
+    }
+}
+
+// Coerce a JS value to a 32-bit integer (booleans -> 0/1).
+function valueAsNumber(value: unknown): number {
+    if (typeof value === 'boolean') return value ? 1 : 0;
+    return Number(value);
+}
+
+// Coerce a JS value to epoch seconds (string) for the `tim` wire type.
+function valueAsSeconds(value: unknown): string {
+    if (value instanceof Date) return String(Math.floor(value.getTime() / 1000));
+    return String(value);
 }
 
 export function buildMessage(callbackId: string, objects: TestObject[]): ArrayBuffer {
@@ -98,28 +155,14 @@ export function buildMessage(callbackId: string, objects: TestObject[]): ArrayBu
                     const [pl, pd] = buildStrNumber(ptr);
                     parts.push(pl, pd);
                 }
-                // values by key name matching keys order
+                // Values encoded per declared key type so the byte layout matches
+                // Protocol.parse. Bare keys resolve through the shared fallback map.
                 const keysList = hda.keys.split(',');
                 for (const keyDef of keysList) {
-                    const [keyName] = keyDef.split(':');
-                    const val = item.values[keyName];
-                    if (val === undefined || val === null) {
-                        parts.push(buildUint32BE(0xFFFFFFFF)); // NULL string
-                    } else if (typeof val === 'string') {
-                        const [vl, vd] = buildStr(val);
-                        parts.push(vl, vd);
-                    } else if (typeof val === 'number') {
-                        if (Number.isInteger(val)) {
-                            parts.push(buildUint32BE(val));
-                        } else {
-                            // float stored as string number
-                            const vStr = String(val);
-                            const vBytes = strToBytes(vStr);
-                            parts.push(new Uint8Array([vBytes.length]), vBytes);
-                        }
-                    } else if (typeof val === 'boolean') {
-                        parts.push(new Uint8Array([val ? 1 : 0]));
-                    }
+                    const keyParts = keyDef.split(':');
+                    const keyName = keyParts[0]!;
+                    const type = keyParts[1] || hdataKeyTypes[keyName] || 'str';
+                    encodeTypedValue(type, item.values[keyName], parts);
                 }
             }
         } else if (obj.type === 'htb') {
@@ -132,14 +175,8 @@ export function buildMessage(callbackId: string, objects: TestObject[]): ArrayBu
             parts.push(strToBytes(htb.typeValues));
             parts.push(buildUint32BE(htb.items.length));
             for (const [key, value] of htb.items) {
-                const keyBytes = strToBytes(key);
-                parts.push(buildUint32BE(keyBytes.length), keyBytes);
-                if (typeof value === 'number') {
-                    parts.push(buildUint32BE(value));
-                } else {
-                    const valBytes = strToBytes(value as string);
-                    parts.push(buildUint32BE(valBytes.length), valBytes);
-                }
+                encodeTypedValue(htb.typeKeys, key, parts);
+                encodeTypedValue(htb.typeValues, value, parts);
             }
         } else if (obj.type === 'inl') {
             // Infolist: name(str) + count(int) + items...
@@ -155,14 +192,9 @@ export function buildMessage(callbackId: string, objects: TestObject[]): ArrayBu
                 for (const field of item) {
                     const [fnLen, fnData] = buildStr(field.name);
                     parts.push(fnLen, fnData);
-                    const [ftLen, ftData] = buildStr(field.type);
-                    parts.push(ftLen, ftData);
-                    if (typeof field.value === 'number') {
-                        parts.push(buildUint32BE(field.value));
-                    } else {
-                        const [fvLen, fvData] = buildStr(field.value as string);
-                        parts.push(fvLen, fvData);
-                    }
+                    // Field type is 3 raw bytes on the wire (matches Protocol.getType).
+                    parts.push(strToBytes(field.type));
+                    encodeTypedValue(field.type, field.value, parts);
                 }
             }
         } else if (obj.type === 'arr') {

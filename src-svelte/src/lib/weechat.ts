@@ -777,6 +777,29 @@ interface TypeStrHandler {
 type HandlerMap = Record<string, TypeHandler>;
 type StrHandlerMap = Record<string, TypeStrHandler>;
 
+// Fallback type mapping for hdata keys without an explicit type specifier.
+// Real WeeChat sends typed keys in all supported versions (e.g., "number:int",
+// "id:lon"); this map is a defensive fallback for untyped (bare) keys only, so a
+// bare `id` key can never be mis-parsed as `str` and desync the stream.
+export const hdataKeyTypes: Readonly<Record<string, string>> = Object.freeze({
+    number: 'int',
+    hidden: 'int',
+    notify: 'int',
+    type: 'int',
+    full_name: 'str',
+    short_name: 'str',
+    title: 'str',
+    local_variables: 'htb',
+    nicklist: 'int',
+    prev_buffer: 'ptr',
+    next_buffer: 'ptr',
+    plugin: 'ptr',
+    name: 'str',
+    id: 'lon',
+    nicklist_last_id_assigned: 'lon',
+    time_usec: 'lon'
+});
+
 export class Protocol {
     private static readonly types: HandlerMap = {
         chr: function (this: Protocol) { return this.getByte(); },
@@ -800,24 +823,6 @@ export class Protocol {
         tim: function (this: Protocol, obj: unknown) { return this.strToString(obj); },
         ptr: function (this: Protocol, obj: unknown) { return this.strDirect(obj); }
     };
-
-    // Default type mappings for hdata keys without explicit type specifiers.
-    // WeeChat relay sends keys as bare names (e.g., "number" not "number:int").
-    private static readonly hdataKeyTypes: Readonly<Record<string, string>> = Object.freeze({
-        number: 'int',
-        hidden: 'chr',
-        notify: 'int',
-        type: 'int',
-        full_name: 'str',
-        short_name: 'str',
-        title: 'str',
-        local_variables: 'htb',
-        nicklist: 'chr',
-        prev_buffer: 'ptr',
-        next_buffer: 'ptr',
-        plugin: 'str',
-        name: 'str'
-    });
 
     // Static utility: parse raw WeeChat formatted text into rich text parts
     static rawText2Rich(text: string): RichPart[] {
@@ -964,7 +969,7 @@ export class Protocol {
             const key = keyEntry[0]!;
             let type = keyEntry[1] ?? '';
             if (!type) {
-                type = Protocol.hdataKeyTypes[key] ?? 'str';
+                type = hdataKeyTypes[key] ?? 'str';
             }
             const handler = Protocol.types[type];
             if (!handler) {

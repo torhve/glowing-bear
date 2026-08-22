@@ -2,7 +2,7 @@
 
 A web frontend for the [WeeChat](https://weechat.org) IRC client. Connects directly to WeeChat via WebSocket relay — no backend service required.
 
-Requires WeeChat >= 2.9 with the relay plugin configured.
+Requires WeeChat >= 3.x with the relay plugin configured.
 
 ## How to Run It
 

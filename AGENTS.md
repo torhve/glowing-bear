@@ -1,6 +1,6 @@
 # Glowing Bear Svelte — Agent Guide
 
-Browser frontend for WeeChat IRC via WebSockets — **no backend**. Client-side SvelteKit 2.x + Svelte 5 + TypeScript (strict) + Tailwind CSS v4. Wrapped in Tauri 2.x for desktop. Includes basic PWA via SvelteKit's native `$service-worker` (fetch-through, no caching). Requires WeeChat >= 2.9.
+Browser frontend for WeeChat IRC via WebSockets — **no backend**. Client-side SvelteKit 2.x + Svelte 5 + TypeScript (strict) + Tailwind CSS v4. Wrapped in Tauri 2.x for desktop. Includes basic PWA via SvelteKit's native `$service-worker` (fetch-through, no caching). Requires WeeChat >= 3.x. The buffer hdata `id` (LONGLONG) exists only in WeeChat 4.3+ and is treated as optional.
 
 ## Project Structure
 
