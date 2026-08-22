@@ -53,31 +53,31 @@ function encodeTypedValue(type: string, value: unknown, parts: Uint8Array[]): vo
         return;
     }
     switch (type) {
-        case 'str': case 'buf': {
-            const [l, d] = buildStr(String(value));
-            parts.push(l, d);
-            break;
-        }
-        case 'int': {
-            parts.push(buildUint32BE(valueAsNumber(value)));
-            break;
-        }
-        case 'chr': {
-            parts.push(new Uint8Array([valueAsNumber(value) & 0xff]));
-            break;
-        }
-        case 'lon': case 'ptr': {
-            const [l, d] = buildStrNumber(String(value));
-            parts.push(l, d);
-            break;
-        }
-        case 'tim': {
-            const [l, d] = buildStrNumber(valueAsSeconds(value));
-            parts.push(l, d);
-            break;
-        }
-        default:
-            throw new Error(`buildMessage: unsupported wire type '${type}'`);
+    case 'str': case 'buf': {
+        const [l, d] = buildStr(String(value));
+        parts.push(l, d);
+        break;
+    }
+    case 'int': {
+        parts.push(buildUint32BE(valueAsNumber(value)));
+        break;
+    }
+    case 'chr': {
+        parts.push(new Uint8Array([valueAsNumber(value) & 0xff]));
+        break;
+    }
+    case 'lon': case 'ptr': {
+        const [l, d] = buildStrNumber(String(value));
+        parts.push(l, d);
+        break;
+    }
+    case 'tim': {
+        const [l, d] = buildStrNumber(valueAsSeconds(value));
+        parts.push(l, d);
+        break;
+    }
+    default:
+        throw new Error(`buildMessage: unsupported wire type '${type}'`);
     }
 }
 
