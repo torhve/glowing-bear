@@ -81,7 +81,7 @@ describe('Protocol hdata key type inference', () => {
         expect(hdaContent[0]!.short_name).toBe('mixed');
     });
 
-    it('parses hdata hidden field (chr) without type specifier', async () => {
+    it('parses hdata hidden field (int) without type specifier', async () => {
         const binary = buildMessage('cbid', [
             { type: 'hda', content: {
                 path: 'buffer',
@@ -119,9 +119,10 @@ describe('Protocol hdata key type inference', () => {
         expect(hdaContent[1]!.notify).toBe(2);
     });
 
-    it('parses full buffer info response without type specifiers (real-world format)', async () => {
+    it('parses full buffer info response with untyped keys (defensive fallback path)', async () => {
         // This mirrors the actual query: keys: ['notify,number,full_name,short_name,title,hidden,type']
-        // WeeChat doesn't send type specifiers in responses — only key names.
+        // Real WeeChat sends typed keys in all supported versions; this test
+        // exercises the defensive fallback path for untyped (bare) key lists.
         const binary = buildMessage('_buffer_info', [
             { type: 'hda', content: {
                 path: 'buffer',
