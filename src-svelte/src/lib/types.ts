@@ -47,6 +47,8 @@ export interface BufferLineMessage {
     displayed: number;
     notify_level: number;
     highlight: number;
+    // WeeChat 4.3+ may provide a stable line id; older relays omit it.
+    id?: string | number;
 }
 
 // Nick message from protocol
@@ -110,6 +112,14 @@ export interface BufferLine {
     prefixtext: string;
     text: string;
     showHiddenBrackets: boolean;
+    /** Stable identity used to remap the read boundary across line-array changes. */
+    lineId?: string;
+    /** WeeChat notify level, retained separately from user-message classification. */
+    notifyLevel?: number;
+    /** True for PRIVMSG/actions/notices and message lines in non-IRC buffers. */
+    isUserMessage?: boolean;
+    /** Synthetic day separators are display rows, never user messages. */
+    isDateSeparator?: boolean;
     metadata?: PluginMetadata[];
 }
 
@@ -148,7 +158,12 @@ export interface BufferData {
     lines: BufferLine[];
     requestedLines: number;
     allLinesFetched: boolean;
+    /** Legacy array index retained for compatibility with callers and diagnostics. */
     lastSeen: number;
+    /** True when the exact read boundary is known; false means reconnect ambiguity. */
+    readBoundaryKnown?: boolean;
+    /** Identity of the last read line; null means every retained line is unread. */
+    readBoundaryId?: string | null;
     localUnread: number;
     unread: number;
     notification: number;

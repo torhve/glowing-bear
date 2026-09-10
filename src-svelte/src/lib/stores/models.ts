@@ -105,6 +105,67 @@ export function getEffectiveUnread(buffer: BufferData): number {
     );
 }
 
+/** Classify display lines independently from notification eligibility. */
+export function isUserMessageLine(line: BufferLine): boolean {
+    if (line.isDateSeparator) return false;
+    if (line.isUserMessage !== undefined) return line.isUserMessage;
+    const tags = line.tags || [];
+    if (tags.some((tag) => ['irc_privmsg', 'irc_action', 'irc_notice'].includes(tag))) return true;
+    if (tags.some((tag) => ['notify_message', 'notify_private', 'notify_highlight'].includes(tag))) return true;
+    if (tags.includes('notify_none')) return false;
+    // Non-IRC conversational buffers can contain real messages without IRC tags.
+    if (!tags.some((tag) => tag.startsWith('irc_'))) return (line.notifyLevel ?? 1) > 0;
+    return false;
+}
+
+/** Find a unique line anchor; duplicate legacy fallback IDs are ambiguous. */
+function findUniqueLineIndex(lines: BufferLine[], lineId: string): number | null {
+    let found = -1;
+    let matches = 0;
+    lines.forEach((line, index) => {
+        if (line.lineId === lineId) {
+            found = index;
+            matches++;
+        }
+    });
+    return matches === 1 ? found : matches === 0 ? -1 : null;
+}
+
+/** Return the current boundary index, or null when reconnect made it uncertain. */
+export function getReadBoundaryIndex(buffer: BufferData): number | null {
+    if (buffer.readBoundaryKnown === false) return null;
+    if (buffer.readBoundaryId === null) return -1;
+    if (buffer.readBoundaryId !== undefined) {
+        const index = findUniqueLineIndex(buffer.lines, buffer.readBoundaryId);
+        if (index !== null && index >= 0) return index;
+        return buffer.lines.length === 0 ? -1 : null;
+    }
+    // Compatibility for test fixtures and state written before line identities existed.
+    return buffer.lastSeen >= 0
+        ? Math.min(buffer.lastSeen, buffer.lines.length - 1)
+        : null;
+}
+
+/** Set a known read boundary without using a synthetic date row as an anchor. */
+export function setReadBoundary(buffer: BufferData, index: number): void {
+    const clamped = buffer.lines.length === 0 ? -1 : Math.max(-1, Math.min(index, buffer.lines.length - 1));
+    const boundaryLineId = clamped >= 0 ? buffer.lines[clamped]?.lineId : undefined;
+    if (boundaryLineId !== undefined && findUniqueLineIndex(buffer.lines, boundaryLineId) === null) {
+        setReadBoundaryUnknown(buffer);
+        return;
+    }
+    buffer.readBoundaryKnown = true;
+    buffer.readBoundaryId = clamped >= 0 ? boundaryLineId : null;
+    buffer.lastSeen = clamped;
+}
+
+/** Mark a buffer as having no trustworthy positional boundary after replacement. */
+export function setReadBoundaryUnknown(buffer: BufferData): void {
+    buffer.readBoundaryKnown = false;
+    buffer.readBoundaryId = null;
+    buffer.lastSeen = -1;
+}
+
 // Sort buffers: pinned first, then by number. Optionally groups by server when orderByServer is true.
 export function sortBuffers(
     buffersList: BufferData[],
@@ -176,6 +237,8 @@ export function createBuffer(message: {
         requestedLines: 0,
         allLinesFetched: false,
         lastSeen: -1,
+        readBoundaryKnown: false,
+        readBoundaryId: null,
         localUnread: 0,
         unread: 0,
         notification: 0,
@@ -206,11 +269,25 @@ export function createBufferLine(message: {
   message: string;
   tags_array: string[];
   displayed: number;
+  notify_level?: number;
   highlight: number;
+  id?: string | number;
+  bufferType?: BufferType;
 }): BufferLine {
     const date = new Date(message.date);
     const prefix = parseRichText(message.prefix);
     const content = parseRichText(message.message);
+    const tags = message.tags_array || [];
+    const notifyLevel = message.notify_level ?? 0;
+    const isUserMessage =
+        tags.some((tag) => ['irc_privmsg', 'irc_action', 'irc_notice', 'notify_message', 'notify_private', 'notify_highlight'].includes(tag)) ||
+        (!tags.some((tag) => tag.startsWith('irc_')) && !tags.includes('notify_none') &&
+            (message.bufferType ? message.bufferType !== 'server' : notifyLevel > 0));
+    // Prefer WeeChat's optional id; the deterministic fallback lets older relays remap
+    // a boundary across a history refresh when the line content is unchanged.
+    const lineId = message.id !== undefined
+        ? `weechat:${String(message.id)}`
+        : `line:${message.buffer}:${message.date}:${message.prefix || ''}:${message.message}:${tags.join(',')}`;
 
     const showHiddenBrackets =
       message.tags_array.includes("irc_privmsg") &&
@@ -240,12 +317,16 @@ export function createBufferLine(message: {
         }),
         formattedTime: date.toLocaleTimeString(),
         buffer: message.buffer,
-        tags: message.tags_array,
+        tags,
         highlight: !!message.highlight,
         displayed: !!message.displayed,
         prefixtext,
         text: content.map((c) => c.text).join(""),
         showHiddenBrackets,
+        lineId,
+        notifyLevel,
+        isUserMessage,
+        isDateSeparator: false,
     };
 }
 
@@ -518,23 +599,19 @@ export function setActiveBuffer(bufferId: string): boolean {
             buffer.notification,
         );
 
-    // Compute effective unread count that avoids double-counting.
-    const effectiveUnread = getEffectiveUnread(buffer);
-
-    // Recalculate lastSeen from unread count whenever unread exists.
-    // Use Math.max(effectiveUnread, localUnread) to handle hotlist race:
-    // effectiveUnread may be 0 if hotlist hasn't synced yet, but localUnread
-    // already tracks messages received while away from this buffer.
-    let targetLastSeen = buffer.lastSeen;
-    const pendingUnread = Math.max(effectiveUnread, buffer.localUnread ?? 0);
-    if (buffer.lines.length > 0 && pendingUnread > 0) {
-        targetLastSeen = Math.max(0, buffer.lines.length - pendingUnread - 1);
-    } else if (targetLastSeen >= 0) {
-        targetLastSeen = Math.min(targetLastSeen, buffer.lines.length - 1);
-    }
+    // The positional boundary is authoritative when known; hotlist totals are not.
+    // A non-zero hotlist can include interleaved status lines, so it cannot identify
+    // the exact first unread displayed line. Preserve uncertainty instead of guessing.
+    const existingBoundary = getReadBoundaryIndex(buffer);
+    const targetBoundaryKnown = existingBoundary !== null ||
+        ((buffer.unread || 0) === 0 && (buffer.notification || 0) === 0 && (buffer.localUnread || 0) === 0);
+    const targetLastSeen = existingBoundary ?? (targetBoundaryKnown ? buffer.lines.length - 1 : -1);
+    const targetBoundaryId: string | null | undefined = targetBoundaryKnown
+        ? targetLastSeen < 0 ? null : buffer.lines[targetLastSeen]?.lineId
+        : null;
 
     if (DEBUG_BUFFERS)
-        console.log("[setActiveBuffer] targetLastSeen:", targetLastSeen);
+        console.log("[setActiveBuffer] targetLastSeen:", targetLastSeen, "known:", targetBoundaryKnown);
 
     // Build a new buffers object with immutable updates to avoid in-place
     // mutations that can race with concurrent handler updates (e.g. hotlist).
@@ -543,18 +620,12 @@ export function setActiveBuffer(bufferId: string): boolean {
         const buf = currentBuffers[id];
         if (!buf) continue;
         if (id === prevId) {
-            // Optimistically clear WeeChat-authoritative unread counts when leaving a buffer.
-            // Prevents stale hotlist responses from overwriting correct local state
-            // before WeeChat's clear commands have been processed.
-            // Preserve localUnread — it tracks real-time messages received while this
-            // buffer was active, which are NOT covered by the hotlist clear command.
-            updatedBuffers[id] = {
-                ...buf,
-                active: false,
-                lastSeen: buf.lines.length - 1,
-                unread: 0,
-                notification: 0,
-            };
+            // Leaving a buffer means every currently displayed line has been seen.
+            const updated = { ...buf, active: false };
+            setReadBoundary(updated, updated.lines.length - 1);
+            updated.unread = 0;
+            updated.notification = 0;
+            updatedBuffers[id] = updated;
         } else if (id === bufferId) {
             updatedBuffers[id] = {
                 ...buf,
@@ -562,6 +633,8 @@ export function setActiveBuffer(bufferId: string): boolean {
                 nicklist: { ...buf.nicklist },
                 active: true,
                 lastSeen: targetLastSeen,
+                readBoundaryKnown: targetBoundaryKnown,
+                readBoundaryId: targetBoundaryId,
                 unread: 0,
                 notification: 0,
                 localUnread: 0,
@@ -571,23 +644,31 @@ export function setActiveBuffer(bufferId: string): boolean {
         }
     }
 
-    // Discard unread lines above dynamic limit to keep GB responsive when loading
-    // buffers which have seen a lot of traffic (see issue #859). Adjust lastSeen
-    // so the readmarker stays at the correct position relative to visible content.
+    // Discard old lines above the dynamic limit. Re-find the stable boundary after
+    // trimming; if its anchor was removed, all retained lines are known unread.
     const maxLines = get(maxBufferLines);
     const targetLinesLength = updatedBuffers[bufferId]!.lines.length;
     if (targetLinesLength > maxLines) {
+        const target = updatedBuffers[bufferId]!;
         const linesToRemove = targetLinesLength - maxLines;
-      updatedBuffers[bufferId]!.lines.splice(0, linesToRemove);
-      updatedBuffers[bufferId]!.requestedLines -= linesToRemove;
-      targetLastSeen = Math.max(0, targetLastSeen - linesToRemove);
-      // Clamp to the new buffer length so readmarker doesn't point past end.
-      targetLastSeen = Math.min(
-          targetLastSeen,
-          updatedBuffers[bufferId]!.lines.length - 1,
-      );
-      updatedBuffers[bufferId]!.lastSeen = targetLastSeen;
-      updatedBuffers[bufferId]!.allLinesFetched = false;
+        const boundaryIndexBeforeTrim = getReadBoundaryIndex(target);
+        const boundaryId = target.readBoundaryId;
+        target.lines.splice(0, linesToRemove);
+        target.requestedLines -= linesToRemove;
+        if (target.readBoundaryKnown !== false) {
+            if (boundaryId) {
+                const matches = target.lines.reduce<number[]>((found, line, index) => {
+                    if (line.lineId === boundaryId) found.push(index);
+                    return found;
+                }, []);
+                if (matches.length > 1) setReadBoundaryUnknown(target);
+                else setReadBoundary(target, matches.length === 1 ? matches[0]! : -1);
+            } else {
+                const boundaryIndex = boundaryIndexBeforeTrim === null ? -1 : boundaryIndexBeforeTrim - linesToRemove;
+                setReadBoundary(target, boundaryIndex);
+            }
+        }
+        target.allLinesFetched = false;
     }
 
     activeBufferId.set(bufferId);
@@ -646,6 +727,8 @@ export function clearAllUnread() {
                 notification: 0,
                 localUnread: 0,
                 lastSeen: buf.lines.length - 1,
+                readBoundaryKnown: true,
+                readBoundaryId: buf.lines.length > 0 ? buf.lines[buf.lines.length - 1]?.lineId ?? undefined : null,
             };
         }
     }

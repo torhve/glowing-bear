@@ -84,6 +84,56 @@ test('readmarker appears when switching back after receiving messages elsewhere'
     await expect(readmarker).toBeVisible();
 });
 
+// Status lines are deliberately interleaved with user messages. The readmarker must
+// follow the displayed unread boundary, while the badge counts only actual user lines.
+test('places the marker before interleaved unread status lines and counts six messages', async () => {
+    await waitForBuffer(page, '#glowing-bear', 15000);
+    await switchToBuffer(page, '#glowing-bear');
+    const chatContainer = page.locator('[data-testid="chat-messages"]');
+    await chatContainer.evaluate((el) => {
+        (el as HTMLElement).scrollTop = (el as HTMLElement).scrollHeight;
+    });
+    await waitForBuffer(page, 'gbtest', 10000);
+    await switchToBuffer(page, 'gbtest');
+
+    const runId = Date.now();
+    const statusBefore = Array.from({ length: 4 }, (_, i) => `readmarker-status-before-${runId}-${i}`);
+    const userMessages = Array.from({ length: 6 }, (_, i) => `readmarker-user-message-${runId}-${i}`);
+    const statusAfter = Array.from({ length: 8 }, (_, i) => `readmarker-status-after-${runId}-${i}`);
+
+    for (const text of statusBefore) {
+        await irc.raw(`:gbbot!gbbot@localhost JOIN #glowing-bear :${text}`);
+    }
+    for (const text of userMessages) {
+        await irc.sendMessage('#glowing-bear', text);
+    }
+    for (const text of statusAfter) {
+        await irc.raw(`:gbbot!gbbot@localhost PART #glowing-bear :${text}`);
+    }
+
+    await switchToBuffer(page, '#glowing-bear');
+    await page.waitForFunction(({ statusBefore, userMessages, statusAfter }) => {
+        const text = document.querySelector('[data-testid="chat-messages"]')?.textContent ?? '';
+        return [...statusBefore, ...userMessages, ...statusAfter].every(marker => text.includes(marker));
+    }, { statusBefore, userMessages, statusAfter });
+
+    const state = await page.evaluate((statusMarker) => {
+        const container = document.querySelector('[data-testid="chat-messages"]');
+        const marker = container?.querySelector('.readmarker');
+        const rows = container ? Array.from(container.querySelectorAll('[data-testid="bufferline-row"]')) : [];
+        const firstUnreadStatus = rows.find(row => row.textContent?.includes(statusMarker));
+        const ordered = container ? Array.from(container.querySelectorAll('[data-testid="bufferline-row"], .readmarker')) : [];
+        return {
+            markerBeforeFirstStatus: !!marker && !!firstUnreadStatus && ordered.indexOf(marker) < ordered.indexOf(firstUnreadStatus),
+            badge: marker?.querySelector('.readmarker-badge')?.textContent?.trim() ?? null,
+        };
+    }, statusBefore[0]);
+
+    expect(state.markerBeforeFirstStatus).toBe(true);
+    expect(state.badge).toBe('6 new');
+});
+
+
 // After scrolling to bottom (marking as fully read) and then receiving more messages
 // while away, the readmarker should still appear correctly on return.
 test('readmarker appears after scroll-to-bottom followed by new unreads', async () => {
@@ -193,4 +243,27 @@ test('other buffer unread counts preserved when switching active buffer', async 
     } else {
         test.skip(true, 'Need at least 2 non-glowing-bear buffers for this test');
     }
+});
+
+test('renders a plain marker at the end once all displayed lines are read', async () => {
+    await waitForBuffer(page, '#glowing-bear', 15000);
+    await switchToBuffer(page, '#glowing-bear');
+    // Let buffer-switch auto-positioning settle before simulating catch-up scrolling.
+    await page.waitForTimeout(300);
+    const chatContainer = page.locator('[data-testid="chat-messages"]');
+    await chatContainer.evaluate((el) => {
+        el.dispatchEvent(new WheelEvent('wheel', { deltaY: 100, bubbles: true }));
+        (el as HTMLElement).scrollTop = (el as HTMLElement).scrollHeight;
+    });
+    await page.waitForFunction(() => {
+        const container = document.querySelector('[data-testid="chat-messages"]');
+        const marker = container?.querySelector('.readmarker');
+        if (!container || !marker) return false;
+        const siblings = marker.parentElement ? Array.from(marker.parentElement.children) : [];
+        const markerIndex = siblings.indexOf(marker);
+        return markerIndex >= 0 && !siblings.slice(markerIndex + 1).some((sibling) => sibling.matches('[data-testid="bufferline-row"]'));
+    });
+    const marker = page.getByTestId('readmarker');
+    await expect(marker).toBeVisible();
+    await expect(marker.locator('.readmarker-badge')).toHaveCount(0);
 });
