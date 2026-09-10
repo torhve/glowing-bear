@@ -24,6 +24,8 @@ import {
     isSyncing,
     maxBufferLines,
     deepCloneBufferLine,
+    setReadBoundary,
+    setReadBoundaryUnknown,
 } from "$lib/stores/models";
 import { shouldResume, getLastBuffer, recordLastBuffer } from "$lib/stores/bufferResume";
 import {
@@ -85,24 +87,38 @@ export function flushLineBatch(): void {
 }
 
 /**
- * Trims buffer lines to the given limit, adjusting lastSeen and requestedLines
- * to preserve readmarker position relative to visible content.
+ * Trim old rows while preserving the stable read boundary when it is retained.
+ * If the anchor is removed from the front, all remaining rows are after the boundary.
  */
 function trimBufferLines(buffer: BufferData, limit: number) {
     if (buffer.lines.length <= limit) return;
     const linesToRemove = buffer.lines.length - limit;
     // Adjust localUnread for removed lines — it tracks real-time messages
-    // received while this buffer was inactive. If trimmed lines were part of
-    // the locally-tracked unread range, reduce the count accordingly.
+    // received while this buffer was inactive.
     if (buffer.localUnread > 0) {
         const unreadStartIndex = Math.max(0, buffer.lines.length - buffer.localUnread);
         const overlap = Math.max(0, Math.min(linesToRemove, unreadStartIndex));
         buffer.localUnread = Math.max(0, buffer.localUnread - overlap);
     }
+    const boundaryId = buffer.readBoundaryId;
+    const wasKnown = buffer.readBoundaryKnown !== false;
+    const oldLastSeen = buffer.lastSeen;
     buffer.lines.splice(0, linesToRemove);
     buffer.requestedLines -= linesToRemove;
-    buffer.lastSeen = Math.max(0, buffer.lastSeen - linesToRemove);
-    buffer.lastSeen = Math.min(buffer.lastSeen, buffer.lines.length - 1);
+    if (wasKnown) {
+        if (boundaryId === null) {
+            setReadBoundary(buffer, -1);
+        } else if (boundaryId !== undefined) {
+            const matches = buffer.lines.reduce<number[]>((found, line, index) => {
+                if (line.lineId === boundaryId) found.push(index);
+                return found;
+            }, []);
+            if (matches.length > 1) setReadBoundaryUnknown(buffer);
+            else setReadBoundary(buffer, matches.length === 1 ? matches[0]! : -1);
+        } else {
+            setReadBoundary(buffer, oldLastSeen - linesToRemove);
+        }
+    }
     buffer.allLinesFetched = false;
 }
 
@@ -206,9 +222,8 @@ export function handleBufferInfo(message: ProtocolMessage) {
         if (workingBuffers[bufferId]) {
             // Update existing buffer — handleBufferUpdate returns partial data without mutating
             const updates = handleBufferUpdate(workingBuffers[bufferId], bufferMsg);
-            // Clear existing lines on reconnect — sync events will repopulate.
-            // Reset lastSeen/localUnread so the sync phase recalculates them
-            // from hotlist counts (handleHotlistInfo runs after handleBufferInfo).
+            // Reconnect replaces the displayed snapshot. Until the new snapshot is
+            // explicitly marked read, the old boundary must remain unknown.
             workingBuffers[bufferId] = {
                 ...workingBuffers[bufferId],
                 ...updates,
@@ -216,6 +231,8 @@ export function handleBufferInfo(message: ProtocolMessage) {
                 requestedLines: 0,
                 allLinesFetched: false,
                 lastSeen: -1,
+                readBoundaryKnown: false,
+                readBoundaryId: null,
                 localUnread: 0,
             };
         } else {
@@ -498,7 +515,7 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
             continue;
         }
 
-        const line = createBufferLine(lineMsg);
+        const line = createBufferLine({ ...lineMsg, bufferType: buffer.type });
         buffer.requestedLines++;
 
         console.debug(
@@ -523,43 +540,33 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
             }
 
             buffer.lines = [...buffer.lines, line];
-
-            // During initial sync, don't increment lastSeen per-line.
-            // Instead, calculate it once after sync completes using the
-            // unread count from the hotlist that arrived before sync.
-            if (isSyncing() && buffer.lastSeen < 0) {
-                // Check if we've received enough lines to cover all unread.
-                // Include localUnread — real-time messages received while this
-                // buffer was inactive are not reflected in hotlist counts yet.
-                const unreadSum = buffer.unread + buffer.notification + (buffer.localUnread || 0);
-                if (buffer.lines.length > unreadSum) {
-                    buffer.lastSeen = buffer.lines.length - unreadSum - 1;
+            // A zero hotlist is enough to establish that the initial snapshot is
+            // fully read, but a non-zero total still cannot identify an interleaved
+            // boundary. End the sync guard once more rows than the total are loaded.
+            if (isSyncing() && buffer.readBoundaryKnown === false) {
+                const pendingCount = buffer.unread + buffer.notification + (buffer.localUnread || 0);
+                if (pendingCount === 0) {
+                    setReadBoundary(buffer, buffer.lines.length - 1);
                     setSyncing(false);
-                } else {
-                    // Not enough lines to cover stale hotlist counts (e.g., query buffer
-                    // with old notification from previous session). Set lastSeen to 0 so
-                    // subsequent real-time lines are not blocked by the isSyncing() gate.
-                    buffer.lastSeen = 0;
+                } else if (buffer.lines.length > pendingCount) {
+                    setSyncing(false);
                 }
             }
-            // For buffers with lastSeen already set (already synced), apply post-sync logic
-            // even during syncing phase. Also applies when not syncing (normal operation).
-            if (buffer.lastSeen >= 0 || !isSyncing()) {
-                // Do NOT advance lastSeen for active buffer lines. Readmarker stays in place
-                // until user explicitly scrolls to bottom (absorbed by ChatView effect) or
-                // switches buffers. This preserves the readmarker through incoming messages.
+            // During initial sync the boundary is intentionally unknown: hotlist totals
+            // cannot tell where interleaved status rows belong. Once a buffer has a
+            // known local boundary, realtime rows never move that boundary.
+            if (!isSyncing() || buffer.readBoundaryKnown !== false) {
                 if (buffer.id === activeId) {
-                    // New lines on active buffer accumulate as unread; lastSeen unchanged.
+                    // New lines on the active buffer remain unread until the view catches up.
                 } else if (buffer.id !== activeId && lineMsg.notify_level >= 1) {
-                    // Track local unread count for real-time messages (notify_level >= 1)
-                    // on inactive buffers. Backfill data (notify_level=0) is not counted,
-                    // as it will be reconciled by hotlist sync.
+                    // This counter is for buffer badges only; it is not a line-position proxy.
                     buffer.localUnread = (buffer.localUnread || 0) + 1;
                     localUnreadBuffers.update((s: Set<string>) =>
                         new Set(s).add(buffer.id),
                     );
                 }
-
+            }
+            if (!isSyncing() || buffer.readBoundaryKnown !== false) {
                 // Increment unread for real-time messages with notify_level=1 (message) only.
                 // PMs/highlights (notify_level>=2) increment notification, not unread.
                 // Only count as unread if the buffer's notify setting allows message-level notifications.
@@ -717,7 +724,7 @@ export function handleBufferLineDataChanged(message: ProtocolMessage) {
 
     // Create new BufferLine from updated data using createBufferLine for consistent
     // highlight class handling and RichTextPart processing.
-    const updatedLine = createBufferLine(lineMsg);
+    const updatedLine = createBufferLine({ ...lineMsg, bufferType: buffer.type });
 
     // Immutable update: clone lines array, replace at index, then update store.
     const updatedBuffer = {
@@ -847,8 +854,9 @@ export function injectDateChangeMessageIfNeeded(
 
     if (oldDate.valueOf() === newDate.valueOf()) return;
 
-    if (manually) ++buffer.lastSeen;
-
+    // Legacy callers without boundary metadata still receive the old index update;
+    // production buffers use stable line identities instead.
+    if (manually && buffer.readBoundaryKnown === undefined) buffer.lastSeen++;
     const datePlusOne = new Date(oldDate.getTime());
     datePlusOne.setDate(datePlusOne.getDate() + 1);
     datePlusOne.setHours(0, 0, 0, 0);
@@ -897,8 +905,12 @@ export function injectDateChangeMessageIfNeeded(
         message: content,
         tags_array: [],
         displayed: 1,
+        notify_level: 0,
         highlight: 0,
     });
+    dateLine.lineId = `date:${buffer.id}:${newDate.getTime()}`;
+    dateLine.isDateSeparator = true;
+    dateLine.isUserMessage = false;
 
     buffer.lines.push(dateLine);
 }
@@ -928,6 +940,8 @@ export function handleBufferOpened(message: ProtocolMessage) {
                 requestedLines: existingBuffer.requestedLines,
                 allLinesFetched: existingBuffer.allLinesFetched,
                 lastSeen: existingBuffer.lastSeen,
+                readBoundaryKnown: existingBuffer.readBoundaryKnown,
+                readBoundaryId: existingBuffer.readBoundaryId,
                 localUnread: existingBuffer.localUnread,
                 unread: Math.max(existingBuffer.unread, newBuffer.unread),
                 notification: Math.max(
@@ -1133,7 +1147,14 @@ export function handleBufferCleared(message: ProtocolMessage) {
     const bufferMsg = message.objects[0]?.content[0];
     if (!bufferMsg) return;
     const bufferId = bufferMsg.pointers[0];
-    const updated = updateBufferDeep(bufferId, { lines: [], requestedLines: 0, localUnread: 0 });
+    const updated = updateBufferDeep(bufferId, {
+        lines: [],
+        requestedLines: 0,
+        localUnread: 0,
+        readBoundaryKnown: true,
+        readBoundaryId: null,
+        lastSeen: -1,
+    });
     if (!updated) return;
     // Use update() to merge with current store state, preventing overwrites
     // of concurrent changes from other handlers.
@@ -1262,13 +1283,6 @@ export function handleHotlistInfo(message: ProtocolMessage) {
         const hotlistNotif = (entry.count[2] || 0) + (entry.count[3] || 0);
         buffer.unread = Math.max(buffer.unread, hotlistUnread);
         buffer.notification = Math.max(buffer.notification, hotlistNotif);
-        // Only calculate lastSeen if buffer has lines and no local unreads tracked.
-        // Buffers with localUnread > 0 have more accurate local data than stale WeeChat hotlist.
-        const freshLocalUnread = get(localUnreadBuffers);
-        if (buffer.lines.length > 0 && !freshLocalUnread.has(entry.buffer)) {
-            const totalUnread = buffer.unread + buffer.notification;
-            buffer.lastSeen = buffer.lines.length - 1 - totalUnread;
-        }
 
         // Clean up cleared set once WeeChat confirms zero counts for this buffer.
         if (hotlistUnread === 0 && hotlistNotif === 0) {
@@ -1752,29 +1766,33 @@ export function handleLineInfo(
     // Unaffected buffers are NOT included — the merge via buffers.update()
     // will preserve whatever state they currently have in the store.
     const updatedBuffers: Record<string, BufferData> = {};
+    const priorBoundaries = new Map<string, { known: boolean; id?: string | null }>();
     for (const id of affectedIds) {
         const buf = currentBuffers[id];
         if (!buf) continue;
-        let linesCopy = buf.lines.map(deepCloneBufferLine);
-        // Clear lines for the buffer that requested a fresh fetch
-        if (id === clearLinesBufferId) {
-            linesCopy = [];
+        const isReplacement = id === clearLinesBufferId;
+        if (isReplacement) {
+            priorBoundaries.set(id, {
+                known: buf.readBoundaryKnown !== false,
+                id: buf.readBoundaryId,
+            });
         }
-        updatedBuffers[id] = {
+        const linesCopy = isReplacement ? [] : buf.lines.map(deepCloneBufferLine);
+        const updated = {
             ...buf,
             lines: linesCopy,
             nicklist: { ...buf.nicklist },
-            localVariables: buf.localVariables
-                ? { ...buf.localVariables }
-                : undefined,
+            localVariables: buf.localVariables ? { ...buf.localVariables } : undefined,
         };
+        if (isReplacement) setReadBoundaryUnknown(updated);
+        updatedBuffers[id] = updated;
     }
 
     for (const lineMsg of reversed) {
         const buffer = updatedBuffers[lineMsg.buffer];
         if (!buffer) continue;
 
-        const line = createBufferLine(lineMsg);
+        const line = createBufferLine({ ...lineMsg, bufferType: buffer.type });
         buffer.requestedLines++;
 
         if (line.displayed) {
@@ -1785,36 +1803,34 @@ export function handleLineInfo(
                 injectDateChangeMessageIfNeeded(buffer, manually, oldDate, newDate);
             }
             buffer.lines.push(line);
-            // For manual fetches on active buffer, do NOT increment lastSeen —
-            // readmarker stays in place. For inactive buffers with lastSeen set
-            // or no unread, increment normally (will be corrected by fetchMoreLines).
-            // For buffers not yet synced (lastSeen < 0, no unread), defer to post-backfill.
-            // If localUnread > 0, skip per-line increment — those real-time messages
-            // must remain unread; the post-backfill recalc will position lastSeen correctly.
-            if (manually && buffer.id !== get(activeBufferId)) {
-                if (buffer.localUnread > 0) {
-                    // Skip increment — let post-backfill recalc handle positioning.
-                } else if (
-                    buffer.lastSeen >= 0 ||
-                  (buffer.unread === 0 && buffer.notification === 0)
-                ) {
-                    buffer.lastSeen++;
-                }
-            }
         }
     }
 
-    // Post-backfill: set lastSeen for buffers with lastSeen < 0 after loading.
-    // Account for hotlist-reported unread counts AND localUnread so the readmarker
-    // appears at the correct position. localUnread tracks real-time messages received
-    // while this buffer was inactive, which are not reflected in hotlist counts yet.
-    for (const buf of Object.values(updatedBuffers)) {
-        if (buf.lastSeen < 0 && buf.lines.length > 0) {
-            const totalUnread = (buf.unread || 0) + (buf.notification || 0) + (buf.localUnread || 0);
-            buf.lastSeen =
-              totalUnread > 0
-                  ? Math.max(0, buf.lines.length - totalUnread - 1)
-                  : buf.lines.length - 1;
+    // Restore a known boundary by identity after a replacement. If the old anchor
+    // is absent, the new snapshot cannot prove where the boundary falls.
+    for (const [id, prior] of priorBoundaries) {
+        const buf = updatedBuffers[id];
+        if (!buf || !prior.known) continue;
+        if (prior.id === null) {
+            setReadBoundary(buf, -1);
+        } else if (prior.id !== undefined) {
+            const matches = buf.lines.reduce<number[]>((found, line, index) => {
+                if (line.lineId === prior.id) found.push(index);
+                return found;
+            }, []);
+            if (matches.length === 1) setReadBoundary(buf, matches[0]!);
+            else setReadBoundaryUnknown(buf);
+        } else {
+            setReadBoundaryUnknown(buf);
+        }
+    }
+    // A fresh buffer with no hotlist activity is fully read once its sync snapshot
+    // is complete; a non-zero hotlist remains unknown until the user views it.
+    if (!isSyncing()) {
+        for (const buf of Object.values(updatedBuffers)) {
+            if (buf.readBoundaryKnown === false && !priorBoundaries.has(buf.id) && buf.unread === 0 && buf.notification === 0 && buf.localUnread === 0) {
+                setReadBoundary(buf, buf.lines.length - 1);
+            }
         }
     }
 

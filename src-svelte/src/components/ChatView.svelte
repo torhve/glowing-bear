@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { BufferLine } from '$lib/types';
   import { get } from 'svelte/store';
-  import { currentBuffer, activeBufferId, bufferBottom, buffers, recalculateLinesPerScreen } from '$lib/stores/models';
+  import { currentBuffer, activeBufferId, bufferBottom, buffers, recalculateLinesPerScreen, getReadBoundaryIndex, isUserMessageLine, setReadBoundary } from '$lib/stores/models';
   import { settings } from '$lib/stores/settings';
   import { fetchMoreLines, closeBufferOnWeeChat, pinBuffer, unpinBuffer } from '$lib/stores/connectionManager';
   import { buildMentionText, isFreeBuffer, modifyTextareaValue } from '$lib/utils';
@@ -71,14 +71,25 @@
   let prevLinesLength = $state(0);
   let prevScrollKey = $state<string>('');
   let readmarkerFailures = $state(0);
-  // Read end index for readmarker positioning. lastSeen stays fixed when new messages
-  // arrive on active buffer — readmarker persists until user scrolls to bottom (absorbed)
-  // or switches buffers (recalculated by setActiveBuffer).
-  let readEndIndex = $derived($currentBuffer?.lastSeen ?? -1);
-  // Readmarker visibility based solely on lastSeen position relative to message count.
-  // Do NOT depend on effectiveUnread — that value can be cleared by hotlist sync
-  // while lastSeen (and thus the readmarker) correctly persists for active buffers.
-  let unreadCount = $derived(readEndIndex >= 0 ? messages.length - readEndIndex - 1 : 0);
+  let readCatchupArmed = $state(false);
+  let readCatchupBufferId: string | null = null;
+  let readCatchupToken = 0;
+  // A null index means the reconnect/snapshot did not provide a trustworthy boundary.
+  let readEndIndex = $derived($currentBuffer ? getReadBoundaryIndex($currentBuffer) : null);
+  let hasUnreadDisplayed = $derived(
+    readEndIndex !== null && messages.length > 0 && readEndIndex < messages.length - 1
+  );
+  // Count only actual user-message rows; status rows and date separators are display-only.
+  let unreadCount = $derived(
+    hasUnreadDisplayed && readEndIndex !== null
+      ? messages.slice(readEndIndex + 1).filter(isUserMessageLine).length
+      : 0
+  );
+  let showMarkerBeforeUnread = $derived(hasUnreadDisplayed);
+  let showEndMarker = $derived(
+    readEndIndex !== null && messages.length > 0 && !hasUnreadDisplayed
+  );
+  let readStartIndex = $derived((readEndIndex ?? -1) + 1);
   // Toggle pin/unpin for the currently active buffer via WeeChat localvar_set.
   function handleTogglePin() {
     const bufId = get(activeBufferId);
@@ -107,6 +118,48 @@
     closeBufferOnWeeChat(bufId);
   }
 
+  // Arm boundary advancement only after explicit user scrolling intent.
+  function armReadCatchup() {
+    readCatchupArmed = true;
+    readCatchupBufferId = get(activeBufferId);
+    if (containerRef && containerRef.scrollTop >= containerRef.scrollHeight - containerRef.clientHeight - SCROLL_BOTTOM_TOLERANCE) {
+      readCatchupArmed = false;
+      scheduleReadCatchup();
+    }
+  }
+
+  // Capture the current last row and commit it after the scroll layout settles.
+  function scheduleReadCatchup() {
+    const buffer = get(currentBuffer);
+    if (!buffer || !containerRef) return;
+    const token = readCatchupToken;
+    const lastLine = buffer.lines.at(-1);
+    requestAnimationFrame(() =>
+      commitReadCatchup(buffer.id, token, lastLine?.lineId, buffer.lines.length),
+    );
+  }
+
+  // Commit a bottom catch-up against the line identity visible when the user arrived there.
+  function commitReadCatchup(bufferId: string, token: number, lineId: string | undefined, lineCount: number) {
+    if (token !== readCatchupToken || get(activeBufferId) !== bufferId || !containerRef) return;
+    if (containerRef.scrollTop < containerRef.scrollHeight - containerRef.clientHeight - SCROLL_BOTTOM_TOLERANCE) return;
+    const buffer = get(currentBuffer);
+    if (!buffer) return;
+    let boundaryIndex = buffer.lines.length - 1;
+    if (lineId !== undefined) {
+      const matches = buffer.lines.reduce<number[]>((found, line, index) => {
+        if (line.lineId === lineId) found.push(index);
+        return found;
+      }, []);
+      if (matches.length !== 1) return;
+      boundaryIndex = matches[0]!;
+    } else if (buffer.lines.length !== lineCount) {
+      return;
+    }
+    setReadBoundary(buffer, boundaryIndex);
+    buffers.set({ ...get(buffers), [buffer.id]: { ...buffer } });
+  }
+
   function handleScroll() {
     if (!containerRef) return;
     const { scrollTop, scrollHeight, clientHeight } = containerRef;
@@ -122,6 +175,10 @@
       isAtBottom = true;
     } else {
       isAtBottom = false;
+    }
+    if (atBottomNow && readCatchupArmed && readCatchupBufferId === get(activeBufferId)) {
+      readCatchupArmed = false;
+      scheduleReadCatchup();
     }
 
     if (scrollTop < 50 && !isLoadingMore && $currentBuffer && !$currentBuffer.allLinesFetched) {
@@ -251,6 +308,11 @@
     const curLinesLength = messages.length;
     const bufferChanged = prevActiveBufferId !== currentBufferId;
     const linesAdded = curLinesLength > prevLinesLength;
+    if (bufferChanged) {
+      // Cancel pending catch-up from another buffer without racing new input on this one.
+      readCatchupToken++;
+      if (readCatchupBufferId !== currentBufferId) readCatchupArmed = false;
+    }
 
     // Trust the scroll handler's authoritative state. handleScroll already captured
     // the user's last deliberate scroll position, so isAtBottom is accurate for
@@ -314,10 +376,11 @@
             if (!settled) requestAnimationFrame(pinToBottom);
           };
           requestAnimationFrame(pinToBottom);
-          // Absorb unread by updating lastSeen since user caught up.
+          // Absorb all displayed rows when the user catches up, including an
+          // initially-unknown boundary discovered by reconnect.
           const buf = get(currentBuffer);
-          if (buf && buf.lastSeen >= 0) {
-            buf.lastSeen = buf.lines.length - 1;
+          if (buf) {
+            setReadBoundary(buf, buf.lines.length - 1);
             buffers.set({ ...get(buffers), [buf.id]: { ...buf } });
           }
         } else {
@@ -335,11 +398,9 @@
       // Re-compute readmarker state from live reactive values inside rAF.
       // $derived does NOT re-evaluate after async boundaries in Svelte 5,
       // so we read $currentBuffer directly (reactive access works inside rAF).
-      // Use lastSeen position directly (not effectiveUnread) - hotlist sync
-      // can clear effectiveUnread while lastSeen correctly persists for active buffers.
-      const freshReadEndIndex = $currentBuffer?.lastSeen ?? -1;
+      const freshReadEndIndex = $currentBuffer ? getReadBoundaryIndex($currentBuffer) : null;
       const freshMessages = $currentBuffer?.lines ?? [];
-      const freshHasUnread = freshReadEndIndex >= 0 && freshReadEndIndex < freshMessages.length - 1;
+      const freshHasUnread = freshReadEndIndex !== null && freshReadEndIndex < freshMessages.length - 1;
       if (!freshHasUnread) {
         // No unread messages - scroll to the bottom.
         readmarkerFailures = 0;
@@ -473,6 +534,7 @@
   <div
     bind:this={containerRef}
     onscroll={handleScroll}
+    onwheel={armReadCatchup}
     data-testid="chat-messages"
     class="chat-messages flex-1 overflow-y-auto overflow-x-hidden bg-bg"
     class:favorite-font={!$currentBuffer || !isFreeBuffer($currentBuffer)}
@@ -504,9 +566,9 @@
           </div>
         {/if}
 
-        {#if readEndIndex >= 0 && readEndIndex < messages.length - 1}
+        {#if showMarkerBeforeUnread}
           <!-- Read lines (up to and including readEndIndex) -->
-          {#each messages.slice(0, readEndIndex + 1) as message, i (i)}
+          {#each messages.slice(0, readStartIndex) as message, i (i)}
             <BufferLineRow
               {message}
               index={i}
@@ -522,15 +584,15 @@
           <div class="readmarker" data-testid="readmarker">
             <div class="readmarker-container">
               <div class="readmarker-line"></div>
-              <span class="readmarker-badge">{unreadCount} new</span>
+              {#if unreadCount > 0}<span class="readmarker-badge">{unreadCount} new</span>{/if}
               <div class="readmarker-line"></div>
             </div>
           </div>
           <!-- Unread lines (after readEndIndex) -->
-          {#each messages.slice(readEndIndex + 1) as message, i (readEndIndex + 1 + i)}
+          {#each messages.slice(readStartIndex) as message, i (readStartIndex + i)}
             <BufferLineRow
               {message}
-              index={readEndIndex + 1 + i}
+              index={readStartIndex + i}
               {messages}
               {noembed}
               bubbleMode={true}
@@ -553,6 +615,15 @@
               onMention={handleMention}
             />
           {/each}
+          {#if showEndMarker}
+            <div class="readmarker" data-testid="readmarker">
+              <div class="readmarker-container">
+                <div class="readmarker-line"></div>
+                {#if unreadCount > 0}<span class="readmarker-badge">{unreadCount} new</span>{/if}
+                <div class="readmarker-line"></div>
+              </div>
+            </div>
+          {/if}
         {/if}
       </div>
     {:else}
@@ -574,9 +645,9 @@
             </tr>
           {/if}<!---->
 
-          {#if readEndIndex >= 0 && readEndIndex < messages.length - 1}
+          {#if showMarkerBeforeUnread}
             <!-- Read lines (up to and including readEndIndex) -->
-            {#each messages.slice(0, readEndIndex + 1) as message, i (i)}
+            {#each messages.slice(0, readStartIndex) as message, i (i)}
               <BufferLineRow
                 {message}
                 index={i}
@@ -590,16 +661,16 @@
               <td colspan="3">
                 <div class="readmarker-container">
                   <div class="readmarker-line"></div>
-                  <span class="readmarker-badge">{unreadCount} new</span>
+                  {#if unreadCount > 0}<span class="readmarker-badge">{unreadCount} new</span>{/if}
                   <div class="readmarker-line"></div>
                 </div>
               </td>
             </tr><!---->
             <!-- Unread lines (after readEndIndex) -->
-            {#each messages.slice(readEndIndex + 1) as message, i (readEndIndex + 1 + i)}
+            {#each messages.slice(readStartIndex) as message, i (readStartIndex + i)}
               <BufferLineRow
                 {message}
-                index={readEndIndex + 1 + i}
+                index={readStartIndex + i}
                 {messages}
                 {noembed}
                 onMention={handleMention}
@@ -616,6 +687,17 @@
                 onMention={handleMention}
               />
             {/each}<!---->
+            {#if showEndMarker}
+              <tr class="readmarker" data-testid="readmarker">
+                <td colspan="3">
+                  <div class="readmarker-container">
+                    <div class="readmarker-line"></div>
+                    {#if unreadCount > 0}<span class="readmarker-badge">{unreadCount} new</span>{/if}
+                    <div class="readmarker-line"></div>
+                  </div>
+                </td>
+              </tr>
+            {/if}
           {/if}<!---->
         </tbody>
       </table>
