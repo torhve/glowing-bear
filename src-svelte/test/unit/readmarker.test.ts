@@ -221,8 +221,8 @@ describe('Readmarker behavior', () => {
         });
     });
 
-    describe('setActiveBuffer preserves unknown boundaries instead of inferring from hotlist counts', () => {
-        it('keeps the boundary unknown when switching to a buffer with unread messages but no boundary', () => {
+    describe('setActiveBuffer infers initial boundaries from authoritative hotlist counts', () => {
+        it('places the boundary before unread messages when no prior boundary exists', () => {
             const buf = makeBuffer('0x200', {
                 lines: Array.from({ length: 100 }, (_, i) => ({ prefix: [], content: [], date: i, shortTime: '', formattedTime: '', buffer: '0x200', tags: [], highlight: false, displayed: true, prefixtext: '', text: `line${i}`, showHiddenBrackets: false }) as any),
                 lastSeen: -1,
@@ -236,11 +236,29 @@ describe('Readmarker behavior', () => {
             setActiveBuffer('0x200');
 
             const result = get(buffers)['0x200'];
-            // Hotlist totals cannot identify an exact interleaved boundary.
-            expect(result!.lastSeen).toBe(-1);
-            expect(result!.readBoundaryKnown).toBe(false);
+            expect(result!.lastSeen).toBe(92);
+            expect(result!.readBoundaryKnown).toBe(true);
             expect(result!.unread).toBe(0);
             expect(result!.notification).toBe(0);
+        });
+
+        it('includes adjacent status rows around the initial unread message', () => {
+            const read = createBufferLine({ buffer: '0x200', date: 1, prefix: '<nick>', message: 'read', tags_array: ['irc_privmsg'], displayed: 1, notify_level: 0, highlight: 0, id: 'read' });
+            const statusBefore = createBufferLine({ buffer: '0x200', date: 2, prefix: '--', message: 'joined', tags_array: ['irc_join'], displayed: 1, notify_level: 0, highlight: 0, id: 'status-before' });
+            const unread = createBufferLine({ buffer: '0x200', date: 3, prefix: '<nick>', message: 'unread', tags_array: ['irc_privmsg'], displayed: 1, notify_level: 1, highlight: 0, id: 'unread' });
+            const statusAfter = createBufferLine({ buffer: '0x200', date: 4, prefix: '--', message: 'left', tags_array: ['irc_part'], displayed: 1, notify_level: 0, highlight: 0, id: 'status-after' });
+            const buf = makeBuffer('0x200', {
+                lines: [read, statusBefore, unread, statusAfter],
+                readBoundaryKnown: false,
+                unread: 1,
+            });
+            buffers.set({ '0x200': buf });
+
+            setActiveBuffer('0x200');
+
+            const result = get(buffers)['0x200']!;
+            expect(getReadBoundaryIndex(result)).toBe(0);
+            expect(result.readBoundaryId).toBe('weechat:read');
         });
 
         it('does not recalculate lastSeen if already set', () => {
@@ -263,7 +281,7 @@ describe('Readmarker behavior', () => {
             expect(result!.notification).toBe(0);
         });
 
-        it('keeps an unknown boundary when unread exceeds the loaded line count', () => {
+        it('keeps the boundary unknown when unread exceeds the loaded message count', () => {
             const buf = makeBuffer('0x200', {
                 lines: Array.from({ length: 3 }, (_, i) => ({ prefix: [], content: [], date: i, shortTime: '', formattedTime: '', buffer: '0x200', tags: [], highlight: false, displayed: true, prefixtext: '', text: `line${i}`, showHiddenBrackets: false }) as any),
                 lastSeen: -1,
@@ -279,6 +297,33 @@ describe('Readmarker behavior', () => {
             const result = get(buffers)['0x200'];
             expect(result!.lastSeen).toBe(-1);
             expect(result!.readBoundaryKnown).toBe(false);
+            expect(result!.pendingReadBoundaryUnread).toBe(15);
+        });
+
+        it('retries a deferred hotlist boundary after additional history loads', () => {
+            const firstMessage = createLineMessage('0x200', ['irc_privmsg'], 0, 1, 1, 1, 'first');
+            const secondMessage = createLineMessage('0x200', ['irc_privmsg'], 0, 1, 1, 2, 'second');
+            const buf = makeBuffer('0x200', {
+                lines: [],
+                readBoundaryKnown: false,
+                unread: 2,
+            });
+            buffers.set({ '0x200': buf });
+
+            setActiveBuffer('0x200');
+            expect(get(buffers)['0x200']!.pendingReadBoundaryUnread).toBe(2);
+
+            handleLineInfo({
+                objects: [{
+                    pointer: '0x200',
+                    content: [secondMessage.objects[0]!.content[0]!, firstMessage.objects[0]!.content[0]!],
+                }],
+            }, true, '0x200');
+
+            const result = get(buffers)['0x200']!;
+            expect(getReadBoundaryIndex(result)).toBe(-1);
+            expect(result.readBoundaryKnown).toBe(true);
+            expect(result.pendingReadBoundaryUnread).toBe(0);
         });
 
         it('prunes lines above 2 screenfuls and adjusts lastSeen', () => {

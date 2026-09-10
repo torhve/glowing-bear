@@ -118,6 +118,29 @@ export function isUserMessageLine(line: BufferLine): boolean {
     return false;
 }
 
+/** Infer the last read row from an initial hotlist count when no saved boundary exists. */
+function inferReadBoundaryFromHotlist(buffer: BufferData, unreadCount: number): number | null {
+    if (unreadCount <= 0) return buffer.lines.length - 1;
+    if (buffer.lines.length === 0) return null;
+
+    let remaining = unreadCount;
+    for (let index = buffer.lines.length - 1; index >= 0; index--) {
+        const line = buffer.lines[index]!;
+        const hotlistEligible = (line.notifyLevel ?? (isUserMessageLine(line) ? 1 : 0)) > 0;
+        if (!hotlistEligible) continue;
+        remaining--;
+        if (remaining !== 0) continue;
+
+        // Include status/date rows immediately preceding the oldest counted message.
+        let boundary = index - 1;
+        while (boundary >= 0 && !isUserMessageLine(buffer.lines[boundary]!)) boundary--;
+        return boundary;
+    }
+
+    // Insufficient history cannot establish where the unread region starts.
+    return null;
+}
+
 /** Find a unique line anchor; duplicate legacy fallback IDs are ambiguous. */
 function findUniqueLineIndex(lines: BufferLine[], lineId: string): number | null {
     let found = -1;
@@ -157,6 +180,7 @@ export function setReadBoundary(buffer: BufferData, index: number): void {
     buffer.readBoundaryKnown = true;
     buffer.readBoundaryId = clamped >= 0 ? boundaryLineId : null;
     buffer.lastSeen = clamped;
+    buffer.pendingReadBoundaryUnread = 0;
 }
 
 /** Mark a buffer as having no trustworthy positional boundary after replacement. */
@@ -164,6 +188,16 @@ export function setReadBoundaryUnknown(buffer: BufferData): void {
     buffer.readBoundaryKnown = false;
     buffer.readBoundaryId = null;
     buffer.lastSeen = -1;
+}
+
+/** Retry a deferred hotlist boundary once enough history is available. */
+export function resolvePendingReadBoundary(buffer: BufferData): boolean {
+    const pendingUnread = buffer.pendingReadBoundaryUnread || 0;
+    if (pendingUnread <= 0) return false;
+    const inferredBoundary = inferReadBoundaryFromHotlist(buffer, pendingUnread);
+    if (inferredBoundary === null) return false;
+    setReadBoundary(buffer, inferredBoundary);
+    return buffer.readBoundaryKnown !== false;
 }
 
 // Sort buffers: pinned first, then by number. Optionally groups by server when orderByServer is true.
@@ -239,6 +273,7 @@ export function createBuffer(message: {
         lastSeen: -1,
         readBoundaryKnown: false,
         readBoundaryId: null,
+        pendingReadBoundaryUnread: 0,
         localUnread: 0,
         unread: 0,
         notification: 0,
@@ -599,16 +634,16 @@ export function setActiveBuffer(bufferId: string): boolean {
             buffer.notification,
         );
 
-    // The positional boundary is authoritative when known; hotlist totals are not.
-    // A non-zero hotlist can include interleaved status lines, so it cannot identify
-    // the exact first unread displayed line. Preserve uncertainty instead of guessing.
+    // Preserve an exact saved boundary. On first connect, use WeeChat's hotlist count
+    // to infer the oldest unread message from the loaded snapshot, including adjacent
+    // status/date rows in the unread section. Keep the boundary unknown only until lines load.
     const existingBoundary = getReadBoundaryIndex(buffer);
-    const targetBoundaryKnown = existingBoundary !== null ||
-        ((buffer.unread || 0) === 0 && (buffer.notification || 0) === 0 && (buffer.localUnread || 0) === 0);
-    const targetLastSeen = existingBoundary ?? (targetBoundaryKnown ? buffer.lines.length - 1 : -1);
-    const targetBoundaryId: string | null | undefined = targetBoundaryKnown
-        ? targetLastSeen < 0 ? null : buffer.lines[targetLastSeen]?.lineId
+    const pendingUnread = Math.max(buffer.pendingReadBoundaryUnread || 0, getEffectiveUnread(buffer));
+    const inferredBoundary = existingBoundary === null
+        ? inferReadBoundaryFromHotlist(buffer, pendingUnread)
         : null;
+    const targetBoundaryKnown = existingBoundary !== null || inferredBoundary !== null;
+    const targetLastSeen = existingBoundary ?? inferredBoundary ?? -1;
 
     if (DEBUG_BUFFERS)
         console.log("[setActiveBuffer] targetLastSeen:", targetLastSeen, "known:", targetBoundaryKnown);
@@ -627,18 +662,22 @@ export function setActiveBuffer(bufferId: string): boolean {
             updated.notification = 0;
             updatedBuffers[id] = updated;
         } else if (id === bufferId) {
-            updatedBuffers[id] = {
+            const updated = {
                 ...buf,
                 lines: buf.lines.map(deepCloneBufferLine),
                 nicklist: { ...buf.nicklist },
                 active: true,
-                lastSeen: targetLastSeen,
-                readBoundaryKnown: targetBoundaryKnown,
-                readBoundaryId: targetBoundaryId,
                 unread: 0,
                 notification: 0,
                 localUnread: 0,
             };
+            if (targetBoundaryKnown) {
+                setReadBoundary(updated, targetLastSeen);
+            } else {
+                setReadBoundaryUnknown(updated);
+                updated.pendingReadBoundaryUnread = pendingUnread;
+            }
+            updatedBuffers[id] = updated;
         } else {
             updatedBuffers[id] = buf;
         }
@@ -729,6 +768,7 @@ export function clearAllUnread() {
                 lastSeen: buf.lines.length - 1,
                 readBoundaryKnown: true,
                 readBoundaryId: buf.lines.length > 0 ? buf.lines[buf.lines.length - 1]?.lineId ?? undefined : null,
+                pendingReadBoundaryUnread: 0,
             };
         }
     }

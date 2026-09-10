@@ -26,6 +26,7 @@ import {
     deepCloneBufferLine,
     setReadBoundary,
     setReadBoundaryUnknown,
+    resolvePendingReadBoundary,
 } from "$lib/stores/models";
 import { shouldResume, getLastBuffer, recordLastBuffer } from "$lib/stores/bufferResume";
 import {
@@ -233,6 +234,7 @@ export function handleBufferInfo(message: ProtocolMessage) {
                 lastSeen: -1,
                 readBoundaryKnown: false,
                 readBoundaryId: null,
+                pendingReadBoundaryUnread: 0,
                 localUnread: 0,
             };
         } else {
@@ -540,11 +542,13 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
             }
 
             buffer.lines = [...buffer.lines, line];
-            // A zero hotlist is enough to establish that the initial snapshot is
-            // fully read, but a non-zero total still cannot identify an interleaved
-            // boundary. End the sync guard once more rows than the total are loaded.
+            // A zero hotlist establishes a fully-read initial snapshot. A deferred
+            // non-zero count is resolved only from an explicit history snapshot.
             if (isSyncing() && buffer.readBoundaryKnown === false) {
-                const pendingCount = buffer.unread + buffer.notification + (buffer.localUnread || 0);
+                const pendingCount = Math.max(
+                    buffer.pendingReadBoundaryUnread || 0,
+                    buffer.unread + buffer.notification + (buffer.localUnread || 0),
+                );
                 if (pendingCount === 0) {
                     setReadBoundary(buffer, buffer.lines.length - 1);
                     setSyncing(false);
@@ -552,12 +556,10 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                     setSyncing(false);
                 }
             }
-            // During initial sync the boundary is intentionally unknown: hotlist totals
-            // cannot tell where interleaved status rows belong. Once a buffer has a
-            // known local boundary, realtime rows never move that boundary.
+            // Once a buffer has a known local boundary, realtime rows never move it.
             if (!isSyncing() || buffer.readBoundaryKnown !== false) {
                 if (buffer.id === activeId) {
-                    // New lines on the active buffer remain unread until the view catches up.
+                    // Active-buffer rows stay below the fixed session boundary.
                 } else if (buffer.id !== activeId && lineMsg.notify_level >= 1) {
                     // This counter is for buffer badges only; it is not a line-position proxy.
                     buffer.localUnread = (buffer.localUnread || 0) + 1;
@@ -942,6 +944,7 @@ export function handleBufferOpened(message: ProtocolMessage) {
                 lastSeen: existingBuffer.lastSeen,
                 readBoundaryKnown: existingBuffer.readBoundaryKnown,
                 readBoundaryId: existingBuffer.readBoundaryId,
+                pendingReadBoundaryUnread: existingBuffer.pendingReadBoundaryUnread,
                 localUnread: existingBuffer.localUnread,
                 unread: Math.max(existingBuffer.unread, newBuffer.unread),
                 notification: Math.max(
@@ -1153,6 +1156,7 @@ export function handleBufferCleared(message: ProtocolMessage) {
         localUnread: 0,
         readBoundaryKnown: true,
         readBoundaryId: null,
+        pendingReadBoundaryUnread: 0,
         lastSeen: -1,
     });
     if (!updated) return;
@@ -1824,11 +1828,15 @@ export function handleLineInfo(
             setReadBoundaryUnknown(buf);
         }
     }
+    // Retry boundaries deferred because activation happened before enough history loaded.
+    for (const buf of Object.values(updatedBuffers)) {
+        resolvePendingReadBoundary(buf);
+    }
     // A fresh buffer with no hotlist activity is fully read once its sync snapshot
     // is complete; a non-zero hotlist remains unknown until the user views it.
     if (!isSyncing()) {
         for (const buf of Object.values(updatedBuffers)) {
-            if (buf.readBoundaryKnown === false && !priorBoundaries.has(buf.id) && buf.unread === 0 && buf.notification === 0 && buf.localUnread === 0) {
+            if (buf.readBoundaryKnown === false && !priorBoundaries.has(buf.id) && buf.unread === 0 && buf.notification === 0 && buf.localUnread === 0 && !buf.pendingReadBoundaryUnread) {
                 setReadBoundary(buf, buf.lines.length - 1);
             }
         }
