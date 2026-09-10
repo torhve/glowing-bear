@@ -164,6 +164,8 @@ export interface BufferData {
     readBoundaryKnown?: boolean;
     /** Identity of the last read line; null means every retained line is unread. */
     readBoundaryId?: string | null;
+    /** Hotlist count retained while more history is needed to infer an initial boundary. */
+    pendingReadBoundaryUnread?: number;
     localUnread: number;
     unread: number;
     notification: number;

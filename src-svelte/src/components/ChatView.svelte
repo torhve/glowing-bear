@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { BufferLine } from '$lib/types';
   import { get } from 'svelte/store';
-  import { currentBuffer, activeBufferId, bufferBottom, buffers, recalculateLinesPerScreen, getReadBoundaryIndex, isUserMessageLine, setReadBoundary } from '$lib/stores/models';
+  import { currentBuffer, activeBufferId, bufferBottom, buffers, recalculateLinesPerScreen, getReadBoundaryIndex, isUserMessageLine } from '$lib/stores/models';
   import { settings } from '$lib/stores/settings';
   import { fetchMoreLines, closeBufferOnWeeChat, pinBuffer, unpinBuffer } from '$lib/stores/connectionManager';
   import { buildMentionText, isFreeBuffer, modifyTextareaValue } from '$lib/utils';
@@ -71,9 +71,6 @@
   let prevLinesLength = $state(0);
   let prevScrollKey = $state<string>('');
   let readmarkerFailures = $state(0);
-  let readCatchupArmed = $state(false);
-  let readCatchupBufferId: string | null = null;
-  let readCatchupToken = 0;
   // A null index means the reconnect/snapshot did not provide a trustworthy boundary.
   let readEndIndex = $derived($currentBuffer ? getReadBoundaryIndex($currentBuffer) : null);
   let hasUnreadDisplayed = $derived(
@@ -118,47 +115,6 @@
     closeBufferOnWeeChat(bufId);
   }
 
-  // Arm boundary advancement only after explicit user scrolling intent.
-  function armReadCatchup() {
-    readCatchupArmed = true;
-    readCatchupBufferId = get(activeBufferId);
-    if (containerRef && containerRef.scrollTop >= containerRef.scrollHeight - containerRef.clientHeight - SCROLL_BOTTOM_TOLERANCE) {
-      readCatchupArmed = false;
-      scheduleReadCatchup();
-    }
-  }
-
-  // Capture the current last row and commit it after the scroll layout settles.
-  function scheduleReadCatchup() {
-    const buffer = get(currentBuffer);
-    if (!buffer || !containerRef) return;
-    const token = readCatchupToken;
-    const lastLine = buffer.lines.at(-1);
-    requestAnimationFrame(() =>
-      commitReadCatchup(buffer.id, token, lastLine?.lineId, buffer.lines.length),
-    );
-  }
-
-  // Commit a bottom catch-up against the line identity visible when the user arrived there.
-  function commitReadCatchup(bufferId: string, token: number, lineId: string | undefined, lineCount: number) {
-    if (token !== readCatchupToken || get(activeBufferId) !== bufferId || !containerRef) return;
-    if (containerRef.scrollTop < containerRef.scrollHeight - containerRef.clientHeight - SCROLL_BOTTOM_TOLERANCE) return;
-    const buffer = get(currentBuffer);
-    if (!buffer) return;
-    let boundaryIndex = buffer.lines.length - 1;
-    if (lineId !== undefined) {
-      const matches = buffer.lines.reduce<number[]>((found, line, index) => {
-        if (line.lineId === lineId) found.push(index);
-        return found;
-      }, []);
-      if (matches.length !== 1) return;
-      boundaryIndex = matches[0]!;
-    } else if (buffer.lines.length !== lineCount) {
-      return;
-    }
-    setReadBoundary(buffer, boundaryIndex);
-    buffers.set({ ...get(buffers), [buffer.id]: { ...buffer } });
-  }
 
   function handleScroll() {
     if (!containerRef) return;
@@ -175,10 +131,6 @@
       isAtBottom = true;
     } else {
       isAtBottom = false;
-    }
-    if (atBottomNow && readCatchupArmed && readCatchupBufferId === get(activeBufferId)) {
-      readCatchupArmed = false;
-      scheduleReadCatchup();
     }
 
     if (scrollTop < 50 && !isLoadingMore && $currentBuffer && !$currentBuffer.allLinesFetched) {
@@ -283,7 +235,7 @@
          * |           |                                      |     |
          * |           | YES ==> wasFollowing?                |     |
          * |           |          +- true  ==> scroll to bottom |     |
-         * |           |          |         absorb unread       |     |
+         * |           |          |         keep marker fixed    |     |
          * |           |          +- false ==> do nothing (stop) |     |
          * |           |            (user manually scrolled)     |     |
          * |           |                                      |     |
@@ -308,11 +260,6 @@
     const curLinesLength = messages.length;
     const bufferChanged = prevActiveBufferId !== currentBufferId;
     const linesAdded = curLinesLength > prevLinesLength;
-    if (bufferChanged) {
-      // Cancel pending catch-up from another buffer without racing new input on this one.
-      readCatchupToken++;
-      if (readCatchupBufferId !== currentBufferId) readCatchupArmed = false;
-    }
 
     // Trust the scroll handler's authoritative state. handleScroll already captured
     // the user's last deliberate scroll position, so isAtBottom is accurate for
@@ -375,14 +322,9 @@
             const settled = stableFrames >= PIN_SETTLE_FRAMES || performance.now() - pinStart > PIN_CAP_MS;
             if (!settled) requestAnimationFrame(pinToBottom);
           };
+          // Auto-follow changes only the viewport. The session's new-message
+          // separator remains anchored until setActiveBuffer commits it on exit.
           requestAnimationFrame(pinToBottom);
-          // Absorb all displayed rows when the user catches up, including an
-          // initially-unknown boundary discovered by reconnect.
-          const buf = get(currentBuffer);
-          if (buf) {
-            setReadBoundary(buf, buf.lines.length - 1);
-            buffers.set({ ...get(buffers), [buf.id]: { ...buf } });
-          }
         } else {
         // User manually scrolled away from bottom - do nothing.
         // Preserve their reading position; unread accumulates behind readmarker.
@@ -534,7 +476,6 @@
   <div
     bind:this={containerRef}
     onscroll={handleScroll}
-    onwheel={armReadCatchup}
     data-testid="chat-messages"
     class="chat-messages flex-1 overflow-y-auto overflow-x-hidden bg-bg"
     class:favorite-font={!$currentBuffer || !isFreeBuffer($currentBuffer)}

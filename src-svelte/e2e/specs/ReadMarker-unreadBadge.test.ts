@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { createConnectedPage } from '../fixtures/auth';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
+import { disconnect, reconnect } from '../helpers/connection';
 import { irc } from '../helpers/irc-control';
 
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
@@ -245,25 +246,113 @@ test('other buffer unread counts preserved when switching active buffer', async 
     }
 });
 
-test('renders a plain marker at the end once all displayed lines are read', async () => {
+test('keeps the new-message separator fixed for the active viewing session', async () => {
     await waitForBuffer(page, '#glowing-bear', 15000);
     await switchToBuffer(page, '#glowing-bear');
-    // Let buffer-switch auto-positioning settle before simulating catch-up scrolling.
-    await page.waitForTimeout(300);
+    await waitForBuffer(page, 'gbtest', 10000);
+    await switchToBuffer(page, 'gbtest');
+
+    const runId = Date.now();
+    const firstUnread = `fixed-readmarker-first-${runId}`;
+    const secondUnread = `fixed-readmarker-second-${runId}`;
+    const liveMessage = `fixed-readmarker-live-${runId}`;
+    await irc.sendMessage('#glowing-bear', firstUnread);
+    await irc.sendMessage('#glowing-bear', secondUnread);
+    await switchToBuffer(page, '#glowing-bear');
+
+    // Read marker state relative to the first line in this viewing session.
+    const getMarkerState = async () => page.evaluate((firstUnreadText) => {
+        const container = document.querySelector('[data-testid="chat-messages"]') as HTMLElement | null;
+        const marker = container?.querySelector('.readmarker');
+        const rows = container ? Array.from(container.querySelectorAll('[data-testid="bufferline-row"]')) : [];
+        const firstUnreadRow = rows.find(row => row.textContent?.includes(firstUnreadText));
+        const ordered = container ? Array.from(container.querySelectorAll('[data-testid="bufferline-row"], .readmarker')) : [];
+        const markerIndex = marker ? ordered.indexOf(marker) : -1;
+        const firstUnreadIndex = firstUnreadRow ? ordered.indexOf(firstUnreadRow) : -1;
+        return {
+            markerImmediatelyBeforeFirstUnread: markerIndex >= 0 && firstUnreadIndex === markerIndex + 1,
+            markerAtEnd: markerIndex >= 0 && markerIndex === ordered.length - 1,
+            badge: marker?.querySelector('.readmarker-badge')?.textContent?.trim() ?? null,
+            atBottom: !!container && container.scrollTop >= container.scrollHeight - container.clientHeight - 10,
+        };
+    }, firstUnread);
+
+    await expect.poll(getMarkerState).toMatchObject({
+        markerImmediatelyBeforeFirstUnread: true,
+        markerAtEnd: false,
+        badge: '2 new',
+    });
+
     const chatContainer = page.locator('[data-testid="chat-messages"]');
-    await chatContainer.evaluate((el) => {
+    await chatContainer.evaluate(async (el) => {
         el.dispatchEvent(new WheelEvent('wheel', { deltaY: 100, bubbles: true }));
         (el as HTMLElement).scrollTop = (el as HTMLElement).scrollHeight;
+        await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     });
-    await page.waitForFunction(() => {
+    expect(await getMarkerState()).toEqual({
+        markerImmediatelyBeforeFirstUnread: true,
+        markerAtEnd: false,
+        badge: '2 new',
+        atBottom: true,
+    });
+
+    // Auto-following a newly arrived line must not erase or relocate this session's marker.
+    await irc.sendMessage('#glowing-bear', liveMessage);
+    await page.waitForFunction((text) =>
+        document.querySelector('[data-testid="chat-messages"]')?.textContent?.includes(text),
+    liveMessage);
+    await expect.poll(getMarkerState).toEqual({
+        markerImmediatelyBeforeFirstUnread: true,
+        markerAtEnd: false,
+        badge: '3 new',
+        atBottom: true,
+    });
+
+    // Leaving ends the viewing session; returning with no new lines shows the committed end boundary.
+    await switchToBuffer(page, 'gbtest');
+    await switchToBuffer(page, '#glowing-bear');
+    await expect.poll(getMarkerState).toMatchObject({
+        markerImmediatelyBeforeFirstUnread: false,
+        markerAtEnd: true,
+        badge: null,
+    });
+});
+
+test('uses the initial hotlist count for the first visit after connecting', async () => {
+    await switchToBuffer(page, '#glowing-bear');
+    await waitForBuffer(page, 'gbtest', 10000);
+    await switchToBuffer(page, 'gbtest');
+
+    const unreadMessage = `initial-hotlist-readmarker-${Date.now()}`;
+    await irc.sendMessage('#glowing-bear', unreadMessage);
+    const glowItem = page.getByTestId('buffer-item').filter({ hasText: 'glowing-bear' }).first();
+    await expect(glowItem.getByTestId('unread-badge')).toHaveText('1', { timeout: 10000 });
+    await disconnect(page);
+    await reconnect(page, { preserveLastBuffer: true });
+    await waitForBuffer(page, '#glowing-bear', 15000);
+    await switchToBuffer(page, '#glowing-bear');
+    await page.waitForFunction((text) =>
+        document.querySelector('[data-testid="chat-messages"]')?.textContent?.includes(text),
+    unreadMessage);
+
+    // Locate the separator relative to the unread line loaded from the initial snapshot.
+    const getInitialMarkerState = async () => page.evaluate((unreadText) => {
         const container = document.querySelector('[data-testid="chat-messages"]');
         const marker = container?.querySelector('.readmarker');
-        if (!container || !marker) return false;
-        const siblings = marker.parentElement ? Array.from(marker.parentElement.children) : [];
-        const markerIndex = siblings.indexOf(marker);
-        return markerIndex >= 0 && !siblings.slice(markerIndex + 1).some((sibling) => sibling.matches('[data-testid="bufferline-row"]'));
+        const unreadRow = container
+            ? Array.from(container.querySelectorAll('[data-testid="bufferline-row"]')).find(row => row.textContent?.includes(unreadText))
+            : undefined;
+        const ordered = container ? Array.from(container.querySelectorAll('[data-testid="bufferline-row"], .readmarker')) : [];
+        const markerIndex = marker ? ordered.indexOf(marker) : -1;
+        const unreadIndex = unreadRow ? ordered.indexOf(unreadRow) : -1;
+        return {
+            markerImmediatelyBeforeUnread: markerIndex >= 0 && unreadIndex === markerIndex + 1,
+            badge: marker?.querySelector('.readmarker-badge')?.textContent?.trim() ?? null,
+        };
+    }, unreadMessage);
+
+    await expect.poll(getInitialMarkerState).toEqual({
+        markerImmediatelyBeforeUnread: true,
+        badge: '1 new',
     });
-    const marker = page.getByTestId('readmarker');
-    await expect(marker).toBeVisible();
-    await expect(marker.locator('.readmarker-badge')).toHaveCount(0);
 });
