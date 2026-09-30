@@ -1,38 +1,55 @@
 # Static Web Server configuration for Glowing Bear Svelte
 # https://static-web-server.net/
+#
+# Schema notes (sws 2.x):
+#   - Settings live under [general] and [advanced]. Keys at the top level are
+#     silently ignored with a "unused configuration manifest key" warning.
+#   - Header rules use `source` (a globset pattern) + `headers`, not the old
+#     v1 `by` / `match` / `values` form.
+#   - In globset, `*` does NOT cross `/`, so nested paths need `**`.
+#   - Rules are applied in file order and later matches overwrite earlier ones,
+#     so the catch-all floor goes first and the specific overrides follow.
 
-# Serve files from /var/public (set via SERVER_ROOT env in Dockerfile)
-root = "/var/public"
+[general]
+# Root is intentionally NOT set here: a `root` in this file overrides the
+# SERVER_ROOT env var that the Dockerfile and docker-compose.yml document as
+# the way to configure the served directory.
+page404 = "404.html"
 
-# Gzip compression for text-based assets
-[compression]
-enable = true
-level = 6
-# Compress these file types
-extensions = [".html", ".js", ".css", ".json", ".svg", ".xml", ".webmanifest"]
+# Gzip/Brotli/Zstd on demand, driven by Accept-Encoding and applied to
+# text-based types (js, css, svg, webmanifest, ...). Already the sws default;
+# stated explicitly so the intent is visible. Note that `compression_level`
+# only accepts "fastest" | "best" | "default" — a numeric level like 6 is
+# rejected, which is why the old `level = 6` is gone.
+compression = true
 
-# Cache headers: aggressive for hashed Vite assets, no-cache for entry points
-[[headers]]
-by = "path: /_app/assets/*"
-match = "glob"
-values = { "Cache-Control" = "immutable, max-age=31536000" }
+[advanced]
+# Cache policy. Two rules cover the whole tree:
+#
+# 1. Floor: every response must be revalidated before it is reused. sws 2.43
+#    serves no ETag (that arrives in a later release behind SERVER_ETAG), so
+#    revalidation happens via Last-Modified -> 304. A 304 carries no body, so
+#    this costs a conditional round-trip rather than a re-download. This is
+#    what keeps index.html, service-worker.js, manifest.webmanifest and the
+#    version.json poll fresh.
+#
+#    Caveat: this cannot retroactively evict responses a browser already
+#    stored under the old year-long max-age, and it does not reach anything
+#    the service worker has put into Cache Storage.
+#
+#    Without this rule sws's built-in defaults apply instead, which are the
+#    opposite of what a PWA needs: service-worker.js got max-age=31536000 (a
+#    year!) and index.html got max-age=86400, so returning users could keep
+#    running a stale app shell and a stale service worker long after a deploy.
+[[advanced.headers]]
+source = "/**"
+headers = { "Cache-Control" = "no-cache" }
 
-[[headers]]
-by = "path: /index.html"
-match = "exact"
-values = { "Cache-Control" = "no-cache, no-store, must-revalidate" }
-
-[[headers]]
-by = "path: /service-worker.js"
-match = "exact"
-values = { "Cache-Control" = "no-cache, no-store, must-revalidate" }
-
-[[headers]]
-by = "path: /_app/*.js"
-match = "glob"
-values = { "Cache-Control" = "no-cache, no-store, must-revalidate" }
-
-# SPA fallback: any 404 response is rewritten to index.html so client-side routing works
-[[rewrite]]
-response = 404
-to = "/index.html"
+# 2. Override: Vite/SvelteKit fingerprints every bundle under
+#    /_app/immutable/ (entry/, chunks/, nodes/, assets/), so their filenames
+#    change whenever their contents do. Those are safe to hand out for a year
+#    with no revalidation. The previous rule targeted /_app/assets/*, which no
+#    longer exists in a SvelteKit build, so nothing was ever matched.
+[[advanced.headers]]
+source = "/_app/immutable/**"
+headers = { "Cache-Control" = "public, max-age=31536000, immutable" }
