@@ -52,19 +52,44 @@ import type {
 // ---- Batched line addition handling ----
 // During rapid message bursts, WeeChat sends many _buffer_line_added messages
 // in quick succession. Processing each one immediately triggers reactive cascades.
-// This queue accumulates messages and flushes via microtask so that messages
-// arriving in the same synchronous processing pass are merged into one store update,
-// while still being available for downstream logic (readmarker, setActiveBuffer) before
-// the next macrotask runs.
+// This queue accumulates messages and flushes them frame-aligned (rAF), so all
+// lines delivered within one animation frame merge into a single store update
+// and a single DOM/layout pass — the per-message Svelte flush + table re-layout
+// was the dominant flood cost. A short safety timer covers background tabs,
+// where rAF is paused (timers are clamped to ~1s there, so the queue drains
+// promptly even while unfocused).
 const pendingLineMessages: ProtocolMessage[] = [];
 let flushScheduled = false;
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+// Schedules a batch flush as soon as possible (next frame), with a timer
+// fallback for contexts where rAF is paused. Idempotent: at most one
+// rAF + one timer are ever pending.
+function scheduleLineFlush(): void {
+    if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(flushLineBatch);
+    } else {
+        queueMicrotask(flushLineBatch);
+    }
+    if (flushTimer === null) {
+        flushTimer = setTimeout(() => {
+            flushTimer = null;
+            flushLineBatch();
+        }, 100);
+    }
+}
 
 // Flushes all accumulated _buffer_line_added messages through handleBufferLineAdded
-// as a single batch, then clears the queue. Called from microtask or on disconnect.
+// as a single batch, then clears the queue. Called from rAF, the safety timer,
+// or explicitly on disconnect.
 export function flushLineBatch(): void {
     if (pendingLineMessages.length === 0) return;
     const batch = pendingLineMessages.splice(0);
     flushScheduled = false;
+    if (flushTimer !== null) {
+        clearTimeout(flushTimer);
+        flushTimer = null;
+    }
 
     // Process entire batch through handleBufferLineAdded which already does
     // its own batching of lines into a single buffers.update() call.
@@ -1951,12 +1976,12 @@ const eventHandlers: Record<string, (msg: ProtocolMessage) => void> = {
 
 export function handleEvent(event: ProtocolMessage) {
     // Batch _buffer_line_added events to reduce reactive cascades during bursts.
-    // Queue messages and flush via microtask to merge rapid arrivals into one update.
+    // Queue messages and flush frame-aligned to merge rapid arrivals into one update.
     if (event.id === '_buffer_line_added') {
         pendingLineMessages.push(event);
         if (!flushScheduled) {
             flushScheduled = true;
-            queueMicrotask(flushLineBatch);
+            scheduleLineFlush();
         }
         return;
     }
