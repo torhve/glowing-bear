@@ -91,6 +91,10 @@ npm run preview      # Preview production build locally
 npm run tauri:build  # Tauri desktop production build (requires Rust)
 ```
 
+`GIT_COMMIT` overrides the commit hash stamped into the build and shown in Settings
+(`GIT_COMMIT=abc1234 npm run build`); it defaults to `git rev-parse --short HEAD`, or `unknown`
+when no repository is present — as in Docker, where `.dockerignore` excludes `.git`.
+
 ### Testing
 
 ```bash

@@ -5,9 +5,11 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 
 // Capture the latest git commit hash at build time for display in settings.
-// Priority: GIT_COMMIT env var (Docker build-arg) > git command > "unknown"
+// Priority: GIT_COMMIT env var (Docker build-arg) > git command > "unknown".
+// An empty or whitespace-only GIT_COMMIT counts as unset: `??` alone would accept
+// it and render "Glowing Bear version 0.23.1 ()" in Settings.
 const gitCommit =
-    process.env.GIT_COMMIT ??
+    process.env.GIT_COMMIT?.trim() ||
     (() => {
         try {
             return execSync('git rev-parse --short HEAD', { cwd: import.meta.dirname })
