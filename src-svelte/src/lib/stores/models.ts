@@ -105,6 +105,19 @@ export function getEffectiveUnread(buffer: BufferData): number {
     );
 }
 
+/**
+ * WeeChat's relay plugin re-renders its own status buffers (relay.list) whenever a
+ * relay client connects or disconnects, and drops them into the hotlist while doing
+ * so (relay_buffer_refresh). That is bookkeeping, not unread activity, so these
+ * buffers must never carry unread/notification state in Glowing Bear. The relay
+ * plugin only ever creates relay.list and relay.raw, so matching its plugin is the
+ * same criterion WeeChat applies internally (relay_buffer_is_relay); the type check
+ * is a fallback for buffers that report a relay type without the plugin variable.
+ */
+export function isRelayStatusBuffer(buffer: BufferData): boolean {
+    return buffer.plugin === 'relay' || buffer.type === 'relay';
+}
+
 /** Classify display lines independently from notification eligibility. */
 export function isUserMessageLine(line: BufferLine): boolean {
     if (line.isDateSeparator) return false;

@@ -27,6 +27,7 @@ import {
     setReadBoundary,
     setReadBoundaryUnknown,
     resolvePendingReadBoundary,
+    isRelayStatusBuffer,
 } from "$lib/stores/models";
 import { shouldResume, getLastBuffer, recordLastBuffer } from "$lib/stores/bufferResume";
 import {
@@ -557,18 +558,22 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                 }
             }
             // Once a buffer has a known local boundary, realtime rows never move it.
-            if (!isSyncing() || buffer.readBoundaryKnown !== false) {
+            // Relay status buffers (relay.list) are re-rendered by WeeChat whenever a
+            // relay client comes and goes, so their rows never count as unread.
+            if (
+                !isRelayStatusBuffer(buffer) &&
+                (!isSyncing() || buffer.readBoundaryKnown !== false)
+            ) {
                 if (buffer.id === activeId) {
                     // Active-buffer rows stay below the fixed session boundary.
-                } else if (buffer.id !== activeId && lineMsg.notify_level >= 1) {
+                } else if (lineMsg.notify_level >= 1) {
                     // This counter is for buffer badges only; it is not a line-position proxy.
                     buffer.localUnread = (buffer.localUnread || 0) + 1;
                     localUnreadBuffers.update((s: Set<string>) =>
                         new Set(s).add(buffer.id),
                     );
                 }
-            }
-            if (!isSyncing() || buffer.readBoundaryKnown !== false) {
+
                 // Increment unread for real-time messages with notify_level=1 (message) only.
                 // PMs/highlights (notify_level>=2) increment notification, not unread.
                 // Only count as unread if the buffer's notify setting allows message-level notifications.
@@ -1213,6 +1218,39 @@ export function handleHotlistInfo(message: ProtocolMessage) {
         }
     }
 
+    // WeeChat hotlists relay.list all by itself whenever a relay client connects or
+    // disconnects (relay_client_new / relay_client_set_status call
+    // relay_buffer_refresh with a hotlist priority). That is connection bookkeeping,
+    // not unread activity, so clear any counts an earlier poll picked up — otherwise
+    // the badge lingers forever, since the preserve-below rule keeps counts for
+    // buffers that later snapshots no longer list.
+    const localUnreadIds = get(localUnreadBuffers);
+    const staleRelayIds = Object.keys(updatedBuffers).filter((id) => {
+        const buf = updatedBuffers[id];
+        if (!buf || !isRelayStatusBuffer(buf)) return false;
+        const hasCounts =
+            (buf.unread || 0) +
+              (buf.notification || 0) +
+              (buf.localUnread || 0) +
+              (buf.pendingReadBoundaryUnread || 0) >
+            0;
+        return hasCounts || localUnreadIds.has(id);
+    });
+    for (const id of staleRelayIds) {
+        const buf = updatedBuffers[id]!;
+        buf.unread = 0;
+        buf.notification = 0;
+        buf.localUnread = 0;
+        buf.pendingReadBoundaryUnread = 0;
+    }
+    if (staleRelayIds.length > 0) {
+        localUnreadBuffers.update((s: Set<string>) => {
+            const copy = new Set(s);
+            for (const id of staleRelayIds) copy.delete(id);
+            return copy;
+        });
+    }
+
     // Only reset unread/notification counts for buffers that appear in the hotlist.
     // Buffers not in the hotlist keep their existing counts — this preserves locally-tracked
     // unreads (from handleBufferLineAdded) for buffers where WeeChat hasn't reported activity
@@ -1265,6 +1303,10 @@ export function handleHotlistInfo(message: ProtocolMessage) {
         // Our snapshot may be stale if other handlers updated this buffer.
         const freshBuf = freshBuffers[entry.buffer];
         if (!freshBuf) continue;
+
+        // Relay status buffers are hotlisted by WeeChat itself on client
+        // connect/disconnect — never merge those counts (they were zeroed above).
+        if (isRelayStatusBuffer(freshBuf)) continue;
 
         // Skip buffers with real-time unreads — their local state is more accurate
         // than stale hotlist data. Don't include them in updatedBuffers so the merge
