@@ -23,7 +23,6 @@ import {
     setSyncing,
     isSyncing,
     maxBufferLines,
-    deepCloneBufferLine,
     setReadBoundary,
     setReadBoundaryUnknown,
     resolvePendingReadBoundary,
@@ -40,6 +39,7 @@ import { isWindowFocused } from "$lib/windowFocus";
 import { DEBUG_NICKLIST, DEBUG_HANDLERS, DEBUG_HOTLIST } from "$lib/debug";
 import type {
     ProtocolMessage,
+    BufferLine,
     BufferMessage,
     BufferLineMessage,
     NickMessage,
@@ -432,8 +432,10 @@ function formatNotificationBody(lineMsg: BufferLineMessage): string {
 }
 
 // Builds immutable copies of affected buffers first, then mutates only those copies.
-// This ensures Svelte's $derived($currentBuffer?.lines) sees a new array reference
-// and triggers re-render, which is required for readmarker rendering to work.
+// Line objects are immutable once created (see deepCloneBufferLine), so copies
+// share line references: the new array reference is what Svelte's reactivity needs,
+// and stable line references keep row components from re-rendering unchanged rows.
+// This is required for readmarker rendering to work.
 export function handleBufferLineAdded(message: ProtocolMessage) {
     const lines = message.objects[0]?.content as BufferLineMessage[];
     if (!lines) {
@@ -455,8 +457,9 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
         affectedIds.add(lineMsg.buffer);
     }
 
-    // Build immutable copies: deep-copy only affected buffers.
-    // Unaffected buffers are NOT included — the merge via buffers.update()
+    // Build immutable copies of affected buffers.
+    // Lines are immutable after creation, so share references (no deep clone);
+    // unaffected buffers are NOT included — the merge via buffers.update()
     // will preserve whatever state they currently have in the store.
     const updatedBuffers: Record<string, BufferData> = {};
     for (const id of affectedIds) {
@@ -464,7 +467,7 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
         if (!buf) continue;
         updatedBuffers[id] = {
             ...buf,
-            lines: buf.lines.map(deepCloneBufferLine),
+            lines: [...buf.lines],
             nicklist: { ...buf.nicklist },
             localVariables: buf.localVariables
                 ? { ...buf.localVariables }
@@ -472,6 +475,7 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
         };
     }
 
+    const createdLines: { buffer: string; line: BufferLine }[] = [];
     for (const lineMsg of lines) {
         let buffer = updatedBuffers[lineMsg.buffer];
         if (!buffer) {
@@ -520,19 +524,21 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
 
         const line = createBufferLine({ ...lineMsg, bufferType: buffer.type });
         buffer.requestedLines++;
+        createdLines.push({ buffer: lineMsg.buffer, line });
 
-        console.debug(
-            "[handler] line displayed=",
-            line.displayed,
-            "buffer=",
-            buffer.fullName,
-            "text=",
-            line.text?.substring(0, 30),
-            "tags=",
-            JSON.stringify(lineMsg.tags_array),
-            "notify=",
-            buffer.notify,
-        );
+        if (DEBUG_HANDLERS)
+            console.debug(
+                "[handler] line displayed=",
+                line.displayed,
+                "buffer=",
+                buffer.fullName,
+                "text=",
+                line.text?.substring(0, 30),
+                "tags=",
+                JSON.stringify(lineMsg.tags_array),
+                "notify=",
+                buffer.notify,
+            );
         if (line.displayed) {
             // Check for date change and inject date change message
             if (buffer.lines.length > 0) {
@@ -542,7 +548,7 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                 injectDateChangeMessageIfNeeded(buffer, false, oldDate, newDate);
             }
 
-            buffer.lines = [...buffer.lines, line];
+            buffer.lines.push(line);
             // A zero hotlist establishes a fully-read initial snapshot. A deferred
             // non-zero count is resolved only from an explicit history snapshot.
             if (isSyncing() && buffer.readBoundaryKnown === false) {
@@ -644,7 +650,7 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
     }
 
     // Update spokeAt timestamps for tab completion on the immutable copies
-    handleNickMessageForSpeakOnBuffers(lines, updatedBuffers);
+    handleNickMessageForSpeakOnBuffers(createdLines, updatedBuffers);
 
     // Trim lines exceeding memory limit on affected buffers
     const limit = get(maxBufferLines);
@@ -668,13 +674,14 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
     // Update stores using update() to merge with current state.
     // This prevents overwriting concurrent changes from other handlers
     // that modified unaffected buffers between our snapshot and this write.
-    console.debug(
-        "[handler] updating buffers store, total lines:",
-        Object.values(updatedBuffers).reduce(
-            (sum: number, b: BufferData) => sum + b.lines.length,
-            0,
-        ),
-    );
+    if (DEBUG_HANDLERS)
+        console.debug(
+            "[handler] updating buffers store, total lines:",
+            Object.values(updatedBuffers).reduce(
+                (sum: number, b: BufferData) => sum + b.lines.length,
+                0,
+            ),
+        );
     buffers.update((current) => {
         const merged = { ...current };
         for (const id in updatedBuffers) {
@@ -733,10 +740,11 @@ export function handleBufferLineDataChanged(message: ProtocolMessage) {
     // highlight class handling and RichTextPart processing.
     const updatedLine = createBufferLine({ ...lineMsg, bufferType: buffer.type });
 
-    // Immutable update: clone lines array, replace at index, then update store.
+    // Immutable update: new array reference, replace at index, then update store.
+    // Line objects are immutable, so only the edited line gets a fresh reference.
     const updatedBuffer = {
         ...buffer,
-        lines: buffer.lines.map(deepCloneBufferLine),
+        lines: [...buffer.lines],
     };
     updatedBuffer.lines[matchedIndex] = updatedLine;
     // Use update() to merge with current store state, preventing overwrites
@@ -1514,14 +1522,15 @@ export function handleNicklist(message: ProtocolMessage, fresh?: boolean) {
 }
 
 // ---- Update nick spokeAt timestamp for tab completion ----
-// Extracts the nick from a message's prefix or text, then updates spokeAt
-// on the matching nick within a single buffer's nicklist.
+// Extracts the nick from an already-created BufferLine's prefix or text, then
+// updates spokeAt on the matching nick within a single buffer's nicklist.
+// Takes the created line (not the raw message) so its rich text is never
+// re-parsed — the main handler already paid that cost.
 function updateNickSpokeAtInBuffer(
     buffer: BufferData,
-    lineMsg: BufferLineMessage,
+    line: BufferLine,
     now: number,
 ) {
-    const line = createBufferLine(lineMsg);
     const prefix = line.prefix;
     if (prefix.length === 0) return;
 
@@ -1559,16 +1568,16 @@ function updateNickSpokeAtInBuffer(
 }
 
 // Updates spokeAt timestamps on pre-built buffer copies (for immutable updates).
-// Each line message is matched to its buffer and only that buffer's nicklist is searched.
+// Each created line is matched to its buffer and only that buffer's nicklist is searched.
 export function handleNickMessageForSpeakOnBuffers(
-    lineMsgs: BufferLineMessage[],
+    createdLines: { buffer: string; line: BufferLine }[],
     updatedBuffers: Record<string, BufferData>,
 ) {
     const now = Date.now();
-    for (const lineMsg of lineMsgs) {
-        const buffer = updatedBuffers[lineMsg.buffer];
+    for (const { buffer: bufferId, line } of createdLines) {
+        const buffer = updatedBuffers[bufferId];
         if (!buffer) continue;
-        updateNickSpokeAtInBuffer(buffer, lineMsg, now);
+        updateNickSpokeAtInBuffer(buffer, line, now);
     }
 }
 
@@ -1823,7 +1832,7 @@ export function handleLineInfo(
                 id: buf.readBoundaryId,
             });
         }
-        const linesCopy = isReplacement ? [] : buf.lines.map(deepCloneBufferLine);
+        const linesCopy = isReplacement ? [] : [...buf.lines];
         const updated = {
             ...buf,
             lines: linesCopy,

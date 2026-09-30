@@ -582,8 +582,9 @@ export function updateBuffer(
 }
 
 /**
- * Deep-copy a buffer's mutable nested structures (lines, nicklist) along with field overrides.
- * Use this when handlers will mutate lines[] or nicklist[] arrays in-place after calling.
+ * Copy a buffer's mutable nested structures (lines, nicklist) along with field overrides.
+ * Line objects are immutable after creation, so the lines array is a fresh shallow copy
+ * (callers mutate the array in-place, e.g. splice/push) while sharing line references.
  * Returns a new BufferData object — caller must apply via `buffers.update()` merge.
  */
 export function updateBufferDeep(
@@ -594,7 +595,7 @@ export function updateBufferDeep(
     if (!buf) return undefined;
     return {
         ...buf,
-        lines: buf.lines.map(deepCloneBufferLine),
+        lines: [...buf.lines],
         nicklist: { ...buf.nicklist },
         localVariables: buf.localVariables ? { ...buf.localVariables } : undefined,
         ...overrides,
@@ -677,7 +678,7 @@ export function setActiveBuffer(bufferId: string): boolean {
         } else if (id === bufferId) {
             const updated = {
                 ...buf,
-                lines: buf.lines.map(deepCloneBufferLine),
+                lines: [...buf.lines],
                 nicklist: { ...buf.nicklist },
                 active: true,
                 unread: 0,

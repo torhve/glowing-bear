@@ -35,7 +35,6 @@ test('flood: 2000 messages full pipeline', async ({ browser }) => {
         // Start the flood; measure send time separately.
         const t0 = Date.now();
         let firstNewRowAt = -1;
-        let sawBaseRows = baseRows;
 
         // Poll for the first new row to appear (measures first-render latency).
         const pollFirst = (async () => {

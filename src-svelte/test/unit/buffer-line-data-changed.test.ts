@@ -162,8 +162,10 @@ describe('handleBufferLineDataChanged', () => {
 
         // New array reference (Svelte reactivity)
         expect(afterLines).not.toBe(beforeLines);
-        // Every line gets a fresh reference (shallow clone for Svelte reactivity)
-        expect(afterLines[1]).not.toBe(beforeLines[1]);
+        // The edited line (index 0) gets a fresh reference
+        expect(afterLines[0]).not.toBe(beforeLines[0]);
+        // Line objects are immutable, so unedited lines keep their reference
+        expect(afterLines[1]).toBe(beforeLines[1]);
     });
 
     it('handles multiple lines with same timestamp by picking last match', () => {
