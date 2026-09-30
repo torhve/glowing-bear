@@ -1868,13 +1868,34 @@ export function handleLineInfo(
         updatedBuffers[id] = updated;
     }
 
+    // trimBufferLines drops lines older than maxBufferLines per buffer. Lines are
+    // appended oldest-first, so only the newest (limit - existingCount) per buffer
+    // can survive. Creating (rich-text parsing) the guaranteed-trimmed ones is
+    // wasted work on large histories, so count them in requestedLines (which
+    // gates history re-fetches) and skip the rest.
+    const trimLimit = get(maxBufferLines);
+    const perBufferSkip = new Map<string, number>();
+    const perBufferCount = new Map<string, number>();
+    for (const lineMsg of reversed) {
+        perBufferCount.set(lineMsg.buffer, (perBufferCount.get(lineMsg.buffer) ?? 0) + 1);
+    }
+    for (const [id, count] of perBufferCount) {
+        const existing = updatedBuffers[id]?.lines.length ?? 0;
+        const survive = Math.min(count, Math.max(0, trimLimit - existing));
+        perBufferSkip.set(id, count - survive);
+    }
+
     for (const lineMsg of reversed) {
         const buffer = updatedBuffers[lineMsg.buffer];
         if (!buffer) continue;
-
-        const line = createBufferLine({ ...lineMsg, bufferType: buffer.type });
         buffer.requestedLines++;
-
+        const skip = perBufferSkip.get(lineMsg.buffer) ?? 0;
+        if (skip > 0) {
+            // Oldest line of this buffer in this message: it will be trimmed.
+            perBufferSkip.set(lineMsg.buffer, skip - 1);
+            continue;
+        }
+        const line = createBufferLine({ ...lineMsg, bufferType: buffer.type });
         if (line.displayed) {
             if (buffer.lines.length > 0) {
                 const lastLine = buffer.lines[buffer.lines.length - 1]!;
@@ -1919,11 +1940,11 @@ export function handleLineInfo(
     }
 
     // Trim lines exceeding memory limit on affected buffers
-    const limit = get(maxBufferLines);
     for (const id of affectedIds) {
         const buf = updatedBuffers[id];
-        if (buf) trimBufferLines(buf, limit);
+        if (buf) trimBufferLines(buf, trimLimit);
     }
+
 
     // Use update() to merge with current store state, preventing overwrites
     // of concurrent changes from other handlers.
