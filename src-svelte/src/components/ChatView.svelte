@@ -67,8 +67,21 @@
   // the true bottom (see Tauri repro: FAIL-echo-not-at-bottom).
   const FOLLOW_SETTLE_MS = 250;
   let lastFollowPinAt = 0;
+  // ---- Tail revision tracking ----
+  // Every store update rebuilds buffer.lines and clones each line, so object
+  // identity is only stable within one snapshot. Comparing the tail line object
+  // with the one seen on the previous run tells us whether the tail changed,
+  // which a plain length comparison cannot do once the buffer reaches
+  // maxBufferLines (see linesAdded below). The counter exists only to give that
+  // a cheap token for the dedup key; tracking one reference rather than a map
+  // keyed by line objects keeps this allocation-free.
+  let lastLineSeqCounter = 0;
+
   let prevActiveBufferId = $state<string>('');
   let prevLinesLength = $state(0);
+  // Tail line object and revision seen by the previous effect run (0 = none).
+  let prevLastLine: BufferLine | undefined = undefined;
+  let prevLastLineSeq = 0;
   let prevScrollKey = $state<string>('');
   let readmarkerFailures = $state(0);
   // A null index means the reconnect/snapshot did not provide a trustworthy boundary.
@@ -251,6 +264,10 @@
     if (!$currentBuffer || isLoadingMore || messages.length === 0 || !containerRef) {
       prevActiveBufferId = get(activeBufferId);
       prevLinesLength = messages.length;
+      // prevLastLine/prevLastLineSeq are deliberately NOT reset here: a transient
+      // skip (loading more history, buffer not mounted yet) must not manufacture a
+      // fresh revision for a tail that never changed, which would defeat the dedup
+      // guard below.
       return;
     }
 
@@ -258,8 +275,25 @@
     // $derived values do NOT re-evaluate after await in async functions (Svelte 5 limitation).
     const currentBufferId = get(activeBufferId);
     const curLinesLength = messages.length;
+    const curLastLine = curLinesLength > 0 ? messages[curLinesLength - 1] : undefined;
+    // A new revision only when the tail object itself changes - an append, a
+    // clone or an edit - not when the same tail is re-read after an unrelated
+    // store change.
+    const curLastLineSeq = curLastLine === prevLastLine ? prevLastLineSeq : ++lastLineSeqCounter;
     const bufferChanged = prevActiveBufferId !== currentBufferId;
-    const linesAdded = curLinesLength > prevLinesLength;
+    // A line arrived when the list grew, OR when it stayed the same size but the
+    // tail changed. The second case is the maxBufferLines cap: handlers append the
+    // incoming line and trim one off the front in the same update, so the length
+    // never changes. Detecting only growth silently disables auto-follow in every
+    // buffer that has reached the cap - the view stays put and the newest line
+    // ends up below the fold whenever the trimmed line and the new line differ in
+    // height (e.g. a wrapped line arriving).
+    // Updates that rebuild the array without appending (a plugin editing a line,
+    // updateBufferDeep) also read as a tail change. Those extra pins only fire when
+    // wasFollowing/isAtBottom is already true, so they never move a reader who has
+    // scrolled away - but they do re-arm the follow-settle window, which keeps a
+    // following view pinned during a fast message flood (same as below the cap).
+    const linesAdded = curLinesLength > prevLinesLength || (curLinesLength === prevLinesLength && curLastLineSeq !== prevLastLineSeq);
 
     // Trust the scroll handler's authoritative state. handleScroll already captured
     // the user's last deliberate scroll position, so isAtBottom is accurate for
@@ -280,7 +314,7 @@
 
     // Dedup guard: run synchronously to prevent cascading effect re-runs.
     // Bypass when readmarker lookup previously failed, allowing retry.
-    const scrollKey = `${currentBufferId}-${curLinesLength}`;
+    const scrollKey = `${currentBufferId}-${curLinesLength}-${curLastLineSeq}`;
     if (prevScrollKey === scrollKey && readmarkerFailures === 0) return;
 
     // Update tracking state SYNCHRONOUSLY (not inside async IIFE) so that
@@ -288,6 +322,8 @@
     prevScrollKey = scrollKey;
     prevActiveBufferId = currentBufferId;
     prevLinesLength = curLinesLength;
+    prevLastLine = curLastLine;
+    prevLastLineSeq = curLastLineSeq;
 
     // Same buffer + lines added: defer to rAF for layout, but decision is simple.
     // wasFollowing is authoritative - captured synchronously before render.
