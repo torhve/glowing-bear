@@ -46,6 +46,8 @@ src-svelte/coverage/
 
 # Personal notes
 /src-svelte/TODO.md
+# local performance journal (not for the repo)
+/PERFORMANCE.md
 
 # Misplaced test file
 /src-svelte/seed.spec.ts
