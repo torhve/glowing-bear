@@ -2007,6 +2007,11 @@ export function handleEvent(event: ProtocolMessage) {
         return;
     }
 
+    // Any other event may observe individual lines (edits, clears, read
+    // boundaries): commit queued lines first to preserve the pre-coalescing
+    // ordering guarantee. No-op when the queue is empty.
+    flushLineBatch();
+
     const handler = eventHandlers[event.id];
     if (handler) {
         console.debug(
