@@ -7,6 +7,8 @@ import path from 'path';
 export default defineConfig({
   plugins: [svelte()],
   resolve: {
+    // jsdom component tests need Svelte's DOM runtime rather than its SSR exports.
+    conditions: ['browser'],
     alias: {
       $lib: path.resolve('./src-svelte/src/lib'),
       $components: path.resolve('./src-svelte/src/components'),
@@ -17,5 +19,6 @@ export default defineConfig({
     globals: true,
     include: ['src-svelte/test/unit/**/*.test.ts'],
     environment: 'jsdom',
+    css: true,
   },
 });

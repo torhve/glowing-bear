@@ -1,5 +1,6 @@
 <script lang="ts">
   /* eslint-disable svelte/no-dom-manipulating */
+  import { untrack } from 'svelte';
   import type { EmbedCallbackContext, PluginMetadata } from '$lib/types';
   import { imageExts, videoExts, audioExts } from '$lib/utils/mediaExtensions';
   import Play from '@lucide/svelte/icons/play';
@@ -11,17 +12,19 @@
   let embedRef = $state<HTMLDivElement | null>(null);
   let visible = $state(false);
   let contentInjected = $state(false);
+  let autoVisible = $derived(plugin.visible);
 
-  // React only to changes in the plugin.visible prop (settings toggle).
-  // Does NOT read internal state (visible, contentInjected) — those are modified
-  // by showContent/hideContent on user clicks, which would cause the effect to
-  // re-run and undo user interactions.
+  // Only settings changes should override manual toggles. Called functions also
+  // track state reads unless untracked (notably contentInjected in showContent).
   $effect(() => {
-    if (plugin.visible) {
-      showContent();
-    } else {
-      hideContent();
-    }
+    const shouldShow = autoVisible;
+    untrack(() => {
+      if (shouldShow) {
+        showContent();
+      } else {
+        hideContent();
+      }
+    });
   });
 
   let isNsfw = $derived(plugin.nsfw);
