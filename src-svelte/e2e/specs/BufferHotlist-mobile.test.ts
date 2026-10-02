@@ -108,9 +108,11 @@ test('hotlist shows buffers with unread messages', async () => {
     }).toPass({ timeout: 30000 });
 
     const items = page.getByTestId('hotlist-buffer-item');
-    const firstItem = items.first();
-    await expect(firstItem).toContainText(/g?gbbot\d*/);
-    const countBadge = firstItem.getByTestId('hotlist-count');
+    // Pick the PM buffer by name: other specs leave unread in #glowing-bear, so
+    // the hotlist order is not something this test can rely on.
+    const pmItem = items.filter({ hasText: /g?gbbot\d*/ }).first();
+    await expect(pmItem).toContainText(/g?gbbot\d*/);
+    const countBadge = pmItem.getByTestId('hotlist-count');
     await expect(countBadge).toContainText(/\(\d+\)/);
 });
 
@@ -140,14 +142,18 @@ test('clicking hotlist item switches buffer', async () => {
     }).toPass({ timeout: 30000 });
 
     const items = page.getByTestId('hotlist-buffer-item');
-    const firstItem = items.first();
-    await firstItem.click();
+    // Click the PM buffer specifically — hotlist order depends on what other
+    // specs left unread.
+    const pmItem = items.filter({ hasText: /g?gbbot\d*/ }).first();
+    await pmItem.click();
 
-    // Verify we switched to the query buffer
+    // Switching buffers is a relay round-trip: assert the outcome with a polling
+    // assertion instead of reading the topic bar once right after the click.
     await botPm('switch confirm');
     await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 10000 });
-    const topicText = await page.getByTestId('topic-bar').textContent();
-    expect(topicText).toMatch(/g?gbbot\d*/);
+    await expect(
+        page.getByTestId('topic-bar').locator('.topic-channel-name'),
+    ).toContainText(/g?gbbot\d*/, { timeout: 10000 });
 });
 
 // TODO: fix buffer creation via relay — sendWeechatCommand doesn't reliably create buffers in test environment

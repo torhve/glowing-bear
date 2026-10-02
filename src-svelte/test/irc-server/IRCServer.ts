@@ -373,6 +373,19 @@ export class IRCServer {
         if (!bot) { sendErr('Bot not found'); return; }
 
         switch (cmd.cmd) {
+        // Read-only readiness probe: which registered clients are in a channel.
+        // start.sh polls this so tests never start before WeeChat has autojoined.
+        case 'status': {
+            const ch = cmd.channel || this.opts.autoChannel;
+            const members: string[] = [];
+            for (const [, c] of this.clients) {
+                if (c.registered && c.channels.has(ch)) members.push(c.nick);
+            }
+            if (!socket.destroyed) {
+                socket.end(JSON.stringify({ ok: true, channel: ch, members }) + '\n');
+            }
+            return;
+        }
         case 'send_message':
         case 'send_notice': {
             if (!cmd.channel || cmd.text === undefined) { sendErr('Missing channel or text'); return; }

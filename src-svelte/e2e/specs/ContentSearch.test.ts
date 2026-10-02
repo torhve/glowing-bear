@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { createConnectedPage } from '../fixtures/auth';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
-import { irc } from '../helpers/irc-control';
+import { botSayVisible } from '../helpers/messages';
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
 
 let page: import('@playwright/test').Page;
@@ -107,12 +107,7 @@ test('grep buffer is auto-switched after search', async () => {
 
     // Send a message we can actually find
     const testMsg = `e2e-grep-auto-switch-${Date.now()}`;
-    await irc.sendMessage('#glowing-bear', testMsg);
-    const msgRow = page
-        .locator('[data-testid="bufferline-row"] td.message')
-        .filter({ hasText: testMsg })
-        .first();
-    await expect(msgRow).toBeVisible({ timeout: 10000 });
+    await botSayVisible(page, testMsg);
 
     await openContentSearch(page);
     await page.locator('#content-search-input').fill(testMsg);
@@ -175,14 +170,8 @@ test('search results appear in grep buffer', async () => {
 
     // Send a unique message to the channel
     const testMsg = `grep-visible-${Date.now()}`;
-    await irc.sendMessage('#glowing-bear', testMsg);
-
-    // Wait for the message to appear in chat
-    const msgRow = page
-        .locator('[data-testid="bufferline-row"] td.message')
-        .filter({ hasText: testMsg })
-        .first();
-    await expect(msgRow).toBeVisible({ timeout: 10000 });
+    // Wait until the message is actually rendered in the channel
+    await botSayVisible(page, testMsg);
 
     // Now search for it
     await openContentSearch(page);

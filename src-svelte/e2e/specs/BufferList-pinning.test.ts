@@ -19,31 +19,26 @@ test.afterAll(async () => {
 
 test.beforeEach(async () => {
     setupEffectOrphanFilter(page)
-    // Unpin any pinned buffers from previous serial tests by switching to each buffer
-    // and clicking the pin button in the topic bar if it shows "Unpin buffer"
-    const bufferItems = page.getByTestId('buffer-item');
-    const count = await bufferItems.count();
-    for (let i = 0; i < count; i++) {
-        const item = bufferItems.nth(i);
+    // Unpin any pinned buffers left behind by previous serial tests. Names are
+    // snapshotted up front: unpinning re-sorts the buffer list, so iterating by index
+    // chases nodes the list has already detached and the click times out.
+    const names = await page.getByTestId('buffer-item').locator('.buffer-name').allTextContents();
+    for (const raw of names) {
         // Read only the .buffer-name span — full textContent includes badge numbers
         // which would break switchToBuffer's .topic-channel-name assertion.
-        const name = await item.locator('.buffer-name').textContent();
-        if (name) {
-            await switchToBuffer(page, name.trim());
-            const pinBtn = page.getByTestId('topic-bar-container').getByTestId('pin-buffer');
-            const title = await pinBtn.getAttribute('title');
-            if (title === 'Unpin buffer') {
-                await pinBtn.click();
-                await expect(pinBtn).toHaveAttribute('title', 'Pin buffer', { timeout: 5000 });
-            }
+        const name = raw.trim();
+        if (!name) continue;
+        await switchToBuffer(page, name);
+        const pinBtn = page.getByTestId('topic-bar-container').getByTestId('pin-buffer');
+        const title = await pinBtn.getAttribute('title');
+        if (title === 'Unpin buffer') {
+            await pinBtn.click();
+            await expect(pinBtn).toHaveAttribute('title', 'Pin buffer', { timeout: 5000 });
         }
     }
     // Return to first buffer for consistent starting state
-    if (count > 0) {
-        // Read only the .buffer-name span for consistent starting state.
-        const first = await bufferItems.first().locator('.buffer-name').textContent();
-        if (first) await switchToBuffer(page, first.trim());
-    }
+    const first = await page.getByTestId('buffer-item').first().locator('.buffer-name').textContent();
+    if (first) await switchToBuffer(page, first.trim());
 });
 
 test('pin button is visible in topic bar', async () => {

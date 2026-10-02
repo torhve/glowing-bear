@@ -5,10 +5,17 @@ function getBufferText(name: string): string {
     return name.replace(/^[#&!+@]+/, "");
 }
 
-export async function waitForBuffer(page: Page, name: string, timeout = 10000) {
-    await page
+// Exact-name locator: matches the .buffer-name span's full text, so a buffer called
+// "glow" can no longer resolve to "glowing-bear" (or a badge's digits to a name).
+function bufferItemForName(page: Page, name: string) {
+    const exact = new RegExp("^" + getBufferText(name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$");
+    return page
         .getByTestId("buffer-item")
-        .filter({ hasText: getBufferText(name) })
+        .filter({ has: page.locator(".buffer-name").filter({ hasText: exact }) });
+}
+
+export async function waitForBuffer(page: Page, name: string, timeout = 10000) {
+    await bufferItemForName(page, name)
         .first()
         .waitFor({ state: "visible", timeout });
 }
@@ -18,10 +25,7 @@ export async function switchToBuffer(
     name: string,
     opts?: { timeout?: number },
 ) {
-    const bufferItem = page
-        .getByTestId("buffer-item")
-        .filter({ hasText: getBufferText(name) })
-        .first();
+    const bufferItem = bufferItemForName(page, name).first();
 
     // Wait for element to be stable before clicking — prevents "element not stable" failures
     // that occur after viewport changes, reconnections, or other DOM-mutating operations.
