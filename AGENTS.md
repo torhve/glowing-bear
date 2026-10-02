@@ -85,6 +85,31 @@ The codebase avoids `{@html}` entirely. For messages and topics, use the `<Linki
 
 Every non-trivial function needs a brief comment above it explaining intent.
 
+### Sync Phase (never timer-based)
+
+`models.ts` exposes `beginSyncPhase()` / `endSyncPhase(generation?)` / `isSyncing()`.
+The sync phase is the window in which WeeChat's hotlist counts are about to become
+authoritative for a connection; while it is open, real-time lines are not tallied locally
+as unread because the baseline already accounts for them.
+
+- Owned by the connection init in `connectionManager.ts`: opened at the start of the
+  attempt (before any request, so it covers replayed lines), closed after *that attempt's*
+  hotlist baseline has been applied, in its `catch`, and unconditionally by
+  `resetAllState()` on disconnect.
+- `beginSyncPhase()` returns a generation token and `endSyncPhase(generation)` ignores a
+  token that is no longer current, so a superseded connect attempt or a periodic hotlist
+  poll cannot close a newer connection's phase. State-applying steps in init re-check
+  `connectionGeneration` before mutating, so an obsolete response cannot overwrite a
+  newer connection's buffers or hotlist.
+- The phase must end only on a protocol event (baseline applied, init failure,
+  disconnect). Never add a time-based exit: a quiet period is not evidence of a
+  completed sync and would count late history as unread.
+- Read-boundary resolution is a separate per-buffer lifecycle (`readBoundaryKnown`,
+  `readBoundaryId`, `pendingReadBoundaryUnread`, `setReadBoundary`,
+  `resolvePendingReadBoundary`). Never gate it on the global sync flag.
+- Regression coverage: `src-svelte/test/unit/sync-flag-lifecycle.test.ts` and
+  `src-svelte/test/unit/notification-sync-gate.test.ts`.
+
 ## Tauri Desktop
 
 Wrapped in Tauri 2.x for desktop distribution. Custom titlebar via `TauriTitlebar.svelte`. Window API access via `$lib/tauriWindow`. Tauri config in `src-tauri/tauri.conf.json`.

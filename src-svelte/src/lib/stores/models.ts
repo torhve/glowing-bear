@@ -495,28 +495,54 @@ export function recalculateLinesPerScreen(numLines: number) {
     linesPerScreen.set(Math.max(50, numLines));
 }
 
-// Track whether we're in the initial post-connect sync phase.
-// During this phase, lastSeen is not updated per-line — it's calculated
-// after sync completes using: lastSeen = lines.length - unread - 1.
-let syncing = false;
-let syncEndTimer: ReturnType<typeof setTimeout> | null = null;
+/*
+ * Sync phase: the window in which WeeChat's hotlist counts are about to become
+ * authoritative for a connection. It is owned by the connection init that actually
+ * awaits both round trips: opened just before the buffer snapshot is requested and
+ * closed once this connection's hotlist baseline has been applied. Both bounds are
+ * protocol events the client explicitly awaits, so the phase is bounded by the round
+ * trip that defines it — it cannot outlive the baseline, and it never suppresses
+ * unread counters merely because history is slow.
+ *
+ * The phase is generation-scoped: beginSyncPhase() returns the generation it opened,
+ * and endSyncPhase(generation) ignores a generation that is no longer current. A
+ * superseded connect attempt that fails late therefore cannot close a newer
+ * connection's phase, and the periodic hotlist poll (which holds no generation)
+ * cannot close it either. endSyncPhase() without an argument is the unconditional
+ * exit used by disconnect; it is also what a unit test uses to model a baseline.
+ *
+ * Stale responses are a separate, already-solved concern: connectionManager's
+ * connectionGeneration discards messages from superseded sockets (onMessage) and
+ * resetAllState() rejects their pending callbacks, so a superseded attempt can never
+ * apply an old buffer or hotlist snapshot in the first place.
+ *
+ * Read-boundary resolution is a separate, per-buffer lifecycle and is deliberately
+ * not part of this flag: a buffer stays `readBoundaryKnown === false` until history
+ * or an explicit read action proves where the boundary falls (setActiveBuffer ->
+ * pendingReadBoundaryUnread -> resolvePendingReadBoundary, or the post-baseline rule
+ * in handleLineInfo).
+ */
+let syncGeneration = 0;
+let baselinePending = false;
 
-export function setSyncing(value: boolean) {
-    if (value) {
-        syncing = true;
-        if (syncEndTimer) clearTimeout(syncEndTimer);
-    } else {
-        // Schedule exit from sync mode after a quiet period.
-        // This allows rapid-fire sync lines to keep us in sync mode.
-        syncEndTimer = setTimeout(() => {
-            syncing = false;
-            syncEndTimer = null;
-        }, 200);
-    }
+/** Open the sync phase for a new connection; returns its generation token. */
+export function beginSyncPhase(): number {
+    syncGeneration += 1;
+    baselinePending = true;
+    return syncGeneration;
+}
+
+/**
+ * Close the sync phase. With a generation token, only the attempt that opened the
+ * current phase may close it. Without one, close unconditionally (disconnect).
+ */
+export function endSyncPhase(generation?: number): void {
+    if (generation !== undefined && generation !== syncGeneration) return;
+    baselinePending = false;
 }
 
 export function isSyncing(): boolean {
-    return syncing;
+    return baselinePending;
 }
 
 export const currentBuffer = derived(

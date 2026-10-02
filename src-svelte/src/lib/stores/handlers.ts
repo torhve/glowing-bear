@@ -20,7 +20,6 @@ import {
     parseRichText,
     removeBuffer,
     pendingBufferSwitch,
-    setSyncing,
     isSyncing,
     maxBufferLines,
     setReadBoundary,
@@ -230,10 +229,10 @@ export function handleBufferInfo(message: ProtocolMessage) {
         if (buf) workingBuffers[id] = { ...buf };
     }
 
-    // Mark that we're in initial sync phase — hotlist has arrived with unread
-    // counts but lines haven't been synced yet. During sync, don't increment
-    // lastSeen per-line; instead calculate it once after sync completes.
-    setSyncing(true);
+    // The sync phase is owned by the connection init that requested this snapshot
+    // (connectionManager). While it is open, a line landing in a buffer whose
+    // boundary is still unknown is not tallied locally, because the hotlist baseline
+    // that is about to arrive already accounts for it.
 
     // Track pending server unread adjustments for batch update.
     const serverDeltas: Record<string, number> = {};
@@ -294,6 +293,10 @@ export function handleBufferInfo(message: ProtocolMessage) {
             }
         }
     }
+
+    // The snapshot is applied, but the phase stays open until the matching hotlist
+    // baseline is applied (handleHotlistInfo): that is the moment WeeChat's counts
+    // become authoritative and local tallying can safely resume.
 
     // Apply pending server unread deltas immutably.
     if (Object.keys(serverDeltas).length > 0) {
@@ -574,21 +577,11 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
             }
 
             buffer.lines.push(line);
-            // A zero hotlist establishes a fully-read initial snapshot. A deferred
-            // non-zero count is resolved only from an explicit history snapshot.
-            if (isSyncing() && buffer.readBoundaryKnown === false) {
-                const pendingCount = Math.max(
-                    buffer.pendingReadBoundaryUnread || 0,
-                    buffer.unread + buffer.notification + (buffer.localUnread || 0),
-                );
-                if (pendingCount === 0) {
-                    setReadBoundary(buffer, buffer.lines.length - 1);
-                    setSyncing(false);
-                } else if (buffer.lines.length > pendingCount) {
-                    setSyncing(false);
-                }
-            }
-            // Once a buffer has a known local boundary, realtime rows never move it.
+            // --- Unread counters: read-boundary bookkeeping ---
+            // Guards the tallies the read marker is derived from. Once a buffer
+            // has a known local boundary, realtime rows never move it; while the
+            // boundary is still unknown, rows belong to the sync snapshot and must
+            // not inflate the counters used to resolve it.
             // Relay status buffers (relay.list) are re-rendered by WeeChat whenever a
             // relay client comes and goes, so their rows never count as unread.
             if (
@@ -631,43 +624,49 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                         serverDeltas[serverKey] = (serverDeltas[serverKey] || 0) + 1;
                     }
                 }
+            }
 
-                // Fire notification indicators for any message where the buffer's
-                // notify setting allows it. WeeChat notify levels: 0=none,
-                // 1=message, 2=important, 3=highlight.
-                // buffer.notify >= lineMsg.notify_level means this buffer is configured
-                // to notify at this level or higher.
-                if (
-                    buffer.notify >= lineMsg.notify_level &&
-                  lineMsg.notify_level >= 1 &&
-                  buffer.id !== activeId
-                ) {
-                    // Always update passive indicators regardless of window focus —
-                    // title and favicon badge are useful even when tab is visible.
-                    updateTitle();
-                    updateFavico();
+            // --- Notification indicators: user-facing alert ---
+            // Deliberately independent of sync/read-boundary state: a real-time PM
+            // must still ring when it lands in a buffer whose read boundary is
+            // unknown (for example one that carried hotlist unread across a
+            // reconnect). Counter bookkeeping above stays gated; this does not.
+            // Safe against replay: `_buffer_line_added` is a real-time relay event —
+            // history arrives through handleBufferInfo/handleLineInfo, never here.
+            // WeeChat notify levels: 0=none, 1=message, 2=important, 3=highlight.
+            // buffer.notify >= lineMsg.notify_level means this buffer is configured
+            // to notify at this level or higher.
+            if (
+                !isRelayStatusBuffer(buffer) &&
+                buffer.notify >= lineMsg.notify_level &&
+                lineMsg.notify_level >= 1 &&
+                buffer.id !== activeId
+            ) {
+                // Always update passive indicators regardless of window focus —
+                // title and favicon badge are useful even when tab is visible.
+                updateTitle();
+                updateFavico();
 
-                    // Desktop notifications (popup) fire only when window is not focused,
-                    // to avoid spamming the user when they're already looking at the tab.
-                    // Sound plays regardless of focus — it's a local audio cue.
-                    const isHighlight = !!lineMsg.highlight;
-                    const isPrivateMessage =
-                      lineMsg.tags_array.includes("notify_private");
-                    const isPrivate =
-                      buffer.type === "private" || buffer.type === "query";
-                    if (buffer.notify !== 0 && (isHighlight || isPrivateMessage || isPrivate)) {
-                        // Play notification sound for highlights/PMs regardless of window focus.
-                        // Sound is a local audio cue that doesn't depend on tab visibility.
-                        playNotificationSound();
+                // Desktop notifications (popup) fire only when window is not focused,
+                // to avoid spamming the user when they're already looking at the tab.
+                // Sound plays regardless of focus — it's a local audio cue.
+                const isHighlight = !!lineMsg.highlight;
+                const isPrivateMessage =
+                  lineMsg.tags_array.includes("notify_private");
+                const isPrivate =
+                  buffer.type === "private" || buffer.type === "query";
+                if (buffer.notify !== 0 && (isHighlight || isPrivateMessage || isPrivate)) {
+                    // Play notification sound for highlights/PMs regardless of window focus.
+                    // Sound is a local audio cue that doesn't depend on tab visibility.
+                    playNotificationSound();
 
-                        // Desktop popup only when window is not focused
-                        if (!focused) {
-                            // Strip WeeChat formatting codes from message/prefix for notification display
-                            const notificationBody = formatNotificationBody(lineMsg);
+                    // Desktop popup only when window is not focused
+                    if (!focused) {
+                        // Strip WeeChat formatting codes from message/prefix for notification display
+                        const notificationBody = formatNotificationBody(lineMsg);
 
-                            // Trigger notification subsystem
-                            createHighlight(buffer, notificationBody);
-                        }
+                        // Trigger notification subsystem
+                        createHighlight(buffer, notificationBody);
                     }
                 }
             }
@@ -1392,6 +1391,9 @@ export function handleHotlistInfo(message: ProtocolMessage) {
         return merged;
     });
     servers.set(updatedServers);
+    // Baseline applied. Closing the phase is the connection init's job — it holds the
+    // generation token — so that a superseded attempt can never close a newer
+    // connection's phase.
 }
 
 // ---- Nicklist handler ----
@@ -1931,9 +1933,14 @@ export function handleLineInfo(
     }
     // A fresh buffer with no hotlist activity is fully read once its sync snapshot
     // is complete; a non-zero hotlist remains unknown until the user views it.
+    // A replacement fetch resets the boundary first, so a *known* prior boundary
+    // means the restore pass above already placed it (or deliberately invalidated an
+    // ambiguous anchor) — do not second-guess that. An unknown prior boundary is just
+    // an unresolved buffer, which is exactly what this rule is for.
     if (!isSyncing()) {
         for (const buf of Object.values(updatedBuffers)) {
-            if (buf.readBoundaryKnown === false && !priorBoundaries.has(buf.id) && buf.unread === 0 && buf.notification === 0 && buf.localUnread === 0 && !buf.pendingReadBoundaryUnread) {
+            if (priorBoundaries.get(buf.id)?.known === true) continue;
+            if (buf.readBoundaryKnown === false && buf.unread === 0 && buf.notification === 0 && buf.localUnread === 0 && !buf.pendingReadBoundaryUnread) {
                 setReadBoundary(buf, buf.lines.length - 1);
             }
         }

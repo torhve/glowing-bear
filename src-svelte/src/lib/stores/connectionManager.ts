@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
 import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, incrementReconnectAttempts, setNextReconnectAt } from '$lib/stores/connectionStore';
-import { buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer, localUnreadBuffers, hotlistClearedBuffers, bufferBottom, previousBufferId, pendingBufferSwitch } from '$lib/stores/models';
+import { buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer, localUnreadBuffers, hotlistClearedBuffers, bufferBottom, previousBufferId, pendingBufferSwitch, beginSyncPhase, endSyncPhase } from '$lib/stores/models';
 import { settings } from '$lib/stores/settings';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist, flushLineBatch, setOnUpgrade, setOnUpgradeEnded } from '$lib/stores/handlers';
 import { addToast, removeToast, clearToasts, updateToast, toastStore } from '$lib/toast';
@@ -34,6 +34,9 @@ function resetAllState() {
     // Flush any pending line batches before clearing state to avoid losing data.
     flushLineBatch();
 
+    // No hotlist baseline will arrive for a closed connection: never leave the sync
+    // phase open across a disconnect.
+    endSyncPhase();
     // Reject all pending callbacks
     Object.keys(callbacks).forEach(k => {
         const id = parseInt(k, 10);
@@ -189,6 +192,17 @@ export async function connect(host: string, port: number, path: string, password
                 return;
             }
             connecting = true;
+            // Sync phase, owned by this connection attempt: opened before anything is
+            // requested, so it already covers the window in which WeeChat may push
+            // replayed lines, and closed only once this attempt's hotlist baseline has
+            // been applied (or the attempt ends). The token keeps a superseded attempt
+            // from ending a newer connection's phase.
+            const syncPhase = beginSyncPhase();
+            // A response can resolve normally moments before this attempt is superseded
+            // by a reconnect. Applying such a snapshot would write an old connection's
+            // buffers and hotlist over a newer one's, so every state-applying step below
+            // re-checks this instead of trusting that an awaited response is still fresh.
+            const superseded = () => genAtConnect !== connectionGeneration;
             try {
                 // Reset callbacks for new connection
                 Object.keys(callbacks).forEach(k => delete callbacks[parseInt(k, 10)]);
@@ -281,12 +295,15 @@ export async function connect(host: string, port: number, path: string, password
 
                 handleVersionInfo(versionResponse);
 
+                // WeeChat's counts are not authoritative until the baseline below lands,
+                // so real-time lines are not tallied locally while the phase is open.
                 // Get buffer info
                 const bufInfoMsg = Protocol.formatHdata({
                     path: 'buffer:gui_buffers(*)',
                     keys: ['local_variables,notify,number,full_name,short_name,title,hidden,type']
                 });
                 const bufInfoResponse = await sendAsync(bufInfoMsg);
+                if (superseded()) throw new Error('connection superseded by a newer attempt');
                 handleBufferInfo(bufInfoResponse);
 
                 // Get hotlist
@@ -295,7 +312,14 @@ export async function connect(host: string, port: number, path: string, password
                     keys: []
                 });
                 const hotlistResponse = await sendAsync(hotlistMsg);
+                if (superseded()) throw new Error('connection superseded by a newer attempt');
                 handleHotlistInfo(hotlistResponse);
+
+                // Baseline applied: WeeChat's counts are authoritative from here on, so
+                // local tallying of real-time lines resumes. History may still arrive
+                // later; that is a per-buffer concern (readBoundaryKnown), not part of
+                // this phase.
+                endSyncPhase(syncPhase);
 
                 // Get config values
                 await fetchConfValue('weechat.look.buffer_time_format');
@@ -337,6 +361,17 @@ export async function connect(host: string, port: number, path: string, password
                 clearToasts();
                 resolve();
             } catch (e) {
+                // Init ended without applying a hotlist baseline — this attempt closes
+                // the phase it opened, so counters are not suppressed for a connection
+                // that will never sync.
+                endSyncPhase(syncPhase);
+                if (superseded()) {
+                    // A newer attempt owns the connection state now. Reporting an error or
+                    // flipping `connected` here would describe this attempt, not the app.
+                    if (DEBUG_CONNECTION) console.log('[connect] init abandoned: superseded by a newer attempt');
+                    resolve();
+                    return;
+                }
                 // If onclose already set passwordError, don't overwrite with generic error
                 const errors = get(connectionState).errors;
                 if (errors.passwordError) {
