@@ -52,7 +52,11 @@
   );
 
   let isLoadingMore = $state(false);
-  let maxScrollValBeforeFetch = $state(0);
+  let viewBufferId = $derived($currentBuffer?.id);
+  let viewGeneration = 0;
+  // Non-reactive bookkeeping: pending frames belong to one visit to a buffer.
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  const viewFrames = new Set<number>();
   // Distance from the bottom (in px) within which we consider the chat "at bottom".
   // Shared by handleScroll and the auto-scroll effect so tolerances never diverge.
   const SCROLL_BOTTOM_TOLERANCE = 10;
@@ -100,6 +104,33 @@
     readEndIndex !== null && messages.length > 0 && !hasUnreadDisplayed
   );
   let readStartIndex = $derived((readEndIndex ?? -1) + 1);
+
+  // Invalidate work on buffer changes and unmount, including A -> B -> A visits.
+  $effect(() => {
+    void viewBufferId;
+    isLoadingMore = false;
+    return () => {
+      viewGeneration++;
+      for (const frame of viewFrames) cancelAnimationFrame(frame);
+      viewFrames.clear();
+    };
+  });
+
+  // A scheduled layout operation must never act on a different buffer or DOM node.
+  function scheduleViewFrame(callback: () => void) {
+    const generation = viewGeneration;
+    const bufferId = get(activeBufferId);
+    const container = containerRef;
+    if (!container) return;
+    const frame = requestAnimationFrame(() => {
+      viewFrames.delete(frame);
+      if (generation === viewGeneration && bufferId === get(activeBufferId) && container === containerRef) {
+        callback();
+      }
+    });
+    viewFrames.add(frame);
+  }
+
   // Toggle pin/unpin for the currently active buffer via WeeChat localvar_set.
   function handleTogglePin() {
     const bufId = get(activeBufferId);
@@ -128,7 +159,7 @@
     closeBufferOnWeeChat(bufId);
   }
 
-
+  // Track manual scrolling and request history when the user reaches the top.
   function handleScroll() {
     if (!containerRef) return;
     const { scrollTop, scrollHeight, clientHeight } = containerRef;
@@ -146,34 +177,7 @@
       isAtBottom = false;
     }
 
-    if (scrollTop < 50 && !isLoadingMore && $currentBuffer && !$currentBuffer.allLinesFetched) {
-      isLoadingMore = true;
-      maxScrollValBeforeFetch = scrollHeight - clientHeight;
-
-      void (async () => {
-        try {
-          await fetchMoreLines();
-        } catch (err) {
-          console.error('Failed to fetch more lines:', err);
-        } finally {
-          // Defer scroll adjustment to rAF so DOM has updated and we avoid
-          // race with $effect which runs synchronously on store changes.
-          // Set isLoadingMore=false AFTER scroll correction to prevent $effect
-          // from auto-scrolling before the position is restored (AngularJS pattern).
-          requestAnimationFrame(() => {
-            if (containerRef) {
-              const newScrollHeight = containerRef.scrollHeight;
-              const newMaxScrollVal = newScrollHeight - containerRef.clientHeight;
-              // Preserve user's visual position using same formula as AngularJS version
-              // Keeps the user at the same point in the buffer (not scrolled to bottom)
-              containerRef.scrollTop = newMaxScrollVal - maxScrollValBeforeFetch;
-              isAtBottom = false;
-            }
-            isLoadingMore = false;
-          });
-        }
-      })();
-    }
+    if (scrollTop < 50) void loadMoreHistory(true);
   }
 
   $effect(() => {
@@ -199,7 +203,7 @@
   $effect(() => {
     if (containerRef && messages.length > 0) {
       // Defer to rAF so DOM has fully rendered
-      requestAnimationFrame(() => measureLinesPerScreen());
+      scheduleViewFrame(() => measureLinesPerScreen());
     }
   });
 
@@ -328,7 +332,7 @@
     // Same buffer + lines added: defer to rAF for layout, but decision is simple.
     // wasFollowing is authoritative - captured synchronously before render.
     if (!bufferChanged && linesAdded) {
-      requestAnimationFrame(() => {
+      scheduleViewFrame(() => {
         // Auto-scroll if the pre-capture check (wasFollowing) OR the continuous
         // scroll handler (isAtBottom) says we're following. Both use the same
         // SCROLL_BOTTOM_TOLERANCE, so OR simply covers the case where the handler
@@ -356,11 +360,11 @@
             else stableFrames = 0;
             lastScrollHeight = sh;
             const settled = stableFrames >= PIN_SETTLE_FRAMES || performance.now() - pinStart > PIN_CAP_MS;
-            if (!settled) requestAnimationFrame(pinToBottom);
+            if (!settled) scheduleViewFrame(pinToBottom);
           };
           // Auto-follow changes only the viewport. The session's new-message
           // separator remains anchored until setActiveBuffer commits it on exit.
-          requestAnimationFrame(pinToBottom);
+          scheduleViewFrame(pinToBottom);
         } else {
         // User manually scrolled away from bottom - do nothing.
         // Preserve their reading position; unread accumulates behind readmarker.
@@ -372,7 +376,7 @@
     // Buffer changed (with or without line changes) - defer to rAF so that
     // Svelte has time to render the new buffer's content (including readmarker)
     // before we check for unread messages or try to position the scroll.
-    requestAnimationFrame(() => {
+    scheduleViewFrame(() => {
       // Re-compute readmarker state from live reactive values inside rAF.
       // $derived does NOT re-evaluate after async boundaries in Svelte 5,
       // so we read $currentBuffer directly (reactive access works inside rAF).
@@ -392,7 +396,7 @@
       } else {
         // Unread messages present - scroll to readmarker.
         // Second rAF ensures layout is computed after Svelte's DOM insert.
-        requestAnimationFrame(() => {
+        scheduleViewFrame(() => {
           const rmRow = document.querySelector('.readmarker');
           if (!rmRow || !rmRow.parentElement) {
             readmarkerFailures++;
@@ -444,16 +448,37 @@
     });
   }
 
-  async function handleFetchMore() {
-    if (isLoadingMore || $currentBuffer?.allLinesFetched) return;
+  // Share the loading guard between scroll and button requests, scoped to this view.
+  async function loadMoreHistory(preserveScroll: boolean) {
+    const buffer = get(currentBuffer);
+    const container = containerRef;
+    if (isLoadingMore || !buffer || buffer.allLinesFetched || !container) return;
+    const generation = viewGeneration;
+    const maxScrollBeforeFetch = container.scrollHeight - container.clientHeight;
     isLoadingMore = true;
     try {
-      await fetchMoreLines();
+      await fetchMoreLines(0, buffer.id);
     } catch (err) {
       console.warn('[fetchMoreLines] fetch failed:', err);
     } finally {
-      isLoadingMore = false;
+      // An old request must not move the new view or unlock its pending request.
+      if (generation === viewGeneration && buffer.id === get(activeBufferId) && container === containerRef) {
+        if (preserveScroll) {
+          scheduleViewFrame(() => {
+            // Restore position after rendering history, before allowing auto-follow.
+            container.scrollTop = container.scrollHeight - container.clientHeight - maxScrollBeforeFetch;
+            isAtBottom = false;
+            isLoadingMore = false;
+          });
+        } else {
+          isLoadingMore = false;
+        }
+      }
     }
+  }
+
+  function handleFetchMore() {
+    void loadMoreHistory(false);
   }
 </script>
 
