@@ -406,8 +406,12 @@ test("should NOT auto-scroll when user scrolled up in active buffer and messages
     const scrollShift = Math.abs(
       scrollAfter!.scrollTop - scrollBefore!.scrollTop,
     );
-    // View should not have scrolled significantly — within 50px of original position
-    expect(scrollShift).toBeLessThan(50);
+    // View should not have scrolled significantly. A bounded tolerance is required once the
+    // buffer reaches its line cap: trimming front rows makes the browser re-anchor the
+    // scroll position by roughly one row height (~50px measured), without any app-initiated
+    // scroll. A real auto-scroll moves ~1700px to the bottom, so this still fails loudly if
+    // the reader gets dragged down while reading.
+    expect(scrollShift).toBeLessThan(80);
 
     // Readmarker should be visible since there are unread messages
     const readmarker = page.getByTestId("readmarker");
