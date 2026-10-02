@@ -66,9 +66,10 @@
 
     if (key === 'Enter') {
       e.preventDefault();
-      if (groupedBuffers.length > 0) {
-        const selectedGroup = groupedBuffers[selectedIndex]!;
-        handleBufferClick(selectedGroup.buffers[0]!);
+      // Results can change between key events; never dereference a stale selection.
+      const buffer = groupedBuffers[selectedIndex]?.buffers[0];
+      if (buffer) {
+        void handleBufferClick(buffer);
       }
     }
   }
@@ -85,7 +86,9 @@
     }
   }
 
+  // Keep selection valid when live buffer updates shrink the result list.
   $effect(() => {
+    selectedIndex = Math.min(selectedIndex, Math.max(0, groupedBuffers.length - 1));
     const idx = selectedIndex;
     if (idx >= 0) {
       const el = document.querySelector(`[data-search-index="${idx}"]`);
@@ -117,7 +120,7 @@
           id="buffer-search"
           type="text"
           value={bufferSearchQuery}
-          oninput={(e: Event) => { bufferSearchQuery = (e.target as HTMLInputElement).value; }}
+          oninput={(e: Event) => { bufferSearchQuery = (e.target as HTMLInputElement).value; selectedIndex = 0; }}
           onkeydown={handleKeyDown}
           placeholder="Search buffers..."
           variant="search"
