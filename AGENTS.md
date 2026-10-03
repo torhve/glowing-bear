@@ -20,7 +20,9 @@ npm run build                  # Production build (static output to build/)
 npm run check                  # svelte-check
 npm run lint                   # eslint src-svelte/src src-svelte/test src-svelte/e2e
 npm test                       # Vitest unit tests
-npm run test:e2e -- --grep "X" # Targeted E2E tests
+npm run test:e2e               # Full E2E: serial channel specs, then parallel UI-only specs
+npm run test:e2e:serial -- --grep "X" # Targeted E2E (channel-dependent specs)
+npm run test:e2e:ui -- --grep "X"     # Targeted E2E (UI-only specs)
 npm run irc:start / irc:stop   # Manual gbtest IRC server
 npm run tauri                 # Tauri CLI (uses @tauri-apps/cli)
 npm run tauri:dev             # Tauri desktop dev mode
@@ -119,6 +121,9 @@ Wrapped in Tauri 2.x for desktop distribution. Custom titlebar via `TauriTitleba
 **Unit tests (`src-svelte/test/unit/*.test.ts`)** — pure functions, stores, protocol, utilities. Mock stores via `vi.mock('$lib/stores/models')`, read with `get(store)`.
 
 **E2E tests (`src-svelte/e2e/specs/*.test.ts`)** — UI components, user flows. gbtest auto-started by Playwright's `globalSetup` (port check on relay 9001, IRC 6667, control 16667). Gbtest persists across runs, no teardown needed. Dev server auto-started by Playwright's `webServer` config.
+
+E2E runs in two passes: the `chromium` project (channel-state-dependent specs, `workers: 1`, serial against the shared gbtest `#glowing-bear` state) followed by the `chromium-ui` project (UI-only specs, `workers: 4`, `fullyParallel: true`). New specs land in the serial project by default; only add a file to `UI_ONLY_SPECS` in `playwright.config.ts` if it never sends channel messages and never asserts channel-derived content (message rows, nicks, unread badges).
+
 
 ### Writing E2E Tests
 
