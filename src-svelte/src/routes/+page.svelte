@@ -15,7 +15,7 @@
   import { get } from 'svelte/store';
   import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig, sortedVisibleBuffers, checkAndNavigatePendingNotificationBuffer } from '#lib/stores/models.ts';
   import { connectionState, setReconnectAttempts, setNextReconnectAt, setErrors } from '#lib/stores/connectionStore.ts';
-  import { connect, fetchConfValue, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer, getWs, initFocusReconnect, cleanupFocusReconnect } from '#lib/stores/connectionManager.ts';
+  import { connect, fetchConfValue, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer, getWs, initFocusReconnect, cleanupFocusReconnect, setHotlistPollInterval } from '#lib/stores/connectionManager.ts';
   import { Protocol } from '#lib/weechat.ts';
   import { initNotifications, updateTitle, updateFavico, onDisconnect } from '#lib/notifications.ts';
   import { parseRelayUrl, isPopoverOpen, bufferHasNicklist, modifyTextareaValue } from '#lib/utils.ts';
@@ -30,6 +30,7 @@
     (window as any).__sendWeechatCommand = sendWeeChatCommand;
     (window as any).__fetchConfValue = fetchConfValue;
     (window as any).__setGbSettings = updateSettings;
+    (window as any).__setHotlistPollInterval = setHotlistPollInterval;
     (window as any).__setReconnectAttempts = setReconnectAttempts;
     (window as any).__setNextReconnectAt = setNextReconnectAt;
     (window as any).__Protocol = Protocol;

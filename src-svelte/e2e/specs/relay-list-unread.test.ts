@@ -11,14 +11,17 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 test.describe('relay.list unread (issue #8)', () => {
     test.describe.configure({ mode: 'serial' });
-    test.setTimeout(180000);
+    test.setTimeout(60000);
 
     test('a connecting relay client does not mark relay.list unread', async ({ page }) => {
         setupEffectOrphanFilter(page);
         await page.goto('/');
         await waitForAppReady(page);
+        // Shorten the periodic hotlist sync poll so we don't sit through the
+        // production 15 s cycle to observe the poll's effect.
+        await page.evaluate(() => (window as any).__setHotlistPollInterval?.(1000));
         await connectToWeechat(page);
-        await wait(4000);
+        await wait(2000);
 
         const relayItem = page.getByTestId('buffer-item').filter({ hasText: 'relay.list' }).first();
         await expect(relayItem).toBeVisible();
@@ -29,15 +32,15 @@ test.describe('relay.list unread (issue #8)', () => {
         const stalled = net.connect(9001, '127.0.0.1');
         await new Promise<void>((resolve) => stalled.on('connect', () => resolve()));
 
-        // Wait for Glowing Bear's periodic hotlistsync poll (every 15 s). Switching
+        // Wait for Glowing Bear's periodic hotlistsync poll (1 s in this test). Switching
         // buffers would fetch lines, and any inbound request makes WeeChat clear the
         // transient entry again before the poll is answered — so stay idle here.
-        await wait(20000);
+        await wait(3000);
 
         await expect(relayItem.getByTestId('unread-badge')).toHaveCount(0);
 
         stalled.destroy();
-        await wait(3000);
+        await wait(2000);
         await expect(relayItem.getByTestId('unread-badge')).toHaveCount(0);
     });
 });

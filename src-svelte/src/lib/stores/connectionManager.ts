@@ -20,11 +20,18 @@ const webSockets = new Set<WebSocket>();
 
 let ws: WebSocket | null = null;
 let hotlistInterval: ReturnType<typeof setInterval> | null = null;
+let hotlistPollIntervalMs = 15000;
 let reconnectingTimer: ReturnType<typeof setTimeout> | null = null;
 let connectionData: [string, number, string, string, boolean, boolean] | null = null;
 let connecting = false;
 let manualReconnectRequested = false;
 let connectionGeneration = 0;
+
+/** Override the periodic hotlist sync interval (ms). Test hook so e2e tests
+ * do not have to sit through the full 15 s poll cycle; call before connect. */
+export function setHotlistPollInterval(ms: number) {
+    hotlistPollIntervalMs = ms;
+}
 
 // Comprehensive cleanup for any disconnection path.
 // Clears all app state (buffers, servers, unread tracking, timers, callbacks).
@@ -348,7 +355,7 @@ export async function connect(host: string, port: number, path: string, password
                         });
                         const hlResp = await sendAsync(hlMsg);
                         handleHotlistInfo(hlResp);
-                    }, 15000);
+                    }, hotlistPollIntervalMs);
                 }
 
                 // Reset reconnect attempt counter on successful connection

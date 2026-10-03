@@ -16,6 +16,7 @@ vi.mock('#lib/stores/connectionManager.ts', () => ({
     getWs: vi.fn(),
     initFocusReconnect: vi.fn(),
     cleanupFocusReconnect: vi.fn(),
+    setHotlistPollInterval: vi.fn(),
 }));
 
 vi.mock('#lib/notifications.ts', () => ({
