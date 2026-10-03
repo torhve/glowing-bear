@@ -2,6 +2,7 @@ import net from 'net';
 import { execFile } from 'child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'path';
+import fs from 'fs';
 import type { FullConfig } from '@playwright/test';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -39,31 +40,57 @@ async function verifyGbtest(): Promise<boolean> {
     return relay && irc && control;
 }
 
- 
+
+/** WeeChat home used by the gbtest environment. */
+const WEECHAT_HOME = '/tmp/gbtest-weechat';
+
+/** Best-effort prune of accumulated line history in the gbtest test channels.
+ * The persistent WeeChat instance retains up to 4096 lines per buffer and scroll
+ * tests render the whole buffer, so unpruned history makes every subsequent run
+ * slower. Writes /prune commands to WeeChat's fifo; no-ops if it is unavailable.
+ */
+function pruneTestChannelHistory(): void {
+    let fifo: string | null = null;
+    try {
+        const name = fs.readdirSync(WEECHAT_HOME).find((n) => n.startsWith('weechat_fifo_'));
+        if (name) fifo = path.join(WEECHAT_HOME, name);
+    } catch {
+        return; // WEECHAT_HOME not readable — nothing to prune
+    }
+    if (!fifo) return;
+    try {
+        fs.writeFileSync(fifo, 'prune irc.gbtest.#glowing-bear\nprune irc.gbtest.#other-channel\n');
+    } catch {
+        // non-fatal: tests run fine without pruning, just slower
+    }
+}
+
 export default async function globalSetup(_config: FullConfig) {
     // Check if gbtest environment is already running
     if (await verifyGbtest()) {
         console.log('[global-setup] gbtest environment already running — skipping start');
-        return;
+    } else {
+        console.log('[global-setup] gbtest environment not detected, starting...');
+        const startScript = path.join(__dirname, '..', '..', 'test', 'fixtures', 'gbtest', 'start.sh');
+
+        await new Promise<void>((resolve, reject) => {
+            execFile('bash', [startScript], { timeout: 120000 }, (error) => {
+                if (error) {
+                    reject(new Error(`gbtest start failed: ${error.message}`));
+                } else {
+                    resolve();
+                }
+            });
+        });
+
+        // Verify all ports came up after start script completed
+        await waitForPort(IRC_PORT, 'IRC server');
+        await waitForPort(CONTROL_PORT, 'Control API');
+        await waitForPort(RELAY_PORT, 'WeeChat relay');
     }
 
-    console.log('[global-setup] gbtest environment not detected, starting...');
-    const startScript = path.join(__dirname, '..', '..', 'test', 'fixtures', 'gbtest', 'start.sh');
-
-    await new Promise<void>((resolve, reject) => {
-        execFile('bash', [startScript], { timeout: 120000 }, (error) => {
-            if (error) {
-                reject(new Error(`gbtest start failed: ${error.message}`));
-            } else {
-                resolve();
-            }
-        });
-    });
-
-    // Verify all ports came up after start script completed
-    await waitForPort(IRC_PORT, 'IRC server');
-    await waitForPort(CONTROL_PORT, 'Control API');
-    await waitForPort(RELAY_PORT, 'WeeChat relay');
+    // Start every run from a small, deterministic channel history
+    pruneTestChannelHistory();
 
     console.log('[global-setup] gbtest environment ready');
 }
