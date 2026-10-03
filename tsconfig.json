@@ -1,17 +1,17 @@
 {
-  "extends": "./src-svelte/.svelte-kit/tsconfig.json",
+  "extends": "$app/tsconfig",
   "compilerOptions": {
     "incremental": true,
     "target": "es2022",
     "module": "es2022",
-    "moduleResolution": "bundler",
     "strict": true,
-    "skipLibCheck": true,
-    "verbatimModuleSyntax": true,
     "disableSizeLimit": true,
-    "forceConsistentCasingInFileNames": true,
     "noUncheckedIndexedAccess": true,
-    "types": ["vite/client", "node"]
+    "types": [
+      "vite/client",
+      "node",
+      "$app/types"
+    ]
   },
   "include": [
     "src-svelte/src/**/*.d.ts",
@@ -19,5 +19,11 @@
     "src-svelte/src/**/*.ts",
     "src-svelte/src/**/*.svelte",
     "vite.config.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "build",
+    "src-svelte/.svelte-kit",
+    "src-svelte/src/service-worker"
   ]
 }

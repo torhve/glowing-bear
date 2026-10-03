@@ -34,9 +34,7 @@ const config = {
         // Tauri plugins — not imported in source yet
         '@tauri-apps/plugin-autostart',
         '@tauri-apps/plugin-window-state',
-        // Peer deps of other packages (knip doesn't trace meta-package re-exports)
-        '@typescript-eslint/eslint-plugin',
-        '@typescript-eslint/parser',
+        // Transitive parser used by eslint-plugin-svelte
         'svelte-eslint-parser',
         'tailwindcss',
     ],

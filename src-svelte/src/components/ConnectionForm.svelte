@@ -8,7 +8,7 @@
   import { isWindowsTauri } from '$lib/tauriWindow';
 
   import { parseRelayUrl, makeKeyboardActivatable } from '$lib/utils';
-  import { base } from '$app/paths';
+  import { asset } from '$app/paths';
   import Zap from '@lucide/svelte/icons/zap';
   import Settings2 from '@lucide/svelte/icons/settings-2';
   import Rocket from '@lucide/svelte/icons/rocket';
@@ -189,8 +189,9 @@
   <div class="connection-content flex-1 flex items-start justify-center px-4 pt-6">
     <div class="connection-card w-full max-w-lg space-y-6">
       <div class="connection-branding text-center mb-6">
-        <img src={`${base}/glowing-bear.svg`} alt="logo" class="connection-logo w-20 h-20 mx-auto mb-2" />
+        <img src={asset('glowing-bear.svg')} alt="logo" class="connection-logo w-20 h-20 mx-auto mb-2" />
         <h1 class="connection-title text-3xl font-bold text-text">Glowing Bear</h1>
+
         <p class="connection-subtitle text-sm text-text-secondary mt-1">WeeChat web frontend</p>
       </div>
 
@@ -359,14 +360,20 @@
       </form>
 
       <div class="info-accordion-container space-y-2">
-        <details open class="info-accordion bg-panel rounded border border-border" data-info-section="about">
-          <summary class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white transition-colors">
-            <img src={`${base}/glowing-bear.svg`} class="w-4 h-4" alt="" />About
+        <details
+          open
+          class="info-accordion bg-panel rounded border border-border"
+          data-info-section="about"
+        >
+          <summary
+            class="info-accordion-summary px-4 py-2 text-sm font-medium text-text hover:text-white transition-colors"
+          >
+            <img src={asset('glowing-bear.svg')} class="w-4 h-4" alt="" />About
           </summary>
           <div class="info-accordion-content px-4 pb-3 text-sm text-text-secondary space-y-2">
             <p>Glowing Bear is a free, open-source web frontend for WeeChat — no backend required.</p>
             <p>This is a complete rewrite from the original AngularJS codebase into Svelte 5 + TypeScript. The old version was hard to maintain and had next to no tests. Everything still runs entirely as static files in your browser, connecting directly to your WeeChat instance via WebSocket relay — zero intermediary server.</p>
-            <p>Stack: SvelteKit 2, Svelte 5 runes, TypeScript, Tailwind CSS v4, Vite 6, Vitest, Playwright E2E testing, fflate</p>
+            <p>Stack: SvelteKit 3, Svelte 5 runes, TypeScript, Tailwind CSS v4, Vite 8, Vitest, Playwright E2E testing, fflate</p>
           </div>
         </details>
         <details class="info-accordion bg-panel rounded border border-border" data-info-section="connection">
@@ -414,7 +421,7 @@
               </table>
             </div>
             <div>
-              <p class="font-medium text-text mb-1">Panels &amp; Search</p>
+              <p class="font-medium text-text mb-1">Panels & Search</p>
               <table class="w-full text-xs">
                 <tbody>
                   <tr><td class="py-0.5 pr-3 whitespace-nowrap"><KbdGroup><Kbd>Alt</Kbd><Sep /><Kbd>n</Kbd></KbdGroup></td><td class="py-0.5">Toggle nicklist</td></tr>

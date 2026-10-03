@@ -1,10 +1,10 @@
 # Glowing Bear Svelte — Agent Guide
 
-Browser frontend for WeeChat IRC via WebSockets — **no backend**. Client-side SvelteKit 2.x + Svelte 5 + TypeScript (strict) + Tailwind CSS v4. Wrapped in Tauri 2.x for desktop. Includes basic PWA via SvelteKit's native `$service-worker` (fetch-through, no caching). Requires WeeChat >= 3.x. The buffer hdata `id` (LONGLONG) exists only in WeeChat 4.3+ and is treated as optional.
+Browser frontend for WeeChat IRC via WebSockets — **no backend**. Client-side SvelteKit 3.x + Svelte 5 + TypeScript (strict) + Tailwind CSS v4. Wrapped in Tauri 2.x for desktop. Includes basic PWA via SvelteKit's service worker at `src-svelte/src/service-worker/index.ts` (fetch-through, no caching). Requires WeeChat >= 3.x. The buffer hdata `id` (LONGLONG) exists only in WeeChat 4.3+ and is treated as optional.
 
 ## Project Structure
 
-Source code in `src-svelte/src/` has `components/`, `lib/`, `routes/`. Config files (`package.json`, `svelte.config.js`, `vite.config.ts`, `vitest.config.ts`, `eslint.config.js`, `tsconfig.json`) live at repo root. Static assets in `static/`. Test suites in `src-svelte/test/unit/` and `src-svelte/e2e/specs/`. Gbtest environment in `test/fixtures/gbtest/`.
+Source code in `src-svelte/src/` has `components/`, `lib/`, `routes/`, and `service-worker/` (own `tsconfig.json` extending `$app/tsconfig/service-worker`, excluded from the root tsconfig). SvelteKit 3 has no `svelte.config.js` — all Kit config lives in the `sveltekit({...})` plugin options in `vite.config.ts`. Other root config files: `package.json`, `vitest.config.ts`, `eslint.config.js`, `tsconfig.json`, `tsconfig.app.json`. Static assets in `static/`. Test suites in `src-svelte/test/unit/` and `src-svelte/e2e/specs/`. Gbtest environment in `test/fixtures/gbtest/`.
 
 - **`lib/stores/`** — Reactive state (buffers, connection, settings, theme, handlers)
 - **`lib/`** — Core utilities (types, linkTokens, weechat protocol, notifications, etc.)

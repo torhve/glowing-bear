@@ -25,7 +25,7 @@ This produces a `build/` directory containing all the files you need. Point your
 
 ### Progressive Web App
 
-Glowing Bear includes a basic service worker (via SvelteKit's `$service-worker`). On supported browsers and devices, you can install it as an app:
+Glowing Bear includes a basic service worker (via SvelteKit's `src-svelte/src/service-worker/`). On supported browsers and devices, you can install it as an app:
 
 - **Desktop Chrome/Firefox/Edge** — "Install" option in the address bar or app menu
 - **Android Chrome** — "Add to homescreen" for a full-screen experience
@@ -61,7 +61,7 @@ Then enter your WeeChat host, port, and password in Glowing Bear's connection fo
 
 ### Tech Stack
 
-- [SvelteKit 2.x](https://svelte.dev/docs/kit) + [Svelte 5](https://svelte.dev) (runes)
+- [SvelteKit 3.x](https://svelte.dev/docs/kit) + [Svelte 5](https://svelte.dev) (runes)
 - [TypeScript](https://www.typescriptlang.org/) (strict mode)
 - [Tailwind CSS v4](https://tailwindcss.com/)
 - [Tauri 2.x](https://tauri.app) (desktop apps)

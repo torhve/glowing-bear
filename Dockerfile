@@ -13,7 +13,7 @@ WORKDIR /app
 COPY package*.json .
 RUN npm ci
 
-# Copy remaining root files (vite.config.ts, svelte.config.js, tsconfigs, src-svelte/, static/ etc.) — .dockerignore excludes node_modules, .git, build/
+# Copy remaining root files (vite.config.ts, tsconfigs, src-svelte/, static/ etc.) — .dockerignore excludes node_modules, .git, build/
 COPY . .
 
 # Build: uses build:docker to skip prebuild (icon generation requires ImageMagick + macOS nicutil)

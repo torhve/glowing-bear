@@ -3,7 +3,7 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 import path from 'path';
 
 // Vitest uses svelte() plugin directly (not sveltekit()), so it doesn't
-// inherit aliases from svelte.config.js — must define them here.
+// inherit the $lib/$components aliases declared in vite.config.ts — define them here.
 export default defineConfig({
   plugins: [svelte()],
   resolve: {

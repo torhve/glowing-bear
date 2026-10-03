@@ -1,3 +1,5 @@
+import adapter from '@sveltejs/adapter-static';
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import { execSync } from 'node:child_process';
 import { sveltekit } from '@sveltejs/kit/vite';
 
@@ -20,21 +22,38 @@ const gitCommit =
         }
     })();
 
-// Aliases are managed in svelte.config.js kit.alias (propagated to Vite by SvelteKit).
+// $lib/$components are still declared via the SvelteKit `alias` option (deprecated in
+// Kit 3 in favour of `#lib` subpath imports; see package.json "imports".
 export default defineConfig({
-    define: {
-        __GIT_COMMIT__: JSON.stringify(gitCommit),
-    },
-    plugins: [sveltekit(), tailwindcss({ optimize: false })],
-    optimizeDeps: {
-        exclude: ['@lucide/svelte'],
-    },
-    ssr: {
-        noExternal: ['@lucide/svelte'],
-    },
-    build: {
-        target: 'es2022',
-    },
+    define: { __GIT_COMMIT__: JSON.stringify(gitCommit) },
+    plugins: [
+        sveltekit({
+            preprocess: vitePreprocess(),
+            paths: { base: process.env.BASE_PATH ?? '' },
+            adapter: adapter({
+                pages: 'build',
+                assets: 'build',
+                fallback: '404.html',
+                precompress: false,
+                strict: false
+            }),
+            outDir: 'src-svelte/.svelte-kit',
+            files: {
+                appTemplate: 'src-svelte/src/app.html',
+                routes: 'src-svelte/src/routes',
+                serviceWorker: 'src-svelte/src/service-worker/index.ts',
+                hooks: { server: 'src-svelte/src/hooks.server.ts' }
+            },
+            alias: {
+                '$lib': 'src-svelte/src/lib',
+                '$components': 'src-svelte/src/components'
+            }
+        }),
+        tailwindcss({ optimize: false })
+    ],
+    optimizeDeps: { exclude: ['@lucide/svelte'] },
+    ssr: { noExternal: ['@lucide/svelte'] },
+    build: { target: 'es2022' },
     server: {
         port: 8001,
         forwardConsole: true,
