@@ -17,6 +17,10 @@ export default defineConfig({
     globals: true,
     include: ['src-svelte/test/unit/**/*.test.ts'],
     environment: 'jsdom',
+    // Vitest built a fresh jsdom for each of the 49 test files — 21s of a 5.3s run.
+    // vmThreads reuses one jsdom per worker while still isolating each file's module
+    // graph; `isolate: false` is faster again but leaks vi.mock() between files.
+    pool: 'vmThreads',
     css: true,
   },
 });
