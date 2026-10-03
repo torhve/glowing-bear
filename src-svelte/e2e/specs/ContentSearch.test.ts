@@ -180,7 +180,6 @@ test('search results appear in grep buffer', async () => {
 
     // Wait for grep buffer to appear and switch to it
     await waitForGrepBuffer(page, 15000);
-    await page.waitForTimeout(2000);
 
     // Switch back to #glowing-bear first to see messages there
     await switchToBuffer(page, '#glowing-bear');
@@ -192,7 +191,6 @@ test('search results appear in grep buffer', async () => {
 
     // Wait for grep buffer to appear
     await waitForGrepBuffer(page, 15000);
-    await page.waitForTimeout(2000);
 
     // The grep buffer should contain the message
     const grepResult = page

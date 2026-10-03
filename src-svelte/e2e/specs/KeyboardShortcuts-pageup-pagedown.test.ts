@@ -40,29 +40,46 @@ async function waitForScrollStable(
     await page.waitForTimeout(300);
 }
 
-
-// Poll until chat is scrolled to bottom, respecting a proper timeout.
-// Playwright's actionTimeout overrides waitForFunction's inline timeout,
-// so we implement our own retry loop here.
+// Poll until the chat is scrolled to bottom. Scrolls down first, then waits
+// for the app's auto-scroll effects (double-rAF) to settle at the bottom —
+// event-driven, so a small buffer resolves immediately instead of paying a
+// fixed 2.5 s sleep. Respects Playwright's actionTimeout by implementing our
+// own retry loop, since it overrides waitForFunction's inline timeout.
 async function waitForAtBottom(
     page: import("@playwright/test").Page,
     timeout = 60000,
 ) {
     // Scroll to bottom directly — more reliable than waiting for auto-scroll,
-    // which has complex readmarker logic that can prevent reaching bottom on large buffers.
+    // which has complex readmarker logic that can prevent reaching bottom on
+    // large buffers.
     await page.evaluate(() => {
         const c = document.querySelector('[data-testid="chat-messages"]') as HTMLElement;
         if (c) c.scrollTop = c.scrollHeight;
     });
-    // Settle delay for ChatView's double-rAF auto-scroll effects.
-    // On large buffers, rendering takes time. Wait 2s then re-scroll to bottom
-    // to ensure we're truly at bottom after all effects settle.
-    await page.waitForTimeout(2000);
-    // Re-scroll to bottom after effects settle
-    await page.evaluate(() => {
-        const c = document.querySelector('[data-testid="chat-messages"]') as HTMLElement;
-        if (c) c.scrollTop = c.scrollHeight;
-    });
+    const deadline = Date.now() + timeout;
+    let atBottom = false;
+    while (Date.now() < deadline) {
+        atBottom = await page.evaluate(() => {
+            const c = document.querySelector('[data-testid="chat-messages"]') as HTMLElement;
+            if (!c) return false;
+            return c.scrollTop >= c.scrollHeight - c.clientHeight - 200;
+        });
+        if (atBottom) break;
+        await page.waitForTimeout(100);
+    }
+    if (!atBottom) {
+        // Fall back to a hard re-scroll after effects settle so the
+        // at-bottom precondition still holds.
+        await page.waitForTimeout(500);
+        await page.evaluate(() => {
+            const c = document.querySelector('[data-testid="chat-messages"]') as HTMLElement;
+            if (c) c.scrollTop = c.scrollHeight;
+        });
+        await page.waitForTimeout(300);
+        return;
+    }
+    // Let the follow pin loop (400 ms cap) and settle window expire so a later
+    // deliberate scroll-up is not overwritten by an in-flight pin.
     await page.waitForTimeout(500);
 }
 
@@ -71,28 +88,40 @@ let page: import("@playwright/test").Page;
 test.describe.configure({ mode: "serial" });
 
 test.describe("PageUp/PageDown Global Scroll", () => {
-    test.beforeEach(async ({ browser }) => {
-        if (page) await page.close().catch(() => {});
+    // One shared connection for the whole file — all tests assert relative
+    // scroll positions, so there is no need to pay for a fresh page + WeeChat
+    // connect per test.
+    test.beforeAll(async ({ browser }) => {
         page = await createConnectedPage(browser);
         await waitForBuffer(page, "#glowing-bear", 15000);
         await switchToBuffer(page, "#glowing-bear");
-        // Absorb any existing unread from cross-test pollution by sending a message.
-        // This advances lastSeen past all existing content, clearing the readmarker.
-        await page.waitForTimeout(500);
+        // Absorb any existing unread by sending a message: this advances
+        // lastSeen past all existing content, clearing the readmarker for the
+        // whole file.
         await irc.sendMessage("#glowing-bear", `KB-RESET-${Date.now()}`);
-        // Wait for auto-scroll to bottom after our reset message.
-        // With accumulated content from many prior serial tests, rendering can take
-        // a long time. Use generous timeout and tolerance.
         await waitForAtBottom(page, 60000);
     });
 
+    test.afterAll(async () => {
+        if (page) await page.close().catch(() => {});
+    });
+
+    // Wait for the last of a flood of messages to render in the DOM.
+    async function waitForLastMessage(text: string) {
+        await expect(
+            page.locator('[data-testid="bufferline-row"]').filter({ hasText: text }).first(),
+        ).toBeVisible({ timeout: 15000 });
+    }
+
     test("PageUp should scroll chat up when focus is outside input", async () => {
         // Send enough messages to have content to scroll
+        let last = "";
         for (let i = 0; i < 20; i++) {
-            await irc.sendMessage("#glowing-bear", `pageup-test-${Date.now()}-${i}`);
+            last = `pageup-test-${Date.now()}-${i}`;
+            await irc.sendMessage("#glowing-bear", last);
         }
-        // Wait for auto-scroll to settle at bottom after messages arrive.
-        // With accumulated content from prior serial tests, use generous tolerance.
+        // Wait for the last message to render, then for auto-scroll to settle at bottom
+        await waitForLastMessage(last);
         await waitForAtBottom(page, 60000);
 
         const stateBefore = await getChatScrollState(page);
@@ -113,13 +142,13 @@ test.describe("PageUp/PageDown Global Scroll", () => {
 
     test("PageDown should scroll chat down when focus is outside input", async () => {
         // Send enough messages to have content
-        for (let i = 0; i < 30; i++) {
-            await irc.sendMessage(
-                "#glowing-bear",
-                `pagedown-test-${Date.now()}-${i}`,
-            );
+        let last = "";
+        for (let i = 0; i < 60; i++) {
+            last = `pagedown-test-${Date.now()}-${i}`;
+            await irc.sendMessage("#glowing-bear", last);
         }
-        await page.waitForTimeout(2000);
+        // Wait for the last message to render
+        await waitForLastMessage(last);
 
         // First scroll all the way to top
         const chatContainer = page.locator('[data-testid="chat-messages"]');
@@ -143,13 +172,13 @@ test.describe("PageUp/PageDown Global Scroll", () => {
     });
 
     test("PageUp should still work when focus is in message input", async () => {
+        let last = "";
         for (let i = 0; i < 20; i++) {
-            await irc.sendMessage(
-                "#glowing-bear",
-                `input-pgup-test-${Date.now()}-${i}`,
-            );
+            last = `input-pgup-test-${Date.now()}-${i}`;
+            await irc.sendMessage("#glowing-bear", last);
         }
-        await page.waitForTimeout(2000);
+        // Wait for the last message to render
+        await waitForLastMessage(last);
 
         // Scroll to top first
         const chatContainer = page.locator('[data-testid="chat-messages"]');
@@ -173,15 +202,14 @@ test.describe("PageUp/PageDown Global Scroll", () => {
     });
 
     test("PageUp should work when focus is on nicklist", async () => {
+        let last = "";
         for (let i = 0; i < 15; i++) {
-            await irc.sendMessage(
-                "#glowing-bear",
-                `nicklist-pgup-test-${Date.now()}-${i}`,
-            );
+            last = `nicklist-pgup-test-${Date.now()}-${i}`;
+            await irc.sendMessage("#glowing-bear", last);
         }
-        // Wait for auto-scroll to settle at bottom after messages arrive
+        // Wait for the last message to render, then for auto-scroll to settle at bottom
+        await waitForLastMessage(last);
         await waitForAtBottom(page, 30000);
-      
 
         const stateBefore = await getChatScrollState(page);
         expect(stateBefore).not.toBeNull();
@@ -198,13 +226,13 @@ test.describe("PageUp/PageDown Global Scroll", () => {
     });
 
     test("PageUp should not scroll when focus is in a native INPUT element", async () => {
+        let last = "";
         for (let i = 0; i < 15; i++) {
-            await irc.sendMessage(
-                "#glowing-bear",
-                `input-skip-test-${Date.now()}-${i}`,
-            );
+            last = `input-skip-test-${Date.now()}-${i}`;
+            await irc.sendMessage("#glowing-bear", last);
         }
-        await page.waitForTimeout(2000);
+        // Wait for the last message to render
+        await waitForLastMessage(last);
 
         const stateBefore = await getChatScrollState(page);
         expect(stateBefore).not.toBeNull();
@@ -235,13 +263,13 @@ test.describe("PageUp/PageDown Global Scroll", () => {
     });
 
     test("PageUp with Ctrl modifier should not scroll via global handler", async () => {
+        let last = "";
         for (let i = 0; i < 15; i++) {
-            await irc.sendMessage(
-                "#glowing-bear",
-                `modifier-test-${Date.now()}-${i}`,
-            );
+            last = `modifier-test-${Date.now()}-${i}`;
+            await irc.sendMessage("#glowing-bear", last);
         }
-        await page.waitForTimeout(2000);
+        // Wait for the last message to render
+        await waitForLastMessage(last);
 
         const stateBefore = await getChatScrollState(page);
         expect(stateBefore).not.toBeNull();

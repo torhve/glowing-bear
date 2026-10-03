@@ -19,8 +19,8 @@ test.beforeEach(async () => {
     // Reset buffer state to absorb all unread messages from prior serial tests.
     // Sending a message triggers the handler to update lastSeen to cover all lines,
     // effectively clearing the readmarker and providing a clean baseline for each test.
+    const resetText = `BEFORE-EACH-RESET-${Date.now()}`;
     await switchToBuffer(page, "#glowing-bear");
-    await page.waitForTimeout(500);
 
     // Scroll to bottom so handler absorbs any existing unread
     const chatContainer = page.locator('[data-testid="chat-messages"]');
@@ -30,8 +30,11 @@ test.beforeEach(async () => {
     await waitForScrollSettled(3000);
 
     // Send a dummy message to advance lastSeen past all existing content
-    await irc.sendMessage("#glowing-bear", `BEFORE-EACH-RESET-${Date.now()}`);
-    await page.waitForTimeout(2000);
+    await irc.sendMessage("#glowing-bear", resetText);
+    // Wait for the reset message to render (event-driven — no fixed 2 s sleep)
+    await expect(
+        page.locator('[data-testid="bufferline-row"]').filter({ hasText: resetText }).first(),
+    ).toBeVisible({ timeout: 15000 });
     // Force scroll to bottom as a fallback in case the auto-scroll effect doesn't fire
     await chatContainer.evaluate((el) => {
         (el as HTMLElement).scrollTop = (el as HTMLElement).scrollHeight;
@@ -196,7 +199,7 @@ test("should not auto-scroll when switched away and messages arrive", async () =
     await irc.sendMessage("#glowing-bear", "inactive test message 2");
 
     // Wait for messages to arrive and be processed
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(500);
 
     // Switch back — should show readmarker since there are unread messages
     await switchToBuffer(page, "#glowing-bear");
@@ -225,8 +228,9 @@ test("should position readmarker at ~45% when unread count is large", async () =
         await irc.sendMessage("#glowing-bear", `large unread test ${i}`);
     }
 
-    // Wait a moment for all messages to arrive
-    await page.waitForTimeout(2000);
+    // The flood is sent to #glowing-bear while we're on gbtest, so there is no row to
+    // wait for; a short grace period covers relay round-trip time.
+    await page.waitForTimeout(500);
 
     // Switch back — should scroll to readmarker at ~45%, not bottom
     await switchToBuffer(page, "#glowing-bear");
@@ -342,10 +346,13 @@ test("should NOT auto-scroll when user scrolled up in active buffer and messages
         },
         { timeout: 15000 },
     );
-    await page.waitForTimeout(500);
     await waitForScrollSettled(8000);
 
     // Verify the chat container is actually scrollable before proceeding.
+    // Also lets ChatView's follow-settle window (250 ms sticky at-bottom state
+    // after the flood's auto-follow) expire, so the park below is registered as a
+    // deliberate scroll-away.
+    await page.waitForTimeout(300);
     const state = await getChatScrollState();
     if (!state || state.scrollHeight - state.clientHeight < 100) {
         // Not enough content to scroll — skip rather than fail
@@ -384,8 +391,10 @@ test("should NOT auto-scroll when user scrolled up in active buffer and messages
     await irc.sendMessage("#glowing-bear", msg1);
     await irc.sendMessage("#glowing-bear", msg2);
 
-    // Wait for messages to render
-    await page.waitForTimeout(2000);
+    // Wait for the messages to render in the DOM
+    await expect(
+        page.locator('[data-testid="bufferline-row"]').filter({ hasText: msg2 }).first(),
+    ).toBeVisible({ timeout: 15000 });
 
     // Allow time for any scroll effects to settle
     await waitForScrollStable();
@@ -458,7 +467,6 @@ test("should NOT auto-scroll when scrolled up slightly and messages arrive on ac
         },
         { timeout: 15000 },
     );
-    await page.waitForTimeout(500);
     // Wait for all messages to render and scroll to stabilize at bottom.
     // After sending 30 rapid messages, the container needs extra time to
     // finish rendering and scroll-into-view in the full suite where state
@@ -471,6 +479,11 @@ test("should NOT auto-scroll when scrolled up slightly and messages arrive on ac
         test.skip();
         return;
     }
+
+    // Let ChatView's follow pin loop (400 ms cap) and settle window expire after
+    // the flood so the park below registers as a deliberate scroll-away instead
+    // of being overwritten by an in-flight pin.
+    await page.waitForTimeout(500);
 
     // Scroll up just enough to hide the readmarker (~2 lines worth, ~40px).
     // This simulates: user was at bottom, scrolled down to read recent messages,
@@ -503,8 +516,10 @@ test("should NOT auto-scroll when scrolled up slightly and messages arrive on ac
     const msg1 = "scrolled-slightly-test-1-" + Date.now();
     await irc.sendMessage("#glowing-bear", msg1);
 
-    // Wait for messages to render
-    await page.waitForTimeout(2000);
+    // Wait for the message to render in the DOM
+    await expect(
+        page.locator('[data-testid="bufferline-row"]').filter({ hasText: msg1 }).first(),
+    ).toBeVisible({ timeout: 15000 });
     await waitForScrollStable();
 
     // Verify scroll position stayed roughly the same.

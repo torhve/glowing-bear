@@ -53,8 +53,13 @@ test.beforeEach(async () => {
     await waitForScrollSettled(120000);
 
     // Send a dummy message to advance lastSeen past all existing content.
-    await irc.sendMessage('#glowing-bear', `BEFORE-EACH-RESET-${Date.now()}`);
-    await page.waitForTimeout(2000);
+    const resetMsg = `BEFORE-EACH-RESET-${Date.now()}`;
+    await irc.sendMessage('#glowing-bear', resetMsg);
+    await page.waitForFunction(
+        (text) => Array.from(document.querySelectorAll('[data-testid="bufferline-row"]')).some((r) => r.textContent?.includes(text)),
+        resetMsg,
+        { timeout: 15000 },
+    );
     await waitForScrollSettled(120000);
 });
 
@@ -71,20 +76,23 @@ async function waitForReadmarkerPositioned(timeoutMs = 10000) {
 test('should scroll to bottom when posting own message while readmarker is present', async () => {
     // Create unread messages by switching away and having bot send messages.
     await switchToBuffer(page, 'gbtest');
-    await page.waitForTimeout(500);
 
     const botMsg1 = `bot-unread-1-${Date.now()}`;
     const botMsg2 = `bot-unread-2-${Date.now()}`;
     await irc.sendMessage('#glowing-bear', botMsg1);
     await irc.sendMessage('#glowing-bear', botMsg2);
-    await page.waitForTimeout(1000);
+    // Wait until both messages registered as unread on the inactive buffer —
+    // arriving before we switch back is what keeps the readmarker deterministic.
+    await expect(
+        page.getByTestId('buffer-item').filter({ hasText: 'glowing-bear' }).getByTestId('unread-badge'),
+    ).toBeVisible({ timeout: 10000 });
 
     // Switch back to #glowing-bear — readmarker should appear.
     await switchToBuffer(page, '#glowing-bear');
 
     // Wait for readmarker to render AND be positioned in the viewport.
     await waitForReadmarkerPositioned(10000);
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(500);
 
     // Now send a message via the input bar — this is the self-posted message.
     const userMsg = `own-msg-${Date.now()}`;
@@ -103,8 +111,8 @@ test('should scroll to bottom when posting own message while readmarker is prese
         { timeout: 10000 },
     );
 
-    // Allow time for scroll effects to settle (multiple rAF cycles may fire).
-    await page.waitForTimeout(3000);
+    // Wait for the scroll-to-bottom follow to settle (polls diff-from-bottom).
+    await waitForScrollSettled(8000);
 
     // Verify view scrolled to bottom — user's own message should be visible near bottom.
     const msgVisibility = await page.evaluate((text) => {

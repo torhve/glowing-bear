@@ -89,8 +89,13 @@ test.beforeEach(async () => {
     await waitForScrollSettled(3000);
 
     // Send a dummy message to advance lastSeen past all existing content
-    await irc.sendMessage("#glowing-bear", `BEFORE-EACH-RESET-${Date.now()}`);
-    await page.waitForTimeout(2000);
+    const resetMsg = `BEFORE-EACH-RESET-${Date.now()}`;
+    await irc.sendMessage("#glowing-bear", resetMsg);
+    await page.waitForFunction(
+        (text) => Array.from(document.querySelectorAll('[data-testid="bufferline-row"]')).some((r) => r.textContent?.includes(text)),
+        resetMsg,
+        { timeout: 15000 },
+    );
     await chatContainer.evaluate((el) => {
         (el as HTMLElement).scrollTop = (el as HTMLElement).scrollHeight;
     });
@@ -234,7 +239,11 @@ test("long wrapping message should NOT auto-scroll when user scrolled up", async
     await irc.sendMessage("#glowing-bear", fullMessage);
 
     // Wait for the message to render
-    await page.waitForTimeout(2000);
+    await page.waitForFunction(
+        (text) => Array.from(document.querySelectorAll('[data-testid="bufferline-row"]')).some((r) => r.textContent?.includes(text)),
+        msgText,
+        { timeout: 15000 },
+    );
     await waitForScrollStable();
 
     // Verify scroll position stayed roughly the same (within 50px)

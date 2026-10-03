@@ -97,7 +97,9 @@ async function padUntilCapped(maxMessages = 600) {
         }
         prevRows = rows;
         await irc.sendMessage("#glowing-bear", `cap-pad-${Date.now()}-${i}`);
-        await page.waitForTimeout(40);
+        // Short pacing so the relay round-trip lands before the next row count check;
+        // the loop itself is event-driven via the row-count stability detection.
+        await page.waitForTimeout(10);
     }
     return prevRows;
 }
@@ -118,8 +120,11 @@ async function waitForRow(text: string) {
 async function setupCappedAtBottom() {
     await switchToBuffer(page, "#glowing-bear");
     const rows = await padUntilCapped();
-    await page.waitForTimeout(400);
     await scrollContainerToBottom();
+    // Let the follow pin loop (400 ms cap) and settle window expire before any
+    // test scrolls away; an in-flight pin would re-anchor the view to the bottom
+    // and defeat the park.
+    await page.waitForTimeout(500);
     const at = await scrollState();
     // Precondition: the buffer really is capped and really is scrollable.
     expect(rows).toBeGreaterThan(50);

@@ -19,8 +19,10 @@ test.afterAll(async () => {
 
 test.beforeEach(async () => {
     // Restore bot nick to default so botPm targets the gbbot2 buffer.
+    // The nick change is not observable over the relay, so keep only a short
+    // grace period; PM tests wait for their buffer via waitForBuffer.
     await irc.botNick('gbbot2');
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(300);
     await waitForBuffer(page, '#glowing-bear', 15000);
     await switchToBuffer(page, '#glowing-bear');
 });
@@ -76,7 +78,6 @@ test.describe('bubble chats', () => {
         await enableBubbleMode();
         // Proactively trigger a PM to ensure the private buffer exists.
         await botPm('bubble-layout-trigger');
-        await page.waitForTimeout(1000);
         // Wait for the PM buffer to appear before switching.
         await waitForBuffer(page, 'gbbot2', 30000);
         await switchToBuffer(page, 'gbbot2', { timeout: 30000 });

@@ -32,8 +32,8 @@ test('channel name does not wrap with very long topic', async () => {
     const longTopic = 'This is a very long channel topic that contains a lot of text which should cause the topic text area to truncate rather than pushing the channel name into wrapping onto two lines. It goes on and on and on describing things in great detail just to test the layout behavior when topics exceed the available horizontal space in the topic bar.';
     await irc.setTopic('#glowing-bear', longTopic);
 
-    // Wait for topic to propagate
-    await page.waitForTimeout(1000);
+    // Wait for the long topic to propagate into the topic bar
+    await expect(page.locator('.topic-text').first()).toContainText('very long channel topic', { timeout: 10000 });
 
     // The topic bar opener button has fixed height h-8 (32px) via parent container.
     // If channel name wraps to two lines, it would still fit within the button
@@ -58,7 +58,7 @@ test('topic text truncates with ellipsis for very long topic', async () => {
 
     const longTopic = 'A'.repeat(500);
     await irc.setTopic('#glowing-bear', longTopic);
-    await page.waitForTimeout(1000);
+    await expect(page.locator('.topic-text').first()).toContainText('AAAA', { timeout: 10000 });
 
     const topicTextEl = page.locator('.topic-text').first();
 

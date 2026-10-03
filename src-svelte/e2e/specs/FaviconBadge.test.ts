@@ -74,11 +74,11 @@ test("favicon badge resets when switching to buffer with unread", async () => {
 
     // Switch back to #glowing-bear — this should clear unread and reset favicon
     await switchToBuffer(page, "#glowing-bear");
-    await page.waitForTimeout(1000);
-
-    // Favicon should be the default (no badge)
-    const faviconHref = await getFaviconHref(page);
-    expect(faviconHref).toBe("/favicon.png");
+    // Favicon should return to the default (no badge) once the unread clears.
+    await expect(async () => {
+        const href = await getFaviconHref(page);
+        expect(href).toBe("/favicon.png");
+    }).toPass({ timeout: 10000, intervals: [200] });
 });
 
 test("no badge drawn when favico setting is disabled", async () => {
@@ -88,8 +88,9 @@ test("no badge drawn when favico setting is disabled", async () => {
 
     await irc.sendMessage("#glowing-bear", "favico-disabled-test-" + Date.now());
 
-    // Wait for message to be processed (don't check DOM since we're on gbtest buffer)
-    await page.waitForTimeout(2000);
+    // Grace period for the message to be processed (negative assertion: no badge
+    // should ever be drawn while useFavico is disabled)
+    await page.waitForTimeout(1000);
 
     const faviconHref = await getFaviconHref(page);
     expect(faviconHref).toBe("/favicon.png");

@@ -70,7 +70,6 @@ test('/q nick creates and switches to new buffer after close', async () => {
 
     // Close the gbbot buffer via WeeChat command
     await sendWeechatCommand(page, '/buffer close *gbbot*');
-    await page.waitForTimeout(1000);
 
     // Verify gbbot buffer is gone from buffer list
     const gbbotInList = page.getByTestId('buffer-item').filter({ hasText: 'gbbot' });

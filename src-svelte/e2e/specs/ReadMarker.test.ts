@@ -255,8 +255,11 @@ test.describe('buffer switch', () => {
         const uniqueMsg = 'dc-test-' + Date.now();
         await irc.sendMessage('#glowing-bear', uniqueMsg);
 
-        // Wait for the message to arrive — gbtest echo comes back within ~2s
-        await page.waitForTimeout(3000);
+        // Wait for the message to arrive — observable as an unread badge on
+        // the inactive #glowing-bear buffer item.
+        await expect(
+            page.getByTestId('buffer-item').filter({ hasText: 'glowing-bear' }).getByTestId('unread-badge'),
+        ).toBeVisible({ timeout: 10000 });
 
         // Switch back - readmarker should appear with exactly 1 line below it
         // If double-counting were happening, the effectiveUnread calculation would

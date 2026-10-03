@@ -33,8 +33,8 @@ test.beforeEach(async () => {
 async function sendUniquePm() {
     const msg = `pm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     await irc.sendPm('testuser', msg);
-    // Wait for message to propagate through IRC → WeeChat relay → client render
-    await page.waitForTimeout(2000);
+    // Callers poll for the observable effect (buffer item / message row / badge),
+    // so no fixed relay-propagation sleep is needed here.
     return msg;
 }
 
@@ -81,20 +81,18 @@ test('switches to PM buffer and shows message', async () => {
     const msg = await sendUniquePm();
 
     // Try each candidate PM buffer until we find one containing our message.
-    // Bot nick may vary across test runs due to cross-test pollution.
-    let found = false;
-    for (const pm of await findPmBufferItem().getAll()) {
-        await pm.locator.click({ timeout: 5000 });
-        await page.waitForTimeout(500);
-
-        const msgCell = page.getByRole('cell', { name: msg }).first();
-        if (await msgCell.isVisible({ timeout: 3000 }).catch(() => false)) {
-            await expect(msgCell).toBeVisible({ timeout: 5000 });
-            found = true;
-            break;
+    // Bot nick may vary across test runs due to cross-test pollution. The whole
+    // scan is polled so we also wait for the PM buffer to appear.
+    await expect(async () => {
+        for (const pm of await findPmBufferItem().getAll()) {
+            await pm.locator.click({ timeout: 5000 });
+            const msgCell = page.getByRole('cell', { name: msg }).first();
+            if (await msgCell.isVisible({ timeout: 3000 }).catch(() => false)) {
+                return;
+            }
         }
-    }
-    expect(found).toBe(true);
+        throw new Error('No PM buffer contains the message yet');
+    }).toPass({ timeout: 30000 });
 });
 
 test('badge renders on inactive PM buffer', async () => {
@@ -128,23 +126,22 @@ test('badge renders on inactive PM buffer', async () => {
 test('unread clears on buffer switch', async () => {
     const msg = await sendUniquePm();
 
-    // Find the correct PM buffer by trying each candidate
-    let found = false;
-    for (const pm of await findPmBufferItem().getAll()) {
-        await pm.locator.click({ timeout: 5000 });
-        await page.waitForTimeout(500);
-        if (
-            await page
-                .getByRole('cell', { name: msg })
-                .first()
-                .isVisible({ timeout: 3000 })
-                .catch(() => false)
-        ) {
-            found = true;
-            break;
+    // Find the correct PM buffer by trying each candidate (polled until found)
+    await expect(async () => {
+        for (const pm of await findPmBufferItem().getAll()) {
+            await pm.locator.click({ timeout: 5000 });
+            if (
+                await page
+                    .getByRole('cell', { name: msg })
+                    .first()
+                    .isVisible({ timeout: 3000 })
+                    .catch(() => false)
+            ) {
+                return;
+            }
         }
-    }
-    expect(found).toBe(true);
+        throw new Error('No PM buffer contains the message yet');
+    }).toPass({ timeout: 30000 });
 
     // Switch back to channel — this should clear unread counts on PM buffer
     await switchToBuffer(page, '#glowing-bear');
@@ -153,22 +150,21 @@ test('unread clears on buffer switch', async () => {
     const msg2 = await sendUniquePm();
 
     // Find the correct PM buffer again and verify the new message appears
-    let found2 = false;
-    for (const pm of await findPmBufferItem().getAll()) {
-        await pm.locator.click({ timeout: 5000 });
-        await page.waitForTimeout(500);
-        if (
-            await page
-                .getByRole('cell', { name: msg2 })
-                .first()
-                .isVisible({ timeout: 3000 })
-                .catch(() => false)
-        ) {
-            found2 = true;
-            break;
+    await expect(async () => {
+        for (const pm of await findPmBufferItem().getAll()) {
+            await pm.locator.click({ timeout: 5000 });
+            if (
+                await page
+                    .getByRole('cell', { name: msg2 })
+                    .first()
+                    .isVisible({ timeout: 3000 })
+                    .catch(() => false)
+            ) {
+                return;
+            }
         }
-    }
-    expect(found2).toBe(true);
+        throw new Error('No PM buffer contains the new message yet');
+    }).toPass({ timeout: 30000 });
 });
 
 test('closes PM buffer cleanly', async () => {

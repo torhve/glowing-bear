@@ -58,11 +58,9 @@ async function waitForPmBuffer(timeoutMs = 15000): Promise<import('@playwright/t
 test('Alt+A prioritizes notification buffers over plain unread buffers', async () => {
     // Start on server buffer so we don't accidentally clear any buffer's activity by switching
     await switchToBuffer(page, 'gbtest');
-    await page.waitForTimeout(500);
 
     // Send a plain message to #glowing-bear → generates unread count
     await botSay('plain-unread-message-' + Date.now());
-    await page.waitForTimeout(1000);
 
     // Send a PM from gbbot to testuser → generates notification count (PMs are always highlights)
     await botPm('pm-notification-test-' + Date.now());
@@ -71,30 +69,38 @@ test('Alt+A prioritizes notification buffers over plain unread buffers', async (
     const pmItem = await waitForPmBuffer(30000);
     expect(pmItem, 'PM buffer should appear').not.toBeNull();
 
-    // Wait for hotlist sync to propagate counts (debounced at 2s)
-    await page.waitForTimeout(3000);
+    // Wait for hotlist sync (debounced at 2 s) to propagate counts — observable
+    // as unread badges on both activity buffers in the buffer list.
+    await expect(async () => {
+        await expect(
+            page.getByTestId('buffer-item').filter({ hasText: 'glowing-bear' }).getByTestId('unread-badge'),
+        ).toBeVisible();
+        // Any gbbot PM buffer with a badge (a fresh PM may open a numbered
+        // buffer alongside a stale read one from earlier tests).
+        await expect(
+            page
+                .getByTestId('buffer-item')
+                .filter({ hasText: /gbbot/ })
+                .filter({ has: page.getByTestId('unread-badge') })
+                .first(),
+        ).toBeVisible();
+    }).toPass({ timeout: 15000 });
 
     // Stay on server buffer — both other buffers have activity and none is cleared
 
     // Press Alt+A — should jump to the PM buffer (notification > unread by priority)
     await pressAltA();
-    await page.waitForTimeout(500);
-    const afterFirstPress = await getCurrentBufferName();
-    expect(afterFirstPress).toContain('gbbot');
+    await expect(page.getByTestId('topic-bar')).toContainText('gbbot', { timeout: 5000 });
 
     // Switch back to server so we don't clear #glowing-bear's unread
     await switchToBuffer(page, 'gbtest');
-    await page.waitForTimeout(500);
 
     // Press Alt+A again — should jump to #glowing-bear (next most urgent: plain unread)
     await pressAltA();
-    await page.waitForTimeout(500);
-    const afterSecondPress = await getCurrentBufferName();
-    expect(afterSecondPress).toContain('glowing-bear');
+    await expect(page.getByTestId('topic-bar')).toContainText('glowing-bear', { timeout: 5000 });
 
     // Switch back to server so we don't clear remaining buffers
     await switchToBuffer(page, 'gbtest');
-    await page.waitForTimeout(500);
 
     // Press Alt+A a third time — no more active buffers, should stay on server
     await pressAltA();
@@ -110,11 +116,13 @@ test('Alt+A prioritizes notification buffers over plain unread buffers', async (
 test('Alt+A works from the input bar without typing dead key characters', async () => {
     // Start on server buffer
     await switchToBuffer(page, 'gbtest');
-    await page.waitForTimeout(500);
 
-    // Send a message to #glowing-bear to create unread activity
+    // Send a message to #glowing-bear to create unread activity — wait for the
+    // unread badge to appear instead of a fixed sleep.
     await botSay('unread-from-inputbar-' + Date.now());
-    await page.waitForTimeout(2000);
+    await expect(
+        page.getByTestId('buffer-item').filter({ hasText: 'glowing-bear' }).getByTestId('unread-badge'),
+    ).toBeVisible({ timeout: 10000 });
 
     // Focus the input bar
     await page.getByTestId('message-input').focus();
@@ -130,11 +138,7 @@ test('Alt+A works from the input bar without typing dead key characters', async 
 
     // Press Alt+A while input is still focused
     await pressAltA();
-    await page.waitForTimeout(500);
-
-    // Should have switched to #glowing-bear (the buffer with unread)
-    const afterName = await getCurrentBufferName();
-    expect(afterName).toContain('glowing-bear');
+    await expect(page.getByTestId('topic-bar')).toContainText('glowing-bear', { timeout: 5000 });
 
     // Input should still be empty — no dead key character typed
     const valueAfter = await page.getByTestId('message-input').inputValue();
@@ -145,20 +149,17 @@ test('Alt+A works from the input bar without typing dead key characters', async 
 test('Alt+A does nothing when no buffers have unread or notification counts', async () => {
     // Switch to each buffer that might have leftover activity from previous test, clearing counts
     await switchToBuffer(page, '#glowing-bear');
-    await page.waitForTimeout(500);
     await switchToBuffer(page, 'gbtest');
-    await page.waitForTimeout(500);
 
     // Also clear any PM buffers
     const pmItem = await waitForPmBuffer(5000);
     if (pmItem) {
         await pmItem.click();
-        await page.waitForTimeout(500);
+        await expect(page.getByTestId('topic-bar')).toContainText('gbbot', { timeout: 5000 });
     }
 
     // Switch back to server buffer
     await switchToBuffer(page, 'gbtest');
-    await page.waitForTimeout(500);
 
     // Press Alt+A — should be a no-op since all buffers are read
     const beforeName = await getCurrentBufferName();
