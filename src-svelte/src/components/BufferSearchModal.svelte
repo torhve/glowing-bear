@@ -74,13 +74,21 @@
     }
   }
 
-  function handleToggle(event: ToggleEvent) {
-    if (event.newState === 'open') {
+  // Chromium dispatches `toggle` a frame after the popover becomes visible, which
+  // delays auto-focus enough to swallow a fast first keystroke. `beforetoggle`
+  // fires synchronously inside showPopover(), so focus from there — deferred one
+  // microtask, by which time the popover is shown and the input is focusable.
+  function handleBeforeToggle(event: ToggleEvent) {
+    if (event.newState !== 'open') return;
+    queueMicrotask(() => {
       const input = document.getElementById('buffer-search') as HTMLInputElement;
       input?.focus();
       input?.select();
-    }
-    else if (event.newState === 'closed') {
+    });
+  }
+
+  function handleToggle(event: ToggleEvent) {
+    if (event.newState === 'closed') {
       bufferSearchQuery = '';
       selectedIndex = 0;
     }
@@ -97,7 +105,7 @@
   });
 </script>
 
-<BaseDialog id="buffer-search-modal" labelledby="buffer-search-title" noAnimation ontoggle={handleToggle}>
+<BaseDialog id="buffer-search-modal" labelledby="buffer-search-title" noAnimation onbeforetoggle={handleBeforeToggle} ontoggle={handleToggle}>
   <div class="buffer-search-content flex flex-col max-h-[85vh]">
     <div class="buffer-search-header px-4 py-3 border-b border-border flex items-center justify-between">
       <h2 id="buffer-search-title" class="text-sm font-bold text-text">Search Buffers</h2>
