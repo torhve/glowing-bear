@@ -1,26 +1,26 @@
 <script lang="ts">
   import '../app.css';
-  import type { BufferData } from '$lib/types';
-  import ConnectionForm from '$components/ConnectionForm.svelte';
-  import TopBar from '$components/TopBar.svelte';
-  import ChatView from '$components/ChatView.svelte';
-  import InputBar from '$components/InputBar.svelte';
-  import BufferList from '$components/BufferList.svelte';
-  import Nicklist from '$components/Nicklist.svelte';
-  import Toast from '$components/Toast.svelte';
-  import ContentSearchModal from '$components/ContentSearchModal.svelte';
+  import type { BufferData } from '#lib/types.ts';
+  import ConnectionForm from '#components/ConnectionForm.svelte';
+  import TopBar from '#components/TopBar.svelte';
+  import ChatView from '#components/ChatView.svelte';
+  import InputBar from '#components/InputBar.svelte';
+  import BufferList from '#components/BufferList.svelte';
+  import Nicklist from '#components/Nicklist.svelte';
+  import Toast from '#components/Toast.svelte';
+  import ContentSearchModal from '#components/ContentSearchModal.svelte';
   import X from '@lucide/svelte/icons/x';
-  import { settings, updateSettings, applyHashParams } from '$lib/stores/settings';
-  import { initTheme } from '$lib/stores/theme';
+  import { settings, updateSettings, applyHashParams } from '#lib/stores/settings.ts';
+  import { initTheme } from '#lib/stores/theme.ts';
   import { get } from 'svelte/store';
-  import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig, sortedVisibleBuffers, checkAndNavigatePendingNotificationBuffer } from '$lib/stores/models';
-  import { connectionState, setReconnectAttempts, setNextReconnectAt, setErrors } from '$lib/stores/connectionStore';
-  import { connect, fetchConfValue, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer, getWs, initFocusReconnect, cleanupFocusReconnect } from '$lib/stores/connectionManager';
-  import { Protocol } from '$lib/weechat';
-  import { initNotifications, updateTitle, updateFavico, onDisconnect } from '$lib/notifications';
-  import { parseRelayUrl, isPopoverOpen, bufferHasNicklist, modifyTextareaValue } from '$lib/utils';
-  import { addToast, toastStore } from '$lib/toast';
-  import { showWindow } from '$lib/tauriWindow';
+  import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig, sortedVisibleBuffers, checkAndNavigatePendingNotificationBuffer } from '#lib/stores/models.ts';
+  import { connectionState, setReconnectAttempts, setNextReconnectAt, setErrors } from '#lib/stores/connectionStore.ts';
+  import { connect, fetchConfValue, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer, getWs, initFocusReconnect, cleanupFocusReconnect } from '#lib/stores/connectionManager.ts';
+  import { Protocol } from '#lib/weechat.ts';
+  import { initNotifications, updateTitle, updateFavico, onDisconnect } from '#lib/notifications.ts';
+  import { parseRelayUrl, isPopoverOpen, bufferHasNicklist, modifyTextareaValue } from '#lib/utils.ts';
+  import { addToast, toastStore } from '#lib/toast.ts';
+  import { showWindow } from '#lib/tauriWindow.ts';
 
   /* eslint-disable @typescript-eslint/no-explicit-any -- dev-time debug globals on window */
   if (typeof window !== 'undefined' && import.meta.env.DEV) {

@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { buffers, servers, activeBufferId, setActiveBuffer, hotlistClearedBuffers, createBufferLine, getReadBoundaryIndex, isUserMessageLine, setReadBoundary, setReadBoundaryUnknown } from '$lib/stores/models';
-import type { BufferData, ProtocolMessage, HotlistEntry } from '$lib/types';
+import { buffers, servers, activeBufferId, setActiveBuffer, hotlistClearedBuffers, createBufferLine, getReadBoundaryIndex, isUserMessageLine, setReadBoundary, setReadBoundaryUnknown } from '#lib/stores/models.ts';
+import type { BufferData, ProtocolMessage, HotlistEntry } from '#lib/types.ts';
 
 // Mock settings store to avoid localStorage access at module load time
-vi.mock('$lib/stores/settings', () => ({
+vi.mock('#lib/stores/settings.ts', () => ({
     settings: {
         subscribe: (fn: (val: any) => void) => {
             fn({
@@ -29,7 +29,7 @@ const mockPlayNotificationSound = vi.fn();
 const mockUpdateTitle = vi.fn();
 const mockUpdateFavico = vi.fn();
 
-vi.mock('$lib/notifications', () => ({
+vi.mock('#lib/notifications.ts', () => ({
     createHighlight: mockCreateHighlight,
     playNotificationSound: mockPlayNotificationSound,
     updateTitle: mockUpdateTitle,
@@ -37,13 +37,13 @@ vi.mock('$lib/notifications', () => ({
 }));
 
 // Mock windowFocus so tests can control focus via document.hidden
-vi.mock('$lib/windowFocus', () => ({
+vi.mock('#lib/windowFocus.ts', () => ({
     initWindowFocusTracking: vi.fn(() => Promise.resolve(() => {})),
     isWindowFocused: () => typeof document !== 'undefined' && !document.hidden,
 }));
 
 // Mock bufferResume store — models.ts now imports recordBuffer for auto-resume.
-vi.mock('$lib/stores/bufferResume', () => ({
+vi.mock('#lib/stores/bufferResume.ts', () => ({
     lastBufferId: {
         subscribe: (fn: (val: string) => void) => { fn(''); return () => {}; },
         set: vi.fn(),
@@ -52,7 +52,7 @@ vi.mock('$lib/stores/bufferResume', () => ({
     shouldResume: vi.fn().mockReturnValue(false),
 }));
 
-const { handleBufferLineAdded, handleHotlistInfo, handleLineInfo } = await import('$lib/stores/handlers');
+const { handleBufferLineAdded, handleHotlistInfo, handleLineInfo } = await import('#lib/stores/handlers.ts');
 
 // Helper to create a test buffer
 function makeBuffer(id: string, opts: Partial<BufferData> = {}): BufferData {

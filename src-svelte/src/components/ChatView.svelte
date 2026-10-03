@@ -1,13 +1,13 @@
 <script lang="ts">
-  import type { BufferLine } from '$lib/types';
+  import type { BufferLine } from '#lib/types.ts';
   import { get } from 'svelte/store';
-  import { currentBuffer, activeBufferId, bufferBottom, buffers, recalculateLinesPerScreen, getReadBoundaryIndex, isUserMessageLine } from '$lib/stores/models';
-  import { settings } from '$lib/stores/settings';
-  import { fetchMoreLines, closeBufferOnWeeChat, pinBuffer, unpinBuffer } from '$lib/stores/connectionManager';
-  import { buildMentionText, isFreeBuffer, modifyTextareaValue } from '$lib/utils';
-  import BufferLineRow from '$components/BufferLineRow.svelte';
-  import TopicModal from '$components/TopicModal.svelte';
-  import LinkifiedText from '$components/LinkifiedText.svelte';
+  import { currentBuffer, activeBufferId, bufferBottom, buffers, recalculateLinesPerScreen, getReadBoundaryIndex, isUserMessageLine } from '#lib/stores/models.ts';
+  import { settings } from '#lib/stores/settings.ts';
+  import { fetchMoreLines, closeBufferOnWeeChat, pinBuffer, unpinBuffer } from '#lib/stores/connectionManager.ts';
+  import { buildMentionText, isFreeBuffer, modifyTextareaValue } from '#lib/utils.ts';
+  import BufferLineRow from '#components/BufferLineRow.svelte';
+  import TopicModal from '#components/TopicModal.svelte';
+  import LinkifiedText from '#components/LinkifiedText.svelte';
   import ChevronUp from '@lucide/svelte/icons/chevron-up';
   import Inbox from '@lucide/svelte/icons/inbox';
   import FileText from '@lucide/svelte/icons/file-text';

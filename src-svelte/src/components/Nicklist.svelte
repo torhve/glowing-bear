@@ -1,13 +1,13 @@
 <script lang="ts">
   import { get } from 'svelte/store';
-  import type { NickGroup, Nick } from '$lib/types';
+  import type { NickGroup, Nick } from '#lib/types.ts';
   import Users from '@lucide/svelte/icons/users';
   import Search from '@lucide/svelte/icons/search';
-  import { currentBuffer, pendingBufferSwitch } from '$lib/stores/models';
-  import { sendBufferCommand } from '$lib/stores/connectionManager';
-  import { settings } from '$lib/stores/settings';
-  import { insertNickIntoInput, bufferHasNicklist, makeKeyboardActivatable } from '$lib/utils';
-  import { DEBUG_NICKLIST } from '$lib/debug';
+  import { currentBuffer, pendingBufferSwitch } from '#lib/stores/models.ts';
+  import { sendBufferCommand } from '#lib/stores/connectionManager.ts';
+  import { settings } from '#lib/stores/settings.ts';
+  import { insertNickIntoInput, bufferHasNicklist, makeKeyboardActivatable } from '#lib/utils.ts';
+  import { DEBUG_NICKLIST } from '#lib/debug.ts';
 
   let { onClose, forceShow }: { onClose?: () => void; forceShow?: boolean } = $props();
   let searchQuery = $state('');

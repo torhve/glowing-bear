@@ -1,17 +1,17 @@
 <script lang="ts">
 
-  import { connected, weechatVersion } from '$lib/stores/models';
-  import { connectionState, connectionStats, formatBytes, timeAgo, formatDuration } from '$lib/stores/connectionStore';
-  import { settings } from '$lib/stores/settings';
-  import { disconnect } from '$lib/stores/connectionManager';
-  import SettingsModal from '$components/SettingsModal.svelte';
-  import BufferSearchModal from '$components/BufferSearchModal.svelte';
-  import BufferHotlist from '$components/BufferHotlist.svelte';
+  import { connected, weechatVersion } from '#lib/stores/models.ts';
+  import { connectionState, connectionStats, formatBytes, timeAgo, formatDuration } from '#lib/stores/connectionStore.ts';
+  import { settings } from '#lib/stores/settings.ts';
+  import { disconnect } from '#lib/stores/connectionManager.ts';
+  import SettingsModal from '#components/SettingsModal.svelte';
+  import BufferSearchModal from '#components/BufferSearchModal.svelte';
+  import BufferHotlist from '#components/BufferHotlist.svelte';
   import Search from '@lucide/svelte/icons/search';
   import Users from '@lucide/svelte/icons/users';
   import Settings from '@lucide/svelte/icons/settings';
   import Power from '@lucide/svelte/icons/power';
-  import TauriTitlebar from '$components/TauriTitlebar.svelte';
+  import TauriTitlebar from '#components/TauriTitlebar.svelte';
   import ArrowUp from '@lucide/svelte/icons/arrow-up';
   import ArrowDown from '@lucide/svelte/icons/arrow-down';
   import MessageSquare from '@lucide/svelte/icons/message-square';

@@ -26,16 +26,16 @@ import {
     setReadBoundaryUnknown,
     resolvePendingReadBoundary,
     isRelayStatusBuffer,
-} from "$lib/stores/models";
-import { shouldResume, getLastBuffer, recordLastBuffer } from "$lib/stores/bufferResume";
+} from "#lib/stores/models.ts";
+import { shouldResume, getLastBuffer, recordLastBuffer } from "#lib/stores/bufferResume.ts";
 import {
     createHighlight,
     playNotificationSound,
     updateTitle,
     updateFavico,
-} from "$lib/notifications";
-import { isWindowFocused } from "$lib/windowFocus";
-import { DEBUG_NICKLIST, DEBUG_HANDLERS, DEBUG_HOTLIST } from "$lib/debug";
+} from "#lib/notifications.ts";
+import { isWindowFocused } from "#lib/windowFocus.ts";
+import { DEBUG_NICKLIST, DEBUG_HANDLERS, DEBUG_HOTLIST } from "#lib/debug.ts";
 import type {
     ProtocolMessage,
     BufferLine,
@@ -46,7 +46,7 @@ import type {
     HotlistEntry,
     BufferData,
     BufferType,
-} from "$lib/types";
+} from "#lib/types.ts";
 
 // ---- Batched line addition handling ----
 // During rapid message bursts, WeeChat sends many _buffer_line_added messages

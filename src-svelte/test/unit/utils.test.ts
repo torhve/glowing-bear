@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { bufferMatchesSearch, completeNick } from '$lib/utils';
-import { buffers, activeBufferId, wconfig, sortBuffers } from '$lib/stores/models';
-import type { BufferData } from '$lib/types';
+import { bufferMatchesSearch, completeNick } from '#lib/utils.ts';
+import { buffers, activeBufferId, wconfig, sortBuffers } from '#lib/stores/models.ts';
+import type { BufferData } from '#lib/types.ts';
 
 describe('bufferMatchesSearch', () => {
     const mockBuffer = {

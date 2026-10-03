@@ -19,11 +19,11 @@ import {
     activeBufferId,
     recalculateLinesPerScreen,
     createBuffer,
-} from '$lib/stores/models';
-import type { BufferData, ProtocolMessage, BufferLine } from '$lib/types';
+} from '#lib/stores/models.ts';
+import type { BufferData, ProtocolMessage, BufferLine } from '#lib/types.ts';
 
 // ---- Same mocks as flood.bench.ts (isolate store logic from DOM) ----
-vi.mock('$lib/stores/settings', () => ({
+vi.mock('#lib/stores/settings.ts', () => ({
     settings: {
         subscribe: (fn: (val: unknown) => void) => {
             fn({
@@ -43,19 +43,19 @@ vi.mock('$lib/stores/settings', () => ({
     updatePartialSettings: vi.fn()
 }));
 
-vi.mock('$lib/notifications', () => ({
+vi.mock('#lib/notifications.ts', () => ({
     createHighlight: vi.fn(),
     playNotificationSound: vi.fn(),
     updateTitle: vi.fn(),
     updateFavico: vi.fn(),
 }));
 
-vi.mock('$lib/windowFocus', () => ({
+vi.mock('#lib/windowFocus.ts', () => ({
     initWindowFocusTracking: vi.fn(() => Promise.resolve(() => {})),
     isWindowFocused: () => true,
 }));
 
-vi.mock('$lib/stores/bufferResume', () => ({
+vi.mock('#lib/stores/bufferResume.ts', () => ({
     lastBufferId: {
         subscribe: (fn: (val: string) => void) => { fn(''); return () => {}; },
         set: vi.fn(),
@@ -64,7 +64,7 @@ vi.mock('$lib/stores/bufferResume', () => ({
     shouldResume: vi.fn().mockReturnValue(false),
 }));
 
-const { handleLineInfo } = await import('$lib/stores/handlers');
+const { handleLineInfo } = await import('#lib/stores/handlers.ts');
 
 // ---- Workload parameters ----
 const HISTORY_LINES = 5000;

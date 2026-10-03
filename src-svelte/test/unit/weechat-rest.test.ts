@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { WeeChatRest, RestError } from '$lib/weechat-rest';
+import { WeeChatRest, RestError } from '#lib/weechat-rest.ts';
 import type {
     HandshakeResponse,
     VersionResponse,
@@ -11,7 +11,7 @@ import type {
     CompletionResponse,
     PingResponse,
     RestErrorResponse
-} from '$lib/weechat-rest-types';
+} from '#lib/weechat-rest-types.ts';
 
 function mockFetch(response: unknown, status = 200, ok = true): void {
     vi.spyOn(global, 'fetch').mockResolvedValueOnce({

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildMentionText } from '$lib/utils';
-import type { Nick } from '$lib/types';
+import { buildMentionText } from '#lib/utils.ts';
+import type { Nick } from '#lib/types.ts';
 
 describe('buildMentionText', () => {
     it('adds colon suffix for empty input', () => {

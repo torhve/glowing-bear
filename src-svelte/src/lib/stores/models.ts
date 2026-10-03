@@ -1,8 +1,8 @@
 import { writable, get, derived } from "svelte/store";
 
 export const activeBufferChanged = writable(0);
-import { recordLastBuffer } from "$lib/stores/bufferResume";
-import { settings } from "$lib/stores/settings";
+import { recordLastBuffer } from "#lib/stores/bufferResume.ts";
+import { settings } from "#lib/stores/settings.ts";
 import type {
     BufferData,
     BufferLine,
@@ -10,9 +10,9 @@ import type {
     Nick,
     NickGroup,
     RichTextPart,
-} from "$lib/types";
-import { Protocol } from "$lib/weechat";
-import { DEBUG_BUFFERS } from "$lib/debug";
+} from "#lib/types.ts";
+import { Protocol } from "#lib/weechat.ts";
+import { DEBUG_BUFFERS } from "#lib/debug.ts";
 
 /**
  * Deep clone a BufferLine so that nested arrays (prefix, content) and their

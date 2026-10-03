@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { buffers, activeBufferId } from '$lib/stores/models';
-import type { BufferData, ProtocolMessage } from '$lib/types';
+import { buffers, activeBufferId } from '#lib/stores/models.ts';
+import type { BufferData, ProtocolMessage } from '#lib/types.ts';
 
 // Mock settings store to avoid localStorage access at module load time
-vi.mock('$lib/stores/settings', () => ({
+vi.mock('#lib/stores/settings.ts', () => ({
     settings: {
         subscribe: (fn: (val: any) => void) => {
             fn({
@@ -25,14 +25,14 @@ vi.mock('$lib/stores/settings', () => ({
 }));
 
 // Mock notification functions before importing handlers
-vi.mock('$lib/notifications', () => ({
+vi.mock('#lib/notifications.ts', () => ({
     createHighlight: vi.fn(),
     playNotificationSound: vi.fn(),
     updateTitle: vi.fn(),
     updateFavico: vi.fn(),
 }));
 
-const { handleBufferMoved } = await import('$lib/stores/handlers');
+const { handleBufferMoved } = await import('#lib/stores/handlers.ts');
 
 describe('handleBufferMoved', () => {
     function makeBuffer(id: string, number: number): BufferData {

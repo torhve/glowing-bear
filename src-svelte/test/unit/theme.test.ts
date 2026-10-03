@@ -1,19 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { themes, themeLabels, setTheme, loadTheme, themeStore } from '$lib/stores/theme';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { themes, themeLabels, setTheme, loadTheme, themeStore } from '#lib/stores/theme.ts';
 import { get } from 'svelte/store';
 
-// Mock localStorage and document for DOM-dependent functions
+// jsdom already provides a real localStorage and document, so tests drive those
+// directly instead of stubbing globals.
 beforeEach(() => {
-    vi.stubGlobal('localStorage', {
-        getItem: vi.fn(),
-        setItem: vi.fn(),
-        removeItem: vi.fn(),
-    });
-    vi.stubGlobal('document', {
-        documentElement: {
-            setAttribute: vi.fn(),
-        },
-    });
+    localStorage.clear();
+    document.documentElement.removeAttribute('data-theme');
 });
 
 describe('themes array', () => {
@@ -86,33 +79,29 @@ describe('setTheme', () => {
 
 describe('loadTheme', () => {
     it('returns "dark" when no stored theme', () => {
-        (localStorage.getItem as vi.Mock).mockReturnValue(null);
         expect(loadTheme()).toBe('dark');
     });
 
     it('returns stored Catppuccin theme when available', () => {
-        (localStorage.getItem as vi.Mock).mockImplementation((key) => {
-            if (key === 'gb_theme') return 'catppuccin-mocha';
-            return null;
-        });
+        localStorage.setItem('gb_theme', 'catppuccin-mocha');
         expect(loadTheme()).toBe('catppuccin-mocha');
     });
 
     it('returns "dark" for unknown stored theme', () => {
-        (localStorage.getItem as vi.Mock).mockImplementation((key) => {
-            if (key === 'gb_theme') return 'not-a-real-theme';
-            return null;
-        });
+        localStorage.setItem('gb_theme', 'not-a-real-theme');
         expect(loadTheme()).toBe('dark');
     });
 
     it('returns each Catppuccin variant correctly', () => {
         for (const t of ['catppuccin-mocha', 'catppuccin-macchiato', 'catppuccin-frappe']) {
-            (localStorage.getItem as vi.Mock).mockImplementation((key) => {
-                if (key === 'gb_theme') return t;
-                return null;
-            });
+            localStorage.setItem('gb_theme', t);
             expect(loadTheme()).toBe(t);
         }
+    });
+
+    it('setTheme persists the choice to localStorage and the document', () => {
+        setTheme('catppuccin-frappe');
+        expect(localStorage.getItem('gb_theme')).toBe('catppuccin-frappe');
+        expect(document.documentElement.getAttribute('data-theme')).toBe('catppuccin-frappe');
     });
 });

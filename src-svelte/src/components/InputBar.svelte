@@ -1,18 +1,18 @@
 <script lang="ts">
-  import { currentBuffer, buffers, pendingBufferSwitch, setActiveBuffer, findBufferByShortName } from '$lib/stores/models';
-  import { sendMessage, sendWeeChatCommand } from '$lib/stores/connectionManager';
-  import { settings } from '$lib/stores/settings';
-  import { addToHistory, getHistoryUp, getHistoryDown } from '$lib/stores/inputHistory';
-  import { completeNick, isPopoverOpen, filterImageFiles, joinMultilineToSingle, MULTILINE_PASTE_THRESHOLD } from '$lib/utils';
+  import { currentBuffer, buffers, pendingBufferSwitch, setActiveBuffer, findBufferByShortName } from '#lib/stores/models.ts';
+  import { sendMessage, sendWeeChatCommand } from '#lib/stores/connectionManager.ts';
+  import { settings } from '#lib/stores/settings.ts';
+  import { addToHistory, getHistoryUp, getHistoryDown } from '#lib/stores/inputHistory.ts';
+  import { completeNick, isPopoverOpen, filterImageFiles, joinMultilineToSingle, MULTILINE_PASTE_THRESHOLD } from '#lib/utils.ts';
   import Send from '@lucide/svelte/icons/send';
-  import { emojifyInput } from '$lib/emojify';
+  import { emojifyInput } from '#lib/emojify.ts';
   import Camera from '@lucide/svelte/icons/camera';
   import Megaphone from '@lucide/svelte/icons/megaphone';
   import Type from '@lucide/svelte/icons/type';
   import { get } from 'svelte/store';
   import ImageUploadPreview from './ImageUploadPreview.svelte';
   import MultiLinePasteDialog from './MultiLinePasteDialog.svelte';
-  import { DEBUG_INPUT } from '$lib/debug';
+  import { DEBUG_INPUT } from '#lib/debug.ts';
 
   interface PreviewItem {
     id: number;
@@ -32,7 +32,7 @@
     onInsertUrls?: (urls: string[]) => void;
   } = $props();
 
-  // Paste debugging — controlled by DEBUG_INPUT flag in $lib/debug
+  // Paste debugging — controlled by DEBUG_INPUT flag in #lib/debug
   function log(...args: unknown[]) { if (DEBUG_INPUT) console.log('[paste]', ...args); }
 
   let inputRef = $state<HTMLTextAreaElement>();

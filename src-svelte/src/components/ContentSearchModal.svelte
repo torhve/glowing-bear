@@ -1,6 +1,6 @@
 <script lang="ts">
-  import BaseDialog from '$components/BaseDialog.svelte';
-  import FormInput from '$components/FormInput.svelte';
+  import BaseDialog from '#components/BaseDialog.svelte';
+  import FormInput from '#components/FormInput.svelte';
   import Search from '@lucide/svelte/icons/search';
   import X from '@lucide/svelte/icons/x';
 

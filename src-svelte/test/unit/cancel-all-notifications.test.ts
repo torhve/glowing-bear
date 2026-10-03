@@ -2,21 +2,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type * as TauriNotif from '@tauri-apps/plugin-notification';
 
 // Mock isTauri before any module loads
-vi.mock('$lib/tauriWindow', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('$lib/tauriWindow')>();
+vi.mock('#lib/tauriWindow.ts', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('#lib/tauriWindow.ts')>();
     return { ...actual, isTauri: () => true };
 });
 
 describe('cancelAll clears both pending and active Tauri notifications', () => {
     let tauriNotif: typeof TauriNotif;
-    let notifications: typeof import('$lib/notifications');
+    let notifications: typeof import('#lib/notifications.ts');
 
     beforeEach(async () => {
         vi.resetModules();
         vi.clearAllMocks();
 
         tauriNotif = await import('@tauri-apps/plugin-notification');
-        notifications = await import('$lib/notifications');
+        notifications = await import('#lib/notifications.ts');
 
         // Trigger lazy-load of Tauri notification module inside notifications.ts
         await notifications.initNotifications();

@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
-import { buffers, activeBufferId, wconfig, sortBuffers } from '$lib/stores/models';
-import type { BufferData, Nick } from '$lib/types';
+import { buffers, activeBufferId, wconfig, sortBuffers } from '#lib/stores/models.ts';
+import type { BufferData, Nick } from '#lib/types.ts';
 
 export interface NickCompletionResult {
     text: string;

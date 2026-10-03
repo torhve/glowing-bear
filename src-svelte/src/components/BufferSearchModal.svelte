@@ -1,10 +1,10 @@
 <script lang="ts">
-  import type { BufferData } from '$lib/types';
-  import { visibleBuffers, sortBuffers } from '$lib/stores/models';
-  import { switchBuffer } from '$lib/stores/connectionManager';
+  import type { BufferData } from '#lib/types.ts';
+  import { visibleBuffers, sortBuffers } from '#lib/stores/models.ts';
+  import { switchBuffer } from '#lib/stores/connectionManager.ts';
 
-  import BaseDialog from '$components/BaseDialog.svelte';
-  import FormInput from '$components/FormInput.svelte';
+  import BaseDialog from '#components/BaseDialog.svelte';
+  import FormInput from '#components/FormInput.svelte';
   import Search from '@lucide/svelte/icons/search';
   import X from '@lucide/svelte/icons/x';
 

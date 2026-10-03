@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { TokenGroup } from '$lib/linkTokens';
+  import type { TokenGroup } from '#lib/linkTokens.ts';
 
   let {
     groups

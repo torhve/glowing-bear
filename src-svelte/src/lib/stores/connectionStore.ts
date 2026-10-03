@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import type { ConnectionError } from '$lib/types';
+import type { ConnectionError } from '#lib/types.ts';
 
 export interface ConnectionState {
     status: 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error';

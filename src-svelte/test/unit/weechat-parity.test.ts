@@ -3,7 +3,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { buildMessage } from './buildMessage';
-import { Protocol as NewProtocol, ParsedMessage } from '$lib/weechat';
+import { Protocol as NewProtocol, ParsedMessage } from '#lib/weechat.ts';
 
 // Import the OLD AngularJS parser — dynamically import to avoid bundler issues with zlibjs
 async function loadOldProtocol() {

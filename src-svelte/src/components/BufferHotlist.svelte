@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { activeBufferId, visibleBuffers } from '$lib/stores/models';
-  import { switchBuffer } from '$lib/stores/connectionManager';
-  import type { BufferData } from '$lib/types';
+  import { activeBufferId, visibleBuffers } from '#lib/stores/models.ts';
+  import { switchBuffer } from '#lib/stores/connectionManager.ts';
+  import type { BufferData } from '#lib/types.ts';
 
   let { onBufferSelect = () => {} } = $props();
 

@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { buffers, servers, activeBufferId } from '$lib/stores/models';
-import type { BufferData } from '$lib/types';
-import type { ProtocolMessage } from '$lib/types';
+import { buffers, servers, activeBufferId } from '#lib/stores/models.ts';
+import type { BufferData } from '#lib/types.ts';
+import type { ProtocolMessage } from '#lib/types.ts';
 
 // Mock settings store to avoid localStorage access at module load time
-vi.mock('$lib/stores/settings', () => ({
+vi.mock('#lib/stores/settings.ts', () => ({
     settings: {
         subscribe: (fn: (val: any) => void) => {
             fn({
@@ -31,7 +31,7 @@ const mockPlayNotificationSound = vi.fn();
 const mockUpdateTitle = vi.fn();
 const mockUpdateFavico = vi.fn();
 
-vi.mock('$lib/notifications', () => ({
+vi.mock('#lib/notifications.ts', () => ({
     createHighlight: mockCreateHighlight,
     playNotificationSound: mockPlayNotificationSound,
     updateTitle: mockUpdateTitle,
@@ -39,13 +39,13 @@ vi.mock('$lib/notifications', () => ({
 }));
 
 // Mock windowFocus so tests can control focus via document.hidden
-vi.mock('$lib/windowFocus', () => ({
+vi.mock('#lib/windowFocus.ts', () => ({
     initWindowFocusTracking: vi.fn(() => Promise.resolve(() => {})),
     isWindowFocused: () => typeof document !== 'undefined' && !document.hidden,
 }));
 
 // Import handlers AFTER mocking settings and notifications
-const { handleBufferLineAdded } = await import('$lib/stores/handlers');
+const { handleBufferLineAdded } = await import('#lib/stores/handlers.ts');
 
 describe('PM/Highlight Notification Handling', () => {
     beforeEach(() => {

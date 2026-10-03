@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Protocol } from '$lib/weechat';
+import { Protocol } from '#lib/weechat.ts';
 
 describe('Protocol static methods', () => {
     function expectHandshakeParams(result: string, expected: Record<string, string>) {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import BaseDialog from '$components/BaseDialog.svelte';
+  import BaseDialog from '#components/BaseDialog.svelte';
   import X from '@lucide/svelte/icons/x';
 
   let {

@@ -7,7 +7,7 @@
 // that shape so a `lon` value can never be mis-parsed as a 4-byte `str` and
 // desync the stream.
 import { describe, it, expect } from 'vitest';
-import { Protocol } from '$lib/weechat';
+import { Protocol } from '#lib/weechat.ts';
 import { buildMessage } from './buildMessage';
 
 // 16-digit value that exceeds the 32-bit signed range (like a real 4.10 `id`).

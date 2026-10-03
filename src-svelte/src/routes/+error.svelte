@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { asset, resolve } from '$app/paths';
-  import { initTheme } from '$lib/stores/theme';
+  import { initTheme } from '#lib/stores/theme.ts';
 
   // app.css hides <body> until the app marks itself ready
   // (body:not([data-app-ready])). Only +page.svelte sets that attribute, and an

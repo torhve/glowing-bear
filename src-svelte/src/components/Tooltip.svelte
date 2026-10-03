@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { BufferData } from '$lib/types';
+  import type { BufferData } from '#lib/types.ts';
 
   let { buffer, x = 0, y = 0 }: { buffer: BufferData; x: number; y: number } = $props();
 </script>

@@ -1,5 +1,5 @@
 import { writable, get } from 'svelte/store';
-import type { Settings } from '$lib/types';
+import type { Settings } from '#lib/types.ts';
 
 export const settings = writable<Settings>({
     hostField: '',

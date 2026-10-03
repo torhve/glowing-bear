@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tokenizeLinks } from '$lib/linkTokens';
+import { tokenizeLinks } from '#lib/linkTokens.ts';
 
 describe('tokenizeLinks', () => {
     it('returns empty array for empty string', () => {

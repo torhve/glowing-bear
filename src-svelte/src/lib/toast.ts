@@ -19,7 +19,7 @@ let nextId = 0;
 
 const toasts: Writable<Toast[]> = writable([]);
 
-import { DEBUG_TOAST } from '$lib/debug';
+import { DEBUG_TOAST } from '#lib/debug.ts';
 
 export function addToast(message: string, options?: Partial<Omit<Toast, 'id' | 'message'>>) {
     if (DEBUG_TOAST) console.log('[toast] addToast:', options?.type ?? 'info', message.substring(0, 100));

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { rawText2Rich, richText2Str } from '$lib/weechat';
-import type { RichTextPart } from '$lib/types';
+import { rawText2Rich, richText2Str } from '#lib/weechat.ts';
+import type { RichTextPart } from '#lib/types.ts';
 
 describe('richText2Str serialization', () => {
     it('returns empty string for empty parts array', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { codify, inlinecolour, prefixlimit } from '$lib/filters';
+import { codify, inlinecolour, prefixlimit } from '#lib/filters.ts';
 
 describe('codify filter', () => {
     it('wraps text in backticks', () => {

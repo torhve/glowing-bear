@@ -7,11 +7,11 @@ import {
     beginSyncPhase,
     endSyncPhase,
     isSyncing,
-} from '$lib/stores/models';
-import type { BufferData, ProtocolMessage } from '$lib/types';
+} from '#lib/stores/models.ts';
+import type { BufferData, ProtocolMessage } from '#lib/types.ts';
 
 // Mock settings store to avoid localStorage access at module load time
-vi.mock('$lib/stores/settings', () => ({
+vi.mock('#lib/stores/settings.ts', () => ({
     settings: {
         subscribe: (fn: (val: any) => void) => {
             fn({
@@ -36,7 +36,7 @@ const mockPlayNotificationSound = vi.fn();
 const mockUpdateTitle = vi.fn();
 const mockUpdateFavico = vi.fn();
 
-vi.mock('$lib/notifications', () => ({
+vi.mock('#lib/notifications.ts', () => ({
     createHighlight: mockCreateHighlight,
     playNotificationSound: mockPlayNotificationSound,
     updateTitle: mockUpdateTitle,
@@ -44,13 +44,13 @@ vi.mock('$lib/notifications', () => ({
 }));
 
 // Focus is driven by document.hidden so tests can flip it explicitly.
-vi.mock('$lib/windowFocus', () => ({
+vi.mock('#lib/windowFocus.ts', () => ({
     initWindowFocusTracking: vi.fn(() => Promise.resolve(() => {})),
     isWindowFocused: () => typeof document !== 'undefined' && !document.hidden,
 }));
 
 // Import handlers AFTER mocking settings and notifications
-const { handleBufferLineAdded } = await import('$lib/stores/handlers');
+const { handleBufferLineAdded } = await import('#lib/stores/handlers.ts');
 
 
 /** Build a buffer; defaults are a normal channel buffer with no unread state. */

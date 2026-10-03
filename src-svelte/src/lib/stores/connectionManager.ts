@@ -1,14 +1,14 @@
 import { get } from 'svelte/store';
-import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, incrementReconnectAttempts, setNextReconnectAt } from '$lib/stores/connectionStore';
-import { buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer, localUnreadBuffers, hotlistClearedBuffers, bufferBottom, previousBufferId, pendingBufferSwitch, beginSyncPhase, endSyncPhase } from '$lib/stores/models';
-import { settings } from '$lib/stores/settings';
-import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist, flushLineBatch, setOnUpgrade, setOnUpgradeEnded } from '$lib/stores/handlers';
-import { addToast, removeToast, clearToasts, updateToast, toastStore } from '$lib/toast';
-import { onDisconnect } from '$lib/notifications';
-import { Protocol } from '$lib/weechat';
-import { sha256, pbkdf2 as nativePbkdf2, toHexString } from '$lib/utils/crypto';
-import type { ProtocolMessage } from '$lib/types';
-import { DEBUG_NICKLIST, DEBUG_WEECHAT_COMMANDS, DEBUG_CONNECTION } from '$lib/debug';
+import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, incrementReconnectAttempts, setNextReconnectAt } from '#lib/stores/connectionStore.ts';
+import { buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer, localUnreadBuffers, hotlistClearedBuffers, bufferBottom, previousBufferId, pendingBufferSwitch, beginSyncPhase, endSyncPhase } from '#lib/stores/models.ts';
+import { settings } from '#lib/stores/settings.ts';
+import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist, flushLineBatch, setOnUpgrade, setOnUpgradeEnded } from '#lib/stores/handlers.ts';
+import { addToast, removeToast, clearToasts, updateToast, toastStore } from '#lib/toast.ts';
+import { onDisconnect } from '#lib/notifications.ts';
+import { Protocol } from '#lib/weechat.ts';
+import { sha256, pbkdf2 as nativePbkdf2, toHexString } from '#lib/utils/crypto.ts';
+import type { ProtocolMessage } from '#lib/types.ts';
+import { DEBUG_NICKLIST, DEBUG_WEECHAT_COMMANDS, DEBUG_CONNECTION } from '#lib/debug.ts';
 
 // Protocol instance for instance methods (setId, parse)
 // Static methods (formatHandshake, formatInit, etc.) are called on the constructor directly

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Protocol as NewProtocol, rawText2Rich } from '$lib/weechat';
+import { Protocol as NewProtocol, rawText2Rich } from '#lib/weechat.ts';
 
 async function loadOldProtocol() {
     const mod = await import('../fixtures/weechat-old.js');

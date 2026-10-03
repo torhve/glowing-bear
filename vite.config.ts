@@ -22,8 +22,8 @@ const gitCommit =
         }
     })();
 
-// $lib/$components are still declared via the SvelteKit `alias` option (deprecated in
-// Kit 3 in favour of `#lib` subpath imports; see package.json "imports".
+// $lib and $components are `#lib` / `#components` subpath imports declared in
+// package.json "imports" — Kit 3 deprecated the `alias` option.
 export default defineConfig({
     define: { __GIT_COMMIT__: JSON.stringify(gitCommit) },
     plugins: [
@@ -43,10 +43,6 @@ export default defineConfig({
                 routes: 'src-svelte/src/routes',
                 serviceWorker: 'src-svelte/src/service-worker/index.ts',
                 hooks: { server: 'src-svelte/src/hooks.server.ts' }
-            },
-            alias: {
-                '$lib': 'src-svelte/src/lib',
-                '$components': 'src-svelte/src/components'
             }
         }),
         tailwindcss({ optimize: false })

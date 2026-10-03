@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sha256, pbkdf2, hmacSha256, toHexString } from '$lib/utils/crypto';
+import { sha256, pbkdf2, hmacSha256, toHexString } from '#lib/utils/crypto.ts';
 
 describe('sha256', () => {
     it('hashes empty string', () => {

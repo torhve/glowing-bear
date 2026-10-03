@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
-import { settings, updateSettings } from '$lib/stores/settings';
+import { settings, updateSettings } from '#lib/stores/settings.ts';
 
 describe('password save/clear behavior', () => {
     beforeEach(() => {

@@ -1,8 +1,8 @@
 import { afterEach, expect, it } from 'vitest';
 import { flushSync, mount, unmount, type Component } from 'svelte';
 import { fromStore, writable } from 'svelte/store';
-import PluginEmbed from '$components/PluginEmbed.svelte';
-import type { PluginMetadata } from '$lib/types';
+import PluginEmbed from '#components/PluginEmbed.svelte';
+import type { PluginMetadata } from '#lib/types.ts';
 
 const components: Record<string, unknown>[] = [];
 

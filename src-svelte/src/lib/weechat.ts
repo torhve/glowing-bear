@@ -1,4 +1,4 @@
-import type { ColorInfo, TextAttrs, RichTextPart } from '$lib/types';
+import type { ColorInfo, TextAttrs, RichTextPart } from '#lib/types.ts';
 
 // --- Type definitions ---
 

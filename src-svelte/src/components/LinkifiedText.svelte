@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tokenizeAndCodify } from '$lib/linkTokens';
+  import { tokenizeAndCodify } from '#lib/linkTokens.ts';
 
   let {
     text = '',

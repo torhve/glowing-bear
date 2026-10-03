@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Protocol } from '$lib/weechat';
+import { Protocol } from '#lib/weechat.ts';
 import { buildMessage } from './buildMessage';
 
 describe('Protocol buffer line parsing', () => {

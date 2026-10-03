@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { formatCount } from '$lib/faviconBadge';
+import { formatCount } from '#lib/faviconBadge.ts';
 
 describe('formatCount', () => {
     it('returns the count as string for small numbers', () => {
@@ -31,8 +31,8 @@ describe('formatCount', () => {
 const mockDrawOnCanvas = vi.fn();
 const mockReset = vi.fn();
 
-vi.mock('$lib/faviconBadge', async () => {
-    const actual = await vi.importActual('$lib/faviconBadge');
+vi.mock('#lib/faviconBadge.ts', async () => {
+    const actual = await vi.importActual('#lib/faviconBadge.ts');
     return {
         ...actual,
         initFavicon: vi.fn(),
@@ -55,20 +55,20 @@ const settingsMock = {
     }),
 };
 
-vi.mock('$lib/stores/models', () => ({
+vi.mock('#lib/stores/models.ts', () => ({
     buffers: modelsMock,
 }));
 
-vi.mock('$lib/stores/settings', () => ({
+vi.mock('#lib/stores/settings.ts', () => ({
     settings: settingsMock,
 }));
 
 describe('favicon badge integration', () => {
-    let notifications: typeof import('$lib/notifications');
+    let notifications: typeof import('#lib/notifications.ts');
 
     beforeEach(async () => {
         vi.clearAllMocks();
-        notifications = await import('$lib/notifications');
+        notifications = await import('#lib/notifications.ts');
     });
 
     it('initializes favicon by calling initFavicon', () => {
@@ -77,8 +77,8 @@ describe('favicon badge integration', () => {
     });
 
     it('draws notification badge when notifications exist', async () => {
-        const mockBuffs: Record<string, import('$lib/types').BufferData> = {
-            buf1: { unread: 0, notification: 3 } as import('$lib/types').BufferData,
+        const mockBuffs: Record<string, import('#lib/types.ts').BufferData> = {
+            buf1: { unread: 0, notification: 3 } as import('#lib/types.ts').BufferData,
         };
         modelsMock.subscribe.mockImplementation((fn) => {
             fn(mockBuffs);
@@ -91,8 +91,8 @@ describe('favicon badge integration', () => {
     });
 
     it('draws unread badge when no notifications but unread exists', async () => {
-        const mockBuffs: Record<string, import('$lib/types').BufferData> = {
-            buf1: { unread: 5, notification: 0 } as import('$lib/types').BufferData,
+        const mockBuffs: Record<string, import('#lib/types.ts').BufferData> = {
+            buf1: { unread: 5, notification: 0 } as import('#lib/types.ts').BufferData,
         };
         modelsMock.subscribe.mockImplementation((fn) => {
             fn(mockBuffs);
@@ -105,8 +105,8 @@ describe('favicon badge integration', () => {
     });
 
     it('clears app badge when no unread or notifications', async () => {
-        const mockBuffs: Record<string, import('$lib/types').BufferData> = {
-            buf1: { unread: 0, notification: 0 } as import('$lib/types').BufferData,
+        const mockBuffs: Record<string, import('#lib/types.ts').BufferData> = {
+            buf1: { unread: 0, notification: 0 } as import('#lib/types.ts').BufferData,
         };
         modelsMock.subscribe.mockImplementation((fn) => {
             fn(mockBuffs);
@@ -120,8 +120,8 @@ describe('favicon badge integration', () => {
     });
 
     it('prefers notification count over unread', async () => {
-        const mockBuffs: Record<string, import('$lib/types').BufferData> = {
-            buf1: { unread: 10, notification: 2 } as import('$lib/types').BufferData,
+        const mockBuffs: Record<string, import('#lib/types.ts').BufferData> = {
+            buf1: { unread: 10, notification: 2 } as import('#lib/types.ts').BufferData,
         };
         modelsMock.subscribe.mockImplementation((fn) => {
             fn(mockBuffs);

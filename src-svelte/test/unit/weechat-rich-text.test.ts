@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Protocol, rawText2Rich, richText2Str, convertIrcCodes } from '$lib/weechat';
+import { Protocol, rawText2Rich, richText2Str, convertIrcCodes } from '#lib/weechat.ts';
 
 // --- rawText2Rich conversion tests ---
 

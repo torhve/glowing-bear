@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { joinMultilineToSingle, MULTILINE_PASTE_THRESHOLD } from '$lib/utils';
+import { joinMultilineToSingle, MULTILINE_PASTE_THRESHOLD } from '#lib/utils.ts';
 
 describe('joinMultilineToSingle', () => {
     it('joins normal multi-line text with single spaces', () => {

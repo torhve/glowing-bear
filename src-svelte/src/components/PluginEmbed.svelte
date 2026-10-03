@@ -1,11 +1,11 @@
 <script lang="ts">
   /* eslint-disable svelte/no-dom-manipulating */
   import { untrack } from 'svelte';
-  import type { EmbedCallbackContext, PluginMetadata } from '$lib/types';
-  import { imageExts, videoExts, audioExts } from '$lib/utils/mediaExtensions';
+  import type { EmbedCallbackContext, PluginMetadata } from '#lib/types.ts';
+  import { imageExts, videoExts, audioExts } from '#lib/utils/mediaExtensions.ts';
   import Play from '@lucide/svelte/icons/play';
   import X from '@lucide/svelte/icons/x';
-  import { DEBUG_PLUGIN } from '$lib/debug';
+  import { DEBUG_PLUGIN } from '#lib/debug.ts';
 
   let { plugin }: { plugin: PluginMetadata } = $props();
 

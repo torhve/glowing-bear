@@ -1,13 +1,13 @@
 <script lang="ts">
   import { get } from 'svelte/store';
   import { untrack } from 'svelte';
-  import { connect } from '$lib/stores/connectionManager';
-  import { connectionState, setConnectionStatus, setErrors, clearErrors } from '$lib/stores/connectionStore';
-  import { settings, updateSettings, hashSyncVersion } from '$lib/stores/settings';
-  import { addToast } from '$lib/toast';
-  import { isWindowsTauri } from '$lib/tauriWindow';
+  import { connect } from '#lib/stores/connectionManager.ts';
+  import { connectionState, setConnectionStatus, setErrors, clearErrors } from '#lib/stores/connectionStore.ts';
+  import { settings, updateSettings, hashSyncVersion } from '#lib/stores/settings.ts';
+  import { addToast } from '#lib/toast.ts';
+  import { isWindowsTauri } from '#lib/tauriWindow.ts';
 
-  import { parseRelayUrl, makeKeyboardActivatable } from '$lib/utils';
+  import { parseRelayUrl, makeKeyboardActivatable } from '#lib/utils.ts';
   import { asset } from '$app/paths';
   import Zap from '@lucide/svelte/icons/zap';
   import Settings2 from '@lucide/svelte/icons/settings-2';
@@ -18,7 +18,7 @@
   import Globe from '@lucide/svelte/icons/globe';
   import Eye from '@lucide/svelte/icons/eye';
   import EyeOff from '@lucide/svelte/icons/eye-off';
-  import { Kbd, KbdGroup, Sep } from '$components';
+  import { Kbd, KbdGroup, Sep } from '#components';
   import Lock from '@lucide/svelte/icons/lock';
   import Key from '@lucide/svelte/icons/key';
   import Monitor from '@lucide/svelte/icons/monitor';
@@ -27,7 +27,7 @@
   import Loader2 from '@lucide/svelte/icons/loader-2';
   import FormInput from './FormInput.svelte';
   import TauriTitlebar from './TauriTitlebar.svelte';
-  import { DEBUG_FORM } from '$lib/debug';
+  import { DEBUG_FORM } from '#lib/debug.ts';
 
   // Populate form fields from saved settings once on mount.
   // Using one-time init (not a reactive $effect) prevents typed values

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectEmbedUrl } from '$lib/utils/urlEmbeds';
+import { detectEmbedUrl } from '#lib/utils/urlEmbeds.ts';
 
 describe('detectEmbedUrl', () => {
     it('detects YouTube watch URLs', () => {

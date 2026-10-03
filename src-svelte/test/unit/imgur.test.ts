@@ -5,7 +5,7 @@ const mockSettingsSubscribe = vi.fn((fn: (val: Record<string, unknown>) => void)
     fn({ iToken: '', iAlb: '' });
     return () => {};
 });
-vi.mock('$lib/stores/settings', () => ({
+vi.mock('#lib/stores/settings.ts', () => ({
     settings: { subscribe: mockSettingsSubscribe },
 }));
 
@@ -75,7 +75,7 @@ describe('uploadImage', () => {
     });
 
     it('uploads File as raw binary via readAsArrayBuffer', async () => {
-        const { uploadImage } = await import('$lib/imgur');
+        const { uploadImage } = await import('#lib/imgur.ts');
         const file = new File(['test'], 'test.png', { type: 'image/png' });
         const result = uploadImage(file, () => {});
 
@@ -101,7 +101,7 @@ describe('uploadImage', () => {
     });
 
     it('uses client ID when no iToken configured (binary)', async () => {
-        const { uploadImage } = await import('$lib/imgur');
+        const { uploadImage } = await import('#lib/imgur.ts');
         const file = new File(['test'], 'test.png', { type: 'image/png' });
         void uploadImage(file, () => {});
         actualReader!.onload!({ target: { result: new ArrayBuffer(1) } } as unknown as ProgressEvent);
@@ -118,7 +118,7 @@ describe('uploadImage', () => {
             return () => {};
         });
         // Re-import to pick up new settings mock
-        const { uploadImage } = await import('$lib/imgur');
+        const { uploadImage } = await import('#lib/imgur.ts');
         const file = new File(['test'], 'test.png', { type: 'image/png' });
         void uploadImage(file, () => {});
         actualReader!.onload!({ target: { result: new ArrayBuffer(1) } } as unknown as ProgressEvent);
@@ -132,7 +132,7 @@ describe('uploadImage', () => {
     });
 
     it('handles API error response (binary)', async () => {
-        const { uploadImage } = await import('$lib/imgur');
+        const { uploadImage } = await import('#lib/imgur.ts');
         const file = new File(['test'], 'test.png', { type: 'image/png' });
         const result = uploadImage(file, () => {});
         actualReader!.onload!({ target: { result: new ArrayBuffer(1) } } as unknown as ProgressEvent);
@@ -145,7 +145,7 @@ describe('uploadImage', () => {
     });
 
     it('handles missing link in response (binary)', async () => {
-        const { uploadImage } = await import('$lib/imgur');
+        const { uploadImage } = await import('#lib/imgur.ts');
         const file = new File(['test'], 'test.png', { type: 'image/png' });
         const result = uploadImage(file, () => {});
         actualReader!.onload!({ target: { result: new ArrayBuffer(1) } } as unknown as ProgressEvent);
@@ -158,7 +158,7 @@ describe('uploadImage', () => {
     });
 
     it('reports progress during binary upload', async () => {
-        const { uploadImage } = await import('$lib/imgur');
+        const { uploadImage } = await import('#lib/imgur.ts');
         const progressCb = vi.fn();
         const file = new File(['test'], 'test.png', { type: 'image/png' });
         void uploadImage(file, progressCb);
@@ -170,7 +170,7 @@ describe('uploadImage', () => {
     });
 
     it('skips progress when not computable (binary)', async () => {
-        const { uploadImage } = await import('$lib/imgur');
+        const { uploadImage } = await import('#lib/imgur.ts');
         const progressCb = vi.fn();
         const file = new File(['test'], 'test.png', { type: 'image/png' });
         void uploadImage(file, progressCb);
@@ -181,18 +181,18 @@ describe('uploadImage', () => {
     });
 
     it('rejects for non-image files', async () => {
-        const { uploadImage } = await import('$lib/imgur');
+        const { uploadImage } = await import('#lib/imgur.ts');
         const file = new File(['test'], 'test.txt', { type: 'text/plain' });
         await expect(uploadImage(file, () => {})).rejects.toThrow('not an image');
     });
 
     it('rejects null input', async () => {
-        const { uploadImage } = await import('$lib/imgur');
+        const { uploadImage } = await import('#lib/imgur.ts');
         await expect(uploadImage(null as unknown as File, () => {})).rejects.toThrow('No image provided');
     });
 
     it('accepts base64 data URL string input (FormData upload)', async () => {
-        const { uploadImage } = await import('$lib/imgur');
+        const { uploadImage } = await import('#lib/imgur.ts');
         const result = uploadImage('data:image/png;base64,abc123', () => {});
 
         // Should not use FileReader for string input
@@ -209,7 +209,7 @@ describe('uploadImage', () => {
     });
 
     it('accepts raw base64 string (no data: prefix)', async () => {
-        const { uploadImage } = await import('$lib/imgur');
+        const { uploadImage } = await import('#lib/imgur.ts');
         const result = uploadImage('rawBase64Data', () => {});
 
         expect(mockFileReader).not.toHaveBeenCalled();
@@ -224,7 +224,7 @@ describe('uploadImage', () => {
     });
 
     it('handles FileReader read error for binary upload', async () => {
-        const { uploadImage } = await import('$lib/imgur');
+        const { uploadImage } = await import('#lib/imgur.ts');
         const file = new File(['test'], 'test.png', { type: 'image/png' });
         const result = uploadImage(file, () => {});
 
@@ -252,7 +252,7 @@ describe('deleteImage', () => {
     });
 
     it('deletes image successfully via DELETE request', async () => {
-        const { deleteImage } = await import('$lib/imgur');
+        const { deleteImage } = await import('#lib/imgur.ts');
         const promise = deleteImage('testDeleteHash');
 
         expect(actualXhr.open).toHaveBeenCalledWith('DELETE', 'https://api.imgur.com/3/image/testDeleteHash', true);
@@ -266,7 +266,7 @@ describe('deleteImage', () => {
     });
 
     it('rejects on API error during delete', async () => {
-        const { deleteImage } = await import('$lib/imgur');
+        const { deleteImage } = await import('#lib/imgur.ts');
         const promise = deleteImage('badDeleteHash');
 
         actualXhr.status = 404;

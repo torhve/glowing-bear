@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Protocol } from '$lib/weechat';
+import { Protocol } from '#lib/weechat.ts';
 
 function expectHandshakeContains(result: string, expected: Record<string, string>) {
     expect(result).toMatch(/^handshake\s/);

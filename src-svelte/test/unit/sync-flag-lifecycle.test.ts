@@ -9,11 +9,11 @@ import {
     endSyncPhase,
     isSyncing,
     getEffectiveUnread,
-} from '$lib/stores/models';
-import type { BufferData, ProtocolMessage } from '$lib/types';
+} from '#lib/stores/models.ts';
+import type { BufferData, ProtocolMessage } from '#lib/types.ts';
 
 // Mock settings store to avoid localStorage access at module load time
-vi.mock('$lib/stores/settings', () => ({
+vi.mock('#lib/stores/settings.ts', () => ({
     settings: {
         subscribe: (fn: (val: any) => void) => {
             fn({
@@ -41,7 +41,7 @@ vi.mock('$lib/stores/settings', () => ({
     },
 }));
 
-vi.mock('$lib/notifications', () => ({
+vi.mock('#lib/notifications.ts', () => ({
     playNotificationSound: vi.fn(),
     createHighlight: vi.fn(),
     createDM: vi.fn(),
@@ -53,14 +53,14 @@ vi.mock('$lib/notifications', () => ({
 
 // jsdom in this setup exposes no localStorage; last-buffer resume is unrelated to the
 // sync phase, and handleBufferInfo would otherwise throw on it.
-vi.mock('$lib/stores/bufferResume', () => ({
+vi.mock('#lib/stores/bufferResume.ts', () => ({
     shouldResume: vi.fn(() => false),
     getLastBuffer: vi.fn(() => null),
     recordLastBuffer: vi.fn(),
 }));
 
 const { handleBufferInfo, handleHotlistInfo, handleBufferLineAdded, handleLineInfo } =
-    await import('$lib/stores/handlers');
+    await import('#lib/stores/handlers.ts');
 
 /** Build a buffer; defaults are a normal channel buffer with no unread state. */
 function makeBuffer(id: string, overrides: Partial<BufferData> = {}): BufferData {

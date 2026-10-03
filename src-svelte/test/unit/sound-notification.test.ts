@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { playNotificationSound } from '$lib/notifications';
+import { playNotificationSound } from '#lib/notifications.ts';
 
 // Mock settings to return soundnotification: true
-vi.mock('$lib/stores/settings', () => ({
+vi.mock('#lib/stores/settings.ts', () => ({
     settings: {
         subscribe(fn: (s: any) => void) {
             fn({ soundnotification: true });

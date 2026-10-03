@@ -8,7 +8,7 @@ import type { BufferData } from './types';
 import { initFavicon, drawBadge, resetBadge } from './faviconBadge';
 import { isTauri, setBadgeCount } from './tauriWindow';
 import { initWindowFocusTracking } from './windowFocus';
-import { DEBUG_NOTIFICATIONS } from '$lib/debug';
+import { DEBUG_NOTIFICATIONS } from '#lib/debug.ts';
 
 // Calculate total unread and notification counts across all buffers.
 function getTotalUnread(): { unread: number; notifications: number } {

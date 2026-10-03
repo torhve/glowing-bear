@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { settings, updateSettings } from '$lib/stores/settings';
+  import { settings, updateSettings } from '#lib/stores/settings.ts';
   import { get } from 'svelte/store';
-  import { requestNotificationPermission, isNotificationSupported } from '$lib/notifications';
-  import { themeStore, setTheme, themes, themeLabels } from '$lib/stores/theme';
-  import { weechatVersion } from '$lib/stores/models';
-  import BaseDialog from '$components/BaseDialog.svelte';
+  import { requestNotificationPermission, isNotificationSupported } from '#lib/notifications.ts';
+  import { themeStore, setTheme, themes, themeLabels } from '#lib/stores/theme.ts';
+  import { weechatVersion } from '#lib/stores/models.ts';
+  import BaseDialog from '#components/BaseDialog.svelte';
   import Palette from '@lucide/svelte/icons/palette';
   import Monitor from '@lucide/svelte/icons/monitor';
   import Bell from '@lucide/svelte/icons/bell';
@@ -32,7 +32,7 @@
   import LogIn from '@lucide/svelte/icons/log-in';
   import Cog from '@lucide/svelte/icons/cog';
   import { version as appVersion } from '../../../package.json';
-  import FormInput from '$components/FormInput.svelte';
+  import FormInput from '#components/FormInput.svelte';
 
   let notifSupported = $derived(isNotificationSupported());
 

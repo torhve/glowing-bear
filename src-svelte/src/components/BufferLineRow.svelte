@@ -1,17 +1,17 @@
 <script lang="ts">
-  import type { BufferLine, EmbedCallbackContext, PluginMetadata } from '$lib/types';
-  import { tokenizeAndCodify, type TokenGroup } from '$lib/linkTokens';
-  import TokenGroupRenderer from '$components/TokenGroupRenderer.svelte';
-  import PluginEmbed from '$components/PluginEmbed.svelte';
+  import type { BufferLine, EmbedCallbackContext, PluginMetadata } from '#lib/types.ts';
+  import { tokenizeAndCodify, type TokenGroup } from '#lib/linkTokens.ts';
+  import TokenGroupRenderer from '#components/TokenGroupRenderer.svelte';
+  import PluginEmbed from '#components/PluginEmbed.svelte';
   import ArrowRight from '@lucide/svelte/icons/arrow-right';
   import ArrowLeft from '@lucide/svelte/icons/arrow-left';
   import ChevronLeft from '@lucide/svelte/icons/chevron-left';
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import Minus from '@lucide/svelte/icons/minus';
-  import { detectPrefixIcon, type PrefixIconType } from '$lib/utils/prefixIcons';
-  import { imageExts, videoExts, audioExts, normalizeImageUrl } from '$lib/utils/mediaExtensions';
-  import { detectEmbedUrl } from '$lib/utils/urlEmbeds';
-  import { DEBUG_METADATA } from '$lib/debug';
+  import { detectPrefixIcon, type PrefixIconType } from '#lib/utils/prefixIcons.ts';
+  import { imageExts, videoExts, audioExts, normalizeImageUrl } from '#lib/utils/mediaExtensions.ts';
+  import { detectEmbedUrl } from '#lib/utils/urlEmbeds.ts';
+  import { DEBUG_METADATA } from '#lib/debug.ts';
 
   let {
     message,

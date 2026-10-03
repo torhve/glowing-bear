@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { codifyText, tokenizeAndCodify, tokenizeLinks } from '$lib/linkTokens';
+import { codifyText, tokenizeAndCodify, tokenizeLinks } from '#lib/linkTokens.ts';
 
 describe('codifyText', () => {
     it('should not modify plain text without backticks', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { shortnameToUnicode, emojifyInput } from '$lib/emojify';
+import { shortnameToUnicode, emojifyInput } from '#lib/emojify.ts';
 
 describe('shortnameToUnicode', () => {
     it('converts :smile: to smile emoji', () => {

@@ -1,11 +1,11 @@
 <script lang="ts">
-  import type { BufferData } from '$lib/types';
-  import { buffers, activeBufferId, sortedVisibleBuffers, getEffectiveUnread } from '$lib/stores/models';
-  import { switchBuffer } from '$lib/stores/connectionManager';
-  import { settings, updateSettings } from '$lib/stores/settings';
-  import { getBufferIconName, getDisplayName } from '$lib/utils';
+  import type { BufferData } from '#lib/types.ts';
+  import { buffers, activeBufferId, sortedVisibleBuffers, getEffectiveUnread } from '#lib/stores/models.ts';
+  import { switchBuffer } from '#lib/stores/connectionManager.ts';
+  import { settings, updateSettings } from '#lib/stores/settings.ts';
+  import { getBufferIconName, getDisplayName } from '#lib/utils.ts';
   import { get } from 'svelte/store';
-  import { tooltipAttachment } from '$lib/utils/bufferTooltip';
+  import { tooltipAttachment } from '#lib/utils/bufferTooltip.ts';
   import LayoutGrid from '@lucide/svelte/icons/layout-grid';
   import List from '@lucide/svelte/icons/list';
   import Hash from '@lucide/svelte/icons/hash';

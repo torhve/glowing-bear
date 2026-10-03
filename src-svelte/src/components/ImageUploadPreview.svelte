@@ -1,11 +1,11 @@
 <script lang="ts">
-  import BaseDialog from '$components/BaseDialog.svelte';
+  import BaseDialog from '#components/BaseDialog.svelte';
   import X from '@lucide/svelte/icons/x';
   import Loader2 from '@lucide/svelte/icons/loader-2';
   import CheckCircle from '@lucide/svelte/icons/check-circle';
   import AlertCircle from '@lucide/svelte/icons/alert-circle';
-  import { uploadImage, deleteImage } from '$lib/imgur';
-  import { addToast } from '$lib/toast';
+  import { uploadImage, deleteImage } from '#lib/imgur.ts';
+  import { addToast } from '#lib/toast.ts';
 
   interface PreviewItem {
     id: number;

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { isMacOSTauri, isWindowsTauri, minimizeWindow, toggleMaximizeWindow, closeWindow } from '$lib/tauriWindow';
+  import { isMacOSTauri, isWindowsTauri, minimizeWindow, toggleMaximizeWindow, closeWindow } from '#lib/tauriWindow.ts';
   import Minimize2 from '@lucide/svelte/icons/minimize-2';
   import Maximize2 from '@lucide/svelte/icons/maximize-2';
   import X from '@lucide/svelte/icons/x';

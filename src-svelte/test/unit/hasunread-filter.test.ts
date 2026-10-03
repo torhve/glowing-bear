@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { hasUnread } from '$lib/utils';
-import type { BufferData } from '$lib/types';
+import { hasUnread } from '#lib/utils.ts';
+import type { BufferData } from '#lib/types.ts';
 
 function createBuffer(opts: Partial<BufferData> = {}): BufferData {
     return {

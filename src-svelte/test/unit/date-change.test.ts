@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 
 // Mock settings store to avoid localStorage access at module load time
-vi.mock('$lib/stores/settings', () => ({
+vi.mock('#lib/stores/settings.ts', () => ({
     settings: {
         subscribe: (fn: (val: any) => void) => {
             fn({
@@ -40,7 +40,7 @@ vi.mock('$lib/stores/settings', () => ({
 }));
 
 // Mock notifications before importing handlers
-vi.mock('$lib/notifications', () => ({
+vi.mock('#lib/notifications.ts', () => ({
     createHighlight: vi.fn(),
     playNotificationSound: vi.fn(),
     updateTitle: vi.fn(),
@@ -48,12 +48,12 @@ vi.mock('$lib/notifications', () => ({
 }));
 
 // Mock windowFocus so handlers module loads without runtime errors
-vi.mock('$lib/windowFocus', () => ({
+vi.mock('#lib/windowFocus.ts', () => ({
     initWindowFocusTracking: vi.fn(() => Promise.resolve(() => {})),
     isWindowFocused: () => typeof document !== 'undefined' && !document.hidden,
 }));
 
-const { injectDateChangeMessageIfNeeded } = await import('$lib/stores/handlers');
+const { injectDateChangeMessageIfNeeded } = await import('#lib/stores/handlers.ts');
 
 describe('Date change injection', () => {
     it('produces valid rich text with 2-digit color code', () => {

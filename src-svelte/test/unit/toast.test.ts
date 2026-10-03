@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { addToast, removeToast, clearToasts, toastStore } from '$lib/toast';
+import { addToast, removeToast, clearToasts, toastStore } from '#lib/toast.ts';
 import { get } from 'svelte/store';
 
 describe('Toast Store', () => {

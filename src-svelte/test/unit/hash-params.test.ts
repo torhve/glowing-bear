@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { settings, applyHashParams, updateSettings } from '$lib/stores/settings';
+import { settings, applyHashParams, updateSettings } from '#lib/stores/settings.ts';
 
 describe('applyHashParams', () => {
     beforeEach(() => {
@@ -13,14 +13,16 @@ describe('applyHashParams', () => {
             savepassword: false,
             autoconnect: false,
         });
+        // window.location.hash and localStorage both persist across tests in one file.
+        window.location.hash = '';
+        localStorage.clear();
         vi.restoreAllMocks();
     });
 
+    // jsdom's window.location is non-configurable, so drive the hash directly —
+    // same-document hash navigation is something jsdom does implement.
     function setHash(hash: string) {
-        Object.defineProperty(window, 'location', {
-            value: { ...window.location, hash: '#' + hash },
-            writable: true,
-        });
+        window.location.hash = hash ? '#' + hash : '';
     }
 
     it('does nothing when hash is empty', () => {
@@ -117,14 +119,8 @@ describe('applyHashParams', () => {
         expect(get(settings).password).toBe('p=ass=word');
     });
 
-    it('does not read from server side', () => {
-        const originalWindow = globalThis.window;
-        // @ts-expect-error - testing SSR guard
-        delete globalThis.window;
-        expect(() => applyHashParams()).not.toThrow();
-        globalThis.window = originalWindow;
-    });
-
+    // The SSR guard (no `window` at all) lives in hash-params-ssr.test.ts, which runs
+    // in a node environment — jsdom's `window` cannot be deleted from the test global.
     it('overwrites localStorage-stored settings', () => {
         updateSettings({ hostField: 'old.host', port: '8080', password: 'oldpass' });
         setHash('host=new.host&port=9001&password=newpass');

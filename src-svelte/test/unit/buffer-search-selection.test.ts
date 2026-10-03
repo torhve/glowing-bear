@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount, type Component } from 'svelte';
-import BufferSearchModal from '$components/BufferSearchModal.svelte';
-import { activeBufferId, buffers, createBuffer } from '$lib/stores/models';
-import { switchBuffer } from '$lib/stores/connectionManager';
-import type { BufferData } from '$lib/types';
+import BufferSearchModal from '#components/BufferSearchModal.svelte';
+import { activeBufferId, buffers, createBuffer } from '#lib/stores/models.ts';
+import { switchBuffer } from '#lib/stores/connectionManager.ts';
+import type { BufferData } from '#lib/types.ts';
 
-vi.mock('$lib/stores/connectionManager', () => ({
+vi.mock('#lib/stores/connectionManager.ts', () => ({
     switchBuffer: vi.fn(async () => true),
 }));
 

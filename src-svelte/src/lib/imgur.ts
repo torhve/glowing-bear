@@ -1,4 +1,4 @@
-import { settings } from '$lib/stores/settings';
+import { settings } from '#lib/stores/settings.ts';
 import { get } from 'svelte/store';
 
 const DEFAULT_CLIENT_ID = '164efef8979cd4b';

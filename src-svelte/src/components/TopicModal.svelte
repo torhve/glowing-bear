@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { RichTextPart } from '$lib/types';
-  import BaseDialog from '$components/BaseDialog.svelte';
-  import LinkifiedText from '$components/LinkifiedText.svelte';
+  import type { RichTextPart } from '#lib/types.ts';
+  import BaseDialog from '#components/BaseDialog.svelte';
+  import LinkifiedText from '#components/LinkifiedText.svelte';
   import X from '@lucide/svelte/icons/x';
   import Check from '@lucide/svelte/icons/check';
 

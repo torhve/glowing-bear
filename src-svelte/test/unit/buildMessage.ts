@@ -1,4 +1,4 @@
-import { hdataKeyTypes } from '$lib/weechat';
+import { hdataKeyTypes } from '#lib/weechat.ts';
 
 // Builds WeeChat relay protocol binary messages for unit testing.
 // Format: [4B length][1B compression][ID: 4B+len+str][objects...]

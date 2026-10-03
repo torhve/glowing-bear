@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { toastStore, removeToast } from '$lib/toast';
+  import { toastStore, removeToast } from '#lib/toast.ts';
   import { untrack } from 'svelte';
 
   import X from '@lucide/svelte/icons/x';
@@ -7,9 +7,9 @@
   import AlertCircle from '@lucide/svelte/icons/alert-circle';
   import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 
-  let _active: import('$lib/toast').Toast[] = $state([]);
+  let _active: import('#lib/toast.ts').Toast[] = $state([]);
   // Map of toast ID -> toast data for toasts currently playing exit animation
-  let _removing: Map<number, import('$lib/toast').Toast> = $state(new Map());
+  let _removing: Map<number, import('#lib/toast.ts').Toast> = $state(new Map());
 
   // Ticking counter to force re-render of toasts with dynamic messageFn (countdown)
   let _tick = $state(0);
@@ -50,7 +50,7 @@
   }
 
   // Display list: active toasts + toasts in exit animation
-  let _displayToasts: import('$lib/toast').Toast[] = $derived.by(() => {
+  let _displayToasts: import('#lib/toast.ts').Toast[] = $derived.by(() => {
     const activeIds = new Set(_active.map(t => t.id));
     const result = [..._active];
     for (const [id, toast] of _removing) {

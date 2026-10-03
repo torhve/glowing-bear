@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount, type Component } from 'svelte';
-import ChatView from '$components/ChatView.svelte';
-import { activeBufferId, buffers, createBuffer, createBufferLine } from '$lib/stores/models';
-import { fetchMoreLines } from '$lib/stores/connectionManager';
-import type { BufferData } from '$lib/types';
+import ChatView from '#components/ChatView.svelte';
+import { activeBufferId, buffers, createBuffer, createBufferLine } from '#lib/stores/models.ts';
+import { fetchMoreLines } from '#lib/stores/connectionManager.ts';
+import type { BufferData } from '#lib/types.ts';
 
-vi.mock('$lib/stores/connectionManager', () => ({
+vi.mock('#lib/stores/connectionManager.ts', () => ({
     fetchMoreLines: vi.fn(),
     closeBufferOnWeeChat: vi.fn(),
     pinBuffer: vi.fn(),
