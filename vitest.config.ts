@@ -11,6 +11,7 @@ export default defineConfig({
     conditions: ['browser'],
     alias: {
       '@tauri-apps/plugin-notification': path.resolve('./src-svelte/test/unit/mocks/tauri-plugin-notification.ts'),
+      '$app/paths': path.resolve('./src-svelte/test/unit/mocks/app-paths.ts'),
     },
   },
   test: {

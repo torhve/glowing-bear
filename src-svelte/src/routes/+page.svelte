@@ -215,48 +215,47 @@
     }
   }
 
-  let _jumpDecimal: number | null = $state(null);
-
+  // Two-step buffer jump: Alt+J arms the mode, the first digit is the tens place,
+  // the second digit switches to that buffer number, any other key aborts.
+  let _jumpArmed = $state(false);
+  let _jumpTens: number | null = $state(null);
   function handleJumpToBuffer(e: KeyboardEvent) {
     // Skip when focus is in an input field so user can type normally
     const activeEl = document.activeElement;
     const tag = activeEl?.tagName || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
     if ((activeEl as HTMLElement)?.isContentEditable) return;
-
     const code = e.keyCode || e.which;
     const digit = code - 48;
-
-    // Alt+J -> start jump mode
+    // Alt+J -> arm jump mode (tens place reset)
     if (e.altKey && !e.ctrlKey && !e.shiftKey && code === 74) {
       e.preventDefault();
-      _jumpDecimal = null;
+      _jumpArmed = true;
+      _jumpTens = null;
       return;
     }
-
-    // In jump mode, first digit
-    if (_jumpDecimal !== null && digit >= 0 && digit <= 9 && !e.altKey && !e.ctrlKey && !e.shiftKey) {
+    if (!_jumpArmed) return;
+    // Digits while armed: first is tens, second completes the buffer number
+    if (digit >= 0 && digit <= 9 && !e.altKey && !e.ctrlKey && !e.shiftKey) {
       e.preventDefault();
-      if (_jumpDecimal === null) {
-        _jumpDecimal = digit;
-      } else {
-        // Second digit -> jump to buffer
-        const targetNum = _jumpDecimal * 10 + digit;
-        const sorted = get(sortedVisibleBuffers) as BufferData[];
-        const targetIdx = targetNum - 1;
-        if (targetIdx >= 0 && targetIdx < sorted.length) {
-          const targetBuf = sorted[targetIdx];
-          if (targetBuf) switchBuffer(targetBuf.id);
-        }
-        _jumpDecimal = null;
+      if (_jumpTens === null) {
+        _jumpTens = digit;
+        return;
+      }
+      const targetNum = _jumpTens * 10 + digit;
+      _jumpArmed = false;
+      _jumpTens = null;
+      const sorted = get(sortedVisibleBuffers) as BufferData[];
+      const targetIdx = targetNum - 1;
+      if (targetIdx >= 0 && targetIdx < sorted.length) {
+        const targetBuf = sorted[targetIdx];
+        if (targetBuf) switchBuffer(targetBuf.id);
       }
       return;
     }
-
-    // Non-digit key while in jump mode -> abort
-    if (_jumpDecimal !== null && !(digit >= 0 && digit <= 9)) {
-      _jumpDecimal = null;
-    }
+    // Any other key while armed -> abort
+    _jumpArmed = false;
+    _jumpTens = null;
   }
 
   let lastEscapeTime = 0;

@@ -681,8 +681,13 @@
         document.removeEventListener('click', handleClickOutside);
       }
     }
-    setTimeout(() => document.addEventListener('click', handleClickOutside), 0);
-    return () => document.removeEventListener('click', handleClickOutside);
+    // Defer past the opening click. Cleanup cancels a pending installation so a
+    // rapid open/close cannot leak a listener that no effect run owns.
+    const timer = setTimeout(() => document.addEventListener('click', handleClickOutside), 0);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('click', handleClickOutside);
+    };
   });
 
   // Expose a reset function for E2E tests to clear message and formatting state

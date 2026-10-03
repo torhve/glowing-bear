@@ -17,6 +17,21 @@
 
   let containerRef = $state<HTMLDivElement>();
   let messages = $derived($currentBuffer?.lines ?? []);
+  // Stable per-row keys: every store update clones the lines, so object identity is
+  // useless and index keys let a row's component state (e.g. an injected embed) follow
+  // the wrong message when the line cap trims the front. lineId is stable across
+  // updates; a positional suffix keeps keys unique for identical content-fallback ids
+  // (relays without WeeChat line ids).
+  let lineKeys = $derived.by(() => {
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local dedup bookkeeping, not reactive state
+    const seen = new Map<string, number>();
+    return messages.map((m) => {
+      const base = m.lineId ?? `line:${m.date}:${m.text}`;
+      const n = seen.get(base) ?? 0;
+      seen.set(base, n + 1);
+      return n === 0 ? base : `${base}#${n}`;
+    });
+  });
   let noembed = $derived($settings.noembed);
   let topicText = $derived($currentBuffer?.title?.map(t => t.text).join('') || '');
   // Bubble mode: enabled when setting is on AND buffer is a private chat type.
@@ -570,7 +585,7 @@
 
         {#if showMarkerBeforeUnread}
           <!-- Read lines (up to and including readEndIndex) -->
-          {#each messages.slice(0, readStartIndex) as message, i (i)}
+          {#each messages.slice(0, readStartIndex) as message, i (lineKeys[i]!)}
             <BufferLineRow
               {message}
               index={i}
@@ -591,7 +606,7 @@
             </div>
           </div>
           <!-- Unread lines (after readEndIndex) -->
-          {#each messages.slice(readStartIndex) as message, i (readStartIndex + i)}
+          {#each messages.slice(readStartIndex) as message, i (lineKeys[readStartIndex + i]!)}
             <BufferLineRow
               {message}
               index={readStartIndex + i}
@@ -605,7 +620,7 @@
           {/each}
         {:else}
           <!-- All lines visible (no readmarker needed) -->
-          {#each messages as message, i (i)}
+          {#each messages as message, i (lineKeys[i]!)}
             <BufferLineRow
               {message}
               index={i}
@@ -649,7 +664,7 @@
 
           {#if showMarkerBeforeUnread}
             <!-- Read lines (up to and including readEndIndex) -->
-            {#each messages.slice(0, readStartIndex) as message, i (i)}
+            {#each messages.slice(0, readStartIndex) as message, i (lineKeys[i]!)}
               <BufferLineRow
                 {message}
                 index={i}
@@ -669,7 +684,7 @@
               </td>
             </tr><!---->
             <!-- Unread lines (after readEndIndex) -->
-            {#each messages.slice(readStartIndex) as message, i (readStartIndex + i)}
+            {#each messages.slice(readStartIndex) as message, i (lineKeys[readStartIndex + i]!)}
               <BufferLineRow
                 {message}
                 index={readStartIndex + i}
@@ -680,7 +695,7 @@
             {/each}<!---->
           {:else}
             <!-- All lines visible (no readmarker needed) -->
-            {#each messages as message, i (i)}
+            {#each messages as message, i (lineKeys[i]!)}
               <BufferLineRow
                 {message}
                 index={i}
