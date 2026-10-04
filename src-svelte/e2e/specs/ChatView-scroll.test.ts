@@ -100,12 +100,16 @@ test("should scroll to bottom when switching to a buffer with many lines", async
     // Wait for #glowing-bear to appear in buffer list
     await waitForBuffer(page, "#glowing-bear", 15000);
 
-    // Send initial messages to ensure we have enough lines for scroll testing
+    // Establish a known read state independent of earlier specs' leftovers:
+    // visit the buffer, send while active (active rows are read), then leave
+    // (leaving marks every displayed row read) and re-enter. The behavior
+    // under test is landing at the bottom of a long HISTORY; unread
+    // positioning has its own dedicated tests below.
+    await switchToBuffer(page, "#glowing-bear");
     for (let i = 0; i < 10; i++) {
         await irc.sendMessage("#glowing-bear", `scroll-init-${Date.now()}-${i}`);
     }
-
-    // Switch to the buffer and wait for data to load
+    await switchToBuffer(page, "core.weechat");
     await switchToBuffer(page, "#glowing-bear");
 
     // Wait for chat messages to actually load (async fetchMoreLines from +page effect)

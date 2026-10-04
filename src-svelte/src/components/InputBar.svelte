@@ -176,7 +176,8 @@
     } else {
       // Put back exactly the lines that failed, and say so instead of failing silently.
       // The wording stays generic: the socket can be closing even while `connected` is true.
-      message = unsent.join('\n');
+      // Text typed while the send was in flight stays intact below the restored lines.
+      message = unsent.join('\n') + (message ? '\n' + message : '');
       addToast('Message could not be sent — your text was kept', { type: 'warning', duration: 5000 });
     }
 

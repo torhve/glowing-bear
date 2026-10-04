@@ -92,6 +92,13 @@ interface PendingRequest {
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 
+const textEncoder = new TextEncoder();
+
+/** UTF-8 byte length of a JSON frame — the closest browser-visible proxy for wire payload bytes. */
+function utf8ByteLength(text: string): number {
+    return textEncoder.encode(text).length;
+}
+
 /** Collision-free request ids: random per-session prefix + monotonic counter. */
 function makeSessionId(): string {
     const bytes = new Uint8Array(6);
@@ -107,8 +114,9 @@ export class ApiSession {
     private readonly opts: ApiSessionOptions;
     private readonly sessionId = makeSessionId();
     private counter = 0;
-    /** Wire byte accounting for the connection stats UI (UTF-16 length of
-     *  JSON frames — close enough for display, no per-frame encoder cost). */
+    /** Wire byte accounting for the connection stats UI: UTF-8 byte length
+     *  of the JSON frames the session writes to the socket. Transport
+     *  overhead (headers, compression) is browser-managed and not visible. */
     bytesSent = 0;
     bytesReceived = 0;
     private socket: WebSocket | null = null;
@@ -225,7 +233,7 @@ export class ApiSession {
         // One socket send for the whole batch, after every id is registered.
         try {
             const payload = JSON.stringify(frames);
-            this.bytesSent += payload.length;
+            this.bytesSent += utf8ByteLength(payload);
             this.socket!.send(payload);
             this.lastActivityAt = Date.now();
         } catch (e) {
@@ -285,7 +293,7 @@ export class ApiSession {
             if (!alreadySent && frame) {
                 try {
                     const payload = JSON.stringify(frame);
-                    this.bytesSent += payload.length;
+                    this.bytesSent += utf8ByteLength(payload);
                     this.socket!.send(payload);
                     this.lastActivityAt = Date.now();
                 } catch (e) {
@@ -313,7 +321,7 @@ export class ApiSession {
     private handleFrame(ev: MessageEvent, mySocket: WebSocket): void {
         if (this.isStale(mySocket)) return;
         this.lastActivityAt = Date.now();
-        if (typeof ev.data === 'string') this.bytesReceived += ev.data.length;
+        if (typeof ev.data === 'string') this.bytesReceived += utf8ByteLength(ev.data);
         let frame: unknown;
         if (typeof ev.data !== 'string') {
             this.opts.onDiagnostic?.({ kind: 'malformed_frame', raw: '<non-text frame>', error: 'binary frame' });
