@@ -318,13 +318,27 @@ export function createApiStoreReducers(): ApiReducers {
                 if (!buffer) return current; // buffer not synced yet; history fetch covers it
                 const copy = { ...current, [key]: { ...buffer, lines: [...buffer.lines] } };
                 const target = copy[key]!;
-                const epoch = target.clearEpoch ?? 0;
+                // Line identity is idempotent: a live line that raced with a
+                // concurrent history response updates the existing row in
+                // place instead of duplicating it, and is not tallied twice.
+                const lineId = `weechat:${line.id}`;
+                const existingIndex = target.lines.findIndex((l) => l.lineId === lineId);
+                if (existingIndex >= 0) {
+                    target.lines[existingIndex] = createBufferLine({
+                        buffer: target.id,
+                        date: line.epochMs,
+                        prefix: line.prefix,
+                        message: line.message,
+                        tags_array: line.tags,
+                        displayed: line.displayed ? 1 : 0,
+                        notify_level: line.notifyLevel,
+                        highlight: line.highlight ? 1 : 0,
+                        id: line.id,
+                        bufferType: target.type,
+                    });
+                    return copy;
+                }
                 appendLines(target, [line]);
-                // Clear-epoch guard: a line that arrives for a buffer cleared
-                // mid-request still appends (it is live), but history
-                // responses captured under an older epoch are rejected in
-                // phase 8; the epoch bump is what makes that check possible.
-                void epoch;
                 if (line.displayed) {
                     tallyLine(target, line, activeId);
                     alertForLine(target, line, activeId);
