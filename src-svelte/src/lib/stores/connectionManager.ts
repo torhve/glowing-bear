@@ -343,7 +343,7 @@ export async function requestNicklist(bufferId: string) {
         return;
     }
     try {
-        const res = await session.request({ method: 'GET', path: `/api/buffers/${apiId}/nicks` });
+        const res = await session.request({ method: 'GET', path: `/api/buffers/${apiId}/nicks?colors=weechat` });
         if (DEBUG_NICKLIST) console.log('[nicklist] response code:', res.code);
         if (res.code === 200) {
             applyNicklistRoot(res.body, apiId, createApiStoreReducers());

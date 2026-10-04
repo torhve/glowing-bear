@@ -505,3 +505,53 @@ export function richText2Str(parts: RichPart[]): string {
     }
     return segments.join('');
 }
+
+/// Color class for a parsed ColorInfo in the nick/line CSS vocabulary
+/// (cwf-/cef-/cof- foreground, cwb-/ceb-/cob- background).
+function nickColorClass(color: ColorInfo, isFg: boolean): string {
+    switch (color.type) {
+    case 'option': return (isFg ? 'cof-' : 'cob-') + color.name;
+    case 'weechat': return (isFg ? 'cwf-' : 'cwb-') + color.name;
+    case 'ext': return (isFg ? 'cef-' : 'ceb-') + color.name;
+    }
+}
+
+/**
+ * Parse a WeeChat internal color string — the `colors=weechat` encoding of the
+ * nick `color`/`prefix_color` fields, e.g. "\x19F06", "\x19*03,05", "\x19@12345",
+ * "\x19F" — into the same CSS class vocabulary line parts use. Leading attribute
+ * chars (from attrNameChars) become a-* classes; the color body is resolved with
+ * the shared getStyle() engine. Returns null when the string is not a parseable
+ * internal code so callers can fall back to name-based mapping.
+ */
+export function parseWeechatNickColor(code: string): string[] | null {
+    if (!code || !code.includes('\x19')) return null;
+    // A nick color payload is one spec; keep the last non-empty segment.
+    let spec = '';
+    for (const seg of code.split('\x19')) {
+        if (seg.length > 0) spec = seg;
+    }
+    if (spec.length === 0) return null;
+    const classes: string[] = [];
+    // Bare F/B = default fg/bg. (Option colors like bar_fg encode marker
+    // bytes the style engine does not model; those fall through to null and
+    // the caller's name-based mapping handles them.)
+    if (spec === 'F') return ['cwf-default'];
+    if (spec === 'B') return ['cwb-default'];
+    // Bare extended color: getStyle() treats bare @NNNNN as unimplemented.
+    const ext = spec.match(/^@(\d{5})/);
+    if (ext) return ['cef-' + ext[1]!];
+    // Otherwise delegate to the shared style engine. Attributes live inside
+    // the F/%/. patterns (e.g. F*06 = bold lightgreen); a leading * is the
+    // fg+bg marker, so no separate attribute scan is needed.
+    const style = getStyle(spec);
+    if (style.text.length > 0) return null; // trailing garbage: not a color code
+    if (style.fgColor) classes.push(nickColorClass(style.fgColor, true));
+    if (style.bgColor) classes.push(nickColorClass(style.bgColor, false));
+    if (style.attrs) {
+        for (const attr in style.attrs.override) {
+            if (style.attrs.override[attr]) classes.push('a-' + attr);
+        }
+    }
+    return classes.length > 0 ? classes : null;
+}

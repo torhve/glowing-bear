@@ -204,8 +204,8 @@ function createNickFromApi(buffer: BufferData, snap: NickSnapshot): Nick {
         prefix: snap.prefix,
         visible: snap.visible ? '1' : '0',
         name: snap.name,
-        color: snap.colorName || snap.color,
-        prefix_color: snap.prefixColorName || snap.prefixColor,
+        color: snap.color || snap.colorName,
+        prefix_color: snap.prefixColor || snap.prefixColorName,
     });
     nick.nickId = snap.id;
     return nick;

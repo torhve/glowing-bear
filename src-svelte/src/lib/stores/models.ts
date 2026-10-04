@@ -11,7 +11,7 @@ import type {
     NickGroup,
     RichTextPart,
 } from "#lib/types.ts";
-import { rawText2Rich } from "#lib/weechat-colors.ts";
+import { rawText2Rich, parseWeechatNickColor } from "#lib/weechat-colors.ts";
 import { DEBUG_BUFFERS } from "#lib/debug.ts";
 
 /**
@@ -466,6 +466,11 @@ export function createNick(message: {
     const getNickColorClasses = (colorStr?: string): string[] => {
         const classes: string[] = ["cwf-default"];
         if (!colorStr) return classes;
+        // WeeChat internal color code (new API `colors=weechat` encoding):
+        // resolve through the shared color parser, keep default if unparseable.
+        if (colorStr.includes("\x19")) {
+            return parseWeechatNickColor(colorStr) ?? ["cwf-default"];
+        }
 
         if (colorStr.startsWith("weechat")) {
             const match = colorStr.match(/[a-zA-Z0-9_]+$/);
