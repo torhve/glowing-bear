@@ -1,0 +1,29 @@
+{"t":"2026-10-04T16:29:03.891Z","step":"handshake","data":{"password_hash_algo":"pbkdf2+sha512","password_hash_iterations":100000,"totp":false}}
+{"t":"2026-10-04T16:29:03.896Z","step":"http:plain","data":"status=200 {\"weechat_version\":\"4.10.1\",\"weechat_version_git\":\"\",\"weechat_version_number\":67764480,\"relay_api_version\":\"0.6.0\",\"rela"}
+{"t":"2026-10-04T16:29:04.154Z","step":"ws:plain","data":"code=200 {\"weechat_version\":\"4.10.1\",\"weechat_version_git\":\"\",\"weechat_version_number\":67764480,\"relay_api_version\":\"0.6.0\",\"rela"}
+{"t":"2026-10-04T16:29:04.154Z","step":"result","data":"plain: http=200 ws=200"}
+{"t":"2026-10-04T16:29:04.157Z","step":"http:sha256","data":"status=200 {\"weechat_version\":\"4.10.1\",\"weechat_version_git\":\"\",\"weechat_version_number\":67764480,\"relay_api_version\":\"0.6.0\",\"rela"}
+{"t":"2026-10-04T16:29:04.410Z","step":"ws:sha256","data":"code=200 {\"weechat_version\":\"4.10.1\",\"weechat_version_git\":\"\",\"weechat_version_number\":67764480,\"relay_api_version\":\"0.6.0\",\"rela"}
+{"t":"2026-10-04T16:29:04.410Z","step":"result","data":"sha256: http=200 ws=200"}
+{"t":"2026-10-04T16:29:04.412Z","step":"http:sha512","data":"status=200 {\"weechat_version\":\"4.10.1\",\"weechat_version_git\":\"\",\"weechat_version_number\":67764480,\"relay_api_version\":\"0.6.0\",\"rela"}
+{"t":"2026-10-04T16:29:04.669Z","step":"ws:sha512","data":"code=200 {\"weechat_version\":\"4.10.1\",\"weechat_version_git\":\"\",\"weechat_version_number\":67764480,\"relay_api_version\":\"0.6.0\",\"rela"}
+{"t":"2026-10-04T16:29:04.669Z","step":"result","data":"sha512: http=200 ws=200"}
+{"t":"2026-10-04T16:29:04.745Z","step":"http:pbkdf2+sha256","data":"status=200 {\"weechat_version\":\"4.10.1\",\"weechat_version_git\":\"\",\"weechat_version_number\":67764480,\"relay_api_version\":\"0.6.0\",\"rela"}
+{"t":"2026-10-04T16:29:05.069Z","step":"ws:pbkdf2+sha256","data":"code=200 {\"weechat_version\":\"4.10.1\",\"weechat_version_git\":\"\",\"weechat_version_number\":67764480,\"relay_api_version\":\"0.6.0\",\"rela"}
+{"t":"2026-10-04T16:29:05.070Z","step":"result","data":"pbkdf2+sha256: http=200 ws=200"}
+{"t":"2026-10-04T16:29:05.150Z","step":"http:pbkdf2+sha512","data":"status=200 {\"weechat_version\":\"4.10.1\",\"weechat_version_git\":\"\",\"weechat_version_number\":67764480,\"relay_api_version\":\"0.6.0\",\"rela"}
+{"t":"2026-10-04T16:29:05.485Z","step":"ws:pbkdf2+sha512","data":"code=200 {\"weechat_version\":\"4.10.1\",\"weechat_version_git\":\"\",\"weechat_version_number\":67764480,\"relay_api_version\":\"0.6.0\",\"rela"}
+{"t":"2026-10-04T16:29:05.485Z","step":"result","data":"pbkdf2+sha512: http=200 ws=200"}
+{"t":"2026-10-04T16:29:05.487Z","step":"http:plain-wrongpw","data":"status=401 {\"error\":\"Invalid password\"}"}
+{"t":"2026-10-04T16:29:05.487Z","step":"result","data":"plain wrong password: http=401 (expect 401)"}
+{"t":"2026-10-04T16:29:05.488Z","step":"http:sha256-wrongpw","data":"status=401 {\"error\":\"Invalid password\"}"}
+{"t":"2026-10-04T16:29:05.488Z","step":"result","data":"sha256 wrong password: http=401 (expect 401)"}
+{"t":"2026-10-04T16:29:05.489Z","step":"http:sha512-wrongpw","data":"status=401 {\"error\":\"Invalid password\"}"}
+{"t":"2026-10-04T16:29:05.489Z","step":"result","data":"sha512 wrong password: http=401 (expect 401)"}
+{"t":"2026-10-04T16:29:05.548Z","step":"http:pbkdf2+sha256-wrongpw","data":"status=401 {\"error\":\"Invalid password\"}"}
+{"t":"2026-10-04T16:29:05.548Z","step":"result","data":"pbkdf2+sha256 wrong password: http=401 (expect 401)"}
+{"t":"2026-10-04T16:29:05.629Z","step":"http:pbkdf2+sha512-wrongpw","data":"status=401 {\"error\":\"Invalid password\"}"}
+{"t":"2026-10-04T16:29:05.629Z","step":"result","data":"pbkdf2+sha512 wrong password: http=401 (expect 401)"}
+{"t":"2026-10-04T16:29:05.642Z","step":"http:pbkdf2+sha256-stale-ts","data":"status=401 {\"error\":\"Invalid timestamp\"}"}
+{"t":"2026-10-04T16:29:05.642Z","step":"result","data":"stale timestamp: http=401 (expect 401)"}
+{"t":"2026-10-04T16:29:05.642Z","step":"done","data":"auth probe complete"}

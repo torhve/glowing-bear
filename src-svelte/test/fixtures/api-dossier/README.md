@@ -27,8 +27,11 @@ form; this directory keeps the reproducible evidence.
 2. Run the probes (Node ≥ 22 for global `WebSocket`):
 
    ```bash
-   node probes/probe-session.mjs   # bootstrap, completion, input, lines, G1 notify experiment
-   node probes/probe-lifecycle.mjs # free buffers, errors, close events, event inventory
+   node probes/probe-session.mjs        # bootstrap, completion, input, lines, G1 notify experiment
+   node probes/probe-lifecycle.mjs      # free buffers, errors, close events, event inventory
+   node probes/probe-auth-algorithms.mjs # all five auth algorithms, HTTP + WS (needs a
+                                          # dedicated instance on 9011 with
+                                          # password_hash_algo=*; see that file's header)
    ```
 
 3. Raw frames land in `frames/probe-session.jsonl` and `frames/probe-lifecycle.jsonl`
@@ -139,5 +142,27 @@ No PUT/DELETE resources exist despite the CORS Allow header.
   equal the server's `password_hash_iterations`, key length = digest length
   (32 for sha256), hex compared case-insensitively. `gbtest/start.sh`'s
   authenticated probe implements exactly this.
+### Auth algorithms (live, `probes/probe-auth-algorithms.mjs` → `frames/probe-auth.jsonl`)
+
+Run against a dedicated probe instance (port 9011, `password_hash_algo=*`, never the
+shared gbtest fixture):
+
+- All five algorithms authenticate over HTTP and WebSocket subprotocol auth:
+  `plain`, `sha256`, `sha512`, `pbkdf2+sha256`, `pbkdf2+sha512` → 200.
+- Handshake negotiation with `password_hash_algo=*` picks `pbkdf2+sha512` even when
+  the client lists `plain` first — the server's preference order wins; clients must
+  use whatever the handshake returns, not their own first choice.
+- Wrong password for every algorithm → 401 `{"error":"Invalid password"}`.
+- Timestamp 60 s outside `relay.network.time_window` → 401 `{"error":"Invalid
+  timestamp"}`.
+- Harness trap: Node undici keep-alive HTTP sockets interleaved with rapid
+  WebSocket connects caused spurious server-side WS auth failures; sending
+  `Connection: close` on probe HTTP requests removes the artifact. Warns against
+  hammering WS reconnects immediately after HTTP calls.
+- Operational trap: an orphaned WeeChat from an earlier session silently held port
+  9011 and made a fresh instance appear to hang (TCP accepted by the kernel
+  backlog, never served). Check `lsof -iTCP:<port> -sTCP:LISTEN` before blaming
+  the protocol stack.
+
 - `/api/input` with omitted buffer fields executes on the **main buffer** (204, no
   hint) — always send `buffer_id`.
