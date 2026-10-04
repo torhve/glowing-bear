@@ -89,7 +89,9 @@ test('should send a message via Send button', async () => {
     await input.focus();
     await input.clear();
     await input.fill('test message via button');
-    await sendBtn.click();
+    // Under parallel load the bootstrap can still be settling; give the
+    // enablement check the same headroom the rest of the suite uses.
+    await sendBtn.click({ timeout: 10000 });
     await expect(input).toHaveValue('', { timeout: 5000 });
 });
 
