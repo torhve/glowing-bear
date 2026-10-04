@@ -79,6 +79,7 @@ function snapshotToBuffer(snap: BufferSnapshot): BufferData {
         local_variables: snap.localVariables,
     });
     buffer.apiBufferId = snap.id;
+    if (snap.notify !== undefined) buffer.notify = snap.notify;
     buffer.clearEpoch = 0;
     applyReadMarker(buffer, snap.lastReadLineId);
     return buffer;
@@ -122,6 +123,7 @@ function upsertBuffer(map: Record<string, BufferData>, snap: BufferSnapshot): Bu
     existing.localVariables = Object.keys(snap.localVariables).length ? { ...snap.localVariables } : undefined;
     existing.pinned = snap.localVariables.pinned === 'true';
     existing.hideBufferLineTimes = snap.contentType === 'free';
+    if (snap.notify !== undefined) existing.notify = snap.notify;
     return existing;
 }
 
@@ -229,8 +231,9 @@ function findNickLocation(buffer: BufferData, nickId: number): { group: NickGrou
  * - notify_level ≥ 1 → localUnread (badge bookkeeping);
  * - notify_level = 1 with buffer.notify > 1 → unread;
  * - notify_level ≥ 2 with highlight/private → notification.
- * buffer.notify defaults to 3 ('all'); the API does not expose the per-buffer
- * notify setting (open gate G4) — hotlist baselines correct the counts.
+ * buffer.notify defaults to 3 ('all'). WeeChat >= 5.0.0 reports the per-buffer
+ * notify level in buffers and buffer_notify_changed events, which sets it; on
+ * 4.10.1 it stays 'all' and hotlist baselines correct the counts.
  */
 function tallyLine(buffer: BufferData, line: LineSnapshot, activeId: string): void {
     if (isRelayStatusBuffer(buffer)) return;
@@ -258,7 +261,13 @@ function tallyLine(buffer: BufferData, line: LineSnapshot, activeId: string): vo
  *  (a real-time PM must ring even in a boundary-unknown buffer). */
 function alertForLine(buffer: BufferData, line: LineSnapshot, activeId: string): void {
     if (isRelayStatusBuffer(buffer)) return;
-    if (buffer.notify < line.notifyLevel || line.notifyLevel < 1) return;
+    // WeeChat hotlist policy maps line priority to a minimum buffer notify
+    // level: message (1) requires 'message' (2); private/highlight (2-3)
+    // require at least 'highlight' (1). The legacy client compared the two
+    // scales directly, which muted 'highlight' buffers entirely — corrected
+    // now that the API reports the buffer notify level.
+    if (line.notifyLevel < 1) return;
+    if (buffer.notify < (line.notifyLevel === 1 ? 2 : 1)) return;
     if (buffer.id === activeId) return;
     updateTitle();
     updateFavico();
@@ -381,6 +390,19 @@ export function createApiStoreReducers(): ApiReducers {
                 if (!buffer) return current;
                 const copy = { ...current, [key]: { ...buffer } };
                 copy[key]!.localVariables = { ...(copy[key]!.localVariables ?? {}), modes };
+                return copy;
+            });
+        },
+
+        bufferNotifyChanged(bufferId, notify): void {
+            // WeeChat >= 5.0.0 sends buffer_notify_changed; the tally and
+            // alert gates below read buffer.notify on every line.
+            const key = storeKeyForBufferId(bufferId);
+            buffers.update((current) => {
+                const buffer = current[key];
+                if (!buffer) return current;
+                const copy = { ...current, [key]: { ...buffer } };
+                copy[key]!.notify = notify;
                 return copy;
             });
         },

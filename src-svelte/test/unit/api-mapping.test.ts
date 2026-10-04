@@ -10,7 +10,7 @@ function reducers(): ApiReducers {
     return {
         buffers: vi.fn(), bufferOpened: vi.fn(), bufferClosing: vi.fn(), bufferClosed: vi.fn(),
         bufferTitleChanged: vi.fn(), bufferLocalvarSet: vi.fn(), bufferLocalvarRemoved: vi.fn(),
-        bufferModesChanged: vi.fn(), bufferInputChanged: vi.fn(), lineAdded: vi.fn(),
+        bufferModesChanged: vi.fn(), bufferNotifyChanged: vi.fn(), bufferInputChanged: vi.fn(), lineAdded: vi.fn(),
         lineDataChanged: vi.fn(), bufferCleared: vi.fn(), nickGroupChanged: vi.fn(),
         nickGroupRemoved: vi.fn(), nickChanged: vi.fn(), nickRemoved: vi.fn(),
         hotlist: vi.fn(), completion: vi.fn(), inputRejected: vi.fn(), unhandled: vi.fn(),
@@ -147,6 +147,28 @@ describe('dispatchEvent', () => {
         expect(r.bufferTitleChanged).toHaveBeenCalledWith(1759000000000001, 'new title');
         expect(r.bufferLocalvarRemoved).toHaveBeenCalledWith(1759000000000001, 'pinned');
         expect(r.bufferModesChanged).toHaveBeenCalledWith(1759000000000001, 'vo');
+    });
+
+    it('routes buffer_notify_changed from a buffer body or a bare level string', () => {
+        const r = reducers();
+        dispatchEvent(event('buffer_notify_changed', 1759000000000001, { ...BUFFER, notify: 'highlight' }, 'buffer'), r);
+        dispatchEvent(event('buffer_notify_changed', 1759000000000001, 'none'), r);
+        expect(r.bufferNotifyChanged).toHaveBeenCalledWith(1759000000000001, 1);
+        expect(r.bufferNotifyChanged).toHaveBeenCalledWith(1759000000000001, 0);
+        expect(r.unhandled).not.toHaveBeenCalled();
+    });
+
+    it('reports buffer_notify_changed without a usable level', () => {
+        const r = reducers();
+        dispatchEvent(event('buffer_notify_changed', 1759000000000001, { ...BUFFER, notify: 'loud' }), r);
+        expect(r.bufferNotifyChanged).not.toHaveBeenCalled();
+        expect(r.unhandled).toHaveBeenCalledWith('buffer_notify_changed without notify level');
+    });
+
+    it('maps the WeeChat >= 5.0.0 buffer notify field to a numeric level', () => {
+        expect(mapBuffer({ ...BUFFER, notify: 'all' })?.notify).toBe(3);
+        expect(mapBuffer({ ...BUFFER, notify: 'message' })?.notify).toBe(2);
+        expect(mapBuffer(BUFFER)?.notify).toBeUndefined();
     });
 
     it('routes object-body events (localvar set, input changed)', () => {

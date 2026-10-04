@@ -108,6 +108,17 @@ describe('validateBuffer', () => {
         expect(value?.name).toBe('core.weechat');
     });
 
+    it('validates the WeeChat >= 5.0.0 notify field when present', () => {
+        const okRes = validateBuffer({ ...liveBuffer, notify: 'message' });
+        expect(okRes.issues).toEqual([]);
+        expect(okRes.value?.notify).toBe('message');
+        const absent = validateBuffer(liveBuffer);
+        expect(absent.value?.notify).toBeUndefined();
+        const bad = validateBuffer({ ...liveBuffer, notify: 'loud' });
+        expect(bad.value).toBeNull();
+        expect(bad.issues[0]).toContain('notify');
+    });
+
     it('rejects malformed required fields with diagnostics', () => {
         const { value, issues } = validateBuffer({ ...liveBuffer, id: '0x1' });
         expect(value).toBeNull();

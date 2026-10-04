@@ -24,6 +24,17 @@ import {
 } from '#lib/api/api-contracts.ts';
 import type { ApiSessionEvent } from '#lib/api/api-session.ts';
 
+// Wire notify string -> numeric level (none 0, highlight 1, message 2, all 3).
+function wireNotifyToLevel(value: string | undefined): 0 | 1 | 2 | 3 | undefined {
+    switch (value) {
+    case 'none': return 0;
+    case 'highlight': return 1;
+    case 'message': return 2;
+    case 'all': return 3;
+    default: return undefined;
+    }
+}
+
 export function mapBuffer(wire: RestBuffer): BufferSnapshot | null {
     const id = asBufferId(wire.id);
     if (id === null) return null;
@@ -48,6 +59,7 @@ export function mapBuffer(wire: RestBuffer): BufferSnapshot | null {
         timeDisplayed: wire.time_displayed,
         localVariables: wire.local_variables,
         lastReadLineId: lastRead === null ? NO_READ_LINE : lastRead,
+        ...(wire.notify !== undefined ? { notify: wireNotifyToLevel(wire.notify) } : {}),
     };
 }
 
@@ -237,6 +249,16 @@ export function dispatchEvent(event: ApiSessionEvent, reducers: ApiReducers): vo
             : (isObj(event.body) && typeof event.body.modes === 'string') ? event.body.modes : null;
         if (modes === null) { reducers.unhandled('buffer_modes_changed without modes'); return; }
         reducers.bufferModesChanged(bufferId, modes);
+        return;
+    }
+    case 'buffer_notify_changed': {
+        if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
+        // Documented body is a buffer snapshot; a bare level string is also accepted.
+        const raw = typeof event.body === 'string' ? event.body
+            : (isObj(event.body) && typeof event.body.notify === 'string') ? event.body.notify : null;
+        const level = raw === null ? undefined : wireNotifyToLevel(raw);
+        if (level === undefined) { reducers.unhandled('buffer_notify_changed without notify level'); return; }
+        reducers.bufferNotifyChanged(bufferId, level);
         return;
     }
     case 'buffer_input_changed': {

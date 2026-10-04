@@ -233,6 +233,15 @@ export function validateBuffer(raw: unknown): Validated<RestBuffer> {
     if (raw.local_variables !== undefined && !isRecord(raw.local_variables)) {
         issues.push('local_variables: expected object');
     }
+    // notify is a WeeChat >= 5.0.0 field; validate only when present.
+    let notify: RestBuffer['notify'];
+    if (raw.notify !== undefined) {
+        if (raw.notify === 'none' || raw.notify === 'highlight' || raw.notify === 'message' || raw.notify === 'all') {
+            notify = raw.notify;
+        } else {
+            issues.push(`notify: unknown level ${JSON.stringify(raw.notify)}`);
+        }
+    }
     // Omitted vs present-empty is significant: only validate when present.
     let lines: RestLine[] | undefined;
     if (raw.lines !== undefined) {
@@ -271,6 +280,7 @@ export function validateBuffer(raw: unknown): Validated<RestBuffer> {
             : {},
         keys: Array.isArray(raw.keys) ? raw.keys as RestBuffer['keys'] : [],
         last_read_line_id: lastReadLineId ?? NO_READ_LINE,
+        ...(notify !== undefined ? { notify } : {}),
         ...(lines !== undefined ? { lines } : {}),
         ...(nicklistRoot !== undefined ? { nicklist_root: nicklistRoot } : {}),
     });

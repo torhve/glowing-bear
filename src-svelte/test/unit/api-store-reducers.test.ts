@@ -196,6 +196,52 @@ describe('line tally gates (ported legacy rules)', () => {
     });
 });
 
+describe('buffer notify level (WeeChat >= 5.0.0)', () => {
+    it('defaults to all (3) when the server does not report notify', () => {
+        reducers.buffers([bufferSnap()]);
+        expect(get(buffers)[KEY]!.notify).toBe(3);
+    });
+
+    it('applies notify from snapshots and buffer_notify_changed events', () => {
+        reducers.buffers([bufferSnap({ notify: 1 })]);
+        expect(get(buffers)[KEY]!.notify).toBe(1);
+        reducers.bufferNotifyChanged(BUFFER_ID, 0);
+        expect(get(buffers)[KEY]!.notify).toBe(0);
+        reducers.bufferNotifyChanged(999 as ApiBufferId, 2); // unknown buffer: no crash
+    });
+
+    it('muted buffer (notify none) tallies no unread or notification counts', () => {
+        reducers.buffers([bufferSnap({ notify: 0 })]);
+        activeBufferId.set(''); // bootstrap auto-selects; tally needs an inactive buffer
+        reducers.lineAdded(BUFFER_ID, lineSnap(1));
+        reducers.lineAdded(BUFFER_ID, lineSnap(2, { notifyLevel: 3, highlight: true, tags: ['notify_highlight'] }));
+        const buf = get(buffers)[KEY]!;
+        expect(buf.unread).toBe(0);
+        expect(buf.notification).toBe(0);
+        expect(get(servers)['irc.glowing-bear']?.unread ?? 0).toBe(0); // no server totals at all
+    });
+
+    it('highlight-notify buffer counts highlights but not plain messages', () => {
+        reducers.buffers([bufferSnap({ notify: 1 })]);
+        activeBufferId.set('');
+        reducers.lineAdded(BUFFER_ID, lineSnap(1));
+        reducers.lineAdded(BUFFER_ID, lineSnap(2, { notifyLevel: 3, highlight: true, tags: ['notify_highlight'] }));
+        const buf = get(buffers)[KEY]!;
+        expect(buf.unread).toBe(0); // message priority needs notify >= 2
+        expect(buf.notification).toBe(1); // highlight needs notify >= 1
+    });
+
+    it('buffer_opened snapshot carries notify through to the tally gate', () => {
+        dispatchEvent(event('buffer_opened', { ...WIRE_BUFFER, notify: 'none' }, 'buffer'), reducers);
+        const buf = get(buffers)[KEY]!;
+        expect(buf.notify).toBe(0);
+        activeBufferId.set('');
+        reducers.lineAdded(BUFFER_ID, lineSnap(1, { notifyLevel: 3, highlight: true, tags: ['notify_highlight'] }));
+        expect(get(buffers)[KEY]!.notification).toBe(0);
+    });
+
+});
+
 describe('hotlist baseline', () => {
     it('applies server counts and preserves separately modeled localUnread', () => {
         reducers.buffers([bufferSnap()]);

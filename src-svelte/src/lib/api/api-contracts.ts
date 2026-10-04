@@ -60,6 +60,10 @@ export interface BufferSnapshot {
     localVariables: Record<string, string>;
     /** Server-side read marker; NO_READ_LINE (-1) means "no marker". */
     lastReadLineId: ApiLineId | -1;
+    /** Buffer notify level 0=none 1=highlight 2=message 3=all; undefined when
+     *  the server (WeeChat < 5.0.0) does not report it — reducers then keep
+     *  the previous/default value instead of guessing. */
+    notify?: 0 | 1 | 2 | 3;
 }
 
 /** Normalized line; raw strings preserved, parsed time derived separately. */
@@ -116,6 +120,7 @@ export interface ApiReducers {
     bufferLocalvarSet(bufferId: ApiBufferId, name: string, value: string): void;
     bufferLocalvarRemoved(bufferId: ApiBufferId, name: string): void;
     bufferModesChanged(bufferId: ApiBufferId, modes: string): void;
+    bufferNotifyChanged(bufferId: ApiBufferId, notify: 0 | 1 | 2 | 3): void;
     bufferInputChanged(bufferId: ApiBufferId, input: string, cursorPos: number): void;
     lineAdded(bufferId: ApiBufferId, line: LineSnapshot): void;
     lineDataChanged(bufferId: ApiBufferId, line: LineSnapshot): void;

@@ -36,6 +36,8 @@ export interface RestBuffer {
     short_name: string;
     number: number;
     type: 'formatted' | 'free';
+    /** Buffer notify level; sent by WeeChat >= 5.0.0, absent in 4.10.1. */
+    notify?: 'none' | 'highlight' | 'message' | 'all';
     hidden: boolean;
     title: string;
     modes: string;
