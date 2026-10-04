@@ -304,6 +304,10 @@ export function createApiStoreReducers(): ApiReducers {
             }
             if (groups && groups.length) buildNicklist(buffer, groups, nicks ?? []);
             if (lines && lines.length) applyReadMarker(buffer, snap.lastReadLineId);
+            // Publish the store first: setActiveBuffer resolves the buffer by id
+            // from the live store, so a brand-new buffer must exist there before
+            // the switch (and resume) logic runs.
+            buffers.set(copy);
             // Auto-switch to a /query buffer once WeeChat opens it (pending
             // switch set by InputBar when the target buffer did not exist yet).
             const targetNick = get(pendingBufferSwitch);
@@ -313,7 +317,6 @@ export function createApiStoreReducers(): ApiReducers {
             } else if (shouldResume(buffer.fullName) && !get(activeBufferId)) {
                 setActiveBuffer(buffer.id);
             }
-            buffers.set(copy);
         },
 
         bufferClosing(bufferId): void {
