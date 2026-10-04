@@ -1,5 +1,8 @@
 // WeeChat Relay REST API Type Definitions
-// Based on doc/weechat_relay_api.en.adoc
+// Verified against a live WeeChat 4.10.1 / Relay API 0.6.0 session — see
+// src-svelte/test/fixtures/api-dossier/ for raw frame captures and the
+// OpenAPI stable schema 0.6.0. Where the shipped schema and the live server
+// disagree, the live behavior wins and is noted inline.
 
 // --- Authentication ---
 
@@ -179,15 +182,17 @@ export interface SyncRequest {
 
 // --- Error Response ---
 
+// Live: error bodies are exactly `{"error":"..."}` with HTTP-style codes on the
+// surrounding frame/status; the extra fields below belong to the frame, not
+// the body (see WebSocketResponse).
 export interface RestErrorResponse {
     error: string;
-    code?: number;
-    message?: string;
-    request?: string;
-    request_body?: unknown;
-    body_type?: string | null;
-    body?: unknown;
 }
+
+// body_type values observed live (null on 204/no-body responses)
+export type ApiBodyType =
+    | 'buffers' | 'buffer' | 'lines' | 'line'
+    | 'nick_group' | 'nick' | 'hotlist' | 'completion' | 'scripts' | 'json';
 
 // --- WebSocket Frame Types (for reference, not used in REST) ---
 
@@ -207,11 +212,26 @@ export interface WebSocketResponse {
     body: unknown;
 }
 
+// Event names observed live on 4.10.1 (buffer_modes_changed and
+// input_prompt_changed exist in source but are absent from the manual table).
+// The union stays open (`string & {}`) because WeeChat may add events.
+export type ApiEventName =
+    | 'buffer_opened' | 'buffer_closing' | 'buffer_closed'
+    | 'buffer_title_changed' | 'buffer_localvar_set' | 'buffer_localvar_removed'
+    | 'buffer_modes_changed' | 'buffer_input_changed'
+    | 'buffer_line_added' | 'buffer_line_data_changed'
+    | 'nicklist_group_added' | 'nicklist_group_removed' | 'nicklist_group_moved'
+    | 'nicklist_group_changed' | 'nicklist_group_removing'
+    | 'nicklist_nick_added' | 'nicklist_nick_removed' | 'nicklist_nick_moved'
+    | 'nicklist_nick_removing' | 'nicklist_nick_changed'
+    | 'input_changed' | 'input_prompt_changed'
+    | (string & {});
+
 export interface WebSocketEvent {
     code: 0;
     message: 'Event';
-    event_name: string;
+    event_name: ApiEventName;
     buffer_id: number;
-    body_type: string | null;
+    body_type: ApiBodyType | null;
     body: unknown;
 }
