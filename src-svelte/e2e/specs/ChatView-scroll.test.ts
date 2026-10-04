@@ -109,7 +109,7 @@ test("should scroll to bottom when switching to a buffer with many lines", async
     for (let i = 0; i < 10; i++) {
         await irc.sendMessage("#glowing-bear", `scroll-init-${Date.now()}-${i}`);
     }
-    await switchToBuffer(page, "core");
+    await switchToBuffer(page, "weechat");
     await switchToBuffer(page, "#glowing-bear");
 
     // Wait for chat messages to actually load (async fetchMoreLines from +page effect)
