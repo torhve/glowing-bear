@@ -4,7 +4,7 @@ import { fillInput } from '../helpers/input';
 
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
 
-const RELAY_URL = 'ws://localhost:9001/weechat';
+const RELAY_URL = 'ws://localhost:9010/weechat';
 const PASSWORD = 'testpassword123';
 
 test.describe('Connection Form', () => {
@@ -32,7 +32,7 @@ test.describe('Connection Form', () => {
 
     test('should show connecting state while connecting', async ({ page }) => {
         await fillInput(page, 'host-input', 'localhost');
-        await fillInput(page, 'port-input', '9001');
+        await fillInput(page, 'port-input', '9010');
         await fillInput(page, 'password-input', 'testpassword123');
         await page.getByTestId('connect-button').click();
         // Connection is fast in test environment — button becomes disabled immediately
@@ -76,13 +76,13 @@ test.describe('Connection Form', () => {
         await page.evaluate(() => {
             localStorage.setItem('gb-settings', JSON.stringify({
                 hostField: 'localhost',
-                port: '9001',
+                port: '9010',
                 tls: false,
             }));
         });
         await page.reload();
         await expect(page.getByTestId('host-input')).toHaveValue('localhost', { timeout: 10000 });
-        await expect(page.getByTestId('port-input')).toHaveValue('9001', { timeout: 5000 });
+        await expect(page.getByTestId('port-input')).toHaveValue('9010', { timeout: 5000 });
     });
 
     test('should not connect with empty host', async ({ page }) => {
@@ -94,7 +94,7 @@ test.describe('Connection Form', () => {
 
     test('should disable connect button while connecting', async ({ page }) => {
         await fillInput(page, 'host-input', 'localhost');
-        await fillInput(page, 'port-input', '9001');
+        await fillInput(page, 'port-input', '9010');
         await fillInput(page, 'password-input', 'testpassword123');
         await page.getByTestId('connect-button').click();
         await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
@@ -125,7 +125,7 @@ test.describe('Connection Form', () => {
 
     test('should connect when pressing Enter with focus off the form', async ({ page }) => {
         await fillInput(page, 'host-input', 'localhost');
-        await fillInput(page, 'port-input', '9001');
+        await fillInput(page, 'port-input', '9010');
         await fillInput(page, 'password-input', 'testpassword123');
         // Move focus off the form by clicking an accordion summary outside the form
         await page.locator('summary').nth(1).click();
@@ -136,7 +136,7 @@ test.describe('Connection Form', () => {
 
     test('should connect when pressing Enter while password field is focused', async ({ page }) => {
         await fillInput(page, 'host-input', 'localhost');
-        await fillInput(page, 'port-input', '9001');
+        await fillInput(page, 'port-input', '9010');
         await fillInput(page, 'password-input', 'testpassword123');
         // Focus the password input, then press Enter
         await page.getByTestId('password-input').focus();
@@ -147,132 +147,6 @@ test.describe('Connection Form', () => {
 });
 
 test.describe.configure({ mode: 'serial' });
-
-test.describe('WeeChat relay protocol (via browser WebSocket)', () => {
-    test.beforeEach(async ({ page }) => {
-        setupEffectOrphanFilter(page)
-        await page.goto('http://localhost:8001/');
-        await waitForAppReady(page);
-        // Verify Protocol is exposed on window
-        await page.waitForFunction(() => (window as any).__Protocol !== undefined, { timeout: 5000 });
-    });
-
-    // Skipped: requires a real WeeChat relay for binary protocol handshake;
-    // gbtest IRC server does not implement WeeChat relay protocol framing.
-    test.skip('handshake → init → version round-trip', async ({ page }) => {
-        const result = await page.evaluate(async ({ RELAY_URL, PASSWORD }) => {
-            const Protocol = (window as any).__Protocol;
-            const protocol = new Protocol();
-            const log: string[] = [];
-            const step = (msg: string) => { log.push(msg); console.log(msg); };
-
-            try {
-                step('1. Creating WebSocket...');
-                const ws = new WebSocket(RELAY_URL);
-                ws.binaryType = 'arraybuffer';
-
-                const connectPromise = new Promise<void>((resolve, reject) => {
-                    ws.onopen = () => { step('2. WebSocket open'); resolve(); };
-                    ws.onerror = () => reject(new Error('WebSocket error'));
-                });
-                await connectPromise;
-
-                // Step 2: Send handshake
-                const handshakeStr = Protocol.formatHandshake({
-                    password_hash_algo: 'plain',
-                    compression: 'zlib'
-                });
-                step('3. Sending handshake: ' + handshakeStr);
-                ws.send(handshakeStr);
-
-                const handshakeResponse = await new Promise<any>((resolve, reject) => {
-                    const timeout = setTimeout(() => reject(new Error('Handshake timeout')), 10000);
-                    ws.onmessage = async (event) => {
-                        clearTimeout(timeout);
-                        try {
-                            const parsed = await protocol.parse(event.data as ArrayBuffer);
-                            step('4. Handshake response parsed, objects: ' + parsed.objects.length);
-                            resolve(parsed);
-                        } catch (e: any) {
-                            reject(new Error('Parse failed: ' + e.message));
-                        }
-                    };
-                });
-
-                // Verify handshake response has expected content (WeeChat returns htb/hash-table)
-                const hsObj = handshakeResponse.objects[0];
-                if (!hsObj || hsObj.type !== 'htb') {
-                    throw new Error('Expected htb object, got ' + hsObj?.type);
-                }
-                const hsContent = hsObj.content as Record<string, string>;
-                if (!hsContent['password_hash_algo']) {
-                    throw new Error('Expected password_hash_algo in handshake response, got keys: ' + Object.keys(hsContent).join(', '));
-                }
-                step('5. Auth method: ' + hsContent['password_hash_algo']);
-
-                // Step 3: Send init (fire-and-forget)
-                const initStr = Protocol.formatInit('plain:' + PASSWORD, null);
-                step('6. Sending init: ' + initStr);
-                ws.send(initStr);
-
-                // Small delay to let WeeChat process the init
-                await new Promise(r => setTimeout(r, 50));
-
-                // Step 4: Request version info with callback ID
-                const versionStr = protocol.setId(1, Protocol.formatInfo({ name: 'version' }));
-                step('7. Requesting version: ' + versionStr);
-                ws.send(versionStr);
-
-                const versionResponse = await new Promise<any>((resolve, reject) => {
-                    const timeout = setTimeout(() => reject(new Error('Version timeout')), 10000);
-                    ws.onmessage = async (event) => {
-                        clearTimeout(timeout);
-                        try {
-                            const parsed = await protocol.parse(event.data as ArrayBuffer);
-                            step('8. Version response parsed, objects: ' + parsed.objects.length);
-                            resolve(parsed);
-                        } catch (e: any) {
-                            reject(new Error('Parse failed: ' + e.message));
-                        }
-                    };
-                });
-
-                // Verify version response
-                if (versionResponse.id !== '1') {
-                    throw new Error('Expected id "1", got "' + versionResponse.id + '"');
-                }
-
-                // Log object details
-                for (const obj of versionResponse.objects) {
-                    const c = obj.content;
-                    if (obj.type === 'hda') {
-                        const items = c as Record<string, unknown>[];
-                        for (const item of items) {
-                            step('  hda item keys: ' + Object.keys(item).join(', '));
-                            if (item.value) step('  version value: ' + item.value);
-                        }
-                    } else {
-                        step('  obj type=' + obj.type + ' content=' + JSON.stringify(c).slice(0, 100));
-                    }
-                    step('');
-                }
-
-                ws.close();
-
-                return { success: true, log };
-            } catch (e: any) {
-                return { success: false, log, error: e.message };
-            }
-        }, { RELAY_URL, PASSWORD });
-
-        // Print log regardless
-        for (const line of result.log) {
-            console.log(line);
-        }
-
-        expect(result.success).toBe(true);
-    });
-});
 
 test.describe('Disconnect handling', () => {
     test.beforeEach(async ({ page }) => {
@@ -292,8 +166,8 @@ test.describe('Disconnect handling', () => {
 
         // Simulate WebSocket close (browser only allows 1000 or 3000-4999)
         await page.evaluate(() => {
-            const ws = (window as any).__getWs?.();
-            if (ws) ws.close(3000, 'test disconnect');
+            const socket = (window as any).__getSession?.()?.getSocket?.();
+            if (socket) socket.close(3000, 'test disconnect');
         });
 
         // Toast should appear with disconnect message
@@ -310,8 +184,8 @@ test.describe('Disconnect handling', () => {
 
         // Simulate WebSocket close
         await page.evaluate(() => {
-            const ws = (window as any).__getWs?.();
-            if (ws) ws.close(3000, 'test disconnect');
+            const socket = (window as any).__getSession?.()?.getSocket?.();
+            if (socket) socket.close(3000, 'test disconnect');
         });
 
         // Wait for toast to appear
@@ -334,8 +208,8 @@ test.describe('Disconnect handling', () => {
         // Disable autoconnect and simulate WebSocket close
         await setSettings(page, { autoconnect: false });
         await page.evaluate(() => {
-            const ws = (window as any).__getWs?.();
-            if (ws) ws.close(3000, 'test disconnect');
+            const socket = (window as any).__getSession?.()?.getSocket?.();
+            if (socket) socket.close(3000, 'test disconnect');
         });
 
         // After disconnect, TopBar is replaced by ConnectionForm — host input becomes visible

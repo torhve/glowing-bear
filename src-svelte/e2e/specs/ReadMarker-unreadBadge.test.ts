@@ -66,8 +66,9 @@ test('readmarker appears when switching back after receiving messages elsewhere'
     await irc.sendMessage('#glowing-bear', 'unread-badge-test msg-2-' + Date.now());
     await irc.sendMessage('#glowing-bear', 'testuser: and a highlight for good measure' + Date.now());
 
-    // Wait for console logs showing unread counts
-    await waitForConsoleLog('#glowing-bear');
+    // Wait for the unread badge on #glowing-bear (messages arrived and tallied)
+    const gbItem = page.getByTestId('buffer-item').filter({ has: page.locator('.buffer-name').filter({ hasText: /^glowing-bear$/ }) }).first();
+    await expect(gbItem.getByTestId('unread-badge')).toBeVisible({ timeout: 10000 });
 
     // Switch back to #glowing-bear — readmarker should appear
     await waitForBuffer(page, '#glowing-bear', 15000);
@@ -157,8 +158,9 @@ test('readmarker appears after scroll-to-bottom followed by new unreads', async 
     // Bot sends new messages to #glowing-bear
     await irc.sendMessage('#glowing-bear', 'unread-scroll-test msg-' + Date.now());
 
-    // Wait for console logs showing unread counts
-    await waitForConsoleLog('#glowing-bear');
+    // Wait for the unread badge on #glowing-bear (messages arrived and tallied)
+    const gbItem = page.getByTestId('buffer-item').filter({ has: page.locator('.buffer-name').filter({ hasText: /^glowing-bear$/ }) }).first();
+    await expect(gbItem.getByTestId('unread-badge')).toBeVisible({ timeout: 10000 });
 
     // Switch back — readmarker should appear again
     await waitForBuffer(page, '#glowing-bear', 15000);

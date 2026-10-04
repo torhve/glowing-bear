@@ -1,9 +1,10 @@
 <script lang="ts">
   import { currentBuffer, buffers, pendingBufferSwitch, setActiveBuffer, findBufferByShortName } from '#lib/stores/models.ts';
-  import { sendMessage, sendWeeChatCommand } from '#lib/stores/connectionManager.ts';
+  import { sendMessage, sendWeeChatCommand, getSession } from '#lib/stores/connectionManager.ts';
+  import { requestCompletion, rankCandidates } from '#lib/api/api-features.ts';
   import { settings } from '#lib/stores/settings.ts';
   import { addToHistory, getHistoryUp, getHistoryDown } from '#lib/stores/inputHistory.ts';
-  import { completeNick, isPopoverOpen, filterImageFiles, joinMultilineToSingle, MULTILINE_PASTE_THRESHOLD } from '#lib/utils.ts';
+  import { isPopoverOpen, filterImageFiles, joinMultilineToSingle, MULTILINE_PASTE_THRESHOLD } from '#lib/utils.ts';
   import Send from '@lucide/svelte/icons/send';
   import { emojifyInput } from '#lib/emojify.ts';
   import Camera from '@lucide/svelte/icons/camera';
@@ -101,7 +102,7 @@
     buffers.set(updated);
   }
 
-  function handleSend() {
+  async function handleSend() {
     if (!canSend) return;
 
     const text = message;
@@ -117,7 +118,7 @@
     if (/^\/buffer\s+clear\s*$/i.test(lines[0]!)) {
       // Clear locally only when the socket accepted the command — otherwise the buffer
       // looks emptied while its lines are still on the server.
-      if ($currentBuffer && sendWeeChatCommand('/buffer clear')) {
+      if ($currentBuffer && await sendWeeChatCommand('/buffer clear')) {
         clearBufferMessages($currentBuffer.id);
       }
     }
@@ -150,7 +151,7 @@
 
       // History records only what the socket accepted, so ArrowUp never offers back a
       // line that was not sent.
-      if (sendMessage(line)) {
+      if (await sendMessage(line)) {
         if ($currentBuffer) {
           addToHistory($currentBuffer.id, line);
         }
@@ -176,6 +177,41 @@
       // Keep focus on a failed send so the text can be corrected and retried.
       if (unsent.length === 0) inputRef.blur();
     }
+  }
+
+  // Relay API completion (G2 strategy): server candidates, locally re-ranked
+  // by nick recency. Candidates already embed the configured completer suffix;
+  // add_space means a space must follow. Cycling walks the ranked list.
+  async function completeViaApi(text: string, caretPos: number): Promise<{ text: string; cursor: number; iterCandidate: string | null } | null> {
+    const session = getSession();
+    const buffer = get(currentBuffer);
+    if (!session || !buffer || buffer.apiBufferId === undefined) return null;
+    const res = await requestCompletion(session, {
+      bufferId: buffer.apiBufferId as never,
+      command: text,
+      cursor: caretPos,
+    });
+    if (!res.ok || res.candidates.length === 0) return null;
+    const spokeAt: Record<string, number> = {};
+    for (const key in buffer.nicklist) {
+      for (const nick of buffer.nicklist[key]!.nicks) {
+        spokeAt[nick.name.toLowerCase()] = nick.spokeAt ?? 0;
+      }
+    }
+    const ranked = rankCandidates(res.candidates, spokeAt);
+    let candidate: string;
+    if (_iterCandidate === null) {
+      candidate = ranked[0]!;
+    } else {
+      const idx = ranked.indexOf(_iterCandidate);
+      candidate = ranked[(idx >= 0 ? idx + 1 : 0) % ranked.length]!;
+    }
+    const insert = candidate + (res.addSpace ? ' ' : '');
+    return {
+      text: text.slice(0, res.replaceStart) + insert + text.slice(res.replaceEnd),
+      cursor: res.replaceStart + insert.length,
+      iterCandidate: candidate,
+    };
   }
 
   function getCaretPos(): number {
@@ -295,14 +331,16 @@
     if (code === 9 && !e.altKey && !e.ctrlKey && !e.shiftKey) {
       e.preventDefault();
       const caretPos = getCaretPos();
-      const result = completeNick(message, caretPos, _iterCandidate);
-      if (result) {
-        message = result.text;
-        _iterCandidate = result.iterCandidate;
-        setTimeout(() => setCaretPos(result.cursor), 0);
-      } else {
-        _iterCandidate = null;
-      }
+      void (async () => {
+        const result = await completeViaApi(message, caretPos);
+        if (result) {
+          message = result.text;
+          _iterCandidate = result.iterCandidate;
+          setTimeout(() => setCaretPos(result.cursor), 0);
+        } else {
+          _iterCandidate = null;
+        }
+      })();
       return true;
     }
 
@@ -892,7 +930,7 @@
       </button>
 
       <button
-        onclick={() => { if (inputRef) { const caret = getCaretPos(); const result = completeNick(message, caret, _iterCandidate); if (result) { message = result.text; _iterCandidate = result.iterCandidate; setTimeout(() => setCaretPos(result.cursor), 0); } } }}
+        onclick={() => { if (inputRef) { const caret = getCaretPos(); void (async () => { const result = await completeViaApi(message, caret); if (result) { message = result.text; _iterCandidate = result.iterCandidate; setTimeout(() => setCaretPos(result.cursor), 0); } })(); } }}
         data-testid="nick-complete-button"
         class="input-bar-nickcomplete flex-shrink-0 hidden md:inline-flex px-2 py-2 text-text-secondary hover:text-text hover:bg-border rounded transition-colors"
         title="Complete nick"

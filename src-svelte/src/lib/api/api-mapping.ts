@@ -174,137 +174,137 @@ export function dispatchEvent(event: ApiSessionEvent, reducers: ApiReducers): vo
     const bufferId = asBufferId(event.buffer_id);
 
     switch (event.event_name) {
-        case 'buffer_opened': {
-            if (bufferId === null) { reducers.unhandled('buffer_opened with invalid buffer_id'); return; }
-            const body = event.body;
-            if (body === null || typeof body !== 'object') { reducers.unhandled('buffer_opened without body'); return; }
-            const v = validateBuffer(body);
-            if (!v.value) { reducers.unhandled(`buffer_opened invalid: ${v.issues.join('; ')}`); return; }
-            const snap = mapBuffer(v.value);
-            if (snap === null) { reducers.unhandled('buffer_opened invalid id'); return; }
-            let lines: LineSnapshot[] | undefined;
-            if (v.value.lines !== undefined) {
-                const lv = validateLineArray(v.value.lines);
-                if (!lv.value) { reducers.unhandled(`buffer_opened invalid lines: ${lv.issues.join('; ')}`); return; }
-                lines = lv.value.map(mapLine).filter((l): l is LineSnapshot => l !== null);
+    case 'buffer_opened': {
+        if (bufferId === null) { reducers.unhandled('buffer_opened with invalid buffer_id'); return; }
+        const body = event.body;
+        if (body === null || typeof body !== 'object') { reducers.unhandled('buffer_opened without body'); return; }
+        const v = validateBuffer(body);
+        if (!v.value) { reducers.unhandled(`buffer_opened invalid: ${v.issues.join('; ')}`); return; }
+        const snap = mapBuffer(v.value);
+        if (snap === null) { reducers.unhandled('buffer_opened invalid id'); return; }
+        let lines: LineSnapshot[] | undefined;
+        if (v.value.lines !== undefined) {
+            const lv = validateLineArray(v.value.lines);
+            if (!lv.value) { reducers.unhandled(`buffer_opened invalid lines: ${lv.issues.join('; ')}`); return; }
+            lines = lv.value.map(mapLine).filter((l): l is LineSnapshot => l !== null);
+        }
+        let groups: NickGroupSnapshot[] | undefined;
+        let nicks: NickSnapshot[] | undefined;
+        if (v.value.nicklist_root !== undefined) {
+            groups = collectGroups(v.value.nicklist_root);
+            if (groups !== undefined) {
+                nicks = collectNicks(v.value.nicklist_root);
             }
-            let groups: NickGroupSnapshot[] | undefined;
-            let nicks: NickSnapshot[] | undefined;
-            if (v.value.nicklist_root !== undefined) {
-                groups = collectGroups(v.value.nicklist_root);
-                if (groups !== undefined) {
-                    nicks = collectNicks(v.value.nicklist_root);
-                }
-            }
-            reducers.bufferOpened(snap, lines, groups, nicks);
-            return;
         }
-        case 'buffer_closing':
-            if (bufferId === null) { reducers.unhandled('buffer_closing with invalid buffer_id'); return; }
-            reducers.bufferClosing(bufferId);
-            return;
-        case 'buffer_closed':
-            if (bufferId === null) { reducers.unhandled('buffer_closed with invalid buffer_id'); return; }
-            reducers.bufferClosed(bufferId);
-            return;
-        case 'buffer_title_changed': {
-            if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
-            const title = typeof event.body === 'string' ? event.body
-                : (isObj(event.body) && typeof event.body.title === 'string') ? event.body.title : null;
-            if (title === null) { reducers.unhandled('buffer_title_changed without title'); return; }
-            reducers.bufferTitleChanged(bufferId, title);
-            return;
+        reducers.bufferOpened(snap, lines, groups, nicks);
+        return;
+    }
+    case 'buffer_closing':
+        if (bufferId === null) { reducers.unhandled('buffer_closing with invalid buffer_id'); return; }
+        reducers.bufferClosing(bufferId);
+        return;
+    case 'buffer_closed':
+        if (bufferId === null) { reducers.unhandled('buffer_closed with invalid buffer_id'); return; }
+        reducers.bufferClosed(bufferId);
+        return;
+    case 'buffer_title_changed': {
+        if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
+        const title = typeof event.body === 'string' ? event.body
+            : (isObj(event.body) && typeof event.body.title === 'string') ? event.body.title : null;
+        if (title === null) { reducers.unhandled('buffer_title_changed without title'); return; }
+        reducers.bufferTitleChanged(bufferId, title);
+        return;
+    }
+    case 'buffer_localvar_set': {
+        if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
+        if (!isObj(event.body) || typeof event.body.name !== 'string' || typeof event.body.value !== 'string') {
+            reducers.unhandled('buffer_localvar_set without name/value'); return;
         }
-        case 'buffer_localvar_set': {
-            if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
-            if (!isObj(event.body) || typeof event.body.name !== 'string' || typeof event.body.value !== 'string') {
-                reducers.unhandled('buffer_localvar_set without name/value'); return;
-            }
-            reducers.bufferLocalvarSet(bufferId, event.body.name, event.body.value);
-            return;
+        reducers.bufferLocalvarSet(bufferId, event.body.name, event.body.value);
+        return;
+    }
+    case 'buffer_localvar_removed': {
+        if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
+        const name = typeof event.body === 'string' ? event.body
+            : (isObj(event.body) && typeof event.body.name === 'string') ? event.body.name : null;
+        if (name === null) { reducers.unhandled('buffer_localvar_removed without name'); return; }
+        reducers.bufferLocalvarRemoved(bufferId, name);
+        return;
+    }
+    case 'buffer_modes_changed': {
+        if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
+        const modes = typeof event.body === 'string' ? event.body
+            : (isObj(event.body) && typeof event.body.modes === 'string') ? event.body.modes : null;
+        if (modes === null) { reducers.unhandled('buffer_modes_changed without modes'); return; }
+        reducers.bufferModesChanged(bufferId, modes);
+        return;
+    }
+    case 'buffer_input_changed': {
+        if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
+        if (!isObj(event.body) || typeof event.body.input !== 'string') {
+            reducers.unhandled('buffer_input_changed without input'); return;
         }
-        case 'buffer_localvar_removed': {
-            if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
-            const name = typeof event.body === 'string' ? event.body
-                : (isObj(event.body) && typeof event.body.name === 'string') ? event.body.name : null;
-            if (name === null) { reducers.unhandled('buffer_localvar_removed without name'); return; }
-            reducers.bufferLocalvarRemoved(bufferId, name);
-            return;
-        }
-        case 'buffer_modes_changed': {
-            if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
-            const modes = typeof event.body === 'string' ? event.body
-                : (isObj(event.body) && typeof event.body.modes === 'string') ? event.body.modes : null;
-            if (modes === null) { reducers.unhandled('buffer_modes_changed without modes'); return; }
-            reducers.bufferModesChanged(bufferId, modes);
-            return;
-        }
-        case 'buffer_input_changed': {
-            if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
-            if (!isObj(event.body) || typeof event.body.input !== 'string') {
-                reducers.unhandled('buffer_input_changed without input'); return;
-            }
-            const pos = typeof event.body.cursor_pos === 'number' ? event.body.cursor_pos : 0;
-            reducers.bufferInputChanged(bufferId, event.body.input, pos);
-            return;
-        }
-        case 'buffer_line_added': {
-            if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
-            const v = validateLine(event.body);
-            if (!v.value) { reducers.unhandled(`buffer_line_added invalid: ${v.issues.join('; ')}`); return; }
-            const line = mapLine(v.value);
-            if (line === null) { reducers.unhandled('buffer_line_added invalid id'); return; }
-            reducers.lineAdded(bufferId, line);
-            return;
-        }
-        case 'buffer_line_data_changed': {
-            if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
-            const v = validateLine(event.body);
-            if (!v.value) { reducers.unhandled(`buffer_line_data_changed invalid: ${v.issues.join('; ')}`); return; }
-            const line = mapLine(v.value);
-            if (line === null) { reducers.unhandled('buffer_line_data_changed invalid id'); return; }
-            reducers.lineDataChanged(bufferId, line);
-            return;
-        }
-        case 'nicklist_group_changed': {
-            if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
-            const v = validateNickGroup(event.body);
-            if (!v.value) { reducers.unhandled(`nicklist_group_changed invalid: ${v.issues.join('; ')}`); return; }
-            const group = mapNickGroup(v.value);
-            if (group === null) { reducers.unhandled('nicklist_group_changed invalid ids'); return; }
-            reducers.nickGroupChanged(bufferId, group);
-            return;
-        }
-        case 'nicklist_group_removed':
-        case 'nicklist_group_removing': {
-            if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
-            const groupId = asGroupId(event.body);
-            if (groupId === null) { reducers.unhandled('nicklist group removal without group id'); return; }
-            reducers.nickGroupRemoved(bufferId, groupId);
-            return;
-        }
-        case 'nicklist_nick_changed': {
-            if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
-            const v = validateNick(event.body);
-            if (!v.value) { reducers.unhandled(`nicklist_nick_changed invalid: ${v.issues.join('; ')}`); return; }
-            const nick = mapNick(v.value);
-            if (nick === null) { reducers.unhandled('nicklist_nick_changed invalid ids'); return; }
-            reducers.nickChanged(bufferId, nick);
-            return;
-        }
-        case 'nicklist_nick_removed':
-        case 'nicklist_nick_removing': {
-            if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
-            const nickId = asNickId(event.body);
-            if (nickId === null) { reducers.unhandled('nick removal without nick id'); return; }
-            reducers.nickRemoved(bufferId, nickId);
-            return;
-        }
-        default:
-            // nicklist_group_added / nicklist_nick_added / input_changed /
-            // input_prompt_changed and any future events: full snapshots are
-            // fetched on demand; concrete handling lands with phases 8–9.
-            reducers.unhandled(`unrouted event: ${event.event_name}`);
+        const pos = typeof event.body.cursor_pos === 'number' ? event.body.cursor_pos : 0;
+        reducers.bufferInputChanged(bufferId, event.body.input, pos);
+        return;
+    }
+    case 'buffer_line_added': {
+        if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
+        const v = validateLine(event.body);
+        if (!v.value) { reducers.unhandled(`buffer_line_added invalid: ${v.issues.join('; ')}`); return; }
+        const line = mapLine(v.value);
+        if (line === null) { reducers.unhandled('buffer_line_added invalid id'); return; }
+        reducers.lineAdded(bufferId, line);
+        return;
+    }
+    case 'buffer_line_data_changed': {
+        if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
+        const v = validateLine(event.body);
+        if (!v.value) { reducers.unhandled(`buffer_line_data_changed invalid: ${v.issues.join('; ')}`); return; }
+        const line = mapLine(v.value);
+        if (line === null) { reducers.unhandled('buffer_line_data_changed invalid id'); return; }
+        reducers.lineDataChanged(bufferId, line);
+        return;
+    }
+    case 'nicklist_group_changed': {
+        if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
+        const v = validateNickGroup(event.body);
+        if (!v.value) { reducers.unhandled(`nicklist_group_changed invalid: ${v.issues.join('; ')}`); return; }
+        const group = mapNickGroup(v.value);
+        if (group === null) { reducers.unhandled('nicklist_group_changed invalid ids'); return; }
+        reducers.nickGroupChanged(bufferId, group);
+        return;
+    }
+    case 'nicklist_group_removed':
+    case 'nicklist_group_removing': {
+        if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
+        const groupId = asGroupId(event.body);
+        if (groupId === null) { reducers.unhandled('nicklist group removal without group id'); return; }
+        reducers.nickGroupRemoved(bufferId, groupId);
+        return;
+    }
+    case 'nicklist_nick_changed': {
+        if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
+        const v = validateNick(event.body);
+        if (!v.value) { reducers.unhandled(`nicklist_nick_changed invalid: ${v.issues.join('; ')}`); return; }
+        const nick = mapNick(v.value);
+        if (nick === null) { reducers.unhandled('nicklist_nick_changed invalid ids'); return; }
+        reducers.nickChanged(bufferId, nick);
+        return;
+    }
+    case 'nicklist_nick_removed':
+    case 'nicklist_nick_removing': {
+        if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
+        const nickId = asNickId(event.body);
+        if (nickId === null) { reducers.unhandled('nick removal without nick id'); return; }
+        reducers.nickRemoved(bufferId, nickId);
+        return;
+    }
+    default:
+        // nicklist_group_added / nicklist_nick_added / input_changed /
+        // input_prompt_changed and any future events: full snapshots are
+        // fetched on demand; concrete handling lands with phases 8–9.
+        reducers.unhandled(`unrouted event: ${event.event_name}`);
     }
 }
 
@@ -328,6 +328,28 @@ function collectGroups(node: RestNickGroup): NickGroupSnapshot[] | undefined {
         return true;
     };
     return walk(node) ? out : undefined;
+}
+
+/** Apply a GET /api/buffers/{id}/nicks nick_group tree through the group/nick
+ *  upsert reducers (groups first so display keys register, then nicks). */
+export function applyNicklistRoot(
+    body: unknown,
+    bufferId: ApiBufferId,
+    reducers: ApiReducers,
+): boolean {
+    const v = validateNickGroup(body);
+    if (!v.value) {
+        reducers.unhandled(`nicklist root invalid: ${v.issues.join('; ')}`);
+        return false;
+    }
+    const groups = collectGroups(v.value);
+    if (!groups) {
+        reducers.unhandled('nicklist root has invalid group ids');
+        return false;
+    }
+    for (const group of groups) reducers.nickGroupChanged(bufferId, group);
+    for (const nick of collectNicks(v.value)) reducers.nickChanged(bufferId, nick);
+    return true;
 }
 
 function collectNicks(group: RestNickGroup): NickSnapshot[] {

@@ -10,7 +10,7 @@ echo "[1/2] Stopping WeeChat..."
 if pgrep -f "weechat-headless.*-d /tmp/gbtest-weechat" > /dev/null 2>&1; then
   pkill -f "weechat-headless.*-d /tmp/gbtest-weechat" 2>/dev/null || true
   sleep 1
-  if nc -z localhost 9001 2>/dev/null || nc -z localhost 9010 2>/dev/null; then
+  if nc -z localhost 9010 2>/dev/null; then
     pkill -9 -f "weechat-headless.*-d /tmp/gbtest-weechat" 2>/dev/null || true
     sleep 1
   fi

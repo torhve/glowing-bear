@@ -55,7 +55,7 @@ function wsAuth(cred, label) {
             'api.weechat',
             'base64url.bearer.authorization.weechat.' + b64url(cred),
         ]);
-        const done = (result) => { try { ws.close(); } catch {} resolve(result); };
+        const done = (result) => { try { ws.close(); } catch { /* already closed */ } resolve(result); };
         const timer = setTimeout(() => done('timeout'), 5000);
         ws.onopen = () => {
             ws.send(JSON.stringify({ request: 'GET /api/version', request_id: label }));

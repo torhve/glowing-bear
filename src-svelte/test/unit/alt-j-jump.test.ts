@@ -7,13 +7,12 @@ import type { BufferData } from '#lib/types.ts';
 
 vi.mock('#lib/stores/connectionManager.ts', () => ({
     connect: vi.fn(),
-    fetchConfValue: vi.fn(),
     fetchMoreLines: vi.fn(),
     sendWeeChatCommand: vi.fn(),
     disconnect: vi.fn(),
     requestNicklist: vi.fn(),
     switchBuffer: vi.fn(),
-    getWs: vi.fn(),
+    getSession: vi.fn(),
     initFocusReconnect: vi.fn(),
     cleanupFocusReconnect: vi.fn(),
     setHotlistPollInterval: vi.fn(),

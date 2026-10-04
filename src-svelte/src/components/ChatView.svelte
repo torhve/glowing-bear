@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { BufferLine } from '#lib/types.ts';
   import { get } from 'svelte/store';
-  import { currentBuffer, activeBufferId, bufferBottom, buffers, recalculateLinesPerScreen, getReadBoundaryIndex, isUserMessageLine } from '#lib/stores/models.ts';
+  import { currentBuffer, activeBufferId, bufferBottom, buffers, maxBufferLines, recalculateLinesPerScreen, getReadBoundaryIndex, isUserMessageLine } from '#lib/stores/models.ts';
   import { settings } from '#lib/stores/settings.ts';
   import { fetchMoreLines, closeBufferOnWeeChat, pinBuffer, unpinBuffer } from '#lib/stores/connectionManager.ts';
   import { buildMentionText, isFreeBuffer, modifyTextareaValue } from '#lib/utils.ts';
@@ -69,6 +69,12 @@
   let isLoadingMore = $state(false);
   let viewBufferId = $derived($currentBuffer?.id);
   let viewGeneration = 0;
+  // A fetch that prepends nothing new (server history already fully displayed
+  // under the client line cap) must not re-pulse the fetch row on every
+  // scroll-to-top: the row height change shifts the viewport and UA scroll
+  // anchoring drags the user away from where they parked. Remember the
+  // buffer whose top is exhausted; the explicit button still forces a fetch.
+  let exhaustedTopBufferId: string | null = null;
   // Non-reactive bookkeeping: pending frames belong to one visit to a buffer.
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   const viewFrames = new Set<number>();
@@ -124,6 +130,7 @@
   $effect(() => {
     void viewBufferId;
     isLoadingMore = false;
+    exhaustedTopBufferId = null;
     return () => {
       viewGeneration++;
       for (const frame of viewFrames) cancelAnimationFrame(frame);
@@ -464,15 +471,28 @@
   }
 
   // Share the loading guard between scroll and button requests, scoped to this view.
-  async function loadMoreHistory(preserveScroll: boolean) {
+  // `force` (the explicit button) bypasses the exhausted-top memo.
+  async function loadMoreHistory(preserveScroll: boolean, force = false) {
     const buffer = get(currentBuffer);
     const container = containerRef;
     if (isLoadingMore || !buffer || buffer.allLinesFetched || !container) return;
+    if (!force && exhaustedTopBufferId === buffer.id) return;
     const generation = viewGeneration;
     const maxScrollBeforeFetch = container.scrollHeight - container.clientHeight;
+    const topLineBefore = buffer.lines[0]?.lineId;
     isLoadingMore = true;
     try {
       await fetchMoreLines(0, buffer.id);
+      const after = get(buffers)[buffer.id];
+      const topAfter = after?.lines[0]?.lineId;
+      if (after && topAfter !== undefined && topAfter === topLineBefore && after.lines.length >= get(maxBufferLines)) {
+        // Nothing was prepended while the buffer is at its line cap: the
+        // displayed window already covers the server history. Stop
+        // auto-fetching for this buffer (the button still forces one).
+        exhaustedTopBufferId = buffer.id;
+      } else {
+        exhaustedTopBufferId = null;
+      }
     } catch (err) {
       console.warn('[fetchMoreLines] fetch failed:', err);
     } finally {
@@ -493,7 +513,7 @@
   }
 
   function handleFetchMore() {
-    void loadMoreHistory(false);
+    void loadMoreHistory(false, true);
   }
 </script>
 

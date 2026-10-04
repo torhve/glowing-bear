@@ -11,7 +11,7 @@ import type {
     NickGroup,
     RichTextPart,
 } from "#lib/types.ts";
-import { Protocol } from "#lib/weechat.ts";
+import { rawText2Rich } from "#lib/weechat-colors.ts";
 import { DEBUG_BUFFERS } from "#lib/debug.ts";
 
 /**
@@ -35,7 +35,7 @@ export function deepCloneBufferLine(l: BufferLine): BufferLine {
     };
 }
 
-// ---- Utility: parse rich text (delegates to Protocol.rawText2Rich) ----
+// ---- Utility: parse rich text (delegates to the standalone color parser) ----
 function buildClasses(part: {
   fgColor: { type: string; name: string };
   bgColor: { type: string; name: string };
@@ -80,7 +80,7 @@ export function parseRichText(text: string | undefined | null): RichTextPart[] {
             },
         ];
     }
-    const rawParts = Protocol.rawText2Rich(text);
+    const rawParts = rawText2Rich(text);
     return rawParts.map((p) => ({
         text: p.text,
         fgColor: p.fgColor,
@@ -376,6 +376,82 @@ export function createBufferLine(message: {
         isUserMessage,
         isDateSeparator: false,
     };
+}
+
+// ---- Date-change separator injection (moved from the legacy handlers at
+// cutover; pure model logic used by both history and live line paths) ----
+export function injectDateChangeMessageIfNeeded(
+    buffer: BufferData,
+    manually: boolean,
+    oldDate: Date,
+    newDate: Date,
+) {
+    if (buffer.bufferType === 1) return; // Free buffers
+
+    oldDate.setHours(0, 0, 0, 0);
+    newDate.setHours(0, 0, 0, 0);
+
+    if (oldDate.valueOf() === newDate.valueOf()) return;
+
+    // Legacy callers without boundary metadata still receive the old index
+    // update; production buffers use stable line identities instead.
+    if (manually && buffer.readBoundaryKnown === undefined) buffer.lastSeen++;
+    const datePlusOne = new Date(oldDate.getTime());
+    datePlusOne.setDate(datePlusOne.getDate() + 1);
+    datePlusOne.setHours(0, 0, 0, 0);
+
+    let content = `\u001943\u2500`; // Day change color (code 43 = chat_day_change) + box drawing
+
+    // Add day of week
+    const weekdays = [
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+    ];
+    content += weekdays[newDate.getDay()] + " (";
+    content += newDate.toLocaleDateString(undefined, {
+        month: "long",
+        day: "numeric",
+    });
+
+    if (newDate.getFullYear() !== oldDate.getFullYear()) {
+        content += `, ${newDate.getFullYear()}`;
+    }
+
+    if (datePlusOne.valueOf() !== newDate.valueOf()) {
+        const diff =
+          Math.round(
+              (newDate.getTime() - oldDate.getTime()) / (24 * 60 * 60 * 1000),
+          ) + 1;
+        if (diff < 0) {
+            content += `, ${Math.abs(diff)} days before`;
+        } else {
+            content += `, ${diff} days later`;
+        }
+    }
+
+    content += ")";
+
+    const dateLine = createBufferLine({
+        buffer: buffer.id,
+        date: newDate.getTime(),
+        date_long: 0,
+        prefix: "\u001943\u2500",
+        message: content,
+        tags_array: [],
+        displayed: 1,
+        notify_level: 0,
+        highlight: 0,
+    });
+    dateLine.lineId = `date:${buffer.id}:${newDate.getTime()}`;
+    dateLine.isDateSeparator = true;
+    dateLine.isUserMessage = false;
+
+    buffer.lines.push(dateLine);
 }
 
 // ---- Nick creation ----

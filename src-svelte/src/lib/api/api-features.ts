@@ -14,9 +14,9 @@ import { get } from 'svelte/store';
 import type { ApiSession, ApiSessionResponse } from '#lib/api/api-session.ts';
 import { validateCompletionResponse, validateLineArray } from '#lib/api/api-validation.ts';
 import { mapLine } from '#lib/api/api-mapping.ts';
-import { storeKeyForBufferId } from '#lib/api/api-store-reducers.ts';
-import { buffers } from '#lib/stores/models.ts';
-import type { CompletionResponse, RestLine } from '#lib/weechat-rest-types.ts';
+import { storeKeyForBufferId, trimBufferLines } from '#lib/api/api-store-reducers.ts';
+import { buffers, maxBufferLines } from '#lib/stores/models.ts';
+import type { CompletionResponse } from '#lib/weechat-rest-types.ts';
 import type { LineSnapshot } from '#lib/api/api-contracts.ts';
 import type { ApiBufferId, ApiLineId } from '#lib/api/api-ids.ts';
 import { createBufferLine } from '#lib/stores/models.ts';
@@ -124,6 +124,10 @@ function applyHistory(buffer: BufferData, lines: LineSnapshot[]): void {
     if (!fresh.length) return;
     buffer.lines = [...fresh, ...buffer.lines];
     buffer.requestedLines += fresh.length;
+    // A capped buffer trims the oldest prepended lines right away, exactly
+    // like the legacy history pass (trimmed lines still count in
+    // requestedLines so scroll-up paging knows it is exhausted).
+    trimBufferLines(buffer, get(maxBufferLines));
 }
 
 function lineSnapshotToBufferLine(buffer: BufferData, l: LineSnapshot) {
@@ -244,12 +248,14 @@ export async function requestCompletion(session: ApiSession, q: CompletionQuery)
  * order is preserved as the base; nicks the buffer saw most recently move
  * first, stably. `spokeAt` comes from the existing nick model.
  */
-export function rankCandidates(candidates: string[], spokeAt: Map<string, number>): string[] {
-    if (spokeAt.size === 0) return candidates;
+export function rankCandidates(candidates: string[], spokeAt: Map<string, number> | Record<string, number>): string[] {
+    const lookup = (key: string): number | undefined =>
+        spokeAt instanceof Map ? spokeAt.get(key) : spokeAt[key];
+    if ((spokeAt instanceof Map ? spokeAt.size : Object.keys(spokeAt).length) === 0) return candidates;
     const norm = (s: string) => s.replace(/[:,\s]+$/, '').toLowerCase();
     return candidates.slice().sort((a, b) => {
-        const ta = spokeAt.get(norm(a)) ?? 0;
-        const tb = spokeAt.get(norm(b)) ?? 0;
+        const ta = lookup(norm(a)) ?? 0;
+        const tb = lookup(norm(b)) ?? 0;
         return tb - ta;
     });
 }

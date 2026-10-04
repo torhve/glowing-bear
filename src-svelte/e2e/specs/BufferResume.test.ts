@@ -41,7 +41,7 @@ test('should restore last viewed buffer after reconnect', async () => {
     // Reconnect while preserving the saved last buffer
     await setSettings(page, { savepassword: false, autoconnect: false });
     await page.getByTestId('host-input').fill('localhost');
-    await page.getByTestId('port-input').fill('9001');
+    await page.getByTestId('port-input').fill('9010');
     await page.getByTestId('password-input').fill('testpassword123');
     await page.getByTestId('connect-button').click();
     await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
@@ -93,7 +93,7 @@ test('should fall back to weechat core when last viewed buffer no longer exists'
     await expect(page.getByTestId('host-input')).toBeVisible({ timeout: 15000 });
     await setSettings(page, { savepassword: false, autoconnect: false });
     await page.getByTestId('host-input').fill('localhost');
-    await page.getByTestId('port-input').fill('9001');
+    await page.getByTestId('port-input').fill('9010');
     await page.getByTestId('password-input').fill('testpassword123');
     await page.getByTestId('connect-button').click();
     await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });

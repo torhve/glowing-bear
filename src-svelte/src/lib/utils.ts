@@ -1,176 +1,6 @@
 import { get } from 'svelte/store';
-import { buffers, activeBufferId, wconfig, sortBuffers } from '#lib/stores/models.ts';
+import { buffers, sortBuffers } from '#lib/stores/models.ts';
 import type { BufferData, Nick } from '#lib/types.ts';
-
-export interface NickCompletionResult {
-    text: string;
-    cursor: number;
-    iterCandidate: string | null;
-}
-
-/* Utilities for nick completion — mirrors AngularJS IrcUtils */
-
-function escapeRegExp(str: string): string {
-    return str.replace(/[[\]{}()*+?.,\\^$|#\s-]/g, '\\$&');
-}
-
-function _completeSingleNick(candidate: string, nickList: string[]): string | null {
-    const lcCandidate = candidate.toLowerCase();
-    for (const nick of nickList) {
-        if (nick.toLowerCase().startsWith(lcCandidate)) {
-            return nick;
-        }
-    }
-    return null;
-}
-
-function _nextNick(iterCandidate: string, currentNick: string, nickList: string[]): string {
-    const lcIterCandidate = iterCandidate.toLowerCase();
-    const lcCurrentNick = currentNick.toLowerCase();
-    const matchingNicks: string[] = [];
-    let at: number | null = null;
-
-    for (let i = 0; i < nickList.length; ++i) {
-        const nick = nickList[i]!;
-        const lcNick = nick.toLowerCase();
-        if (lcNick.indexOf(lcIterCandidate) === 0) {
-            matchingNicks.push(nick);
-            if (lcCurrentNick === lcNick) {
-                at = matchingNicks.length - 1;
-            }
-        }
-    }
-
-    if (at === null || matchingNicks.length === 0) {
-        return currentNick;
-    }
-
-    ++at;
-    if (at >= matchingNicks.length) {
-        at = 0;
-    }
-    return matchingNicks[at]!;
-}
-
-export function completeNick(text: string, caretPos: number, iterCandidate: string | null): NickCompletionResult | null {
-    const bufferId = get(activeBufferId);
-    if (!bufferId) return null;
-    const buffer = get(buffers)[bufferId];
-    if (!buffer) return null;
-
-    const nicks = getNicklistByTime(buffer);
-    if (nicks.length === 0) return null;
-
-    const searchNickList = nicks.map((el: { name: string }) => el.name);
-    const suf = get(wconfig)['weechat.completion.nick_completer'] || ':';
-    const addSpace = get(wconfig)['weechat.completion.nick_add_space'];
-    const addSpaceChar = (addSpace === undefined || addSpace === 'on') ? ' ' : '';
-
-    const beforeCaret = text.substring(0, caretPos);
-    const afterCaret = text.substring(caretPos);
-
-    const nickCharClass = '[a-zA-Z0-9_\\\\\\[\\]{}^`|-]';
-    const escapedSuf = escapeRegExp(suf);
-    const doIterate = (iterCandidate !== null);
-
-    // Case A: iterating nicks at the beginning
-    // Pattern: ^(nickchars)+suf $  (e.g., "nick: " at start)
-    let m = beforeCaret.match(new RegExp('^(' + nickCharClass + '+)' + escapedSuf + ' $'));
-    if (m) {
-        const matchedCurrent = m[1]!;
-        if (doIterate) {
-            const newNick = _nextNick(iterCandidate!, matchedCurrent, searchNickList);
-            let result: string;
-            if (suf.endsWith(' ')) {
-                result = newNick + suf;
-            } else {
-                result = newNick + suf + ' ';
-            }
-            return {
-                text: result + afterCaret,
-                cursor: result.length,
-                iterCandidate: iterCandidate
-            };
-        }
-        return null;
-    }
-
-    // Case B: nick completion in the beginning
-    // Pattern: ^(nickchars)+$
-    m = beforeCaret.match(new RegExp('^(' + nickCharClass + '+)$'));
-    if (m) {
-        const candidate = m[1]!;
-        const newNick = _completeSingleNick(candidate, searchNickList);
-        if (newNick === null) return null;
-        let result: string;
-        if (suf.endsWith(' ')) {
-            result = newNick + suf;
-        } else {
-            result = newNick + suf + ' ';
-        }
-        let after = afterCaret;
-        if (after[0] === ' ') {
-            after = after.substring(1);
-        }
-        return {
-            text: result + after,
-            cursor: result.length,
-            iterCandidate: candidate
-        };
-    }
-
-    // Case C: iterating nicks in the middle
-    // Pattern: ^(.* )(nickchars)+ $
-    m = beforeCaret.match(new RegExp('^(.* )(' + nickCharClass + '+) $'));
-    if (m) {
-        const prefix = m[1]!;
-        const matchedCurrent = m[2]!;
-        if (doIterate) {
-            const newNick = _nextNick(iterCandidate!, matchedCurrent, searchNickList);
-            const result = prefix + newNick + addSpaceChar;
-            return {
-                text: result + afterCaret,
-                cursor: result.length,
-                iterCandidate: iterCandidate
-            };
-        }
-        return null;
-    }
-
-    // Case D: nick completion elsewhere in the middle
-    // Pattern: ^(.* )(nickchars)+$
-    m = beforeCaret.match(new RegExp('^(.* )(' + nickCharClass + '+)$'));
-    if (m) {
-        const prefix = m[1]!;
-        const candidate = m[2]!;
-        const newNick = _completeSingleNick(candidate, searchNickList);
-        if (newNick === null) return null;
-        const result = prefix + newNick + addSpaceChar;
-        let after = afterCaret;
-        if (after[0] === ' ') {
-            after = after.substring(1);
-        }
-        return {
-            text: result + after,
-            cursor: result.length,
-            iterCandidate: candidate
-        };
-    }
-
-    return null;
-}
-
-function getNicklistByTime(buffer: BufferData): Nick[] {
-    const newlist: Nick[] = [];
-    for (const groupIdx in buffer.nicklist) {
-        const group = buffer.nicklist[groupIdx];
-        if (!group || !group.nicks) continue;
-        newlist.push(...group.nicks);
-    }
-    newlist.sort((a, b) => (b.spokeAt || 0) - (a.spokeAt || 0));
-    return newlist;
-}
-
 
 // Check if buffer matches search
 export function bufferMatchesSearch(buffer: BufferData, search: string): boolean {
@@ -197,18 +27,20 @@ export function getFilteredBuffers(search: string, onlyUnread: boolean, orderByS
 }
 
 /**
- * Parse a relay URL string into host, port, and path.
+ * Parse a relay URL string into host, port, and path. The path is an optional
+ * proxy prefix in front of the Relay API (/api); with the legacy relay retired
+ * there is no default endpoint path anymore.
  */
 export function parseRelayUrl(raw: string, defaultPort: string | number = 443): { host: string; port: number; path: string } {
     let host = raw;
     let port = typeof defaultPort === 'string' ? (parseInt(defaultPort, 10) || 443) : defaultPort;
     if (port < 1 || port > 65535) port = 443;
-    let path = 'weechat';
+    let path = '';
     const match = raw.match(/^(\[[0-9a-f:]+\]|[^\]]+):(\d+)(\/.*)?$/i);
     if (match) {
         host = match[1] || host;
         port = parseInt(match[2] || '', 10) || port;
-        path = match[3]?.slice(1) || 'weechat';
+        path = match[3]?.slice(1) ?? '';
     }
     return { host, port, path };
 }

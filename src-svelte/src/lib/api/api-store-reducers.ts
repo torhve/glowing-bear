@@ -12,17 +12,16 @@
 // Hotlist rule: a baseline is authoritative for server counts; locally
 // tracked unread (localUnread) is modeled separately and preserved.
 //
-// NOTE: injectDateChangeMessageIfNeeded currently lives in handlers.ts
-// (legacy). It is pure model logic and moves to models.ts at cutover; the
-// import here is temporary and will invert.
 
 import { get } from 'svelte/store';
 import {
     buffers, servers, activeBufferId, previousBufferId, localUnreadBuffers,
     createBuffer, createBufferLine, createNick, createNickGroup,
     parseRichText, removeBuffer, isSyncing, isRelayStatusBuffer,
+    maxBufferLines, setReadBoundary, setReadBoundaryUnknown,
+    injectDateChangeMessageIfNeeded, pendingBufferSwitch, setActiveBuffer,
 } from '#lib/stores/models.ts';
-import { injectDateChangeMessageIfNeeded } from '#lib/stores/handlers.ts';
+import { shouldResume } from '#lib/stores/bufferResume.ts';
 import { createHighlight, playNotificationSound, updateTitle, updateFavico } from '#lib/notifications.ts';
 import { isWindowFocused } from '#lib/windowFocus.ts';
 import type { BufferData, Nick, NickGroup } from '#lib/types.ts';
@@ -35,6 +34,21 @@ import type { ApiBufferId } from '#lib/api/api-ids.ts';
 /** Central conversion: store key for an API buffer id. */
 export function storeKeyForBufferId(bufferId: ApiBufferId): string {
     return String(bufferId);
+}
+
+// Group display keys follow the legacy contract: group name, root group is
+// 'root'. The id→key mapping lets lifecycle events address groups by API id.
+const groupKeys = new Map<string, Map<number, string>>();
+function groupKey(bufferKey: string, groupId: number, name = ''): string {
+    const map = groupKeys.get(bufferKey);
+    return map?.get(groupId) ?? (name || 'root');
+}
+function registerGroupKey(bufferKey: string, groupId: number, name: string): string {
+    const key = name || 'root';
+    let map = groupKeys.get(bufferKey);
+    if (!map) { map = new Map(); groupKeys.set(bufferKey, map); }
+    map.set(groupId, key);
+    return key;
 }
 
 function serverKey(buffer: BufferData): string {
@@ -129,13 +143,53 @@ function appendLines(buffer: BufferData, lines: LineSnapshot[]): void {
     }
 }
 
+/** Drop oldest lines beyond the dynamic memory limit, mirroring the legacy
+ *  buffer-info/line-add trim: localUnread, requestedLines, and the read
+ *  boundary are all re-anchored for the removed prefix. */
+export function trimBufferLines(buffer: BufferData, limit: number): void {
+    if (buffer.lines.length <= limit) return;
+    const linesToRemove = buffer.lines.length - limit;
+    // Adjust localUnread for removed lines — it tracks real-time messages
+    // received while this buffer was inactive.
+    if (buffer.localUnread > 0) {
+        const unreadStartIndex = Math.max(0, buffer.lines.length - buffer.localUnread);
+        const overlap = Math.max(0, Math.min(linesToRemove, unreadStartIndex));
+        buffer.localUnread = Math.max(0, buffer.localUnread - overlap);
+    }
+    const boundaryId = buffer.readBoundaryId;
+    const wasKnown = buffer.readBoundaryKnown !== false;
+    const oldLastSeen = buffer.lastSeen;
+    buffer.lines.splice(0, linesToRemove);
+    buffer.requestedLines -= linesToRemove;
+    if (wasKnown) {
+        if (boundaryId === null) {
+            setReadBoundary(buffer, -1);
+        } else if (boundaryId !== undefined) {
+            const matches = buffer.lines.reduce<number[]>((found, line, index) => {
+                if (line.lineId === boundaryId) found.push(index);
+                return found;
+            }, []);
+            if (matches.length > 1) setReadBoundaryUnknown(buffer);
+            else setReadBoundary(buffer, matches.length === 1 ? matches[0]! : -1);
+        } else {
+            setReadBoundary(buffer, oldLastSeen - linesToRemove);
+        }
+    }
+    buffer.allLinesFetched = false;
+}
+
+/** Apply the memory-limit trim after any append (history, live, opened). */
+function trimToLimit(buffer: BufferData): void {
+    trimBufferLines(buffer, get(maxBufferLines));
+}
+
 /** Flatten the API nick tree into the legacy flat group map, depth-first so
  *  group display order matches the server tree. */
 function buildNicklist(buffer: BufferData, groups: NickGroupSnapshot[], nicks: NickSnapshot[]): void {
     buffer.nicklist = {};
     // Groups arrive depth-first from the tree walk; keep that display order.
     for (const group of groups) {
-        const key = String(group.id);
+        const key = registerGroupKey(buffer.id, group.id, group.name);
         const entry: NickGroup = createNickGroup({ name: group.name, visible: group.visible ? '1' : '0' });
         for (const snap of nicks) {
             if (snap.parentGroupId === group.id) entry.nicks.push(createNickFromApi(buffer, snap));
@@ -228,15 +282,37 @@ export function createApiStoreReducers(): ApiReducers {
             const copy: Record<string, BufferData> = { ...current };
             for (const snap of list) upsertBuffer(copy, snap);
             buffers.set(copy);
+            // Resume the last-viewed buffer (saved by fullName across
+            // connections); otherwise prefer core.weechat, then the first
+            // buffer — same default order as the legacy buffer-info pass.
+            if (!get(activeBufferId)) {
+                const resume = list.find((snap) => shouldResume(snap.name));
+                const fallback = resume
+                    ?? list.find((snap) => snap.name === 'core.weechat')
+                    ?? list[0];
+                if (fallback) setActiveBuffer(storeKeyForBufferId(fallback.id));
+            }
         },
 
         bufferOpened(snap, lines, groups, nicks): void {
             const current = get(buffers);
             const copy: Record<string, BufferData> = { ...current };
             const buffer = upsertBuffer(copy, snap);
-            if (lines && lines.length) appendLines(buffer, lines);
+            if (lines && lines.length) {
+                appendLines(buffer, lines);
+                trimToLimit(buffer);
+            }
             if (groups && groups.length) buildNicklist(buffer, groups, nicks ?? []);
             if (lines && lines.length) applyReadMarker(buffer, snap.lastReadLineId);
+            // Auto-switch to a /query buffer once WeeChat opens it (pending
+            // switch set by InputBar when the target buffer did not exist yet).
+            const targetNick = get(pendingBufferSwitch);
+            if (targetNick && buffer.shortName.toLowerCase() === targetNick.toLowerCase()) {
+                setActiveBuffer(buffer.id);
+                pendingBufferSwitch.set(null);
+            } else if (shouldResume(buffer.fullName) && !get(activeBufferId)) {
+                setActiveBuffer(buffer.id);
+            }
             buffers.set(copy);
         },
 
@@ -249,6 +325,7 @@ export function createApiStoreReducers(): ApiReducers {
             const key = storeKeyForBufferId(bufferId);
             const buffer = get(buffers)[key];
             if (!buffer) return;
+            groupKeys.delete(key);
             removeBuffer(key, buffer.active);
         },
 
@@ -339,6 +416,7 @@ export function createApiStoreReducers(): ApiReducers {
                     return copy;
                 }
                 appendLines(target, [line]);
+                trimToLimit(target);
                 if (line.displayed) {
                     tallyLine(target, line, activeId);
                     alertForLine(target, line, activeId);
@@ -397,9 +475,10 @@ export function createApiStoreReducers(): ApiReducers {
                 if (!buffer) return current;
                 const copy = { ...current, [key]: { ...buffer, nicklist: { ...buffer.nicklist } } };
                 const target = copy[key]!;
-                const existing = target.nicklist[String(group.id)];
+                const key2 = registerGroupKey(target.id, group.id, group.name);
+                const existing = target.nicklist[key2];
                 const entry = existing ?? createNickGroup({ name: group.name, visible: group.visible ? '1' : '0' });
-                target.nicklist[String(group.id)] = { ...entry, name: group.name, visible: group.visible ? '1' : '0' };
+                target.nicklist[key2] = { ...entry, name: group.name, visible: group.visible ? '1' : '0' };
                 return copy;
             });
         },
@@ -410,7 +489,8 @@ export function createApiStoreReducers(): ApiReducers {
                 const buffer = current[key];
                 if (!buffer) return current;
                 const copy = { ...current, [key]: { ...buffer, nicklist: { ...buffer.nicklist } } };
-                delete copy[key]!.nicklist[String(groupId)];
+                delete copy[key]!.nicklist[groupKey(copy[key]!.id, groupId)];
+                groupKeys.get(key)?.delete(groupId);
                 return copy;
             });
         },
@@ -422,14 +502,14 @@ export function createApiStoreReducers(): ApiReducers {
                 if (!buffer) return current;
                 const copy = { ...current, [key]: { ...buffer, nicklist: { ...buffer.nicklist } } };
                 const target = copy[key]!;
-                const groupKey = String(nick.parentGroupId);
-                const group = target.nicklist[groupKey] ?? createNickGroup({ name: '', visible: '1' });
+                const key2 = groupKey(target.id, nick.parentGroupId);
+                const group = target.nicklist[key2] ?? createNickGroup({ name: key2 === 'root' ? '' : key2, visible: '1' });
                 const existingIndex = group.nicks.findIndex((n) => n.nickId === nick.id);
                 const created = createNickFromApi(target, nick);
                 const nicks = existingIndex >= 0
                     ? group.nicks.map((n, i) => (i === existingIndex ? created : n))
                     : [...group.nicks, created];
-                target.nicklist[groupKey] = { ...group, nicks };
+                target.nicklist[key2] = { ...group, nicks };
                 return copy;
             });
         },
@@ -462,7 +542,9 @@ export function createApiStoreReducers(): ApiReducers {
                     const target = { ...buffer };
                     // Server counts are authoritative at baseline; localUnread
                     // is separate state and is preserved.
-                    target.unread = entry.counts.message + entry.counts.low;
+                    // Legacy parity: only message-priority counts are unread;
+                    // low-priority lines (joins/parts, relay refresh) are not.
+                    target.unread = entry.counts.message;
                     target.notification = entry.counts.private + entry.counts.highlight;
                     if (target.readBoundaryKnown === false && target.unread + target.notification > 0) {
                         target.pendingReadBoundaryUnread = target.unread + target.notification;

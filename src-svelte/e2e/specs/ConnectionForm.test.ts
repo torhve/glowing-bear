@@ -74,7 +74,7 @@ test.describe('Features', () => {
     test('should accept host with port', async ({ page }) => {
         const input = page.getByTestId('host-input');
         await input.clear();
-        await input.fill('localhost:9001');
+        await input.fill('localhost:9010');
         await input.blur();
         await expect(input).not.toHaveClass(/border-danger/);
     });
@@ -90,7 +90,7 @@ test.describe('Features', () => {
     test('should accept host with port and path', async ({ page }) => {
         const input = page.getByTestId('host-input');
         await input.clear();
-        await input.fill('localhost:9001/weechat');
+        await input.fill('localhost:9010/weechat');
         await input.blur();
         await expect(input).not.toHaveClass(/border-danger/);
     });
@@ -114,12 +114,12 @@ test.describe('Features', () => {
         await hostInput.clear();
         await hostInput.pressSequentially('localhost', { delay: 50 });
         await portInput.clear();
-        await portInput.pressSequentially('9001', { delay: 50 });
+        await portInput.pressSequentially('9010', { delay: 50 });
         await savePasswordCheck.check();
         await page.reload();
         await waitForAppReady(page);
         await expect(hostInput).toHaveValue('localhost');
-        await expect(portInput).toHaveValue('9001');
+        await expect(portInput).toHaveValue('9010');
         await expect(savePasswordCheck).toBeChecked();
     });
 });

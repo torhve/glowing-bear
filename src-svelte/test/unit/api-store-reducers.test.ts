@@ -118,9 +118,9 @@ describe('buffer_opened bootstrap', () => {
         }, 'buffer'), reducers);
         const buf = get(buffers)[KEY]!;
         expect(buf.lines.map((l) => l.lineId)).toEqual(['weechat:101', 'weechat:102']);
-        expect(Object.keys(buf.nicklist)).toEqual(['0', '5']);
-        expect(buf.nicklist['0']!.nicks[0]!.name).toBe('alice');
-        expect(buf.nicklist['0']!.nicks[0]!.nickId).toBe(9);
+        expect(Object.keys(buf.nicklist)).toEqual(['root', 'ops']);
+        expect(buf.nicklist['root']!.nicks[0]!.name).toBe('alice');
+        expect(buf.nicklist['root']!.nicks[0]!.nickId).toBe(9);
     });
 
     it('nick lifecycle events locate nicks by api id', () => {
@@ -134,11 +134,11 @@ describe('buffer_opened bootstrap', () => {
             name: 'bob', color_name: '', color: '', visible: false,
         }, 'nick'), reducers);
         let buf = get(buffers)[KEY]!;
-        expect(buf.nicklist['0']!.nicks).toHaveLength(1);
-        expect(buf.nicklist['0']!.nicks[0]!.visible).toBe('0');
+        expect(buf.nicklist['root']!.nicks).toHaveLength(1);
+        expect(buf.nicklist['root']!.nicks[0]!.visible).toBe('0');
         dispatchEvent(event('nicklist_nick_removing', 42), reducers);
         buf = get(buffers)[KEY]!;
-        expect(buf.nicklist['0']!.nicks).toHaveLength(0);
+        expect(buf.nicklist['root']!.nicks).toHaveLength(0);
     });
 });
 
@@ -146,6 +146,7 @@ describe('line tally gates (ported legacy rules)', () => {
     it('does not tally while the sync phase is open and the boundary is unknown', () => {
         const token = beginSyncPhase();
         reducers.buffers([bufferSnap({ lastReadLineId: -1 })]);
+        activeBufferId.set(''); // bootstrap auto-selects a default; tally needs an inactive buffer
         // lastReadLineId -1 marks the boundary known; force the unknown case:
         get(buffers)[KEY]!.readBoundaryKnown = false;
         reducers.lineAdded(BUFFER_ID, lineSnap(1));
@@ -168,6 +169,7 @@ describe('line tally gates (ported legacy rules)', () => {
 
     it('notify_level 1 increments unread and server totals; >=2 with highlight increments notification', () => {
         reducers.buffers([bufferSnap()]);
+        activeBufferId.set('');
         reducers.lineAdded(BUFFER_ID, lineSnap(1));
         reducers.lineAdded(BUFFER_ID, lineSnap(2, { notifyLevel: 3, highlight: true, tags: ['notify_highlight'] }));
         const buf = get(buffers)[KEY]!;
@@ -197,6 +199,7 @@ describe('line tally gates (ported legacy rules)', () => {
 describe('hotlist baseline', () => {
     it('applies server counts and preserves separately modeled localUnread', () => {
         reducers.buffers([bufferSnap()]);
+        activeBufferId.set('');
         reducers.lineAdded(BUFFER_ID, lineSnap(1)); // localUnread 1, unread 1
         const map = new Map<ApiBufferId, HotlistSnapshot>([[BUFFER_ID, {
             priority: 3,
@@ -219,9 +222,35 @@ describe('hotlist baseline', () => {
 
     it('unknown boundary with counts records pendingReadBoundaryUnread', () => {
         reducers.buffers([bufferSnap()]);
+        activeBufferId.set('');
         get(buffers)[KEY]!.readBoundaryKnown = false;
         reducers.hotlist(new Map([[BUFFER_ID, { priority: 2, counts: { low: 0, message: 4, private: 0, highlight: 0 } }]]));
         expect(get(buffers)[KEY]!.pendingReadBoundaryUnread).toBe(4);
+    });
+});
+
+describe('bootstrap default + resume selection', () => {
+    it('defaults to core.weechat, not the first buffer', () => {
+        reducers.buffers([
+            bufferSnap({ id: 1 as ApiBufferId, name: 'irc.s.#a', shortName: '#a' }),
+            bufferSnap({ id: 2 as ApiBufferId, name: 'core.weechat', shortName: 'weechat' }),
+        ]);
+        expect(get(activeBufferId)).toBe('2');
+    });
+
+    it('falls back to the first buffer when there is no core buffer', () => {
+        reducers.buffers([bufferSnap({ id: 3 as ApiBufferId })]);
+        expect(get(activeBufferId)).toBe('3');
+    });
+
+    it('resumes the saved buffer by full name over the core default', () => {
+        localStorage.setItem('gb-last-buffer', 'irc.glowing-bear.#chan');
+        reducers.buffers([
+            bufferSnap({ id: 2 as ApiBufferId, name: 'core.weechat', shortName: 'weechat' }),
+            bufferSnap({ id: 1 as ApiBufferId }),
+        ]);
+        expect(get(activeBufferId)).toBe('1');
+        localStorage.removeItem('gb-last-buffer');
     });
 });
 

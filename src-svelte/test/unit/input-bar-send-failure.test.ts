@@ -9,8 +9,9 @@ import { writeInputDraft } from '#lib/stores/inputDraft.ts';
 import type { BufferData } from '#lib/types.ts';
 
 vi.mock('#lib/stores/connectionManager.ts', () => ({
-    sendMessage: vi.fn(() => true),
-    sendWeeChatCommand: vi.fn(() => true),
+    sendMessage: vi.fn(() => Promise.resolve(true)),
+    sendWeeChatCommand: vi.fn(() => Promise.resolve(true)),
+    getSession: vi.fn(() => null),
 }));
 
 const components: Record<string, unknown>[] = [];
@@ -66,8 +67,11 @@ function pressKey(input: HTMLTextAreaElement, key: string, keyCode: number) {
     flushSync();
 }
 
-function pressEnter(input: HTMLTextAreaElement) {
+async function pressEnter(input: HTMLTextAreaElement) {
     pressKey(input, 'Enter', 13);
+    // handleSend is async (Relay API delivery): let its awaits settle.
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
 }
 
 function pressArrowUp(input: HTMLTextAreaElement) {
@@ -87,7 +91,7 @@ function recallHistory(target: HTMLElement): string {
 
 beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(sendMessage).mockReturnValue(true);
+    vi.mocked(sendMessage).mockResolvedValue(true);
     toastStore.set([]);
     // The draft is module-level, so reset it to keep tests order-independent.
     writeInputDraft('');
@@ -113,68 +117,70 @@ it('keeps a half-typed message when the input bar is torn down and rebuilt by a 
     expect(inputIn(second).value).toBe('a long message I was still typing');
 });
 
-it('keeps the text in the input when the send fails', () => {
+it('keeps the text in the input when the send fails', async () => {
     openBuffer();
-    vi.mocked(sendMessage).mockReturnValue(false);
+    vi.mocked(sendMessage).mockResolvedValue(false);
 
     const target = render(InputBar, {});
     const input = typeInto(target, 'text that cannot be sent');
-    pressEnter(input);
+    await pressEnter(input);
 
     expect(inputIn(target).value).toBe('text that cannot be sent');
 });
 
-it('does not offer a failed message back from input history', () => {
+it('does not offer a failed message back from input history', async () => {
     openBuffer();
-    vi.mocked(sendMessage).mockReturnValue(false);
+    vi.mocked(sendMessage).mockResolvedValue(false);
 
     const target = render(InputBar, {});
     const input = typeInto(target, 'a line that was never sent');
-    pressEnter(input);
+    await pressEnter(input);
 
     expect(recallHistory(target)).not.toBe('a line that was never sent');
 });
 
-it('warns the user when a message could not be sent', () => {
+it('warns the user when a message could not be sent', async () => {
     openBuffer();
-    vi.mocked(sendMessage).mockReturnValue(false);
+    vi.mocked(sendMessage).mockResolvedValue(false);
 
     const target = render(InputBar, {});
-    pressEnter(typeInto(target, 'undeliverable message'));
+    const input = typeInto(target, 'undeliverable message');
+    await pressEnter(input);
 
     const warnings = get(toastStore).filter((toast) => toast.type === 'warning');
     expect(warnings.length).toBeGreaterThan(0);
     expect(warnings.map((toast) => toast.message).join(' ')).toMatch(/could not be sent/i);
 });
 
-it('keeps only the lines that failed when a multi-line send partially fails', () => {
+it('keeps only the lines that failed when a multi-line send partially fails', async () => {
     openBuffer();
-    vi.mocked(sendMessage).mockImplementation((line: string) => line !== 'bad line');
+    vi.mocked(sendMessage).mockImplementation(async (line: string) => line !== 'bad line');
 
     const target = render(InputBar, {});
     const input = typeInto(target, 'good line\nbad line');
-    pressEnter(input);
+    await pressEnter(input);
 
     expect(inputIn(target).value).toBe('bad line');
     expect(recallHistory(target)).toBe('good line');
 });
 
-it('clears the input and records history when the send succeeds', () => {
+it('clears the input and records history when the send succeeds', async () => {
     openBuffer();
 
     const target = render(InputBar, {});
     const input = typeInto(target, 'a message that was sent');
-    pressEnter(input);
+    await pressEnter(input);
 
     expect(inputIn(target).value).toBe('');
     expect(recallHistory(target)).toBe('a message that was sent');
 });
 
-it('does not resurrect a draft that was already sent successfully', () => {
+it('does not resurrect a draft that was already sent successfully', async () => {
     openBuffer();
 
     const first = render(InputBar, {});
-    pressEnter(typeInto(first, 'sent before disconnect'));
+    const input = typeInto(first, 'sent before disconnect');
+    await pressEnter(input);
     expect(inputIn(first).value).toBe('');
 
     unmount(components.pop()!);

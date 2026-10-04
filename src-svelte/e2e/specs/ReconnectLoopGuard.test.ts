@@ -21,7 +21,7 @@ test.describe('Auto reconnect with countdown toast', () => {
 
         // Simulate unexpected WebSocket close
         await page.evaluate(() => {
-            const ws = (window as any).__getWs?.();
+            const ws = (window as any).__getSession?.()?.getSocket?.();
             if (ws) ws.close(3000, 'test disconnect');
         });
 
@@ -47,7 +47,7 @@ test.describe('Auto reconnect with countdown toast', () => {
 
         // Simulate disconnect to trigger countdown toast
         await page.evaluate(() => {
-            const ws = (window as any).__getWs?.();
+            const ws = (window as any).__getSession?.()?.getSocket?.();
             if (ws) ws.close(3000, 'test disconnect');
         });
 
@@ -81,7 +81,7 @@ test.describe('Auto reconnect with countdown toast', () => {
 
         // Simulate unexpected WebSocket close
         await page.evaluate(() => {
-            const ws = (window as any).__getWs?.();
+            const ws = (window as any).__getSession?.()?.getSocket?.();
             if (ws) ws.close(3000, 'test disconnect');
         });
 
@@ -109,7 +109,7 @@ test.describe('Auto reconnect with countdown toast', () => {
 
         // First disconnect — should schedule reconnect at 30s
         await page.evaluate(() => {
-            const ws = (window as any).__getWs?.();
+            const ws = (window as any).__getSession?.()?.getSocket?.();
             if (ws) ws.close(3000, 'test disconnect');
         });
 

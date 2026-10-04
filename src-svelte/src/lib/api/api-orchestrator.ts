@@ -56,7 +56,7 @@ export interface OrchestratorOptions {
     reducers: ApiReducers;
     sync: SyncPhaseTokens;
     webSocketFactory?: (url: string, protocols: string[]) => WebSocket;
-    autoReconnect?: boolean;
+    autoReconnect?: boolean | (() => boolean);
     backoff?: BackoffPolicy;
     minApiVersionNumber?: number;
     keepAliveMs?: number;
@@ -99,10 +99,12 @@ export class ApiOrchestrator {
 
     /** Manual reconnect takeover: cancels any scheduled retry and starts a
      *  fresh attempt immediately. */
-    reconnectNow(): void {
+    reconnectNow(resetAttempts = false): void {
         if (this.stopped) return;
         this.clearRetry();
-        this.attempt = 0;
+        // Manual "reconnect now" keeps the backoff ladder unless explicitly
+        // reset (focus-reconnect), so a failed immediate retry escalates.
+        if (resetAttempts) this.attempt = 0;
         this.supersedeCurrent();
         this.beginAttempt();
     }
@@ -250,7 +252,8 @@ export class ApiOrchestrator {
     }
 
     private handleFailure(generation: number, error: string): void {
-        if (this.opts.autoReconnect === false || this.stopped) {
+        const autoReconnect = typeof this.opts.autoReconnect === 'function' ? this.opts.autoReconnect() : this.opts.autoReconnect;
+        if (autoReconnect === false || this.stopped) {
             this.setStatus({ state: 'failed', error }, { generation });
             return;
         }

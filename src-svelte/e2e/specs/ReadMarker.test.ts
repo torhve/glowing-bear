@@ -225,16 +225,16 @@ test.describe('buffer switch', () => {
         // Readmarker should NOT be at the very end (there should be lines below it)
         expect(state!.linesBelowReadmarker).toBeGreaterThan(0);
 
-        // Readmarker should be visible in the viewport
-        const visibleInViewport = await page.evaluate(() => {
+        // Readmarker should be visible in the viewport (poll: positioning
+        // settles over a couple of rAF frames after the history fetch lands)
+        await page.waitForFunction(() => {
             const container = document.querySelector('[data-testid="chat-messages"]') as HTMLElement;
             const rm = document.querySelector('.readmarker') as HTMLElement;
             if (!container || !rm) return false;
             const containerRect = container.getBoundingClientRect();
             const rmRect = rm.getBoundingClientRect();
             return rmRect.bottom <= containerRect.bottom && rmRect.top >= containerRect.top;
-        });
-        expect(visibleInViewport).toBe(true);
+        }, { timeout: 5000 });
     });
 
     test('should not double-count unreads for inactive buffers', async () => {

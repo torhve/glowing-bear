@@ -22,10 +22,10 @@ test.describe('Hash params', () => {
     });
 
     test('should prefill port from hash parameter', async ({ page }) => {
-        await page.goto('http://localhost:8001/#port=9001');
+        await page.goto('http://localhost:8001/#port=9010');
         await page.reload();
         await waitForAppReady(page);
-        await expect(page.getByTestId('port-input')).toHaveValue('9001');
+        await expect(page.getByTestId('port-input')).toHaveValue('9010');
     });
 
     test('should prefill password from hash parameter', async ({ page }) => {
@@ -57,10 +57,10 @@ test.describe('Hash params', () => {
     });
 
     test('should combine host, port, and path into hostField', async ({ page }) => {
-        await page.goto('http://localhost:8001/#host=localhost&port=9001&path=weechat2');
+        await page.goto('http://localhost:8001/#host=localhost&port=9010&path=weechat2');
         await page.reload();
         await waitForAppReady(page);
-        await expect(page.getByTestId('host-input')).toHaveValue('localhost:9001/weechat2');
+        await expect(page.getByTestId('host-input')).toHaveValue('localhost:9010/weechat2');
     });
 
     test('should override stored settings with hash params', async ({ page }) => {
@@ -69,11 +69,11 @@ test.describe('Hash params', () => {
             (window as any).__setGbSettings?.({ hostField: 'stored.host', port: '8080' });
         });
         // Navigate with different hash params
-        await page.goto('http://localhost:8001/#host=hash.host&port=9001');
+        await page.goto('http://localhost:8001/#host=hash.host&port=9010');
         await page.reload();
         await waitForAppReady(page);
         await expect(page.getByTestId('host-input')).toHaveValue('hash.host');
-        await expect(page.getByTestId('port-input')).toHaveValue('9001');
+        await expect(page.getByTestId('port-input')).toHaveValue('9010');
     });
 
     test('should re-apply hash params on hash change', async ({ page }) => {
@@ -106,10 +106,10 @@ test.describe('Hash params', () => {
     });
 
     test('should ignore malformed hash params', async ({ page }) => {
-        await page.goto('http://localhost:8001/#host=localhost&badparam&port=9001');
+        await page.goto('http://localhost:8001/#host=localhost&badparam&port=9010');
         await page.reload();
         await waitForAppReady(page);
         await expect(page.getByTestId('host-input')).toHaveValue('localhost');
-        await expect(page.getByTestId('port-input')).toHaveValue('9001');
+        await expect(page.getByTestId('port-input')).toHaveValue('9010');
     });
 });

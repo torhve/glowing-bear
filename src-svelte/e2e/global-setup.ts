@@ -7,7 +7,6 @@ import fs from 'fs';
 import type { FullConfig } from '@playwright/test';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const RELAY_PORT = 9001;
 const API_RELAY_PORT = 9010;
 const IRC_PORT = 6667;
 const CONTROL_PORT = 16667;
@@ -58,13 +57,12 @@ async function probeApiRelay(): Promise<boolean> {
 
 /* Verify all gbtest ports are live and the API relay authenticates. Returns true if all healthy. */
 async function verifyGbtest(): Promise<boolean> {
-    const [relay, api, irc, control] = await Promise.all([
-        checkPort(RELAY_PORT),
+    const [api, irc, control] = await Promise.all([
         probeApiRelay(),
         checkPort(IRC_PORT),
         checkPort(CONTROL_PORT),
     ]);
-    return relay && api && irc && control;
+    return api && irc && control;
 }
 
 
@@ -113,7 +111,6 @@ export default async function globalSetup(_config: FullConfig) {
         // Verify all ports came up after start script completed
         await waitForPort(IRC_PORT, 'IRC server');
         await waitForPort(CONTROL_PORT, 'Control API');
-        await waitForPort(RELAY_PORT, 'WeeChat relay');
         await waitForPort(API_RELAY_PORT, 'API relay');
     }
 

@@ -37,7 +37,7 @@ test.describe('Autoconnect spam guard', () => {
         await page.evaluate(() => {
             localStorage.setItem('gb-settings', JSON.stringify({
                 hostField: 'localhost',
-                port: '9001',
+                port: '9010',
                 tls: false,
                 password: 'wrongpassword',
                 savepassword: true,

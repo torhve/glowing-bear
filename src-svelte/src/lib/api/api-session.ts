@@ -107,6 +107,10 @@ export class ApiSession {
     private readonly opts: ApiSessionOptions;
     private readonly sessionId = makeSessionId();
     private counter = 0;
+    /** Wire byte accounting for the connection stats UI (UTF-16 length of
+     *  JSON frames — close enough for display, no per-frame encoder cost). */
+    bytesSent = 0;
+    bytesReceived = 0;
     private socket: WebSocket | null = null;
     private pending = new Map<string, PendingRequest>();
     private deadlines = new Set<ReturnType<typeof setTimeout>>();
@@ -220,7 +224,9 @@ export class ApiSession {
         });
         // One socket send for the whole batch, after every id is registered.
         try {
-            this.socket!.send(JSON.stringify(frames));
+            const payload = JSON.stringify(frames);
+            this.bytesSent += payload.length;
+            this.socket!.send(payload);
             this.lastActivityAt = Date.now();
         } catch (e) {
             const error = new ApiSessionError('send_failed', `batch send failed: ${(e as Error).message}`);
@@ -231,6 +237,11 @@ export class ApiSession {
     }
 
     /** Invalidates this generation and tears everything down. Idempotent. */
+    /** Live socket for tests/diagnostics; null before open or after teardown. */
+    getSocket(): WebSocket | null {
+        return this.socket;
+    }
+
     destroy(): void {
         this.invalidated = true;
         const socket = this.socket;
@@ -273,7 +284,9 @@ export class ApiSession {
             });
             if (!alreadySent && frame) {
                 try {
-                    this.socket!.send(JSON.stringify(frame));
+                    const payload = JSON.stringify(frame);
+                    this.bytesSent += payload.length;
+                    this.socket!.send(payload);
                     this.lastActivityAt = Date.now();
                 } catch (e) {
                     clearTimeout(deadline);
@@ -300,6 +313,7 @@ export class ApiSession {
     private handleFrame(ev: MessageEvent, mySocket: WebSocket): void {
         if (this.isStale(mySocket)) return;
         this.lastActivityAt = Date.now();
+        if (typeof ev.data === 'string') this.bytesReceived += ev.data.length;
         let frame: unknown;
         if (typeof ev.data !== 'string') {
             this.opts.onDiagnostic?.({ kind: 'malformed_frame', raw: '<non-text frame>', error: 'binary frame' });
@@ -376,7 +390,7 @@ export class ApiSession {
         for (const d of this.deadlines) clearTimeout(d);
         this.deadlines.clear();
         const error = new ApiSessionError('closed', 'session closed');
-        for (const [id, p] of this.pending) {
+        for (const p of this.pending.values()) {
             p.reject(error);
         }
         this.pending.clear();

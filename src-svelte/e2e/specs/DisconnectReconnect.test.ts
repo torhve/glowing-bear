@@ -46,7 +46,7 @@ test('reconnect preserves settings and reconnects successfully', async () => {
     // Ensure connected state (previous serial test may have disconnected)
     if (!(await page.getByTestId('disconnect-button').isVisible())) {
         await page.getByTestId('host-input').fill('localhost');
-        await page.getByTestId('port-input').fill('9001');
+        await page.getByTestId('port-input').fill('9010');
         await page.getByTestId('password-input').fill('testpassword123');
         await page.getByTestId('connect-button').click();
         await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
@@ -56,7 +56,7 @@ test('reconnect preserves settings and reconnects successfully', async () => {
     await expect(page.getByTestId('host-input')).toBeVisible({ timeout: 15000 });
 
     await page.getByTestId('host-input').fill('localhost');
-    await page.getByTestId('port-input').fill('9001');
+    await page.getByTestId('port-input').fill('9010');
     await page.getByTestId('password-input').fill('testpassword123');
     await page.getByTestId('connect-button').click();
 
@@ -68,7 +68,7 @@ test('disconnect toast shows reconnect button when autoconnect disabled', async 
     // Ensure connected state (previous serial test may have disconnected)
     if (!(await page.getByTestId('disconnect-button').isVisible())) {
         await page.getByTestId('host-input').fill('localhost');
-        await page.getByTestId('port-input').fill('9001');
+        await page.getByTestId('port-input').fill('9010');
         await page.getByTestId('password-input').fill('testpassword123');
         await page.getByTestId('connect-button').click();
         await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
@@ -77,7 +77,7 @@ test('disconnect toast shows reconnect button when autoconnect disabled', async 
 
     // Simulate WebSocket close directly (not via disconnect(), which suppresses toast for user-initiated disconnects)
     await page.evaluate(() => {
-        const ws = (window as any).__getWs?.();
+        const ws = (window as any).__getSession?.()?.getSocket?.();
         if (ws) ws.close(3000, 'test disconnect');
     });
 
@@ -88,7 +88,7 @@ test('disconnect toast shows reconnect button when autoconnect disabled', async 
 
     // Reconnect by filling in credentials and connecting
     await page.getByTestId('host-input').fill('localhost');
-    await page.getByTestId('port-input').fill('9001');
+    await page.getByTestId('port-input').fill('9010');
     await page.getByTestId('password-input').fill('testpassword123');
     await page.getByTestId('connect-button').click();
 
@@ -115,7 +115,7 @@ test('no error message shown after intentional disconnect via double Escape', as
     // Ensure connected state
     if (!(await page.getByTestId('disconnect-button').isVisible())) {
         await page.getByTestId('host-input').fill('localhost');
-        await page.getByTestId('port-input').fill('9001');
+        await page.getByTestId('port-input').fill('9010');
         await page.getByTestId('password-input').fill('testpassword123');
         await page.getByTestId('connect-button').click();
         await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });

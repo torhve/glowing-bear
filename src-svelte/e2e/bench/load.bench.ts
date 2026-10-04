@@ -21,7 +21,7 @@ test('load: fresh page to connected chat view', async ({ browser }) => {
         const formAt = Date.now() - t0;
 
         await fillInput(page, 'host-input', 'localhost');
-        await fillInput(page, 'port-input', '9001');
+        await fillInput(page, 'port-input', '9010');
         await fillInput(page, 'password-input', 'testpassword123');
         await page.getByTestId('connect-button').click();
         await page.getByTestId('chat-view').waitFor({ state: 'visible', timeout: 45000 });

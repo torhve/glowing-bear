@@ -16,7 +16,7 @@ test.describe('Connection Form password handling', () => {
 
     test('typed password is not overwritten when editing host field', async ({ page }) => {
         await fillInput(page, 'host-input', 'localhost');
-        await fillInput(page, 'port-input', '9001');
+        await fillInput(page, 'port-input', '9010');
         await fillInput(page, 'password-input', 'my_secret_password');
 
         const passwordBefore = await page.getByTestId('password-input').inputValue();
@@ -33,7 +33,7 @@ test.describe('Connection Form password handling', () => {
 
     test('typed password is not overwritten when toggling TLS', async ({ page }) => {
         await fillInput(page, 'host-input', 'localhost');
-        await fillInput(page, 'port-input', '9001');
+        await fillInput(page, 'port-input', '9010');
         await fillInput(page, 'password-input', 'another_secret');
 
         const passwordBefore = await page.getByTestId('password-input').inputValue();
@@ -51,7 +51,7 @@ test.describe('Connection Form password handling', () => {
         await page.evaluate(() => {
             localStorage.setItem('gb-settings', JSON.stringify({
                 hostField: 'localhost',
-                port: '9001',
+                port: '9010',
                 tls: false,
                 password: 'wrong_password',
                 savepassword: true,
@@ -96,7 +96,7 @@ test.describe('Connection Form password with saved settings', () => {
         await page.evaluate(() => {
             localStorage.setItem('gb-settings', JSON.stringify({
                 hostField: 'localhost',
-                port: '9001',
+                port: '9010',
                 tls: false,
                 password: 'saved_secret',
                 savepassword: true,
