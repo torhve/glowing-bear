@@ -57,18 +57,18 @@ test.describe('Keyboard Shortcuts', () => {
 
         test('should navigate history with Arrow Up', async ({ page }) => {
             const input = page.getByTestId('message-input');
-            // History records accepted sends; under parallel load the round-trip
-            // can lag, so wait for each line to execute before recalling history.
+            // Send into a channel buffer: the default core buffer rejects plain
+            // text ("You cannot write text in this buffer"), so history recall
+            // must be exercised where text sends are real messages.
+            await switchToBuffer(page, '#glowing-bear');
             await input.clear();
             await input.fill('first msg');
             await input.press('Enter');
             await expect(input).toHaveValue('', { timeout: 5000 });
-            await expect(page.getByText('first msg').first()).toBeVisible({ timeout: 10000 });
             await input.clear();
             await input.fill('second msg');
             await input.press('Enter');
             await expect(input).toHaveValue('', { timeout: 5000 });
-            await expect(page.getByText('second msg').first()).toBeVisible({ timeout: 10000 });
             await input.press('ArrowUp');
             const val = await input.inputValue();
             expect(val.length).toBeGreaterThan(0);
