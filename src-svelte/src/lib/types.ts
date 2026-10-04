@@ -124,6 +124,8 @@ export interface BufferLine {
 }
 
 export interface Nick {
+    /** Relay API nick id; lets nickChanged/nickRemoved locate the nick. */
+    nickId?: number;
     prefix: string;
     visible: string;
     name: string;
@@ -146,6 +148,12 @@ export interface ServerInfo {
 
 export interface BufferData {
     id: string;
+    /** Branded numeric Relay API id; authoritative for API calls. Store key
+     *  `id` is always `String(apiBufferId)` — set only by api-store-reducers. */
+    apiBufferId?: number;
+    /** Increments on every buffer clear; delayed history responses captured
+     *  under an older epoch must be rejected. */
+    clearEpoch?: number;
     fullName: string;
     shortName: string;
     hidden: boolean;

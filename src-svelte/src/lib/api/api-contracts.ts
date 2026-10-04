@@ -109,7 +109,7 @@ export interface ApiReducers {
     buffers(buffers: BufferSnapshot[]): void;
     /** Buffer metadata snapshot from a buffer_opened event body (may include
      *  initial lines/nicks — passed separately, omitted ≠ empty). */
-    bufferOpened(snapshot: BufferSnapshot, lines: LineSnapshot[] | undefined, root: NickGroupSnapshot | undefined, nicks: NickSnapshot[] | undefined): void;
+    bufferOpened(snapshot: BufferSnapshot, lines: LineSnapshot[] | undefined, groups: NickGroupSnapshot[] | undefined, nicks: NickSnapshot[] | undefined): void;
     bufferClosing(bufferId: ApiBufferId): void;
     bufferClosed(bufferId: ApiBufferId): void;
     bufferTitleChanged(bufferId: ApiBufferId, title: string): void;

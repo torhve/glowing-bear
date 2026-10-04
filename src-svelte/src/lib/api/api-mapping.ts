@@ -188,15 +188,15 @@ export function dispatchEvent(event: ApiSessionEvent, reducers: ApiReducers): vo
                 if (!lv.value) { reducers.unhandled(`buffer_opened invalid lines: ${lv.issues.join('; ')}`); return; }
                 lines = lv.value.map(mapLine).filter((l): l is LineSnapshot => l !== null);
             }
-            let root: NickGroupSnapshot | undefined;
+            let groups: NickGroupSnapshot[] | undefined;
             let nicks: NickSnapshot[] | undefined;
             if (v.value.nicklist_root !== undefined) {
-                root = mapNickGroup(v.value.nicklist_root) ?? undefined;
-                if (root !== undefined) {
+                groups = collectGroups(v.value.nicklist_root);
+                if (groups !== undefined) {
                     nicks = collectNicks(v.value.nicklist_root);
                 }
             }
-            reducers.bufferOpened(snap, lines, root, nicks);
+            reducers.bufferOpened(snap, lines, groups, nicks);
             return;
         }
         case 'buffer_closing':
@@ -314,6 +314,22 @@ function isObj(v: unknown): v is Record<string, unknown> {
 
 /** Flatten the nick tree under a root group into a list (tree structure is
  *  preserved through parentGroupId on each snapshot). */
+/** Depth-first flatten of the nick tree into a group list (root first), so
+ *  reducers keep server display order without walking the tree themselves. */
+function collectGroups(node: RestNickGroup): NickGroupSnapshot[] | undefined {
+    const out: NickGroupSnapshot[] = [];
+    const walk = (n: RestNickGroup): boolean => {
+        const mapped = mapNickGroup(n);
+        if (mapped === null) return false;
+        out.push(mapped);
+        for (const child of n.groups ?? []) {
+            if (!walk(child)) return false;
+        }
+        return true;
+    };
+    return walk(node) ? out : undefined;
+}
+
 function collectNicks(group: RestNickGroup): NickSnapshot[] {
     const out: NickSnapshot[] = [];
     const walk = (g: RestNickGroup) => {

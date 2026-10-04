@@ -112,10 +112,12 @@ describe('dispatchEvent', () => {
             },
         }, 'buffer'), r);
         expect(r.bufferOpened).toHaveBeenCalledTimes(1);
-        const [snap, lines, root, nicks] = r.bufferOpened.mock.calls[0]!;
+        const [snap, lines, groups, nicks] = r.bufferOpened.mock.calls[0]!;
         expect(snap.id).toBe(1759000000000001);
         expect(lines).toHaveLength(1);
-        expect(root).toMatchObject({ id: 0, parentGroupId: -1 });
+        expect(groups).toHaveLength(2); // root + group 5, depth-first
+        expect(groups![0]).toMatchObject({ id: 0, parentGroupId: -1 });
+        expect(groups![1]).toMatchObject({ id: 5, name: 'ops' });
         expect(nicks).toHaveLength(2); // direct + nested under group 5
         expect(r.unhandled).not.toHaveBeenCalled();
     });
@@ -123,9 +125,9 @@ describe('dispatchEvent', () => {
     it('distinguishes absent sub-resources from empty ones', () => {
         const r = reducers();
         dispatchEvent(event('buffer_opened', 1759000000000001, BUFFER, 'buffer'), r);
-        const [, lines, root] = r.bufferOpened.mock.calls[0]!;
+        const [, lines, groups] = r.bufferOpened.mock.calls[0]!;
         expect(lines).toBeUndefined();
-        expect(root).toBeUndefined();
+        expect(groups).toBeUndefined();
     });
 
     it('routes line events with validation', () => {
