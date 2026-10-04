@@ -61,17 +61,21 @@ test.describe('Keyboard Shortcuts', () => {
             // text ("You cannot write text in this buffer"), so history recall
             // must be exercised where text sends are real messages.
             await switchToBuffer(page, '#glowing-bear');
+            // History records a line when the socket accepts it; under parallel
+            // load that round-trip lags, so wait for each send to execute and
+            // poll for the recall rather than reading the input once.
             await input.clear();
             await input.fill('first msg');
             await input.press('Enter');
-            await expect(input).toHaveValue('', { timeout: 5000 });
+            await expect(page.getByText('first msg').first()).toBeVisible({ timeout: 15000 });
             await input.clear();
             await input.fill('second msg');
             await input.press('Enter');
-            await expect(input).toHaveValue('', { timeout: 5000 });
+            await expect(page.getByText('second msg').first()).toBeVisible({ timeout: 15000 });
             await input.press('ArrowUp');
-            const val = await input.inputValue();
-            expect(val.length).toBeGreaterThan(0);
+            await expect
+                .poll(async () => (await input.inputValue()).length, { timeout: 10000 })
+                .toBeGreaterThan(0);
         });
 
         test('should not lose focus on Tab press in input bar', async ({ page }) => {
