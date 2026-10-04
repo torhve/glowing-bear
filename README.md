@@ -1,8 +1,8 @@
 # Glowing Bear
 
-A web frontend for the [WeeChat](https://weechat.org) IRC client. Connects directly to WeeChat via WebSocket relay — no backend service required.
+A web frontend for the [WeeChat](https://weechat.org) IRC client. Connects directly to WeeChat through the relay plugin's JSON API (HTTP + WebSocket) — no backend service required.
 
-Requires WeeChat >= 3.x with the relay plugin configured.
+Requires WeeChat >= 4.10.1 with the relay plugin configured (Relay API 0.6.0). Password authentication supports plain, SHA-256/SHA-512, and PBKDF2+SHA-256/SHA-512; relays that require TOTP (`relay.network.totp`) are not supported by the browser WebSocket authentication path.
 
 ## How to Run It
 
