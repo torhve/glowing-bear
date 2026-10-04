@@ -735,10 +735,12 @@ function concatenateTypedArrays(...arrays: Uint8Array[]): Uint8Array<ArrayBuffer
 }
 
 // Central WebSocket send wrapper — logs all outbound WS messages
-function sendWs(data: string | ArrayBuffer, label = '') {
+// Returns false when the socket could not accept the payload, so callers can tell a
+// real send apart from a silent drop.
+function sendWs(data: string | ArrayBuffer, label = ''): boolean {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         console.warn('[WS] send skipped — not open');
-        return;
+        return false;
     }
     if (DEBUG_WEECHAT_COMMANDS && data instanceof ArrayBuffer) {
         const text = new TextDecoder().decode(data);
@@ -747,8 +749,15 @@ function sendWs(data: string | ArrayBuffer, label = '') {
         console.log('[WeeChatCmd] SEND', label || '(raw):', data.substring(0, 200));
     }
     const byteLength = typeof data === 'string' ? new Blob([data]).size : (data as ArrayBuffer).byteLength;
-    ws.send(data);
+    try {
+        ws.send(data);
+    } catch (e) {
+        // The socket state can change between the readyState check and the send.
+        console.warn('[WS] send failed:', e);
+        return false;
+    }
     recordBytesSent(byteLength);
+    return true;
 }
 
 // Handle incoming messages
@@ -772,29 +781,31 @@ export async function onMessage(data: ArrayBuffer) {
     }
 }
 
-export function sendMessage(message: string) {
+// Deliver one line to the active buffer. Returns false when nothing was sent so the
+// caller can keep the text instead of discarding it.
+export function sendMessage(message: string): boolean {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         console.warn('[sendMessage] WebSocket not open');
-        return;
+        return false;
     }
 
     const bufferId = get(activeBufferId);
     if (!bufferId) {
         console.warn('[sendMessage] no active buffer ID');
-        return;
+        return false;
     }
 
     const buffer = getBuffer(bufferId);
     if (!buffer) {
         console.warn('[sendMessage] buffer not found for id:', bufferId);
-        return;
+        return false;
     }
 
     const msg = Protocol.formatInput({
         buffer: '0x' + buffer.id,
         data: message
     });
-    sendWs(msg, 'msg:' + buffer.shortName);
+    return sendWs(msg, 'msg:' + buffer.shortName);
 }
 
 export function disconnect() {
@@ -929,17 +940,18 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
     }
 }
 
-export function sendWeeChatCommand(command: string, bufferId?: string) {
+// Deliver one WeeChat command. Returns false when nothing was sent.
+export function sendWeeChatCommand(command: string, bufferId?: string): boolean {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         console.warn('[sendWeeChatCommand] WebSocket not open');
-        return;
+        return false;
     }
     // Send command to core WeeChat buffer (0x0), or to a specific buffer if bufferId is provided
     const msg = Protocol.formatInput({
         buffer: bufferId ? '0x' + bufferId : '0x0',
         data: command
     });
-    sendWs(msg, 'cmd:' + command.substring(0, 50));
+    return sendWs(msg, 'cmd:' + command.substring(0, 50));
 }
 
 // Debounce hotlist queries: coalesce rapid buffer switches into a single request.

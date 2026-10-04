@@ -13,6 +13,8 @@
   import ImageUploadPreview from './ImageUploadPreview.svelte';
   import MultiLinePasteDialog from './MultiLinePasteDialog.svelte';
   import { DEBUG_INPUT } from '#lib/debug.ts';
+  import { addToast } from '#lib/toast.ts';
+  import { readInputDraft, writeInputDraft } from '#lib/stores/inputDraft.ts';
 
   interface PreviewItem {
     id: number;
@@ -37,7 +39,9 @@
 
   let inputRef = $state<HTMLTextAreaElement>();
   let fileInputRef = $state<HTMLInputElement>();
-  let message = $state('');
+  // Seeded from the module-level draft so a disconnect (which unmounts this component)
+  // does not discard a message the user was still typing.
+  let message = $state(readInputDraft());
   let _iterCandidate: string | null = $state(null);
   let isDraggingFile = $state(false);
   let previewImages = $state<PreviewItem[]>([]);
@@ -77,6 +81,16 @@
 
   let canSend = $derived($currentBuffer && message.length > 0);
 
+  // Mirror the input into the draft on every change so the next InputBar instance can
+  // start from it. In the current app a disconnect unmounts this component on a later
+  // macrotask (WebSocket close, double-Escape), while the effect flush for the latest
+  // keystroke is a microtask that drains before it — so the draft is already up to date
+  // by the time teardown runs. (Reading $state in an unmount cleanup would see the
+  // pre-flush value, which is why this mirrors on change rather than on destroy.)
+  $effect(() => {
+    writeInputDraft(message);
+  });
+
   // Clear all messages from a buffer, resetting lines and requestedLines count.
   function clearBufferMessages(bufferId: string) {
     const current = get(buffers);
@@ -95,11 +109,16 @@
     // Split the command into multiple commands based on line breaks (matching AngularJS behavior)
     const lines = text.split(/\r?\n/);
 
+    // Lines the socket refused. Keeping them is the point: a failed send must not
+    // silently discard what the user typed.
+    const unsent: string[] = [];
+
     // Handle /buffer clear command on first line only
     if (/^\/buffer\s+clear\s*$/i.test(lines[0]!)) {
-      if ($currentBuffer) {
+      // Clear locally only when the socket accepted the command — otherwise the buffer
+      // looks emptied while its lines are still on the server.
+      if ($currentBuffer && sendWeeChatCommand('/buffer clear')) {
         clearBufferMessages($currentBuffer.id);
-        sendWeeChatCommand('/buffer clear');
       }
     }
 
@@ -129,21 +148,33 @@
         }
       }
 
-      sendMessage(line);
-      if ($currentBuffer) {
-        addToHistory($currentBuffer.id, line);
+      // History records only what the socket accepted, so ArrowUp never offers back a
+      // line that was not sent.
+      if (sendMessage(line)) {
+        if ($currentBuffer) {
+          addToHistory($currentBuffer.id, line);
+        }
+      } else {
+        unsent.push(line);
       }
     }
 
-    if (text === '/c' && $currentBuffer) {
-      clearBufferMessages($currentBuffer.id);
+    if (unsent.length === 0) {
+      if (text === '/c' && $currentBuffer) {
+        clearBufferMessages($currentBuffer.id);
+      }
+      message = '';
+    } else {
+      // Put back exactly the lines that failed, and say so instead of failing silently.
+      // The wording stays generic: the socket can be closing even while `connected` is true.
+      message = unsent.join('\n');
+      addToast('Message could not be sent — your text was kept', { type: 'warning', duration: 5000 });
     }
-
-    message = '';
 
     if (inputRef) {
       inputRef.style.height = 'auto';
-      inputRef.blur();
+      // Keep focus on a failed send so the text can be corrected and retried.
+      if (unsent.length === 0) inputRef.blur();
     }
   }
 
