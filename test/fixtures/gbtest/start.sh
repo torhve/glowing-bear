@@ -8,6 +8,7 @@ WEECHAT_HOME="/tmp/gbtest-weechat"
 IRC_PORT=6667
 CONTROL_PORT=16667
 RELAY_PORT=9001
+API_RELAY_PORT=9010
 
 RELAY_ALREADY_RUNNING=false
 IRC_ALREADY_RUNNING=false
@@ -94,6 +95,38 @@ irc_control() {
 	printf '%s\n' "$1" | nc -w 3 localhost "$CONTROL_PORT" 2>/dev/null
 }
 
+# Authenticated API-relay probe: proves the JSON API relay is live AND that
+# this is our fixture (the password matches). A bare open port is not enough.
+# Uses the API hash scheme: hash:pbkdf2+sha256:<timestamp>:<iterations>:<hex>
+# where the PBKDF2 salt is the decimal timestamp string (server checks it is
+# within relay.network.time_window seconds) and the key length is 32 (SHA-256).
+probe_api_relay() {
+	node -e '
+		const crypto = require("crypto");
+		const ts = Math.floor(Date.now() / 1000);
+		const iterations = 100000;
+		const hash = crypto.pbkdf2Sync("testpassword123", String(ts), iterations, 32, "sha256").toString("hex");
+		const cred = Buffer.from("hash:pbkdf2+sha256:" + ts + ":" + iterations + ":" + hash).toString("base64");
+		fetch("http://127.0.0.1:'"$API_RELAY_PORT"'/api/version", { headers: { Authorization: "Basic " + cred } })
+			.then(r => r.ok ? r.json() : null)
+			.then(b => process.exit(b && typeof b.relay_api_version === "string" ? 0 : 1))
+			.catch(() => process.exit(1));
+	' >/dev/null 2>&1
+}
+
+wait_for_api_relay() {
+	local i
+	for i in $(seq 1 15); do
+		if probe_api_relay; then
+			echo "  API relay ready (authenticated /api/version probe)"
+			return 0
+		fi
+		sleep 1
+	done
+	echo "ERROR: API relay on port $API_RELAY_PORT did not become ready"
+	cleanup
+}
+
 # WeeChat autojoins #glowing-bear a moment after it connects to the IRC server.
 # Until then, messages the test bot sends to the channel never reach it, so a
 # spec started too early loses its own test message.
@@ -167,6 +200,7 @@ if ! $RELAY_ALREADY_RUNNING; then
 		-r "/set relay.network.max_clients 32" \
 		-r "/set relay.network.clients_purge_delay 1" \
 		-r "/relay add weechat $RELAY_PORT" \
+		-r "/relay add api $API_RELAY_PORT" \
 		-r "/server add gbtest localhost/$IRC_PORT -nicks=testuser -autoconnect -notls" \
 		-r "/set irc.server.gbtest.autojoin #glowing-bear" \
 		-r "/hotlist clear" \
@@ -187,6 +221,7 @@ if ! $RELAY_ALREADY_RUNNING; then
 
 	wait_for_grep_shim
 	wait_for_channel_join
+	wait_for_api_relay
 else
 	echo "  WeeChat relay already running — skipping start"
 	# Warm instance: reload the test scripts and drop notification state left
@@ -194,6 +229,14 @@ else
 	weechat_cmd "python unload grep"
 	weechat_cmd "python load $SCRIPT_DIR/weechat/grep.py"
 	weechat_cmd "hotlist clear"
+	# A fixture started before the API relay existed (or with the relay removed)
+	# gets it added through the FIFO; the authenticated probe then confirms it.
+	if ! probe_api_relay; then
+		weechat_cmd "relay add api $API_RELAY_PORT"
+		wait_for_api_relay
+	else
+		echo "  API relay already ready"
+	fi
 	wait_for_grep_shim
 	wait_for_channel_join
 fi
@@ -203,6 +246,7 @@ echo "=== Ready ==="
 echo "  IRC server:     localhost:$IRC_PORT"
 echo "  Control API:    localhost:$CONTROL_PORT"
 echo "  WeeChat relay:  ws://localhost:$RELAY_PORT (password: testpassword123)"
+echo "  API relay:      ws://localhost:$API_RELAY_PORT/api (password: testpassword123)"
 echo "  Bot nick:       gbbot"
 echo "  Auto channel:   #glowing-bear"
 echo "  Config dir:     $WEECHAT_HOME"

@@ -1,5 +1,6 @@
 import net from 'net';
 import { execFile } from 'child_process';
+import { pbkdf2Sync } from 'crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'path';
 import fs from 'fs';
@@ -7,8 +8,10 @@ import type { FullConfig } from '@playwright/test';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const RELAY_PORT = 9001;
+const API_RELAY_PORT = 9010;
 const IRC_PORT = 6667;
 const CONTROL_PORT = 16667;
+const GBTEST_PASSWORD = 'testpassword123';
 
 /* Check if a TCP port is accepting connections. */
 function checkPort(port: number): Promise<boolean> {
@@ -30,14 +33,38 @@ async function waitForPort(port: number, label: string, maxAttempts = 30): Promi
     throw new Error(`${label} on port ${port} did not become available after ${maxAttempts}s`);
 }
 
-/* Verify all gbtest ports are live. Returns true if all healthy. */
+/* Authenticated probe: proves the JSON API relay is live AND that this is our
+ * fixture (the password matches). A bare open port is not enough. Uses the
+ * API hash scheme: hash:pbkdf2+sha256:<timestamp>:<iterations>:<hex>, where
+ * the PBKDF2 salt is the decimal timestamp string (must be within
+ * relay.network.time_window seconds of server time) and key length is 32. */
+async function probeApiRelay(): Promise<boolean> {
+    try {
+        const ts = Math.floor(Date.now() / 1000);
+        const iterations = 100000;
+        const hash = pbkdf2Sync(GBTEST_PASSWORD, String(ts), iterations, 32, 'sha256').toString('hex');
+        const cred = Buffer.from(`hash:pbkdf2+sha256:${ts}:${iterations}:${hash}`).toString('base64');
+        const res = await fetch(`http://127.0.0.1:${API_RELAY_PORT}/api/version`, {
+            headers: { Authorization: 'Basic ' + cred },
+            signal: AbortSignal.timeout(5000),
+        });
+        if (!res.ok) return false;
+        const body = await res.json() as { relay_api_version?: string };
+        return typeof body.relay_api_version === 'string';
+    } catch {
+        return false;
+    }
+}
+
+/* Verify all gbtest ports are live and the API relay authenticates. Returns true if all healthy. */
 async function verifyGbtest(): Promise<boolean> {
-    const [relay, irc, control] = await Promise.all([
+    const [relay, api, irc, control] = await Promise.all([
         checkPort(RELAY_PORT),
+        probeApiRelay(),
         checkPort(IRC_PORT),
         checkPort(CONTROL_PORT),
     ]);
-    return relay && irc && control;
+    return relay && api && irc && control;
 }
 
 
@@ -87,6 +114,7 @@ export default async function globalSetup(_config: FullConfig) {
         await waitForPort(IRC_PORT, 'IRC server');
         await waitForPort(CONTROL_PORT, 'Control API');
         await waitForPort(RELAY_PORT, 'WeeChat relay');
+        await waitForPort(API_RELAY_PORT, 'API relay');
     }
 
     // Start every run from a small, deterministic channel history

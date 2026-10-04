@@ -131,5 +131,13 @@ No PUT/DELETE resources exist despite the CORS Allow header.
   `/api/input`.
 - `relay.network.allow_empty_password` off + empty password → all connections
   rejected (fixture must set a password).
+- `relay.network.password_hash_algo` restricted (gbtest: `pbkdf2+sha256`) → `plain:`
+  credentials are rejected with `{"error":"Invalid hash algorithm (not found or not
+  supported)"}`. API hash credential is colon-separated
+  `hash:pbkdf2+sha256:<timestamp>:<iterations>:<hex>`: PBKDF2 salt = decimal
+  timestamp string (±`relay.network.time_window`, default 5 s), iterations must
+  equal the server's `password_hash_iterations`, key length = digest length
+  (32 for sha256), hex compared case-insensitively. `gbtest/start.sh`'s
+  authenticated probe implements exactly this.
 - `/api/input` with omitted buffer fields executes on the **main buffer** (204, no
   hint) — always send `buffer_id`.
