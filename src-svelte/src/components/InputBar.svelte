@@ -114,6 +114,14 @@
     // silently discard what the user typed.
     const unsent: string[] = [];
 
+    // Clear the input before the round-trip, as the legacy client did: a tall
+    // multi-line textarea keeps the chat viewport short while the send is in
+    // flight, so the line we just sent can pin the view to the shrunken
+    // bottom and then be stranded ~one textarea height above the final one.
+    // On failure the loop below restores the unsent text.
+    message = '';
+    if (inputRef) inputRef.style.height = 'auto';
+
     // Handle /buffer clear command on first line only
     if (/^\/buffer\s+clear\s*$/i.test(lines[0]!)) {
       // Clear locally only when the socket accepted the command — otherwise the buffer
