@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { rawText2Rich, richText2Str } from '#lib/weechat.ts';
+import { rawText2Rich, richText2Str } from '#lib/weechat-colors.ts';
 import type { RichTextPart } from '#lib/types.ts';
 
 describe('richText2Str serialization', () => {
