@@ -1,10 +1,10 @@
 <script lang="ts">
   import { currentBuffer, buffers, pendingBufferSwitch, setActiveBuffer, findBufferByShortName } from '#lib/stores/models.ts';
-  import { sendMessage, sendWeeChatCommand, getSession } from '#lib/stores/connectionManager.ts';
+  import { sendMessage, sendWeeChatCommand, getSession, getActiveTransport } from '#lib/stores/connectionManager.ts';
   import { requestCompletion, rankCandidates } from '#lib/api/api-features.ts';
   import { settings } from '#lib/stores/settings.ts';
   import { addToHistory, getHistoryUp, getHistoryDown } from '#lib/stores/inputHistory.ts';
-  import { isPopoverOpen, filterImageFiles, joinMultilineToSingle, MULTILINE_PASTE_THRESHOLD } from '#lib/utils.ts';
+  import { isPopoverOpen, filterImageFiles, joinMultilineToSingle, MULTILINE_PASTE_THRESHOLD, completeNick } from '#lib/utils.ts';
   import Send from '@lucide/svelte/icons/send';
   import { emojifyInput } from '#lib/emojify.ts';
   import Camera from '@lucide/svelte/icons/camera';
@@ -223,6 +223,16 @@
     };
   }
 
+  // Transport-aware completion: the API relay answers via /api/completion;
+  // the legacy transport uses the client-side matcher (nick_completer read
+  // from wconfig during the legacy handshake).
+  async function completeInput(text: string, caretPos: number): Promise<{ text: string; cursor: number; iterCandidate: string | null } | null> {
+    if (getActiveTransport() === 'legacy') {
+      return completeNick(text, caretPos, _iterCandidate);
+    }
+    return completeViaApi(text, caretPos);
+  }
+
   function getCaretPos(): number {
     return inputRef?.selectionStart ?? 0;
   }
@@ -341,7 +351,7 @@
       e.preventDefault();
       const caretPos = getCaretPos();
       void (async () => {
-        const result = await completeViaApi(message, caretPos);
+        const result = await completeInput(message, caretPos);
         if (result) {
           message = result.text;
           _iterCandidate = result.iterCandidate;
@@ -939,7 +949,7 @@
       </button>
 
       <button
-        onclick={() => { if (inputRef) { const caret = getCaretPos(); void (async () => { const result = await completeViaApi(message, caret); if (result) { message = result.text; _iterCandidate = result.iterCandidate; setTimeout(() => setCaretPos(result.cursor), 0); } })(); } }}
+        onclick={() => { if (inputRef) { const caret = getCaretPos(); void (async () => { const result = await completeInput(message, caret); if (result) { message = result.text; _iterCandidate = result.iterCandidate; setTimeout(() => setCaretPos(result.cursor), 0); } })(); } }}
         data-testid="nick-complete-button"
         class="input-bar-nickcomplete flex-shrink-0 hidden md:inline-flex px-2 py-2 text-text-secondary hover:text-text hover:bg-border rounded transition-colors"
         title="Complete nick"

@@ -15,7 +15,7 @@
   import { get } from 'svelte/store';
   import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig, sortedVisibleBuffers, checkAndNavigatePendingNotificationBuffer } from '#lib/stores/models.ts';
   import { connectionState, setReconnectAttempts, setNextReconnectAt, setErrors } from '#lib/stores/connectionStore.ts';
-  import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer, getSession, initFocusReconnect, cleanupFocusReconnect, setHotlistPollInterval } from '#lib/stores/connectionManager.ts';
+  import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer, getSession, getWs, initFocusReconnect, cleanupFocusReconnect, setHotlistPollInterval } from '#lib/stores/connectionManager.ts';
   import { initNotifications, updateTitle, updateFavico, onDisconnect } from '#lib/notifications.ts';
   import { parseRelayUrl, isPopoverOpen, bufferHasNicklist, modifyTextareaValue } from '#lib/utils.ts';
   import { addToast, toastStore } from '#lib/toast.ts';
@@ -32,6 +32,7 @@
     (window as any).__setReconnectAttempts = setReconnectAttempts;
     (window as any).__setNextReconnectAt = setNextReconnectAt;
     (window as any).__getSession = getSession;
+    (window as any).__getWs = getWs;
     (window as any).__hideBufferListOnMobile = hideBufferListOnMobile;
     (window as any).__showBufferListOnMobile = showBufferListOnMobile;
     (window as any).__addToast = addToast;

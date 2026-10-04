@@ -249,6 +249,9 @@ export interface Settings {
     stylizePrivateChats: boolean;
     enableEmojify: boolean;
     enableFormatting: boolean;
+    /** Relay transport selection: 'auto' probes the API handshake and falls
+     *  back to the legacy WebSocket protocol for WeeChat < 4.10.1. */
+    protocol: 'auto' | 'api' | 'legacy';
     angularTimeFormat?: string;
     supports_formatting_date?: boolean;
 }

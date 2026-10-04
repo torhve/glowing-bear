@@ -32,7 +32,8 @@ export const settings = writable<Settings>({
     hotlistsync: true,
     stylizePrivateChats: false,
     enableEmojify: true,
-    enableFormatting: true
+    enableFormatting: true,
+    protocol: 'auto'
 });
 
 // Load from localStorage on init
@@ -98,6 +99,10 @@ export function applyHashParams(): void {
 
     if (params.autoconnect) {
         updates.autoconnect = params.autoconnect === 'true';
+    }
+
+    if (params.protocol === 'auto' || params.protocol === 'api' || params.protocol === 'legacy') {
+        updates.protocol = params.protocol;
     }
 
     if (Object.keys(updates).length > 0) {

@@ -462,6 +462,21 @@
               />
             </label>
           {/if}
+
+          <label class="settings-option flex items-center justify-between py-2" data-settings-option="protocol">
+            <span class="settings-option-label text-sm text-text flex items-center gap-2"><Plug size={14} class="text-text-secondary shrink-0" />Relay protocol</span>
+            <select
+              id="protocol-selector"
+              data-testid="protocol-selector"
+              class="bg-surface-raised text-text text-sm border border-border rounded px-2 py-1"
+              value={$settings.protocol}
+              onchange={(e) => updateSettings({ protocol: (e.target as HTMLSelectElement).value as 'auto' | 'api' | 'legacy' })}
+            >
+              <option value="auto">Auto (API for WeeChat ≥4.10.1, legacy for older)</option>
+              <option value="api">New API relay (WeeChat ≥4.10.1 only)</option>
+              <option value="legacy">Legacy WebSocket (all versions, deprecated)</option>
+            </select>
+          </label>
         </div>
       </section>
     </div>
