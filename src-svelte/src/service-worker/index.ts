@@ -22,5 +22,10 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+    // Cross-origin requests must bypass the worker: re-issuing them inside a
+    // service worker fails in Firefox (NS_ERROR_INTERCEPTION_FAILED) and
+    // WebKit ("Load failed"). Without a respondWith() the browser performs
+    // the fetch natively, which handles the CORS preflight correctly.
+    if (event.request.mode === 'cors') return;
     event.respondWith(fetch(event.request));
 });

@@ -88,6 +88,9 @@ export async function fetchHistory(session: ApiSession, req: HistoryRequest): Pr
     // Negative lines = newest N; `after` pages older than a line id.
     params.set('lines', String(-Math.abs(req.count)));
     if (req.after !== undefined) params.set('after', String(req.after));
+    // WeeChat-internal color codes: the renderer's rich-text engine parses
+    // them; the default `ansi` encoding has no client-side parser.
+    params.set('colors', 'weechat');
 
     const empty: HistoryResult = { lines: [], applied: false, complete: true };
     let res: ApiSessionResponse;
