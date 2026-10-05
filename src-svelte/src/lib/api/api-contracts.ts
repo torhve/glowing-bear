@@ -108,6 +108,8 @@ export interface NickGroupSnapshot {
  * (phases 7–10) implement it. Every method receives normalized snapshots —
  * never raw wire objects.
  */
+export type RelayLifecycleEvent = 'upgrade' | 'upgrade_ended' | 'quit';
+
 export interface ApiReducers {
     /** Full authoritative buffer list from GET /api/buffers. */
     buffers(buffers: BufferSnapshot[]): void;
@@ -139,6 +141,10 @@ export interface ApiReducers {
     completion(bufferId: ApiBufferId, response: CompletionResponse): void;
     /** Server rejected a command (400/403/404 on an input request). */
     inputRejected(requestId: string, error: string): void;
+    /** Relay-level lifecycle event (buffer_id -1, body null): WeeChat is
+     *  upgrading, finished upgrading, or quitting (manual event table;
+     *  upgrade/upgrade_ended only reach plain-text connections). */
+    relayLifecycle(event: RelayLifecycleEvent): void;
     /** Unknown event name or invalid payload: reducers must not crash; the
      *  session reports here so callers can log/ignore without state damage. */
     unhandled(reason: string): void;

@@ -12,7 +12,7 @@ function reducers(): ApiReducers {
         bufferUpdated: vi.fn(), bufferNotifyChanged: vi.fn(), bufferInputChanged: vi.fn(), lineAdded: vi.fn(),
         lineDataChanged: vi.fn(), bufferCleared: vi.fn(), nickGroupChanged: vi.fn(),
         nickGroupRemoved: vi.fn(), nickChanged: vi.fn(), nickRemoved: vi.fn(),
-        hotlist: vi.fn(), completion: vi.fn(), inputRejected: vi.fn(), unhandled: vi.fn(),
+        hotlist: vi.fn(), completion: vi.fn(), inputRejected: vi.fn(), relayLifecycle: vi.fn(), unhandled: vi.fn(),
     };
 }
 
@@ -280,6 +280,19 @@ describe('dispatchEvent', () => {
         dispatchEvent(event('brand_new_event_from_the_future', 1, {}), r);
         dispatchEvent(event('buffer_hidden', 1759000000000001, 'not a buffer'), r);
         expect(r.unhandled).toHaveBeenCalledTimes(2);
+    });
+
+    // Manual event table: relay-level events with buffer_id -1 and null body.
+    it('routes relay lifecycle events (upgrade/upgrade_ended/quit)', () => {
+        const r = reducers();
+        dispatchEvent(event('upgrade', -1, null), r);
+        dispatchEvent(event('upgrade_ended', -1, null), r);
+        dispatchEvent(event('quit', -1, null), r);
+        expect(r.relayLifecycle).toHaveBeenCalledTimes(3);
+        expect(r.relayLifecycle).toHaveBeenCalledWith('upgrade');
+        expect(r.relayLifecycle).toHaveBeenCalledWith('upgrade_ended');
+        expect(r.relayLifecycle).toHaveBeenCalledWith('quit');
+        expect(r.unhandled).not.toHaveBeenCalled();
     });
 
     it('invalid buffer_id never reaches reducers', () => {

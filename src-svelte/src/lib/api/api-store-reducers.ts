@@ -565,6 +565,14 @@ export function createApiStoreReducers(): ApiReducers {
             console.warn(`[api-store] input rejected for buffer ${bufferId}: ${error}`);
         },
 
+        relayLifecycle(kind): void {
+            // Log only: the orchestrator owns reconnect on upgrade, and the
+            // socket close owns 'quit' (WeeChat closes clients as it exits).
+            if (kind === 'quit') console.info('[api-store] WeeChat has terminated');
+            else if (kind === 'upgrade') console.info('[api-store] WeeChat is upgrading — reconnect will follow');
+            else console.info('[api-store] WeeChat upgrade finished');
+        },
+
         unhandled(detail): void {
             console.warn(`[api-store] unhandled payload: ${detail}`);
         },

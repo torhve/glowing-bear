@@ -193,3 +193,38 @@ shared gbtest fixture):
 
 - `/api/input` with omitted buffer fields executes on the **main buffer** (204, no
   hint) — always send `buffer_id`.
+
+### Relay lifecycle events (live, `probes/probe-quit-event.mjs` → `raw/quit-event.json`)
+
+- The API command whitelist blocks `/quit` over `/api/input` (default
+  `relay.network.commands = *,!quit` — the request returns 204 but nothing
+  happens), so quit is triggered out-of-band:
+  `echo "core.weechat */quit" > /tmp/gbtest-weechat/weechat_fifo_<pid>`.
+- API clients DO receive `{"event_name":"quit","buffer_id":-1,"body_type":null,"body":null}`
+  before the cascade; source hooks it (`relay-api-protocol.c` signal hook list
+  includes `upgrade;upgrade_ended;quit`). The manual table's "plain text
+  connections only" note applies to `upgrade`/`upgrade_ended`; `quit` is
+  live-confirmed for API clients.
+- Quit then cascades `nicklist_*_removing`, `buffer_closing` → `buffer_closed`
+  (null body), `buffer_localvar_removed` with `local_variables:{}`,
+  `buffer_unmerged`, and socket close 1006. `buffer_merged`/`buffer_unmerged`
+  are real wire events and are routed through `bufferUpdated`.
+- Client behavior: `upgrade`/`upgrade_ended` schedule a reconnect in ~2 s
+  (legacy `_upgrade` parity, overriding the slower backoff timer); `quit`
+  relies on the socket-close failure path. Destructive probe — restart the
+  fixture with `npm run irc:start` afterwards.
+
+### Manual event table audit (WeeChat 4.10.1)
+
+Every event in the manual's "events sent according to synchronization
+options" table is now handled: buffer lifecycle/metadata events route through
+`bufferOpened`/`bufferClosing`/`bufferClosed`/`bufferUpdated` (full-snapshot
+merge), `buffer_cleared` drops lines, notify events map string→numeric levels,
+nicklist add/remove events upsert/remove, `buffer_line_added`/
+`buffer_line_data_changed` update lines, `hotlist_changed`/`hotlist_removed`
+rebuild the hotlist map, input events are consumed as no-ops (input is
+client-owned), and `upgrade`/`upgrade_ended`/`quit` route through
+`relayLifecycle`. Events beyond the manual table but present in source
+(`buffer_merged`, `buffer_unmerged`, `buffer_types_changed`,
+`buffer_time_for_each_line_changed`, `buffer_notify_default_changed`) are
+routed or tolerated via the open `ApiEventName` union.

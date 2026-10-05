@@ -73,6 +73,7 @@ export class ApiOrchestrator {
     private session: ApiSession | null = null;
     private abort: AbortController | null = null;
     private retryTimer: ReturnType<typeof setTimeout> | null = null;
+    private upgradeTimer: ReturnType<typeof setTimeout> | null = null;
     private stopped = true;
     private status: OrchestratorStatus = { state: 'idle', generation: 0, attempt: 0 };
 
@@ -185,6 +186,13 @@ export class ApiOrchestrator {
                 onEvent: (event) => {
                     if (!this.isCurrent(generation)) return;
                     dispatchEvent(event, this.opts.reducers);
+                    // Legacy parity (_upgrade/_upgrade_ended): an upgrade kills
+                    // the session; reconnect ~2 s later, once WeeChat's relay
+                    // is back. 'quit' needs nothing — the socket close drives
+                    // the normal failure/reconnect path.
+                    if (event.event_name === 'upgrade' || event.event_name === 'upgrade_ended') {
+                        this.scheduleUpgradeReconnect();
+                    }
                 },
                 onClose: (close) => this.handleSessionClose(generation, close),
             });
@@ -268,6 +276,18 @@ export class ApiOrchestrator {
         }, delay);
     }
 
+    /** Legacy parity for upgrade/upgrade_ended: reconnect ~2 s after the
+     *  signal so WeeChat's restarted relay has time to listen again. The
+     *  2 s timer replaces any slower backoff retry scheduled by the close. */
+    private scheduleUpgradeReconnect(): void {
+        if (this.stopped) return;
+        if (this.upgradeTimer !== null) clearTimeout(this.upgradeTimer);
+        this.upgradeTimer = setTimeout(() => {
+            this.upgradeTimer = null;
+            if (!this.stopped) this.reconnectNow(true);
+        }, 2000);
+    }
+
     private supersedeCurrent(): void {
         if (this.abort) {
             this.abort.abort();
@@ -283,6 +303,10 @@ export class ApiOrchestrator {
     }
 
     private clearRetry(): void {
+        if (this.upgradeTimer !== null) {
+            clearTimeout(this.upgradeTimer);
+            this.upgradeTimer = null;
+        }
         if (this.retryTimer !== null) {
             clearTimeout(this.retryTimer);
             this.retryTimer = null;

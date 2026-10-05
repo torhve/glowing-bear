@@ -20,7 +20,7 @@ import {
 import {
     deriveSemanticType,
     type BufferSnapshot, type HotlistSnapshot, type LineSnapshot,
-    type NickGroupSnapshot, type NickSnapshot, type ApiReducers,
+    type NickGroupSnapshot, type NickSnapshot, type ApiReducers, type RelayLifecycleEvent,
 } from '#lib/api/api-contracts.ts';
 import type { ApiSessionEvent } from '#lib/api/api-session.ts';
 
@@ -260,6 +260,14 @@ export function dispatchEvent(event: ApiSessionEvent, reducers: ApiReducers): vo
         // Body is the full buffer; only the id matters — lines are dropped.
         if (bufferId === null) { reducers.unhandled('buffer_cleared with invalid buffer_id'); return; }
         reducers.bufferCleared(bufferId);
+        return;
+    }
+    case 'upgrade':
+    case 'upgrade_ended':
+    case 'quit': {
+        // Relay-level lifecycle events: buffer_id -1, body null. Reconnect
+        // orchestration reacts in the orchestrator; the reducer logs.
+        reducers.relayLifecycle(event.event_name as RelayLifecycleEvent);
         return;
     }
     case 'input_text_changed':

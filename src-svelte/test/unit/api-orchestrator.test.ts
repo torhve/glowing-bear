@@ -45,7 +45,7 @@ function testReducers() {
         bufferUpdated: vi.fn(), bufferNotifyChanged: vi.fn(), bufferInputChanged: vi.fn(), lineAdded: vi.fn(),
         lineDataChanged: vi.fn(), bufferCleared: vi.fn(), nickGroupChanged: vi.fn(),
         nickGroupRemoved: vi.fn(), nickChanged: vi.fn(), nickRemoved: vi.fn(),
-        hotlist: vi.fn(), completion: vi.fn(), inputRejected: vi.fn(), unhandled: vi.fn(),
+        hotlist: vi.fn(), completion: vi.fn(), inputRejected: vi.fn(), relayLifecycle: vi.fn(), unhandled: vi.fn(),
     } satisfies ApiReducers;
 }
 
@@ -271,6 +271,53 @@ describe('ApiOrchestrator reconnect lifecycle', () => {
         sock.emitClose(1006);
         expect(statuses[statuses.length - 1]!.state).toBe('reconnecting');
         orch.dispose();
+    });
+
+    // Manual event table: upgrade/upgrade_ended kill the session; legacy
+    // parity reconnects ~2 s later instead of climbing the backoff ladder.
+    it('upgrade event reconnects in ~2 s, not via the slow backoff', async () => {
+        vi.useFakeTimers();
+        stubFetch();
+        const { orch, reducers } = makeOrchestrator({ backoff: { baseMs: 30_000, maxMs: 300_000, factor: 1.5 } });
+        orch.start();
+        await vi.advanceTimersByTimeAsync(10);
+        const sock = await waitForSocket();
+        sock.emitOpen();
+        await completeBootstrap(sock);
+        await vi.waitFor(() => expect(reducers.buffers).toHaveBeenCalledTimes(1));
+
+        sock.emitMessage({ code: 0, message: 'Event', event_name: 'upgrade', buffer_id: -1, body_type: null, body: null });
+        expect(reducers.relayLifecycle).toHaveBeenCalledWith('upgrade');
+        sock.emitClose(1006); // WeeChat kills the socket as it re-execs
+
+        FakeSocket.instances = [];
+        await vi.advanceTimersByTimeAsync(1999);
+        expect(FakeSocket.instances).toHaveLength(0); // 30 s backoff has NOT fired
+        await vi.advanceTimersByTimeAsync(2);
+        expect(FakeSocket.instances).toHaveLength(1); // upgrade timer won
+        orch.dispose();
+        vi.useRealTimers();
+    });
+
+    it('quit event logs via relayLifecycle and leaves reconnect to the close path', async () => {
+        vi.useFakeTimers();
+        stubFetch();
+        const { orch, reducers } = makeOrchestrator({ backoff: { baseMs: 5000, maxMs: 5000, factor: 2 } });
+        orch.start();
+        await vi.advanceTimersByTimeAsync(10);
+        const sock = await waitForSocket();
+        sock.emitOpen();
+        await completeBootstrap(sock);
+        sock.emitMessage({ code: 0, message: 'Event', event_name: 'quit', buffer_id: -1, body_type: null, body: null });
+        expect(reducers.relayLifecycle).toHaveBeenCalledWith('quit');
+        sock.emitClose(1006);
+        FakeSocket.instances = [];
+        await vi.advanceTimersByTimeAsync(2500);
+        expect(FakeSocket.instances).toHaveLength(0); // no fast upgrade reconnect
+        await vi.advanceTimersByTimeAsync(2600);
+        expect(FakeSocket.instances).toHaveLength(1); // normal 5 s backoff
+        orch.dispose();
+        vi.useRealTimers();
     });
 
     it('stop() disconnects without reconnecting and never sends /quit', async () => {
