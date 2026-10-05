@@ -182,15 +182,59 @@ describe('dispatchEvent', () => {
     it('routes nick/group lifecycle events', () => {
         const r = reducers();
         dispatchEvent(event('nicklist_nick_changed', 1759000000000001, NICK, 'nick'), r);
-        dispatchEvent(event('nicklist_nick_removing', 1759000000000001, 1759000000000002), r);
+        // Live 4.10.1 shape: removal events carry the full entity object.
+        dispatchEvent(event('nicklist_nick_removing', 1759000000000001, { ...NICK }, 'nick'), r);
         dispatchEvent(event('nicklist_group_changed', 1759000000000001, {
             id: 7, parent_group_id: 0, name: 'halfops', color_name: '', color: '', visible: true, groups: [], nicks: [],
         }, 'nick_group'), r);
-        dispatchEvent(event('nicklist_group_removing', 1759000000000001, 7), r);
+        dispatchEvent(event('nicklist_group_removing', 1759000000000001, {
+            id: 7, parent_group_id: 0, name: 'halfops', color_name: '', color: '', visible: true, groups: [], nicks: [],
+        }, 'nick_group'), r);
         expect(r.nickChanged).toHaveBeenCalledTimes(1);
         expect(r.nickRemoved).toHaveBeenCalledWith(1759000000000001, 1759000000000002);
         expect(r.nickGroupChanged).toHaveBeenCalledWith(1759000000000001, expect.objectContaining({ id: 7 }));
         expect(r.nickGroupRemoved).toHaveBeenCalledWith(1759000000000001, 7);
+        expect(r.unhandled).not.toHaveBeenCalled();
+    });
+
+    it('accepts a bare numeric body on removal events (tolerated shape)', () => {
+        const r = reducers();
+        dispatchEvent(event('nicklist_nick_removed', 1759000000000001, 1759000000000002), r);
+        dispatchEvent(event('nicklist_group_removed', 1759000000000001, 7), r);
+        expect(r.nickRemoved).toHaveBeenCalledWith(1759000000000001, 1759000000000002);
+        expect(r.nickGroupRemoved).toHaveBeenCalledWith(1759000000000001, 7);
+        expect(r.unhandled).not.toHaveBeenCalled();
+    });
+
+    // Live-captured 4.10.1 payloads: a join emits nicklist_nick_removing for
+    // the old nick id followed by nicklist_nick_added with a NEW id — both
+    // must reach the reducers or the nicklist UI drifts after every part/join.
+    it('routes nicklist_nick_added / nicklist_group_added as upserts', () => {
+        const r = reducers();
+        dispatchEvent(event('nicklist_nick_added', 1791149913057556, {
+            id: 1791184475802699, parent_group_id: 1791149913077412, prefix: ' ',
+            prefix_color_name: 'lightblue', prefix_color: '\u0019F10', name: 'gbbot2',
+            color_name: 'bar_fg', color: '\u0019bF', visible: true,
+        }, 'nick'), r);
+        dispatchEvent(event('nicklist_group_added', 1791149913057556, {
+            id: 1791149913077412, parent_group_id: 0, name: '', color_name: '', color: '',
+            visible: true, groups: [], nicks: [],
+        }, 'nick_group'), r);
+        expect(r.nickChanged).toHaveBeenCalledWith(1791149913057556, expect.objectContaining({
+            id: 1791184475802699, name: 'gbbot2',
+        }));
+        expect(r.nickGroupChanged).toHaveBeenCalledWith(1791149913057556, expect.objectContaining({ id: 1791149913077412 }));
+        expect(r.unhandled).not.toHaveBeenCalled();
+    });
+
+    it('reports removal events without a usable id', () => {
+        const r = reducers();
+        dispatchEvent(event('nicklist_nick_removing', 1759000000000001, { name: 'ghost' }, 'nick'), r);
+        dispatchEvent(event('nicklist_group_removing', 1759000000000001, { name: 'gone' }, 'nick_group'), r);
+        expect(r.nickRemoved).not.toHaveBeenCalled();
+        expect(r.nickGroupRemoved).not.toHaveBeenCalled();
+        expect(r.unhandled).toHaveBeenCalledWith('nick removal without nick id');
+        expect(r.unhandled).toHaveBeenCalledWith('nicklist group removal without group id');
     });
 
     it('routes closing/closed with buffer id only', () => {

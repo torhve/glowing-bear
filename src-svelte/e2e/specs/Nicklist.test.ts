@@ -3,6 +3,7 @@ import { setSettings } from '../helpers/connection';
 import { openSettings, closeSettings } from '../helpers/settings';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { createConnectedPage } from '../fixtures/auth';
+import { irc } from '../helpers/irc-control';
 
 let page: import('@playwright/test').Page;
 
@@ -137,4 +138,23 @@ test('should hide nicklist on buffers without nick data', async () => {
         // Nicklist should reappear
         await expect(page.getByTestId('nicklist')).toBeVisible({ timeout: 5000 });
     }
+});
+
+// Live REST event handling: a part emits nicklist_nick_removing (full nick
+// object) and a join emits nicklist_nick_added (new nick id). Both were
+// silently dropped before the mapping fix — this guards the regression.
+test('keeps the nicklist in sync through live part/join churn', async () => {
+    await switchToBuffer(page, '#glowing-bear');
+    const nicklist = page.getByTestId('nicklist');
+    await expect(nicklist).toBeVisible({ timeout: 10000 });
+
+    await irc.botJoin('#glowing-bear');
+    const bot = nicklist.locator('[data-testid="nick-item"]').filter({ hasText: /gbbot/i });
+    await expect(bot.first()).toBeVisible({ timeout: 15000 });
+
+    await irc.botPart('#glowing-bear');
+    await expect(bot).toHaveCount(0, { timeout: 15000 });
+
+    await irc.botJoin('#glowing-bear');
+    await expect(bot.first()).toBeVisible({ timeout: 15000 });
 });

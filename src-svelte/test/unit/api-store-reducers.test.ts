@@ -136,9 +136,34 @@ describe('buffer_opened bootstrap', () => {
         let buf = get(buffers)[KEY]!;
         expect(buf.nicklist['root']!.nicks).toHaveLength(1);
         expect(buf.nicklist['root']!.nicks[0]!.visible).toBe('0');
-        dispatchEvent(event('nicklist_nick_removing', 42), reducers);
+        dispatchEvent(event('nicklist_nick_removing', { id: 42, parent_group_id: 0, prefix: '@', prefix_color_name: '', prefix_color: '', name: 'bob', color_name: '', color: '', visible: true }, 'nick'), reducers);
         buf = get(buffers)[KEY]!;
         expect(buf.nicklist['root']!.nicks).toHaveLength(0);
+    });
+
+    // Production churn captured live on 4.10.1: every part/join emits
+    // nicklist_nick_removing (full object, old id) followed by
+    // nicklist_nick_added (full object, NEW id). Both must land or the
+    // nicklist UI drifts after each churn.
+    it('part/join churn removes the old id and re-adds the new id', () => {
+        reducers.buffers([bufferSnap()]);
+        dispatchEvent(event('nicklist_nick_added', {
+            id: 100, parent_group_id: 0, prefix: ' ', prefix_color_name: '', prefix_color: '',
+            name: 'gbbot2', color_name: '', color: '', visible: true,
+        }, 'nick'), reducers);
+        dispatchEvent(event('nicklist_nick_removing', {
+            id: 100, parent_group_id: 0, prefix: ' ', prefix_color_name: '', prefix_color: '',
+            name: 'gbbot2', color_name: '', color: '', visible: true,
+        }, 'nick'), reducers);
+        expect(get(buffers)[KEY]!.nicklist['root']!.nicks).toHaveLength(0);
+        dispatchEvent(event('nicklist_nick_added', {
+            id: 200, parent_group_id: 0, prefix: '@', prefix_color_name: '', prefix_color: '',
+            name: 'gbbot2', color_name: '', color: '', visible: true,
+        }, 'nick'), reducers);
+        const nicks = get(buffers)[KEY]!.nicklist['root']!.nicks;
+        expect(nicks).toHaveLength(1);
+        expect(nicks[0]!.nickId).toBe(200);
+        expect(nicks[0]!.prefix).toBe('@');
     });
 });
 

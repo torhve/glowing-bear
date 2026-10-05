@@ -299,46 +299,58 @@ export function dispatchEvent(event: ApiSessionEvent, reducers: ApiReducers): vo
         reducers.lineDataChanged(bufferId, line);
         return;
     }
-    case 'nicklist_group_changed': {
+    case 'nicklist_group_changed':
+    case 'nicklist_group_added': {
         if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
         const v = validateNickGroup(event.body);
-        if (!v.value) { reducers.unhandled(`nicklist_group_changed invalid: ${v.issues.join('; ')}`); return; }
+        if (!v.value) { reducers.unhandled(`${event.event_name} invalid: ${v.issues.join('; ')}`); return; }
         const group = mapNickGroup(v.value);
-        if (group === null) { reducers.unhandled('nicklist_group_changed invalid ids'); return; }
-        reducers.nickGroupChanged(bufferId, group);
+        if (group === null) { reducers.unhandled(`${event.event_name} invalid ids`); return; }
+        reducers.nickGroupChanged(bufferId, group); // upsert: added creates, changed updates
         return;
     }
     case 'nicklist_group_removed':
     case 'nicklist_group_removing': {
         if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
-        const groupId = asGroupId(event.body);
+        const groupId = asRemovedId(event.body, asGroupId);
         if (groupId === null) { reducers.unhandled('nicklist group removal without group id'); return; }
         reducers.nickGroupRemoved(bufferId, groupId);
         return;
     }
-    case 'nicklist_nick_changed': {
+    case 'nicklist_nick_changed':
+    case 'nicklist_nick_added': {
         if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
         const v = validateNick(event.body);
-        if (!v.value) { reducers.unhandled(`nicklist_nick_changed invalid: ${v.issues.join('; ')}`); return; }
+        if (!v.value) { reducers.unhandled(`${event.event_name} invalid: ${v.issues.join('; ')}`); return; }
         const nick = mapNick(v.value);
-        if (nick === null) { reducers.unhandled('nicklist_nick_changed invalid ids'); return; }
-        reducers.nickChanged(bufferId, nick);
+        if (nick === null) { reducers.unhandled(`${event.event_name} invalid ids`); return; }
+        reducers.nickChanged(bufferId, nick); // upsert: added inserts, changed updates
         return;
     }
     case 'nicklist_nick_removed':
     case 'nicklist_nick_removing': {
         if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
-        const nickId = asNickId(event.body);
+        // Verified live on 4.10.1: removal events carry the full nick object
+        // (body.id is the nick id); accept a bare numeric body too for safety.
+        const nickId = asRemovedId(event.body, asNickId);
         if (nickId === null) { reducers.unhandled('nick removal without nick id'); return; }
         reducers.nickRemoved(bufferId, nickId);
         return;
     }
     default:
-        // nicklist_group_added / nicklist_nick_added / input_changed /
-        // input_prompt_changed and any future events: full snapshots are
-        // fetched on demand; concrete handling lands with phases 8–9.
+        // input_changed / input_prompt_changed and any future events: full
+        // snapshots are fetched on demand; no state damage from ignoring them.
         reducers.unhandled(`unrouted event: ${event.event_name}`);
     }
+}
+
+/**
+ * Removal-event id extraction: 4.10.1 sends the full entity object
+ * (id inside the body); a bare numeric body is accepted as well.
+ */
+function asRemovedId<T>(body: unknown, as: (v: unknown) => T | null): T | null {
+    const raw = typeof body === 'number' ? body : isObj(body) ? (body as { id?: unknown }).id : undefined;
+    return as(raw);
 }
 
 function isObj(v: unknown): v is Record<string, unknown> {

@@ -121,6 +121,16 @@ No PUT/DELETE resources exist despite the CORS Allow header.
 - Live inventory also captured `buffer_localvar_removed`, `buffer_modes_changed`,
   `nicklist_nick_removing`, `nicklist_group_removing`.
 
+### Nicklist churn events (live, `probes/capture-nicklist-events.mjs`)
+
+- A part/join churn emits `nicklist_nick_removing` (body = the full nick
+  object, old id) followed by `nicklist_nick_added` (body = full nick object
+  with a NEW id); groups churn the same way with `nicklist_group_added`.
+- Removal event bodies are full entity objects, not bare ids: id extraction
+  must read `body.id` (a bare numeric body is tolerated defensively).
+  `nicklist_nick_added`/`nicklist_group_added` are real events and must be
+  routed, not left unrouted (raw capture: `raw/nicklist-events.json`).
+
 ### Read markers / hotlist control (source-verified)
 
 - `/buffer set unread` (`""` mark read; `-N`/`+N` move; `N` mark N latest unread),
