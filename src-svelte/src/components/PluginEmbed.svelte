@@ -84,8 +84,10 @@
 
   // Create a sandboxed iframe for third-party embeds.
   // allow-scripts lets the embed player execute; allow-popups enables
-  // YouTube fullscreen and similar features. No allow-same-origin keeps
-  // the iframe isolated from the parent window (postMessage for cross-origin comms).
+  // YouTube fullscreen and similar features. allow-same-origin is required:
+  // players such as YouTube and Twitch read their own cookies and storage, so
+  // without it they never initialize. Safe because these src documents are
+  // cross-origin to the app, so the frame cannot reach the parent's DOM.
   function injectIframe(src: string, width = '100%', height = '315px') {
     if (!embedRef) return;
     const iframe = document.createElement('iframe');
@@ -94,7 +96,7 @@
     iframe.width = width;
     iframe.height = height;
     iframe.frameBorder = '0';
-    iframe.sandbox = 'allow-scripts allow-popups';
+    iframe.sandbox = 'allow-scripts allow-same-origin allow-popups';
     iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
     iframe.allowFullscreen = true;
     embedRef.innerHTML = '';
