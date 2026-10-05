@@ -530,6 +530,9 @@ export const servers = writable<Record<string, { id: string; unread: number }>>(
 export const activeBufferId = writable<string>("");
 
 export const weechatVersion = writable<number[]>([]);
+// Relay API version string (e.g. "0.6.0") when connected over the new API
+// transport; empty on the legacy transport or while disconnected.
+export const relayApiVersion = writable<string>("");
 
 export const wconfig = writable<Record<string, string>>({});
 

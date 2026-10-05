@@ -54,6 +54,10 @@ const initialStats: ConnectionStats = {
 
 export const connectionState = writable<ConnectionState>(initialState);
 export const connectionStats = writable<ConnectionStats>(initialStats);
+// The relay transport the connection facade is (or was last) using; null
+// while disconnected. Set by connectionManager on connect/disconnect.
+export type RelayTransportKind = 'api' | 'legacy';
+export const activeTransport = writable<RelayTransportKind | null>(null);
 
 export function setConnectionStatus(status: ConnectionState['status']) {
     connectionState.update(current => ({ ...current, status }));

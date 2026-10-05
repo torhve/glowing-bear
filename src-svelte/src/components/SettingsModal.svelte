@@ -3,7 +3,8 @@
   import { get } from 'svelte/store';
   import { requestNotificationPermission, isNotificationSupported } from '#lib/notifications.ts';
   import { themeStore, setTheme, themes, themeLabels } from '#lib/stores/theme.ts';
-  import { weechatVersion } from '#lib/stores/models.ts';
+  import { weechatVersion, relayApiVersion } from '#lib/stores/models.ts';
+  import { activeTransport } from '#lib/stores/connectionStore.ts';
   import BaseDialog from '#components/BaseDialog.svelte';
   import Palette from '@lucide/svelte/icons/palette';
   import Monitor from '@lucide/svelte/icons/monitor';
@@ -33,6 +34,20 @@
   import Cog from '@lucide/svelte/icons/cog';
   import { version as appVersion } from '../../../package.json';
   import FormInput from '#components/FormInput.svelte';
+
+  // About footer line: app version always; relay version + transport only
+  // once known (API relays report the Relay API version; legacy relays don't).
+  let versionLine = $derived(
+    `Glowing Bear version ${appVersion} (${__GIT_COMMIT__})` +
+      ($weechatVersion.length
+        ? ` · WeeChat ${$weechatVersion.join('.')}` +
+          ($activeTransport === 'api' && $relayApiVersion
+            ? ` · Relay API ${$relayApiVersion}`
+            : $activeTransport === 'legacy'
+            ? ' · legacy WebSocket'
+            : '')
+        : ''),
+  );
 
   let notifSupported = $derived(isNotificationSupported());
 
@@ -109,7 +124,7 @@
     <div class="settings-header px-6 py-4 border-b border-border flex items-center justify-between">
       <h2 id="settings-title" class="text-lg font-bold text-white">Settings</h2>
       <div class="flex items-center space-x-2">
-        <span class="settings-version text-xs text-text-muted">Glowing Bear version {appVersion} ({__GIT_COMMIT__}) · WeeChat {$weechatVersion.join('.')}</span>
+        <span class="settings-version text-xs text-text-muted">{versionLine}</span>
         <button
           type="button"
           data-testid="settings-modal-close"

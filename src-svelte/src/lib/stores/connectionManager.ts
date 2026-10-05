@@ -16,6 +16,7 @@
 
 import { get } from 'svelte/store';
 import { settings } from '#lib/stores/settings.ts';
+import { activeTransport } from '#lib/stores/connectionStore.ts';
 import { resolveApiEndpoint } from '#lib/api/api-endpoint.ts';
 import * as api from '#lib/stores/apiConnection.ts';
 import * as legacy from '#lib/stores/legacyConnection.ts';
@@ -23,10 +24,10 @@ import type { ApiSession } from '#lib/api/api-session.ts';
 
 export type RelayTransport = 'api' | 'legacy';
 
-let activeTransport: RelayTransport | null = null;
+let transport: RelayTransport | null = null;
 
 export function getActiveTransport(): RelayTransport | null {
-    return activeTransport;
+    return transport;
 }
 
 // A legacy relay never answers HTTP and never closes the socket either, so
@@ -79,14 +80,15 @@ export async function connect(host: string, port: number, path: string, password
     const preference = get(settings).protocol ?? 'auto';
     const profile = profileKey(host, port, tls);
     if (preference === 'auto') {
-        activeTransport = transportByProfile.get(profile)
+        transport = transportByProfile.get(profile)
             ?? (await probeApiRelay(host, port, path, tls) ? 'api' : 'legacy');
-        transportByProfile.set(profile, activeTransport);
+        transportByProfile.set(profile, transport);
     } else {
-        activeTransport = preference;
-        transportByProfile.set(profile, activeTransport);
+        transport = preference;
+        transportByProfile.set(profile, transport);
     }
-    return activeTransport === 'api'
+    activeTransport.set(transport);
+    return transport === 'api'
         ? api.connect(host, port, path, password, tls, noCompression)
         // The legacy relay only completes the WebSocket upgrade under the
         // '/weechat' path; an empty path would hang the socket forever.
@@ -98,7 +100,8 @@ export function disconnect(): void {
     // shared store resets, which are idempotent.
     api.disconnect();
     legacy.disconnect();
-    activeTransport = null;
+    transport = null;
+    activeTransport.set(null);
     transportByProfile.clear();
 }
 
@@ -118,47 +121,47 @@ export function cleanupFocusReconnect(): void {
 }
 
 export async function requestNicklist(bufferId: string): Promise<void> {
-    if (activeTransport === 'legacy') return legacy.requestNicklist(bufferId);
+    if (transport === 'legacy') return legacy.requestNicklist(bufferId);
     return api.requestNicklist(bufferId);
 }
 
 export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: string): Promise<void> {
-    if (activeTransport === 'legacy') return legacy.fetchMoreLines(numLines, explicitBufferId);
+    if (transport === 'legacy') return legacy.fetchMoreLines(numLines, explicitBufferId);
     return api.fetchMoreLines(numLines, explicitBufferId);
 }
 
 export async function sendWeeChatCommand(command: string, bufferId?: string): Promise<boolean> {
-    if (activeTransport === 'legacy') return legacy.sendWeeChatCommand(command, bufferId);
+    if (transport === 'legacy') return legacy.sendWeeChatCommand(command, bufferId);
     return api.sendWeeChatCommand(command, bufferId);
 }
 
 export async function switchBuffer(bufferId: string): Promise<boolean> {
-    if (activeTransport === 'legacy') return legacy.switchBuffer(bufferId);
+    if (transport === 'legacy') return legacy.switchBuffer(bufferId);
     return api.switchBuffer(bufferId);
 }
 
 export async function sendBufferCommand(bufferId: string, command: string): Promise<void> {
-    if (activeTransport === 'legacy') return legacy.sendBufferCommand(bufferId, command);
+    if (transport === 'legacy') return legacy.sendBufferCommand(bufferId, command);
     return api.sendBufferCommand(bufferId, command);
 }
 
 export async function closeBufferOnWeeChat(bufferId: string): Promise<void> {
-    if (activeTransport === 'legacy') return legacy.closeBufferOnWeeChat(bufferId);
+    if (transport === 'legacy') return legacy.closeBufferOnWeeChat(bufferId);
     return api.closeBufferOnWeeChat(bufferId);
 }
 
 export async function pinBuffer(bufferId: string): Promise<void> {
-    if (activeTransport === 'legacy') return legacy.pinBuffer(bufferId);
+    if (transport === 'legacy') return legacy.pinBuffer(bufferId);
     return api.pinBuffer(bufferId);
 }
 
 export async function unpinBuffer(bufferId: string): Promise<void> {
-    if (activeTransport === 'legacy') return legacy.unpinBuffer(bufferId);
+    if (transport === 'legacy') return legacy.unpinBuffer(bufferId);
     return api.unpinBuffer(bufferId);
 }
 
 export async function sendMessage(message: string): Promise<boolean> {
-    if (activeTransport === 'legacy') return legacy.sendMessage(message);
+    if (transport === 'legacy') return legacy.sendMessage(message);
     return api.sendMessage(message);
 }
 
@@ -176,5 +179,5 @@ export function getWs(): WebSocket | null {
  *  wconfig store via the handlers (the API transport has no config endpoint
  *  until the WeeChat 5.0 options resource). No-op on the API path. */
 export async function fetchConfValue(name: string): Promise<void> {
-    if (activeTransport === 'legacy') return legacy.fetchConfValue(name);
+    if (transport === 'legacy') return legacy.fetchConfValue(name);
 }

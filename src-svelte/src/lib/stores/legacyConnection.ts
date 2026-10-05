@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
 import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, incrementReconnectAttempts, setNextReconnectAt } from '#lib/stores/connectionStore.ts';
-import { buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer, localUnreadBuffers, hotlistClearedBuffers, bufferBottom, previousBufferId, pendingBufferSwitch, beginSyncPhase, endSyncPhase } from '#lib/stores/models.ts';
+import { buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer, localUnreadBuffers, hotlistClearedBuffers, bufferBottom, previousBufferId, pendingBufferSwitch, beginSyncPhase, endSyncPhase, weechatVersion, relayApiVersion } from '#lib/stores/models.ts';
 import { settings } from '#lib/stores/settings.ts';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist, flushLineBatch, setOnUpgrade, setOnUpgradeEnded } from '#lib/stores/handlers.ts';
 import { addToast, removeToast, clearToasts, updateToast, toastStore } from '#lib/toast.ts';
@@ -92,6 +92,10 @@ function resetAllState() {
     activeBufferId.set('');
     previousBufferId.set('');
     connected.set(false);
+    // Drop the relay version info so the UI never shows a stale WeeChat
+    // version after a disconnect.
+    weechatVersion.set([]);
+    relayApiVersion.set('');
     onDisconnect();
 }
 

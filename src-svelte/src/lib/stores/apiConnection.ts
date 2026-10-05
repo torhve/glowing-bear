@@ -16,7 +16,7 @@ import {
 import {
     buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer,
     localUnreadBuffers, hotlistClearedBuffers, bufferBottom, previousBufferId,
-    pendingBufferSwitch, beginSyncPhase, endSyncPhase,
+    pendingBufferSwitch, beginSyncPhase, endSyncPhase, weechatVersion, relayApiVersion,
 } from '#lib/stores/models.ts';
 import { settings } from '#lib/stores/settings.ts';
 import { addToast, removeToast, updateToast, toastStore } from '#lib/toast.ts';
@@ -87,6 +87,10 @@ function resetAllState() {
     activeBufferId.set('');
     previousBufferId.set('');
     connected.set(false);
+    // Drop the relay version info so the UI never shows a stale WeeChat
+    // version after a disconnect.
+    weechatVersion.set([]);
+    relayApiVersion.set('');
     onDisconnect();
 }
 
@@ -169,6 +173,15 @@ export async function connect(host: string, port: number, path: string, password
 
         const handleOrchestratorStatus = (status: OrchestratorStatus, owner: ApiOrchestrator) => {
             if (owner !== orchestrator) return; // stale generator
+            // Publish the version the orchestrator fetched from the relay so
+            // the UI (TopBar, settings footer) can show WeeChat / Relay API
+            // versions. The status merge carries serverVersion forward, so
+            // this republishes on every state change until a reset clears it.
+            const sv = status.serverVersion;
+            if (sv) {
+                weechatVersion.set(sv.weechat_version.split('.').map((c) => parseInt(c, 10)));
+                relayApiVersion.set(sv.relay_api_version);
+            }
             switch (status.state) {
             case 'connecting':
             case 'bootstrapping':

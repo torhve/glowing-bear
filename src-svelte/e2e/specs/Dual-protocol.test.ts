@@ -1,10 +1,12 @@
 import { test, expect } from '@playwright/test';
+import { execSync } from 'node:child_process';
 import { connectToWeechat, connectLegacyToWeechat, waitForAppReady, waitForTransport, setSettings, disconnect } from '../helpers/connection';
 
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { fillInput } from '../helpers/input';
 import { irc } from '../helpers/irc-control';
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
+import { openSettings } from '../helpers/settings';
 
 // Dual-protocol transport selection, tested against the two REAL relays the
 // gbtest fixture runs on one WeeChat instance:
@@ -13,6 +15,11 @@ import { setupEffectOrphanFilter } from '../helpers/pageerror';
 // No transport mocking: every test exercises the actual wire protocol.
 
 test.describe.configure({ mode: 'serial' });
+
+// WeeChat version running under gbtest (system weechat-headless).
+function gbWeechatVersion(): string {
+    return execSync('weechat-headless --version', { encoding: 'utf8' }).trim();
+}
 
 async function freshPage(browser: import('@playwright/test').Browser) {
     const page = await browser.newPage();
@@ -172,6 +179,28 @@ test.describe('Dual-protocol transport selection', () => {
         const text = `legacy-reconnect-${Date.now()}`;
         await irc.sendMessage('#glowing-bear', text);
         await expect(page.getByText(text).first()).toBeVisible({ timeout: 25000 });
+        await page.close();
+    });
+
+    test('settings footer shows WeeChat + Relay API versions on the API transport', async ({ browser }) => {
+        const page = await freshPage(browser);
+        await connectToWeechat(page, '9010');
+        await waitForTransport(page, 'api');
+        await openSettings(page);
+        const versionLine = page.locator('.settings-version');
+        await expect(versionLine).toContainText(`WeeChat ${gbWeechatVersion()}`);
+        // The Relay API version must be a real version number, not just a label.
+        await expect(versionLine).toHaveText(/Relay API \d+\.\d+\.\d+/);
+        await page.close();
+    });
+
+    test('settings footer shows WeeChat version on the legacy transport', async ({ browser }) => {
+        const page = await freshPage(browser);
+        await connectLegacyToWeechat(page);
+        await openSettings(page);
+        const versionLine = page.locator('.settings-version');
+        await expect(versionLine).toContainText(`WeeChat ${gbWeechatVersion()}`);
+        await expect(versionLine).toContainText('legacy WebSocket');
         await page.close();
     });
 
