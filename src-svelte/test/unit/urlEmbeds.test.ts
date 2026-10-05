@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectEmbedUrl } from '#lib/utils/urlEmbeds.ts';
+import { detectEmbedUrl, youtubeVideoPattern } from '#lib/utils/urlEmbeds.ts';
 
 describe('detectEmbedUrl', () => {
     it('detects YouTube watch URLs', () => {
@@ -15,6 +15,43 @@ describe('detectEmbedUrl', () => {
     it('detects YouTube embed URLs', () => {
         const result = detectEmbedUrl('https://www.youtube.com/embed/dQw4w9WgXcQ');
         expect(result).toEqual({ name: 'YouTube video' });
+    });
+
+    it('detects YouTube alternate paths', () => {
+        for (const url of [
+            'https://www.youtube.com/shorts/dQw4w9WgXcQ',
+            'https://www.youtube.com/live/dQw4w9WgXcQ',
+            'https://www.youtube.com/v/dQw4w9WgXcQ',
+            'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ',
+            'https://www.youtube.com/watch?app=desktop&v=dQw4w9WgXcQ',
+            'https://m.youtube.com/watch?v=dQw4w9WgXcQ',
+        ]) {
+            expect(detectEmbedUrl(url)).toEqual({ name: 'YouTube video' });
+        }
+    });
+
+    // PluginEmbed rebuilds the embed src from group 1, so the id must be exact:
+    // a truncated or overlong run must not be accepted.
+    it('extracts the video id from every accepted form', () => {
+        for (const url of [
+            'https://www.youtube.com/watch?app=desktop&v=dQw4w9WgXcQ',
+            'https://www.youtube.com/shorts/dQw4w9WgXcQ',
+            'https://youtu.be/dQw4w9WgXcQ?si=abc',
+        ]) {
+            expect(youtubeVideoPattern.exec(url)?.[1]).toBe('dQw4w9WgXcQ');
+        }
+    });
+
+    it('does not treat other hosts or non-video paths as YouTube', () => {
+        for (const url of [
+            'https://notyoutube.com/watch?v=dQw4w9WgXcQ',
+            'https://www.youtube.com/playlist?list=PLdQw4w9WgXcQ',
+            'https://www.youtube.com/watching',
+            'https://www.youtube.com/watch#?v=dQw4w9WgXcQ',
+            'https://youtu.be/dQw4w9WgXcQxyz',
+        ]) {
+            expect(detectEmbedUrl(url)).toBeNull();
+        }
     });
 
     it('detects Twitch clips', () => {

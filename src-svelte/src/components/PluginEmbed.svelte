@@ -3,6 +3,7 @@
   import { untrack } from 'svelte';
   import type { EmbedCallbackContext, PluginMetadata } from '#lib/types.ts';
   import { imageExts, videoExts, audioExts } from '#lib/utils/mediaExtensions.ts';
+  import { youtubeVideoPattern } from '#lib/utils/urlEmbeds.ts';
   import Play from '@lucide/svelte/icons/play';
   import X from '@lucide/svelte/icons/x';
   import { DEBUG_PLUGIN } from '#lib/debug.ts';
@@ -144,7 +145,7 @@
       return;
     }
 
-    const ytMatch = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    const ytMatch = url.match(youtubeVideoPattern);
     if (ytMatch) {
       injectIframe(`https://www.youtube.com/embed/${ytMatch[1]}`);
       return;

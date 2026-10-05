@@ -7,8 +7,13 @@ type UrlMatcher = {
     test: (url: string) => boolean;
 };
 
+// YouTube video id: watch?v= (with any parameters before v=), embed/, v/, shorts/, live/,
+// youtube-nocookie.com and youtu.be. Shared with PluginEmbed, which rebuilds the embed src
+// from group 1, so this is the single source of truth for what counts as a YouTube URL.
+export const youtubeVideoPattern = /(?<![\w-])(?:youtube(?:-nocookie)?\.com\/(?:(?:embed|v|shorts|live)\/|watch\b[^/#\s]*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})(?![a-zA-Z0-9_-])/i;
+
 const embedMatchers: UrlMatcher[] = [
-    { name: 'YouTube video', test: (url) => /(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/.test(url) },
+    { name: 'YouTube video', test: (url) => youtubeVideoPattern.test(url) },
     { name: 'Twitch clip', test: (url) => /clips\.twitch\.tv\/(\w+)/.test(url) },
     { name: 'Twitch video', test: (url) => /twitch\.tv\/videos\/(\d+)/.test(url) },
     { name: 'Twitch channel', test: (url) => /twitch\.tv\/([a-zA-Z0-9_]+)/.test(url) && !/clips\.twitch\.tv/.test(url) },
