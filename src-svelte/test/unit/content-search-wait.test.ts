@@ -101,3 +101,21 @@ describe('content-search buffer wait', () => {
         expect(scriptInstalled(null, 'grep')).toBeNull();
     });
 });
+
+describe('overlapping searches', () => {
+    it('resolves once, on the first fresh change', async () => {
+        vi.useFakeTimers();
+        showGrep('grep-id', 1);
+        const before = captureBufferAppearance(GREP);
+
+        const pending = waitForFreshBuffer(GREP, before, 3000);
+        showGrep('grep-id', 2); // first /grep run clears the buffer
+        showGrep('grep-id', 3); // a second run changes it while the wait is open
+
+        // The wait must not resolve twice, and results arriving after the clear
+        // still render because the buffer itself stays reactive.
+        expect(await pending).toBe('grep-id');
+        expect(vi.getTimerCount()).toBe(0);
+        vi.useRealTimers();
+    });
+});

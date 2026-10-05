@@ -248,3 +248,28 @@ client-owned), and `upgrade`/`upgrade_ended`/`quit` route through
 (`buffer_merged`, `buffer_unmerged`, `buffer_types_changed`,
 `buffer_time_for_each_line_changed`, `buffer_notify_default_changed`) are
 routed or tolerated via the open `ApiEventName` union.
+
+## Coverage limitations (2026-10-06 audit pass)
+
+Recorded here so the gaps survive in tracked history, not only in local notes:
+
+- **Free-buffer history gate.** `hasNoHistoryToFetch`/`markHistoryComplete` stop
+  `fetchMoreLines` for `bufferType === 1` buffers. The gate is proven by
+  `test/unit/free-buffer-history-gate.test.ts` (transport spies: disabling it
+  fails 2 tests). `e2e/specs/FreeBuffer-history.test.ts` only proves row
+  stability and the absent "Fetch more lines" affordance — that affordance is
+  absent with or without the guard, so it is **not** regression coverage for the
+  gate.
+- **`/grep` freshness.** `waitForFreshBuffer` resolves on the first change
+  (newly opened buffer, `clearEpoch` bump, or changed line count). A clear
+  precedes the result lines, so the switch can land on an empty buffer whose
+  rows then render reactively; overlapping searches resolve on the first fresh
+  change. Pinned by `test/unit/content-search-wait.test.ts` (6 fake-timer
+  tests); no E2E exercises two concurrent searches.
+- **Pending query navigation.** Same-nick/different-server matching and stale-
+  timeout protection are unit-only (`test/unit/pending-query-navigation.test.ts`,
+  7 tests) because the gbtest fixture has exactly one IRC server.
+- **Root-level nicks.** No gbtest IRC nick has a null `parent_group_id`, so
+  `test/unit/nicklist-root-rows.test.ts` (3 tests) is the only coverage; nick
+  visibility and group-display/case-sensitivity semantics remain unfiltered on
+  both the root and the grouped path.
