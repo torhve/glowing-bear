@@ -82,6 +82,17 @@ export function mapLine(wire: RestLine): LineSnapshot | null {
     };
 }
 
+/**
+ * Server-side display decision. WeeChat smart filters mark matched lines
+ * with the filter's tag (conventionally irc_smart_filter) and
+ * displayed:false; the legacy relay never delivered such lines because
+ * they were removed from the buffer, so the client must skip them here to
+ * keep the same visible line set (history and realtime alike).
+ */
+export function isServerHiddenLine(line: LineSnapshot): boolean {
+    return !line.displayed || line.tags.includes('irc_smart_filter');
+}
+
 export function mapNick(wire: RestNick): NickSnapshot | null {
     const id = asNickId(wire.id);
     const parent = asParentGroupId(wire.parent_group_id);

@@ -194,6 +194,17 @@ describe('line tally gates (ported legacy rules)', () => {
         reducers.lineAdded(999 as ApiBufferId, lineSnap(1));
         expect(get(buffers)[String(999)]).toBeUndefined();
     });
+
+    it('skips smart-filtered lines (irc_smart_filter tag or displayed:false) — no render, no tally', () => {
+        reducers.buffers([bufferSnap()]);
+        activeBufferId.set('');
+        reducers.lineAdded(BUFFER_ID, lineSnap(1, { tags: ['irc_privmsg', 'irc_smart_filter'] }));
+        reducers.lineAdded(BUFFER_ID, lineSnap(2, { displayed: false }));
+        reducers.lineAdded(BUFFER_ID, lineSnap(3));
+        const buf = get(buffers)[KEY]!;
+        expect(buf.lines.map((l) => l.lineId)).toEqual(['weechat:3']);
+        expect(buf.localUnread).toBe(1); // only the unfiltered line is tallied
+    });
 });
 
 describe('buffer notify level (WeeChat >= 5.0.0)', () => {

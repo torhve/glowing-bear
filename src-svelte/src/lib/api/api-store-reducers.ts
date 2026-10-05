@@ -30,6 +30,7 @@ import type {
     HotlistSnapshot,
 } from '#lib/api/api-contracts.ts';
 import type { ApiBufferId } from '#lib/api/api-ids.ts';
+import { isServerHiddenLine } from '#lib/api/api-mapping.ts';
 
 /** Central conversion: store key for an API buffer id. */
 export function storeKeyForBufferId(bufferId: ApiBufferId): string {
@@ -129,6 +130,7 @@ function upsertBuffer(map: Record<string, BufferData>, snap: BufferSnapshot): Bu
 
 function appendLines(buffer: BufferData, lines: LineSnapshot[]): void {
     for (const line of lines) {
+        if (isServerHiddenLine(line)) continue; // smart-filtered: WeeChat hides it
         injectDateChangeMessageIfNeeded(buffer, false, new Date(buffer.lines.length ? buffer.lines[buffer.lines.length - 1]!.date : line.epochMs), new Date(line.epochMs));
         buffer.lines.push(createBufferLine({
             buffer: buffer.id,
@@ -413,6 +415,7 @@ export function createApiStoreReducers(): ApiReducers {
         },
 
         lineAdded(bufferId, line): void {
+            if (isServerHiddenLine(line)) return; // smart-filtered: skip render and tally
             const key = storeKeyForBufferId(bufferId);
             const activeId = get(activeBufferId);
             buffers.update((current) => {

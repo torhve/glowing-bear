@@ -13,7 +13,7 @@
 import { get } from 'svelte/store';
 import type { ApiSession, ApiSessionResponse } from '#lib/api/api-session.ts';
 import { validateCompletionResponse, validateLineArray } from '#lib/api/api-validation.ts';
-import { mapLine } from '#lib/api/api-mapping.ts';
+import { mapLine, isServerHiddenLine } from '#lib/api/api-mapping.ts';
 import { storeKeyForBufferId, trimBufferLines } from '#lib/api/api-store-reducers.ts';
 import { buffers, maxBufferLines } from '#lib/stores/models.ts';
 import type { CompletionResponse } from '#lib/weechat-rest-types.ts';
@@ -122,6 +122,7 @@ function applyHistory(buffer: BufferData, lines: LineSnapshot[]): void {
     const fresh = lines
         .slice()
         .sort((a, b) => a.id - b.id)
+        .filter((l) => !isServerHiddenLine(l)) // smart-filtered: WeeChat hides it
         .filter((l) => !existing.has(`weechat:${l.id}`))
         .map((l) => lineSnapshotToBufferLine(buffer, l));
     if (!fresh.length) return;

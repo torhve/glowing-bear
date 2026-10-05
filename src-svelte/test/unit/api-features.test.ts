@@ -120,6 +120,23 @@ describe('fetchHistory', () => {
         expect(res.applied).toBe(false);
         expect(res.lines).toHaveLength(0);
     });
+
+    it('skips smart-filtered lines from history (displayed:false / irc_smart_filter)', async () => {
+        const session = fakeSession(() => ({
+            code: 200,
+            body: [
+                { ...wireLine(1, 'filtered'), displayed: false },
+                { ...wireLine(2, 'tagged'), tags: ['irc_smart_filter'] },
+                wireLine(3, 'visible'),
+            ],
+        }));
+        const res = await fetchHistory(session, { bufferId: BUFFER_ID, count: 10 });
+        expect(res.applied).toBe(true);
+        const buf = get(buffers)[KEY]!;
+        expect(buf.lines.map((l) => l.text)).toEqual(['visible']);
+        // requestedLines counts only lines kept for display.
+        expect(buf.requestedLines).toBe(1);
+    });
 });
 
 describe('sendInput', () => {
