@@ -29,11 +29,12 @@ export function getActiveTransport(): RelayTransport | null {
     return activeTransport;
 }
 
-const HANDSHAKE_PROBE_TIMEOUT_MS = 5000;
+// A legacy relay never answers HTTP and never closes the socket either, so
+// this timeout is the detection cost on legacy relays. An API relay answers
+// in milliseconds even over slow links; 3s is a generous real-world ceiling.
+const HANDSHAKE_PROBE_TIMEOUT_MS = 3000;
 
-/** True only when an HTTP-speaking WeeChat relay answered the unauthenticated
- *  handshake with a valid JSON negotiation. Anything else — including the
- *  timeout a legacy relay produces by simply never replying — means legacy. */
+/** Classifies the relay by probing the unauthenticated API handshake. */
 async function probeApiRelay(host: string, port: number, path: string, tls: boolean): Promise<boolean> {
     try {
         const endpoint = resolveApiEndpoint({ host, port, tls, path: path || undefined });
@@ -46,25 +47,50 @@ async function probeApiRelay(host: string, port: number, path: string, tls: bool
                 body: JSON.stringify({ password_hash_algo: ['pbkdf2+sha512', 'pbkdf2+sha256', 'sha512', 'sha256', 'plain'] }),
                 signal: controller.signal,
             });
-            if (res.status !== 200) return false;
-            const body: unknown = await res.json();
-            return typeof (body as { password_hash_algo?: unknown })?.password_hash_algo === 'string';
+            const body: unknown = await res.json().catch(() => null);
+            if (res.status === 200 && typeof (body as { password_hash_algo?: unknown })?.password_hash_algo === 'string') {
+                return true; // valid API negotiation
+            }
+            // A JSON {"error": ...} body is WeeChat's own API error shape (verified
+            // live: unknown paths answer 404 + {"error":"Resource not found"}) — the
+            // listener speaks the API, so keep the API path and let the real
+            // handshake surface the error instead of hanging a legacy socket.
+            return typeof (body as { error?: unknown })?.error === 'string';
         } finally {
             clearTimeout(timer);
         }
     } catch {
+        // Timeout (a legacy relay never answers HTTP), TLS failure, or a
+        // non-JSON responder (proxy 404 page): fall back to legacy.
         return false;
     }
 }
 
+// Transport chosen per relay profile (host:port:tls). Reconnects to the same
+// relay reuse it without re-probing; an explicit disconnect clears it so a
+// re-connect sees any relay configuration change.
+const transportByProfile = new Map<string, RelayTransport>();
+
+function profileKey(host: string, port: number, tls: boolean): string {
+    return `${host}:${port}:${tls ? 'tls' : 'plain'}`;
+}
+
 export async function connect(host: string, port: number, path: string, password: string, tls: boolean, noCompression: boolean): Promise<void> {
     const preference = get(settings).protocol ?? 'auto';
-    activeTransport = preference === 'auto'
-        ? (await probeApiRelay(host, port, path, tls)) ? 'api' : 'legacy'
-        : preference;
+    const profile = profileKey(host, port, tls);
+    if (preference === 'auto') {
+        activeTransport = transportByProfile.get(profile)
+            ?? (await probeApiRelay(host, port, path, tls) ? 'api' : 'legacy');
+        transportByProfile.set(profile, activeTransport);
+    } else {
+        activeTransport = preference;
+        transportByProfile.set(profile, activeTransport);
+    }
     return activeTransport === 'api'
         ? api.connect(host, port, path, password, tls, noCompression)
-        : legacy.connect(host, port, path, password, tls, noCompression);
+        // The legacy relay only completes the WebSocket upgrade under the
+        // '/weechat' path; an empty path would hang the socket forever.
+        : legacy.connect(host, port, path || 'weechat', password, tls, noCompression);
 }
 
 export function disconnect(): void {
@@ -73,6 +99,7 @@ export function disconnect(): void {
     api.disconnect();
     legacy.disconnect();
     activeTransport = null;
+    transportByProfile.clear();
 }
 
 export function setHotlistPollInterval(ms: number): void {
