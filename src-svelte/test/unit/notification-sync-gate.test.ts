@@ -164,11 +164,12 @@ describe('Notification gate vs. read-boundary gate', () => {
 
         expect(isSyncing()).toBe(true);
         const buf = get(buffers)['0x200']!;
-        // Counter bookkeeping stays gated: the hotlist counts are still the
-        // input to the boundary resolution, not a tally of this line.
+        // Server-count bookkeeping stays gated: the hotlist counts are still
+        // the input to the boundary resolution. The badge tally is not: the
+        // alert rings for this line, so the badge must show it too.
         expect(buf.unread).toBe(5);
         expect(buf.notification).toBe(0);
-        expect(buf.localUnread).toBe(0);
+        expect(buf.localUnread).toBe(1);
         // User-facing alert does not depend on sync/boundary state.
         expect(mockPlayNotificationSound).toHaveBeenCalledTimes(1);
         expect(mockCreateHighlight).toHaveBeenCalledTimes(1);
@@ -176,7 +177,7 @@ describe('Notification gate vs. read-boundary gate', () => {
         expect(mockUpdateFavico).toHaveBeenCalledTimes(1);
     });
 
-    it('still updates passive indicators for a plain message while syncing, without ringing or counting', () => {
+    it('still updates passive indicators for a plain message while syncing, without ringing or server counting', () => {
         buffers.set({
             '0x100': makeBuffer('0x100', {
                 notify: 3,
@@ -190,7 +191,7 @@ describe('Notification gate vs. read-boundary gate', () => {
 
         const buf = get(buffers)['0x100']!;
         expect(buf.unread).toBe(2);
-        expect(buf.localUnread).toBe(0);
+        expect(buf.localUnread).toBe(1); // badge tally is never gated
         expect(mockUpdateTitle).toHaveBeenCalledTimes(1);
         expect(mockPlayNotificationSound).not.toHaveBeenCalled();
         expect(mockCreateHighlight).not.toHaveBeenCalled();

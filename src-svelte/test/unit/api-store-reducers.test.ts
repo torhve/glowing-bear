@@ -243,7 +243,7 @@ describe('buffer_opened bootstrap', () => {
 });
 
 describe('line tally gates (ported legacy rules)', () => {
-    it('does not tally while the sync phase is open and the boundary is unknown', () => {
+    it('badges live lines while the sync phase is open, deferring server counts', () => {
         const token = beginSyncPhase();
         reducers.buffers([bufferSnap({ lastReadLineId: -1 })]);
         activeBufferId.set(''); // bootstrap auto-selects a default; tally needs an inactive buffer
@@ -251,11 +251,54 @@ describe('line tally gates (ported legacy rules)', () => {
         get(buffers)[KEY]!.readBoundaryKnown = false;
         reducers.lineAdded(BUFFER_ID, lineSnap(1));
         const buf = get(buffers)[KEY]!;
-        expect(buf.localUnread).toBe(0);
+        // Alert ⇒ badge invariant: the badge tally is never gated (the alert
+        // path rings for these lines too); only the boundary-resolution
+        // counters stay deferred to the baseline.
+        expect(buf.localUnread).toBe(1);
         expect(buf.unread).toBe(0);
         endSyncPhase(token);
         reducers.lineAdded(BUFFER_ID, lineSnap(2));
-        expect(get(buffers)[KEY]!.localUnread).toBe(1);
+        expect(get(buffers)[KEY]!.localUnread).toBe(2);
+        expect(get(buffers)[KEY]!.unread).toBe(1);
+    });
+
+    it('baseline max-merges with a badge tally that raced past it, without inflation', () => {
+        const token = beginSyncPhase();
+        reducers.buffers([bufferSnap({ lastReadLineId: -1 })]);
+        activeBufferId.set('');
+        get(buffers)[KEY]!.readBoundaryKnown = false;
+        // A highlight races in live before the hotlist baseline is applied...
+        reducers.lineAdded(BUFFER_ID, lineSnap(1, { notifyLevel: 3, highlight: true, tags: ['notify_highlight'] }));
+        // ...and the baseline (generated after the line) already includes it.
+        reducers.hotlist(new Map([[BUFFER_ID, { priority: 3, counts: { low: 0, message: 0, private: 0, highlight: 1 } }]]));
+        const buf = get(buffers)[KEY]!;
+        expect(buf.notification).toBe(1);
+        expect(buf.localUnread).toBe(1);
+        // getEffectiveUnread max-merges: the badge shows 1, never 2.
+        expect(getEffectiveUnread(buf)).toBe(1);
+        endSyncPhase(token);
+    });
+
+    it('poll converges a disjoint baseline+race count after the sync phase', () => {
+        const token = beginSyncPhase();
+        reducers.buffers([bufferSnap({ lastReadLineId: -1 })]);
+        activeBufferId.set('');
+        get(buffers)[KEY]!.readBoundaryKnown = false;
+        // Baseline covers two lines this client never saw live (arrived before
+        // sync)...
+        reducers.hotlist(new Map([[BUFFER_ID, { priority: 1, counts: { low: 0, message: 2, private: 0, highlight: 0 } }]]));
+        // ...and a third line races in after the baseline was generated.
+        reducers.lineAdded(BUFFER_ID, lineSnap(3));
+        let buf = get(buffers)[KEY]!;
+        // Transiently max(2, 1) = 2: the badge is visible (alert ⇒ badge) even
+        // though the disjoint counts undercount until the next poll.
+        expect(getEffectiveUnread(buf)).toBe(2);
+        endSyncPhase(token);
+        // The periodic poll re-reads the hotlist, which now counts all three.
+        reducers.hotlist(new Map([[BUFFER_ID, { priority: 1, counts: { low: 0, message: 3, private: 0, highlight: 0 } }]]));
+        buf = get(buffers)[KEY]!;
+        expect(buf.unread).toBe(3);
+        expect(getEffectiveUnread(buf)).toBe(3);
     });
 
     it('active buffer never tallies', () => {

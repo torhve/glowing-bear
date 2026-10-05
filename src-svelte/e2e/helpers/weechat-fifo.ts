@@ -25,6 +25,9 @@ export function weechatFifoCommand(command: string): boolean {
         if (!entry.startsWith('weechat_fifo_')) continue;
         const fifoPath = path.join(WEECHAT_HOME, entry);
         try {
+            // Only real FIFOs are command channels; stale regular files
+            // (leftovers of dead instances) silently swallow writes.
+            if (!fs.statSync(fifoPath).isFIFO()) continue;
             fs.writeFileSync(fifoPath, `core.weechat */${command}\n`);
             return true;
         } catch {

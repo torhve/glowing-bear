@@ -580,48 +580,52 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
             // --- Unread counters: read-boundary bookkeeping ---
             // Guards the tallies the read marker is derived from. Once a buffer
             // has a known local boundary, realtime rows never move it; while the
-            // boundary is still unknown, rows belong to the sync snapshot and must
-            // not inflate the counters used to resolve it.
+            // boundary is still unknown, the server-count counters stay deferred
+            // to the hotlist baseline that will resolve it.
             // Relay status buffers (relay.list) are re-rendered by WeeChat whenever a
             // relay client comes and goes, so their rows never count as unread.
-            if (
-                !isRelayStatusBuffer(buffer) &&
-                (!isSyncing() || buffer.readBoundaryKnown !== false)
-            ) {
+            if (!isRelayStatusBuffer(buffer)) {
                 if (buffer.id === activeId) {
                     // Active-buffer rows stay below the fixed session boundary.
                 } else if (lineMsg.notify_level >= 1) {
-                    // This counter is for buffer badges only; it is not a line-position proxy.
+                    // This counter is for buffer badges only; it is not a line-position
+                    // proxy, and it is never gated by sync state: the alert path below
+                    // rings even while syncing, and getEffectiveUnread max-merges the
+                    // local tally with hotlist counts, so baseline-covered lines cannot
+                    // inflate the badge while lines that raced past the baseline still
+                    // badge (alert => badge invariant).
                     buffer.localUnread = (buffer.localUnread || 0) + 1;
                     localUnreadBuffers.update((s: Set<string>) =>
                         new Set(s).add(buffer.id),
                     );
                 }
 
-                // Increment unread for real-time messages with notify_level=1 (message) only.
-                // PMs/highlights (notify_level>=2) increment notification, not unread.
-                // Only count as unread if the buffer's notify setting allows message-level notifications.
-                // Suppress for the active buffer regardless of window focus (user is looking at it).
-                if (
-                    buffer.notify > 1 &&
-                  lineMsg.notify_level === 1 &&
-                  buffer.id !== activeId
-                ) {
-                    buffer.unread++;
-                    const serverKey = `${buffer.plugin}.${buffer.server}`;
-                    serverDeltas[serverKey] = (serverDeltas[serverKey] || 0) + 1;
-                }
-
-                // Increment notification count for highlights/privates (notify_level >= 2).
-                // Requires buffer.notify != 0 and either a highlight or private/query message.
-                // WeeChat uses 'query' type for PM buffers, not 'private'.
-                if (lineMsg.notify_level >= 2 && buffer.id !== activeId) {
-                    const isPrivate =
-                      buffer.type === "private" || buffer.type === "query";
-                    if (buffer.notify !== 0 && (lineMsg.highlight || isPrivate)) {
-                        buffer.notification++;
+                if (!isSyncing() || buffer.readBoundaryKnown !== false) {
+                    // Increment unread for real-time messages with notify_level=1 (message) only.
+                    // PMs/highlights (notify_level>=2) increment notification, not unread.
+                    // Only count as unread if the buffer's notify setting allows message-level notifications.
+                    // Suppress for the active buffer regardless of window focus (user is looking at it).
+                    if (
+                        buffer.notify > 1 &&
+                        lineMsg.notify_level === 1 &&
+                        buffer.id !== activeId
+                    ) {
+                        buffer.unread++;
                         const serverKey = `${buffer.plugin}.${buffer.server}`;
                         serverDeltas[serverKey] = (serverDeltas[serverKey] || 0) + 1;
+                    }
+
+                    // Increment notification count for highlights/privates (notify_level >= 2).
+                    // Requires buffer.notify != 0 and either a highlight or private/query message.
+                    // WeeChat uses 'query' type for PM buffers, not 'private'.
+                    if (lineMsg.notify_level >= 2 && buffer.id !== activeId) {
+                        const isPrivate =
+                          buffer.type === "private" || buffer.type === "query";
+                        if (buffer.notify !== 0 && (lineMsg.highlight || isPrivate)) {
+                            buffer.notification++;
+                            const serverKey = `${buffer.plugin}.${buffer.server}`;
+                            serverDeltas[serverKey] = (serverDeltas[serverKey] || 0) + 1;
+                        }
                     }
                 }
             }

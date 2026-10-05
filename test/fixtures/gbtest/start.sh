@@ -201,7 +201,7 @@ if ! $RELAY_ALREADY_RUNNING; then
 		-r "/set relay.network.max_clients 32" \
 		-r "/set relay.network.clients_purge_delay 1" \
 		-r "/relay add api $API_RELAY_PORT" \
-		-r "/relay add websocket $LEGACY_RELAY_PORT" \
+		-r "/relay add weechat $LEGACY_RELAY_PORT" \
 		-r "/server add gbtest localhost/$IRC_PORT -nicks=testuser -autoconnect -notls" \
 		-r "/set irc.server.gbtest.autojoin #glowing-bear" \
 		-r "/relay" \
@@ -232,7 +232,7 @@ else
 		echo "  API relay already ready"
 	fi
 	if ! nc -z localhost "$LEGACY_RELAY_PORT" 2>/dev/null; then
-		weechat_cmd "relay add websocket $LEGACY_RELAY_PORT"
+		weechat_cmd "relay add weechat $LEGACY_RELAY_PORT"
 		for i in $(seq 1 10); do
 			nc -z localhost "$LEGACY_RELAY_PORT" 2>/dev/null && break
 			if [ "$i" -eq 10 ]; then

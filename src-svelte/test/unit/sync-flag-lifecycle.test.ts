@@ -267,7 +267,7 @@ describe('Sync phase lifecycle', () => {
         expect(isSyncing()).toBe(false);
     });
 
-    it('does not tally a live line locally while the baseline is pending', () => {
+    it('badges a live line while the baseline is pending but defers server counts', () => {
         buffers.set({
             '0x100': makeBuffer('0x100', { readBoundaryKnown: false, unread: 4 }),
         });
@@ -276,7 +276,10 @@ describe('Sync phase lifecycle', () => {
         handleBufferLineAdded(lineMessage('0x100'));
 
         const buf = get(buffers)['0x100']!;
-        expect(buf.localUnread).toBe(0);
+        // Badge tally is never gated (alert ⇒ badge invariant): a line that
+        // races past the baseline must still badge, and getEffectiveUnread
+        // max-merges so baseline-covered lines cannot inflate it.
+        expect(buf.localUnread).toBe(1);
         expect(buf.unread).toBe(4); // the baseline still owns this buffer's count
     });
 

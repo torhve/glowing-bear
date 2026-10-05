@@ -234,25 +234,34 @@ function findNickLocation(buffer: BufferData, nickId: number): { group: NickGrou
 /**
  * Ported tally rules from the legacy line handler (behavior, not wire code):
  * - relay status buffers never tally;
- * - while syncing with an unknown boundary, live rows belong to the sync
- *   snapshot and must not inflate counters;
  * - the active buffer never tallies (the user is looking at it);
  * - notify_level ≥ 1 → localUnread (badge bookkeeping);
  * - notify_level = 1 with buffer.notify > 1 → unread;
  * - notify_level ≥ 2 with highlight/private → notification.
+ * The server-count counters (unread/notification) are gated while syncing
+ * with an unknown boundary: they are the input to read-boundary resolution,
+ * and the hotlist baseline is authoritative for the sync snapshot. The badge
+ * counter is never gated — alertForLine rings for these lines even while
+ * syncing, and getEffectiveUnread max-merges server counts with the local
+ * tally, so baseline-covered lines cannot inflate the badge while lines that
+ * raced past the baseline still badge (alert ⇒ badge invariant).
  * buffer.notify defaults to 3 ('all'). WeeChat >= 5.0.0 reports the per-buffer
  * notify level in buffers and buffer_notify_changed events, which sets it; on
  * 4.10.1 it stays 'all' and hotlist baselines correct the counts.
  */
 function tallyLine(buffer: BufferData, line: LineSnapshot, activeId: string): void {
     if (isRelayStatusBuffer(buffer)) return;
-    if (isSyncing() && buffer.readBoundaryKnown === false) return;
     if (buffer.id === activeId) return;
 
     if (line.notifyLevel >= 1) {
         buffer.localUnread = (buffer.localUnread || 0) + 1;
         localUnreadBuffers.update((s) => new Set(s).add(buffer.id));
     }
+
+    // Boundary-resolution counters stay deferred to the hotlist baseline
+    // while the boundary is unknown (see comment above).
+    if (isSyncing() && buffer.readBoundaryKnown === false) return;
+
     if (buffer.notify > 1 && line.notifyLevel === 1) {
         buffer.unread++;
         addServerUnread(serverKey(buffer), 1);
