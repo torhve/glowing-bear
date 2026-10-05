@@ -314,7 +314,7 @@
 
         {#if $connectionState.errors.serverUnreachable}
           <div data-testid="error-message" data-error-type="server-unreachable" class="connection-error bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
-            Unable to reach WeeChat relay at {hostField}:{port} — check that it is running and reachable
+            Unable to reach WeeChat relay at {hostField}:{port} — check that it is running and reachable{#if tls} — a TLS toggle that does not match the relay also shows up as "unreachable"{/if}
           </div>
         {/if}
         {#if $connectionState.errors.errorMessage}

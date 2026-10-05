@@ -111,10 +111,11 @@ function detectError(evt: CloseEvent): boolean {
         return true;
     }
     if (evt.code === 1006) {
-        if (connecting === false && ws !== null) {
-            setErrors({ passwordError: true });
-            return true;
-        }
+        // The connection never completed. The browser does not expose why
+        // (refused port, DNS, TLS, timeout) — it all arrives as 1006 — so
+        // report the relay as unreachable rather than a password problem.
+        // (This runs after resetAllState() in onclose, which is why the
+        // "connecting" flag cannot distinguish the cases here.)
         setErrors({ serverUnreachable: true });
     }
     return false;
@@ -442,9 +443,12 @@ export async function connect(host: string, port: number, path: string, password
         };
 
         ws.onerror = (evt) => {
-            console.error('Relay error:', evt);
+            // The browser's WebSocket API does not expose the underlying failure
+            // (refused port, TLS, timeout) — log the attempted URL so the line is
+            // actionable.
+            console.error(`Relay error: ${url}`, evt);
             setConnectionStatus('error');
-            reject(new Error('Connection failed'));
+            reject(new Error(`Connection failed: ${url}`));
         };
     });
 }
