@@ -263,3 +263,18 @@ export function rankCandidates(candidates: string[], spokeAt: Map<string, number
         return tb - ta;
     });
 }
+
+/**
+ * Build the text inserted by a completion candidate. WeeChat bakes the
+ * completer suffix into nick candidates and, on recent versions, the
+ * nick_add_space trailing space as well ("gbbot2: "). Older relay API
+ * versions sent bare "nick:" candidates with add_space false, leaving the
+ * input stuck onto the next word ("Bear:hello"). Restore the trailing
+ * space for the nick (auto) context when the candidate lacks one.
+ */
+export function completionInsert(candidate: string, addSpace: boolean, context: string): string {
+    let insert = candidate;
+    if (context === 'auto' && !/\s$/.test(insert)) insert += ' ';
+    if (addSpace) insert += ' ';
+    return insert;
+}

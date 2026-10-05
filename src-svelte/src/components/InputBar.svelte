@@ -1,7 +1,7 @@
 <script lang="ts">
   import { currentBuffer, buffers, pendingBufferSwitch, setActiveBuffer, findBufferByShortName } from '#lib/stores/models.ts';
   import { sendMessage, sendWeeChatCommand, getSession, getActiveTransport } from '#lib/stores/connectionManager.ts';
-  import { requestCompletion, rankCandidates } from '#lib/api/api-features.ts';
+  import { requestCompletion, rankCandidates, completionInsert } from '#lib/api/api-features.ts';
   import { settings } from '#lib/stores/settings.ts';
   import { addToHistory, getHistoryUp, getHistoryDown } from '#lib/stores/inputHistory.ts';
   import { isPopoverOpen, filterImageFiles, joinMultilineToSingle, MULTILINE_PASTE_THRESHOLD, completeNick } from '#lib/utils.ts';
@@ -215,7 +215,7 @@
       const idx = ranked.indexOf(_iterCandidate);
       candidate = ranked[(idx >= 0 ? idx + 1 : 0) % ranked.length]!;
     }
-    const insert = candidate + (res.addSpace ? ' ' : '');
+    const insert = completionInsert(candidate, res.addSpace, res.context);
     return {
       text: text.slice(0, res.replaceStart) + insert + text.slice(res.replaceEnd),
       cursor: res.replaceStart + insert.length,

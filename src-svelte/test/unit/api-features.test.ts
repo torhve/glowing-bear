@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
 import {
     byteOffsetToCharIndex, charIndexToCodePointOffset, utf8Length,
-    fetchHistory, sendInput, requestCompletion, rankCandidates,
+    fetchHistory, sendInput, requestCompletion, rankCandidates, completionInsert,
 } from '#lib/api/api-features.ts';
 import { createApiStoreReducers } from '#lib/api/api-store-reducers.ts';
 import { buffers } from '#lib/stores/models.ts';
@@ -223,5 +223,21 @@ describe('rankCandidates', () => {
 
     it('no recency data keeps server order', () => {
         expect(rankCandidates(['a', 'b'], new Map())).toEqual(['a', 'b']);
+    });
+});
+
+describe('completionInsert', () => {
+    it('adds a trailing space to a bare nick candidate (older relay API)', () => {
+        expect(completionInsert('Bear:', false, 'auto')).toBe('Bear: ');
+    });
+
+    it('leaves a nick candidate that already ends in a space (recent WeeChat)', () => {
+        expect(completionInsert('gbbot2: ', false, 'auto')).toBe('gbbot2: ');
+    });
+
+    it('respects add_space for command contexts', () => {
+        expect(completionInsert('version', true, 'command')).toBe('version ');
+        expect(completionInsert('probebot', true, 'command_arg')).toBe('probebot ');
+        expect(completionInsert('foo', false, 'command_arg')).toBe('foo');
     });
 });
