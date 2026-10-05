@@ -1,8 +1,8 @@
 # Glowing Bear
 
-A web frontend for the [WeeChat](https://weechat.org) IRC client. Connects directly to WeeChat through the relay plugin's JSON API (HTTP + WebSocket) — no backend service required.
+A web frontend for the [WeeChat](https://weechat.org) IRC client. Connects directly to WeeChat through the relay plugin — no backend service required.
 
-Requires WeeChat >= 4.10.1 with the relay plugin configured (Relay API 0.6.0). Password authentication supports plain, SHA-256/SHA-512, and PBKDF2+SHA-256/SHA-512; relays that require TOTP (`relay.network.totp`) are not supported by the browser WebSocket authentication path.
+Glowing Bear speaks two relay protocols and picks one automatically: the JSON **Relay API** (HTTP + WebSocket, WeeChat >= 4.10.1, API 0.6.0) when the relay supports it, and the legacy WebSocket protocol for older WeeChat versions. You can pin the choice in settings (`auto` / `api` / `legacy`). Password authentication supports plain, SHA-256/SHA-512, and PBKDF2+SHA-256/SHA-512 on both paths. Relays that require TOTP (`relay.network.totp`) work on the legacy path (the code is requested interactively); the API path cannot deliver TOTP over a browser WebSocket and will report it clearly.
 
 ## How to Run It
 
@@ -46,7 +46,14 @@ Produces installers for Linux (deb), macOS (dmg), and Windows (msi/nsis).
 
 ## Getting Started for Users
 
-To connect Glowing Bear to your WeeChat instance, you need a relay. In WeeChat:
+To connect Glowing Bear to your WeeChat instance, you need a relay. On WeeChat 4.10.1 or newer, add the API relay:
+
+```
+/relay add api 9010
+/set relay.network.password YOURPASSWORD
+```
+
+On older WeeChat versions, add the legacy relay instead (Glowing Bear detects it and falls back automatically):
 
 ```
 /relay add weechat 9001
