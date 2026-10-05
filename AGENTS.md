@@ -29,6 +29,16 @@ npm run tauri:dev             # Tauri desktop dev mode
 npm run tauri:build           # Tauri desktop production build
 ```
 
+Kit 3 writes generated tsconfig shims to `node_modules/$app/` (`tsconfig.json`,
+`tsconfig/service-worker.json`, `types/`), and the root `tsconfig.json` plus
+`src-svelte/src/service-worker/tsconfig.json` extend them. `npm install` wipes that
+directory, which breaks `npm test` (rolldown: `Could not resolve 'node:module'` /
+"Tsconfig not found"), `svelte-check` and the service-worker typecheck. `postinstall`,
+`pretest` and `precheck` run `svelte-kit sync` so it regenerates automatically; run
+`npm run sync` by hand if a tool still reports a missing tsconfig (direct tool calls
+and `npm ci --ignore-scripts` bypass these hooks). The hook needs devDependencies:
+`npm ci --omit=dev` would skip Kit and fail `postinstall`.
+
 ## Code Style (CRITICAL)
 
 ### Svelte 5 Runes
