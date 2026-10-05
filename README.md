@@ -92,14 +92,15 @@ transport opens `<base>/weechat`. WeeChat picks the protocol from the URL path a
 authenticates from the subprotocol, so a proxy that rewrites the path or drops
 `Sec-WebSocket-Protocol` breaks the handshake rather than just the framing.
 
-The test fixture (`test/fixtures/gbtest/`) runs both relays on separate ports — API on 9010,
-legacy on 9001 — so both transports are exercised in CI.
+Cross-origin HTTP matters too: the relay answers `OPTIONS *` with a 204 CORS preflight
+(`Access-Control-Allow-Origin: *`, allowing `authorization`), so a proxy must forward OPTIONS
+requests unchanged — stripping them turns every API call into a CORS failure.
 
-### Migrating an existing relay (operator checklist)
+
+### Migrating an existing relay
 
 Back up the WeeChat configuration (`relay.conf`, `weechat.conf`) before touching the relay,
-and keep a tagged previous release as rollback material — rollback is redeploying that
-release, not a runtime fallback in the client.
+and keep a tagged previous release as rollback material
 
 1. Confirm the WeeChat version: the API transport needs 4.10.1 or newer (Relay API 0.6.0).
    Older builds keep working, but only over the legacy relay.
@@ -215,7 +216,7 @@ npm run irc:server      # Run the IRC server fixture directly via tsx
 ### Themes
 
 Glowing Bear ships with built-in themes (Dark, Light, Black, Catppuccin variants, Base16 variants, and more).
-Custom CSS injection is also available in settings for unlimited personalization.
+Custom CSS injection is also available in settings for personalization.
 
 ### Key Features
 

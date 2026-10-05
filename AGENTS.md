@@ -35,7 +35,6 @@ The app is a **dual-protocol client**. `connectionManager.ts` chooses one transp
 
 `src-svelte/src/lib/weechat-colors.ts` is the application **adapter** over it and is the only application-side formatter. It contains no WeeChat color grammar of its own: it converts mIRC formatting into WeeChat controls (mirroring WeeChat's `irc_color_decode()`), maps the library's symbolic styles onto `RichTextPart` and the CSS class vocabulary (`cwf-`/`cwb-`, `cof-`/`cob-`, `cef-`/`ceb-`, `coa-`, `a-*`/`a-no-*`), and keeps `richText2Str()` as a diagnostic. Callers (`lib/weechat.ts`, `lib/stores/models.ts`) are unchanged, so the API and legacy relay paths share one decoder.
 
-- Do not add color grammar, color tables or parser state to the adapter or to components — extend the library and its tests instead, and keep IRC/CSS compatibility in the adapter.
 - Deliberate departures from upstream are recorded in `packages/weechat-format/docs/behavior-differences.md`; `test/differential.test.ts` locks every divergence it covers to that ledger, so a new undocumented difference — or a documented one that disappeared — fails the suite. The ledger covers the cases the suite exercises, not every possible input.
 - The tracked record of scanner-vs-renderer divergence is `packages/weechat-format/oracle/divergences.json`: three rules, each with upstream line ranges and one example whose scanner and library extents are both recorded. `test/oracle.test.ts` always checks, from that ledger alone, that every example still diverges in the library by the recorded extents and that a documented divergence cannot excuse a later one.
 - A stronger check is a local, untracked tool: `oracle/weechat_color_scan.c` vendors `gui_color_code_size()` and `gui_color_attr_get_flag()` verbatim from WeeChat 4.10.1, `npm run oracle:weechat-format` compiles it (needs `cc`) over a 13,928-input ASCII corpus and writes `oracle/corpus.txt` + `oracle/weechat-oracle.txt`, and `test/oracle.test.ts` then fails unless every library-vs-scanner difference is one of the ledger's rules (and unless each rule still occurs). Those three files are generated evidence, gitignored on purpose — the repo carries the conclusion, not ~700 KB of evidence. Regenerate when the scanner, the generator or the corpus changes; regeneration is idempotent and re-pins the sha256 header, so that check only catches an oracle left stale beside an edited scanner. Re-vendoring a deleted scanner is a manual step: the ledger's upstream line ranges say where the scanner came from, not every wrapper byte. The oracle covers consumption only, not style application.
@@ -186,7 +185,7 @@ E2E runs in two passes: the `chromium` project (channel-state-dependent specs, `
 
 ## Git
 
-Do NOT push.
+Do not push.
 
 ## Legacy AngularJS Code
 
