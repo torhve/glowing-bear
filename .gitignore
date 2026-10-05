@@ -55,3 +55,6 @@ src-svelte/coverage/
 
 # Nested e2e directory with auto-generated reports
 src-svelte/e2e/e2e/
+
+# standalone library build output
+packages/*/dist/

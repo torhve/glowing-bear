@@ -19,7 +19,12 @@ npm run dev                    # Dev server (localhost:8001)
 npm run build                  # Production build (static output to build/)
 npm run check                  # svelte-check
 npm run lint                   # eslint src-svelte/src src-svelte/test src-svelte/e2e
-npm test                       # Vitest unit tests
+npm test                       # Vitest unit tests (runs `svelte-kit sync` first)
+npm run sync                   # Regenerate Kit 3's node_modules/$app tsconfig shims
+npm run test:weechat-format    # Standalone formatter package tests (packages/weechat-format)
+npm run check:weechat-format   # Formatter package typecheck
+npm run bench:weechat-format   # Formatter throughput benchmark + linear-scaling guard
+npm run smoke:weechat-format   # Build + consumer/packaging smoke test
 npm run test:e2e               # Full E2E: serial channel specs, then parallel UI-only specs
 npm run test:e2e:serial -- --grep "X" # Targeted E2E (channel-dependent specs)
 npm run test:e2e:ui -- --grep "X"     # Targeted E2E (UI-only specs)
@@ -35,9 +40,9 @@ Kit 3 writes generated tsconfig shims to `node_modules/$app/` (`tsconfig.json`,
 directory, which breaks `npm test` (rolldown: `Could not resolve 'node:module'` /
 "Tsconfig not found"), `svelte-check` and the service-worker typecheck. `postinstall`,
 `pretest` and `precheck` run `svelte-kit sync` so it regenerates automatically; run
-`npm run sync` by hand if a tool still reports a missing tsconfig (direct tool calls
-and `npm ci --ignore-scripts` bypass these hooks). The hook needs devDependencies:
-`npm ci --omit=dev` would skip Kit and fail `postinstall`.
+`npm run sync` by hand if a tool still reports a missing tsconfig (direct tool calls and
+`npm ci --ignore-scripts` bypass these hooks). The hook needs devDependencies: `npm ci
+--omit=dev` would skip Kit and fail `postinstall`.
 
 ## Code Style (CRITICAL)
 
