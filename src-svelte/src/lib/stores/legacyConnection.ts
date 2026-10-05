@@ -18,6 +18,22 @@ const protocolInstance = new Protocol();
 // so that disconnect() can close them all — prevents orphaned connections.
 const webSockets = new Set<WebSocket>();
 
+/**
+ * Decide the TOTP code to send in `init` from the handshake response.
+ * A legacy relay reports totp:"on" when it requires a token; the user is
+ * prompted interactively (the Angular client's flow). Cancel or empty input
+ * sends no totp parameter — the server then rejects init, which surfaces as
+ * an auth error instead of a silent hang.
+ */
+export function resolveTotpCode(
+    content: Record<string, unknown> | undefined,
+    promptFn: (message: string) => string | null = (msg) => window.prompt(msg),
+): string | null {
+    if (content?.totp !== 'on') return null;
+    const code = promptFn('Please enter your TOTP Token');
+    return code === null || code.trim() === '' ? null : code.trim();
+}
+
 let ws: WebSocket | null = null;
 let hotlistInterval: ReturnType<typeof setInterval> | null = null;
 let hotlistPollIntervalMs = 15000;
@@ -231,6 +247,12 @@ export async function connect(host: string, port: number, path: string, password
                 const nonce = hexStringToByte(content?.nonce as string || '');
                 const iterations = (content?.password_hash_iterations as number) || 0;
 
+                // TOTP is in-band on the legacy protocol (init totp=...), so a
+                // browser CAN satisfy a TOTP-required relay — unlike the REST API
+                // where the code needs a header WebSocket cannot set. Ask only
+                // when the server requests it (same flow as the Angular version).
+                const totpCode = resolveTotpCode(content);
+
                 // PBKDF2 algorithms require a nonce from the server
                 const needsNonce: boolean = !passwordMethod || passwordMethod === '' || passwordMethod.startsWith('pbkdf2+');
                 if (nonce.length === 0 && needsNonce) {
@@ -243,7 +265,7 @@ export async function connect(host: string, port: number, path: string, password
                 // Initialize connection — handle server's chosen hash algorithm
                 if (passwordMethod === 'pbkdf2+sha512') {
                     if (hasCryptoSubtle) {
-                        await initializePBKDF2(password, nonce, iterations, 'SHA-512');
+                        await initializePBKDF2(password, nonce, iterations, 'SHA-512', totpCode);
                     } else {
                         // Server wants pbkdf2+sha512 but we only support sha256 variants natively → error
                         setErrors({ hashAlgorithmDisagree: true });
@@ -253,19 +275,19 @@ export async function connect(host: string, port: number, path: string, password
                     }
                 } else if (passwordMethod === 'pbkdf2+sha256') {
                     if (hasCryptoSubtle) {
-                        await initializePBKDF2(password, nonce, iterations, 'SHA-256');
+                        await initializePBKDF2(password, nonce, iterations, 'SHA-256', totpCode);
                     } else {
-                        await initializePBKDF2Native(password, nonce, iterations);
+                        await initializePBKDF2Native(password, nonce, iterations, totpCode);
                     }
                 } else if (passwordMethod === 'sha256') {
                     if (hasCryptoSubtle) {
-                        await initializeSHA(password, 'sha256');
+                        await initializeSHA(password, 'sha256', totpCode);
                     } else {
-                        await initializeSHANative(password);
+                        await initializeSHANative(password, totpCode);
                     }
                 } else if (passwordMethod === 'sha512') {
                     if (hasCryptoSubtle) {
-                        await initializeSHA(password, 'sha512');
+                        await initializeSHA(password, 'sha512', totpCode);
                     } else {
                         // No native SHA-512 — report error
                         setErrors({ hashAlgorithmDisagree: true });
@@ -274,7 +296,7 @@ export async function connect(host: string, port: number, path: string, password
                         return;
                     }
                 } else if (passwordMethod === 'plain') {
-                    const initMsg = Protocol.formatInit('plain:' + password, null);
+                    const initMsg = Protocol.formatInit('plain:' + password, totpCode);
                     // Fire-and-forget: WeeChat increments callback IDs so sendAsync would timeout
                     if (ws && ws.readyState === WebSocket.OPEN) {
                         sendWs(initMsg, 'init(plain)');
@@ -284,9 +306,9 @@ export async function connect(host: string, port: number, path: string, password
                     // Empty password_hash_algo = WeeChat using non-default algo (pbkdf2+sha256).
                     // Default to pbkdf2+sha256 when server doesn't explicitly report the algo.
                     if (hasCryptoSubtle) {
-                        await initializePBKDF2(password, nonce, iterations, 'SHA-256');
+                        await initializePBKDF2(password, nonce, iterations, 'SHA-256', totpCode);
                     } else {
-                        await initializePBKDF2Native(password, nonce, iterations);
+                        await initializePBKDF2Native(password, nonce, iterations, totpCode);
                     }
                 } else if (passwordMethod && passwordMethod !== 'plain') {
                     // Unsupported algorithm — report error and abort
@@ -424,7 +446,7 @@ export async function connect(host: string, port: number, path: string, password
 }
 
 // Compute PBKDF2 password hash using the specified SHA variant.
-async function initializePBKDF2(password: string, nonce: Uint8Array, iterations: number, hashAlgo: 'SHA-512' | 'SHA-256' = 'SHA-512') {
+async function initializePBKDF2(password: string, nonce: Uint8Array, iterations: number, hashAlgo: 'SHA-512' | 'SHA-256' = 'SHA-512', totp: string | null = null) {
     const passwordArray = new TextEncoder().encode(password);
     const key = await crypto.subtle.importKey('raw', passwordArray, { name: 'PBKDF2' }, false, ['deriveBits']);
 
@@ -449,7 +471,7 @@ async function initializePBKDF2(password: string, nonce: Uint8Array, iterations:
     const algoLabel = hashAlgo.toLowerCase().replace('-', '');
     const initMsg = Protocol.formatInit(
         `pbkdf2+${algoLabel}:${saltHex}:${iterations}:${hashHex}`,
-        null
+        totp
     );
     // Fire-and-forget: WeeChat increments callback IDs so sendAsync would timeout
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -459,14 +481,14 @@ async function initializePBKDF2(password: string, nonce: Uint8Array, iterations:
 }
 
 // Compute SHA-256 or SHA-512 password digest for authentication.
-async function initializeSHA(password: string, method: 'sha256' | 'sha512') {
+async function initializeSHA(password: string, method: 'sha256' | 'sha512', totp: string | null = null) {
     const data = new TextEncoder().encode(password);
     const hashBuffer = await crypto.subtle.digest(method.toUpperCase(), data);
     const hashHex = Array.from(new Uint8Array(hashBuffer))
         .map(b => b.toString(16).padStart(2, '0'))
         .join('');
 
-    const initMsg = Protocol.formatInit(`${method}:${hashHex}`, null);
+    const initMsg = Protocol.formatInit(`${method}:${hashHex}`, totp);
     if (ws && ws.readyState === WebSocket.OPEN) {
         sendWs(initMsg, `init(${method})`);
     }
@@ -474,11 +496,11 @@ async function initializeSHA(password: string, method: 'sha256' | 'sha512') {
 }
 
 // Native TypeScript SHA-256 fallback (no crypto.subtle required).
-async function initializeSHANative(password: string) {
+async function initializeSHANative(password: string, totp: string | null = null) {
     const data = new TextEncoder().encode(password);
     const hashHex = toHexString(sha256(data));
 
-    const initMsg = Protocol.formatInit(`sha256:${hashHex}`, null);
+    const initMsg = Protocol.formatInit(`sha256:${hashHex}`, totp);
     if (ws && ws.readyState === WebSocket.OPEN) {
         sendWs(initMsg, 'init(sha256-native)');
     }
@@ -486,7 +508,7 @@ async function initializeSHANative(password: string) {
 }
 
 // Native TypeScript PBKDF2-SHA256 fallback (no crypto.subtle required).
-async function initializePBKDF2Native(password: string, nonce: Uint8Array, iterations: number) {
+async function initializePBKDF2Native(password: string, nonce: Uint8Array, iterations: number, totp: string | null = null) {
     const passwordArray = new TextEncoder().encode(password);
     const clientNonce = crypto.getRandomValues(new Uint8Array(16));
     const salt = concatenateTypedArrays(nonce, new Uint8Array([0x3A]), clientNonce);
@@ -497,7 +519,7 @@ async function initializePBKDF2Native(password: string, nonce: Uint8Array, itera
 
     const initMsg = Protocol.formatInit(
         `pbkdf2+sha256:${saltHex}:${iterations}:${hashHex}`,
-        null
+        totp
     );
     if (ws && ws.readyState === WebSocket.OPEN) {
         sendWs(initMsg, 'init(pbkdf2+sha256-native)');
