@@ -19,6 +19,7 @@ const UI_ONLY_SPECS = [
     'DisconnectReconnect',
     'ErrorPage-unmatchedRoute',
     'Hash-params',
+    'HashAlgorithmMismatch',
     'InputBar-emojify',
     'InputBar-formatting',
     'InputBar-paste',

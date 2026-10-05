@@ -8,6 +8,7 @@ WEECHAT_HOME="/tmp/gbtest-weechat"
 IRC_PORT=6667
 CONTROL_PORT=16667
 API_RELAY_PORT=9010
+LEGACY_RELAY_PORT=9001
 
 RELAY_ALREADY_RUNNING=false
 IRC_ALREADY_RUNNING=false
@@ -200,6 +201,7 @@ if ! $RELAY_ALREADY_RUNNING; then
 		-r "/set relay.network.max_clients 32" \
 		-r "/set relay.network.clients_purge_delay 1" \
 		-r "/relay add api $API_RELAY_PORT" \
+		-r "/relay add websocket $LEGACY_RELAY_PORT" \
 		-r "/server add gbtest localhost/$IRC_PORT -nicks=testuser -autoconnect -notls" \
 		-r "/set irc.server.gbtest.autojoin #glowing-bear" \
 		-r "/relay" \
@@ -221,13 +223,25 @@ else
 	# Ensure the relay.list buffer exists (created on demand by /relay); the
 	# relay-list-unread spec asserts against it.
 	weechat_cmd "relay"
-	# A fixture started before the API relay existed (or with the relay removed)
-	# gets it added through the FIFO; the authenticated probe then confirms it.
+	# A fixture started before these relays existed (or with one removed) gets
+	# them added through the FIFO; the probes then confirm readiness.
 	if ! probe_api_relay; then
 		weechat_cmd "relay add api $API_RELAY_PORT"
 		wait_for_api_relay
 	else
 		echo "  API relay already ready"
+	fi
+	if ! nc -z localhost "$LEGACY_RELAY_PORT" 2>/dev/null; then
+		weechat_cmd "relay add websocket $LEGACY_RELAY_PORT"
+		for i in $(seq 1 10); do
+			nc -z localhost "$LEGACY_RELAY_PORT" 2>/dev/null && break
+			if [ "$i" -eq 10 ]; then
+				echo "ERROR: legacy relay on port $LEGACY_RELAY_PORT did not become ready"
+				cleanup
+			fi
+			sleep 0.5
+		done
+		echo "  Legacy relay added on $LEGACY_RELAY_PORT"
 	fi
 	wait_for_grep_shim
 	wait_for_channel_join
@@ -238,6 +252,7 @@ echo "=== Ready ==="
 echo "  IRC server:     localhost:$IRC_PORT"
 echo "  Control API:    localhost:$CONTROL_PORT"
 echo "  API relay:      ws://localhost:$API_RELAY_PORT/api (password: testpassword123)"
+echo "  Legacy relay:   ws://localhost:$LEGACY_RELAY_PORT/weechat (password: testpassword123)"
 echo "  Bot nick:       gbbot"
 echo "  Auto channel:   #glowing-bear"
 echo "  Config dir:     $WEECHAT_HOME"

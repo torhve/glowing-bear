@@ -10,7 +10,9 @@ export interface CreateConnectedPageOptions {
   /** Script to run before any page JS (e.g. to mock browser APIs) */
   initScript?: string | (() => string | void);
   /** Extra async setup after the page is ready but before connect (e.g. inject swipe helpers) */
-  beforeConnect?: (page: Page) => Promise<void>;
+  beforeConnect?: (page: Page) => Promise<unknown>;
+  /** Relay port (default 9010 API relay; 9001 is the legacy relay) */
+  port?: string;
 }
 
 /** Creates a new page, navigates to app, clears settings, and connects to WeeChat.
@@ -51,6 +53,6 @@ export async function createConnectedPage(
         await options.beforeConnect(page);
     }
 
-    await connectToWeechat(page);
+    await connectToWeechat(page, options?.port ?? '9010');
     return page;
 }
