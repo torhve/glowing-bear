@@ -115,19 +115,50 @@ export async function fetchHistory(session: ApiSession, req: HistoryRequest): Pr
     applyHistory(buffer, mapped);
     return { lines: mapped, applied: true, complete: mapped.length < req.count };
 }
+// Smart-filtered lines never land in buffer.lines, so overlapping history
+// windows would re-count them in requestedLines. Remember their ids per
+// buffer, reset when the buffer is cleared (epoch bump) so a refetch after
+// /clear starts from a clean slate.
+const hiddenLineIds = new Map<string, { epoch: number; ids: Set<number> }>();
+
+// Drop all per-buffer tracking. Called on disconnect (resetAllState) so a
+// new session's line ids — which restart from a low counter — are never
+// treated as already seen from a previous session.
+export function clearHiddenLineIdTracking(): void {
+    hiddenLineIds.clear();
+}
+
+// Return the seen-hidden-id set for a buffer, recreating it on epoch change.
+function hiddenIdsFor(buffer: BufferData): Set<number> {
+    const epoch = buffer.clearEpoch ?? 0;
+    let entry = hiddenLineIds.get(buffer.id);
+    if (!entry || entry.epoch !== epoch) {
+        entry = { epoch, ids: new Set() };
+        hiddenLineIds.set(buffer.id, entry);
+    }
+    return entry.ids;
+}
 
 /** Prepend oldest-first, dedupe by stable lineId, keep display order. */
 function applyHistory(buffer: BufferData, lines: LineSnapshot[]): void {
+    const hiddenSeen = hiddenIdsFor(buffer);
     const existing = new Set(buffer.lines.map((l) => l.lineId));
-    const fresh = lines
+    const unseen = lines
         .slice()
         .sort((a, b) => a.id - b.id)
-        .filter((l) => !isServerHiddenLine(l)) // smart-filtered: WeeChat hides it
-        .filter((l) => !existing.has(`weechat:${l.id}`))
+        .filter((l) => !existing.has(`weechat:${l.id}`) && !hiddenSeen.has(l.id));
+    // Count every received server line — smart-filtered joins/parts included —
+    // so the requested window (requestedLines * 2) advances past hidden-line
+    // regions; only displayed lines are rendered. Counting only displayed
+    // lines stalls the window: a fetch of newest-N raw lines where all N are
+    // hidden keeps requestedLines at 0 and the same N lines refetch forever.
+    buffer.requestedLines += unseen.length;
+    const fresh = unseen
+        .filter((l) => !isServerHiddenLine(l))
         .map((l) => lineSnapshotToBufferLine(buffer, l));
+    for (const l of unseen) if (isServerHiddenLine(l)) hiddenSeen.add(l.id);
     if (!fresh.length) return;
     buffer.lines = [...fresh, ...buffer.lines];
-    buffer.requestedLines += fresh.length;
     // A capped buffer trims the oldest prepended lines right away, exactly
     // like the legacy history pass (trimmed lines still count in
     // requestedLines so scroll-up paging knows it is exhausted).

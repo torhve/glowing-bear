@@ -591,7 +591,7 @@
       <!-- Bubble mode layout (private/query buffers with stylizePrivateChats enabled) -->
       <div class="chat-bubble-container">
         <!-- Fetch more lines -->
-        {#if !$currentBuffer.allLinesFetched && messages.length > 0}
+        {#if !$currentBuffer.allLinesFetched}
           <div class="bubble-fetchmore-row">
             <button type="button" class="fetchmorelines flex items-center gap-1 px-3 py-1 rounded text-xs font-medium text-text-secondary hover:text-text hover:bg-surface-raised transition-colors" onclick={handleFetchMore}>
               <ChevronUp size={14} class="text-text-muted" />
@@ -668,7 +668,7 @@
       <table class="chat-table">
         <tbody class="chat-tbody">
           <!-- Fetch more lines row -->
-          {#if !$currentBuffer.allLinesFetched && messages.length > 0}
+          {#if !$currentBuffer.allLinesFetched}
             <tr class="bufferline fetchmore-row">
               <td class="text-center py-1" colspan=3>
                 <button type="button" class="fetchmorelines flex items-center gap-1 px-3 py-1 rounded text-xs font-medium text-text-secondary hover:text-text hover:bg-surface-raised transition-colors" onclick={handleFetchMore}>

@@ -25,7 +25,7 @@ import { resolveApiEndpoint } from '#lib/api/api-endpoint.ts';
 import { ApiOrchestrator, type OrchestratorStatus } from '#lib/api/api-orchestrator.ts';
 import { createApiStoreReducers } from '#lib/api/api-store-reducers.ts';
 import { mapHotlist, applyNicklistRoot } from '#lib/api/api-mapping.ts';
-import { fetchHistory, sendInput, type InputOutcome } from '#lib/api/api-features.ts';
+import { fetchHistory, sendInput, clearHiddenLineIdTracking, type InputOutcome } from '#lib/api/api-features.ts';
 import type { ApiSession } from '#lib/api/api-session.ts';
 import type { ApiBufferId } from '#lib/api/api-ids.ts';
 import { DEBUG_NICKLIST, DEBUG_WEECHAT_COMMANDS, DEBUG_CONNECTION } from '#lib/debug.ts';
@@ -78,6 +78,9 @@ function resetAllState() {
     bufferBottom.set(true);
     // Clear all buffer/server state — no stale entries accumulate across reconnects.
     buffers.set({});
+    // Line ids restart from a low counter in a new session: drop the
+    // per-buffer seen-hidden-line tracking so nothing dedupes against stale ids.
+    clearHiddenLineIdTracking();
     servers.set({});
     localUnreadBuffers.update(() => new Set());
     hotlistClearedBuffers.update(() => new Set());

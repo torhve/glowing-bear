@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
 import {
     byteOffsetToCharIndex, charIndexToCodePointOffset, utf8Length,
-    fetchHistory, sendInput, requestCompletion, rankCandidates, completionInsert,
+    fetchHistory, sendInput, requestCompletion, rankCandidates, completionInsert, clearHiddenLineIdTracking,
 } from '#lib/api/api-features.ts';
 import { createApiStoreReducers } from '#lib/api/api-store-reducers.ts';
 import { buffers } from '#lib/stores/models.ts';
@@ -29,6 +29,7 @@ function wireLine(id: number, message = `msg ${id}`) {
 
 beforeEach(() => {
     buffers.set({});
+    clearHiddenLineIdTracking();
     const reducers = createApiStoreReducers();
     const snap: BufferSnapshot = {
         id: BUFFER_ID, name: 'irc.glowing-bear.#chan', shortName: '#chan', number: 2,
@@ -134,8 +135,100 @@ describe('fetchHistory', () => {
         expect(res.applied).toBe(true);
         const buf = get(buffers)[KEY]!;
         expect(buf.lines.map((l) => l.text)).toEqual(['visible']);
-        // requestedLines counts only lines kept for display.
+        // requestedLines counts every line the server sent (hidden included)
+        // so the paging window advances past smart-filtered regions.
+        expect(buf.requestedLines).toBe(3);
+    });
+
+    it('a fully hidden fetch still advances the window (blank-buffer regression)', async () => {
+        const session = fakeSession(() => ({
+            code: 200,
+            body: [
+                { ...wireLine(1, 'join'), displayed: false },
+                { ...wireLine(2, 'part'), tags: ['irc_smart_filter'] },
+            ],
+        }));
+        const res = await fetchHistory(session, { bufferId: BUFFER_ID, count: 2 });
+        expect(res.applied).toBe(true);
+        const buf = get(buffers)[KEY]!;
+        expect(buf.lines).toHaveLength(0);
+        // The window must advance (requestedLines) and NOT be marked complete,
+        // otherwise the buffer stays blank with no way to page further.
+        expect(buf.requestedLines).toBe(2);
+        expect(res.complete).toBe(false);
+    });
+
+    it('deduped lines are not counted twice in requestedLines', async () => {
+        const session = fakeSession(() => ({
+            code: 200,
+            body: [wireLine(1, 'a'), { ...wireLine(2, 'join'), displayed: false }],
+        }));
+        await fetchHistory(session, { bufferId: BUFFER_ID, count: 2 });
+        // Overlapping refetch of the same newest-2 window: nothing is new.
+        const session2 = fakeSession(() => ({
+            code: 200,
+            body: [wireLine(1, 'a'), { ...wireLine(2, 'join'), displayed: false }],
+        }));
+        await fetchHistory(session2, { bufferId: BUFFER_ID, count: 2 });
+        expect(get(buffers)[KEY]!.requestedLines).toBe(2);
+    });
+
+    it('pages past a hidden-only window into visible history', async () => {
+        // First fetch: newest-2 window is all smart-filtered (blank buffer).
+        const session = fakeSession(() => ({
+            code: 200,
+            body: [
+                { ...wireLine(5, 'join'), displayed: false },
+                { ...wireLine(6, 'part'), tags: ['irc_smart_filter'] },
+            ],
+        }));
+        await fetchHistory(session, { bufferId: BUFFER_ID, count: 2 });
+        expect(get(buffers)[KEY]!.lines).toHaveLength(0);
+        // Doubled window (newest-4): older lines include a visible message.
+        const session2 = fakeSession(() => ({
+            code: 200,
+            body: [
+                { ...wireLine(5, 'join'), displayed: false },
+                { ...wireLine(6, 'part'), tags: ['irc_smart_filter'] },
+                wireLine(4, 'hello'),
+                { ...wireLine(3, 'join'), displayed: false },
+            ],
+        }));
+        const res = await fetchHistory(session2, { bufferId: BUFFER_ID, count: 4 });
+        expect(res.applied).toBe(true);
+        const buf = get(buffers)[KEY]!;
+        // The visible line renders; window counts all 4 raw lines (no double-count).
+        expect(buf.lines.map((l) => l.text)).toEqual(['hello']);
+        expect(buf.requestedLines).toBe(4);
+    });
+
+    it('an entirely hidden history completes at the start of history', async () => {
+        const session = fakeSession(() => ({
+            code: 200,
+            body: [{ ...wireLine(1, 'join'), displayed: false }], // 1 of 2: start reached
+        }));
+        const res = await fetchHistory(session, { bufferId: BUFFER_ID, count: 2 });
+        const buf = get(buffers)[KEY]!;
+        expect(res.complete).toBe(true); // caller sets allLinesFetched → paging stops
+        expect(buf.lines).toHaveLength(0);
         expect(buf.requestedLines).toBe(1);
+    });
+
+    it('reconnect clears hidden-id tracking so ids are not deduped against a previous session', async () => {
+        const hidden = { ...wireLine(1, 'join'), displayed: false };
+        const session = fakeSession(() => ({ code: 200, body: [hidden] }));
+        await fetchHistory(session, { bufferId: BUFFER_ID, count: 1 });
+        // New session, same buffer id and epoch 0: the same line id is fresh data.
+        clearHiddenLineIdTracking();
+        buffers.set({});
+        createApiStoreReducers().buffers([{
+            id: BUFFER_ID, name: 'irc.glowing-bear.#chan', shortName: '#chan', number: 2,
+            contentType: 'formatted', semanticType: 'channel', hidden: false, title: '',
+            localVariables: { type: 'channel', plugin: 'irc', server: 'glowing-bear' }, lastReadLineId: -1,
+        }]);
+        const session2 = fakeSession(() => ({ code: 200, body: [hidden] }));
+        await fetchHistory(session2, { bufferId: BUFFER_ID, count: 1 });
+        expect(get(buffers)[KEY]!.requestedLines).toBe(1);
     });
 });
 

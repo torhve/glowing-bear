@@ -144,7 +144,12 @@
     if (!$connected) return;
     const buf = $currentBuffer;
     if (!buf) return;
-    if (buf.requestedLines < 100 && !buf.allLinesFetched) {
+    // `lines.length === 0` keeps advancing the window (each fetch doubles the
+    // raw-line count) while a buffer renders empty: WeeChat counts the newest-N
+    // history window over RAW lines, so a join/part-heavy channel can return N
+    // smart-filtered lines and zero visible ones. Paging continues until visible
+    // lines appear or the server reaches history start (allLinesFetched).
+    if ((buf.requestedLines < 100 || buf.lines.length === 0) && !buf.allLinesFetched) {
       void (async () => {
         try {
           await fetchMoreLines(100);
