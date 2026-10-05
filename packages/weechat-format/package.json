@@ -19,13 +19,12 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "prepare": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run --config vitest.config.ts",
     "test:watch": "vitest --config vitest.config.ts",
     "bench": "npm run build && node bench/parse.bench.mjs",
     "lint": "eslint src test bench",
-    "smoke:dist": "npm run build && node test/smoke-dist.mjs",
-    "oracle:build": "cc -O2 -o test/harness/color_size_harness test/harness/color_size_harness.c",
-    "oracle": "npm run oracle:build && ./test/harness/color_size_harness > test/harness/oracle.json"
+    "smoke:dist": "npm run build && node test/smoke-dist.mjs"
   }
 }

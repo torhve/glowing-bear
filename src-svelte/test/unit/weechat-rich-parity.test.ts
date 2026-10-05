@@ -138,7 +138,7 @@ describe('richText2Rich parity: new vs old JS parser', () => {
 
     it('parses attribute set/reset identically', async () => {
         expect(OldProtocol).not.toBeNull();
-        const input = '\x1a*bold\x1b/unbold text';
+        const input = '\x1a\x01bold\x1b\x01unbold text';
         const newResult = rawText2Rich(input);
         const oldResult = OldProtocol.rawText2Rich(input);
         expect(compareRichParts(newResult, oldResult)).toBe(true);
@@ -183,8 +183,8 @@ describe('richText2Rich parity: new vs old JS parser', () => {
 
     it('parses IRC bold + reset identically', async () => {
         expect(OldProtocol).not.toBeNull();
-        // \x02 → \x1a*, \x0f → \x1c
-        const input = '\x1a*bold text\x1creset';
+        // \x02 → \x1a\x01, \x0f → \x1c
+        const input = '\x1a\x01bold text\x1creset';
         const newResult = rawText2Rich(input);
         const oldResult = OldProtocol.rawText2Rich(input);
         expect(compareRichParts(newResult, oldResult)).toBe(true);
@@ -226,7 +226,7 @@ describe('richText2Rich parity: new vs old JS parser', () => {
 
     it('parses mixed attributes and colors identically', async () => {
         expect(OldProtocol).not.toBeNull();
-        const input = '\x1a*bold\x1903red bold\x1b/unbold\x1900normal';
+        const input = '\x1a\x01bold\x1903red bold\x1b\x01unbold\x1900normal';
         const newResult = rawText2Rich(input);
         const oldResult = OldProtocol.rawText2Rich(input);
         // Old JS has bgColor bug for STD colors; skip bg comparison
@@ -242,20 +242,21 @@ describe('richText2Rich parity: new vs old JS parser', () => {
         expect(compareRichParts(newResult, oldResult, { skipBgColor: true })).toBe(true);
     });
 
-    it('parses \x1a| keep attrs identically', async () => {
-        expect(OldProtocol).not.toBeNull();
-        const input = '\x1a*bold\x1a/italic\x1a|keep both';
-        const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
-        expect(compareRichParts(newResult, oldResult)).toBe(true);
+    it('keeps attributes across a color control that carries the keep flag', () => {
+        // The keep-attributes flag belongs to a color payload, not to \x1a.
+        const result = rawText2Rich('\x1a\x01bold\x1a\x03italic\x19F|04keep both');
+        const keepPart = result.find(p => p.text === 'keep both');
+        expect(keepPart).toBeDefined();
+        expect(keepPart!.fgColor.name).toBe('lightred');
+        expect(keepPart!.attrs.override.b).toBe(true);
+        expect(keepPart!.attrs.override.i).toBe(true);
     });
 
-    it('parses \x1b| reset keep identically', async () => {
-        expect(OldProtocol).not.toBeNull();
-        const input = '\x1a*bold\x1b|keep bold after reset';
-        const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
-        expect(compareRichParts(newResult, oldResult)).toBe(true);
+    it('leaves an unsupported remove-attribute payload as literal text', () => {
+        const result = rawText2Rich('\x1a\x01bold\x1b|keep bold after reset');
+        const part = result.find(p => p.text === 'bold|keep bold after reset');
+        expect(part).toBeDefined();
+        expect(part!.attrs.override.b).toBe(true);
     });
 
     it('parses multiple STD color codes in sequence identically', async () => {
@@ -267,33 +268,34 @@ describe('richText2Rich parity: new vs old JS parser', () => {
         expect(compareRichParts(newResult, oldResult, { skipBgColor: true })).toBe(true);
     });
 
-    it('parses F with EXT color code identically', async () => {
-        expect(OldProtocol).not.toBeNull();
-        const input = '\x19F\x0103bold via ext';
-        const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
-        expect(compareRichParts(newResult, oldResult)).toBe(true);
+    it('consumes an unrecognized F payload character without styling', () => {
+        // WeeChat consumes the fixed two-character payload even when it is not a
+        // number, so the remaining digit is text and no style is applied.
+        const result = rawText2Rich('\x19F\x0103bold via ext');
+        const part = result.find(p => p.text === '3bold via ext');
+        expect(part).toBeDefined();
+        expect(part!.fgColor.name).toBe('default');
+        expect(hasActiveOverride(part!.attrs.override)).toBe(false);
     });
 
-    it('parses * with STD + bg EXT identically', async () => {
-        expect(OldProtocol).not.toBeNull();
-        const input = '\x19*03,@\x0100456fg bg';
-        const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
-        expect(compareRichParts(newResult, oldResult)).toBe(true);
+    it('consumes a malformed combined background payload without styling', () => {
+        const result = rawText2Rich('\x19*03,@\x0100456fg bg');
+        const part = result.find(p => p.text === '6fg bg');
+        expect(part).toBeDefined();
+        expect(part!.fgColor.name).toBe('default');
     });
 
     it('parses all attribute chars identically', async () => {
         expect(OldProtocol).not.toBeNull();
-        const input = '\x1a*\x1a!\x1a/\x1a_underlined';
+        const input = '\x1a\x01\x1a\x02\x1a\x03\x1a\x04underlined';
         const newResult = rawText2Rich(input);
         const oldResult = OldProtocol.rawText2Rich(input);
         expect(compareRichParts(newResult, oldResult)).toBe(true);
     });
 
-    it('parses \x01-\x04 extension chars identically (bold via \x01)', async () => {
+    it('parses set-attribute controls identically', async () => {
         expect(OldProtocol).not.toBeNull();
-        const input = '\x19F\x0103bold via ext';
+        const input = '\x1a\x01bold via control char';
         const newResult = rawText2Rich(input);
         const oldResult = OldProtocol.rawText2Rich(input);
         expect(compareRichParts(newResult, oldResult)).toBe(true);
@@ -323,7 +325,7 @@ describe('attrsFromStr behavior via rawText2Rich', () => {
         // STD colors reset attrs to empty override — bold is lost in both TS and old JS
         // bgColor differs between implementations (option vs weechat default) but attrs/fgColor match
         expect(OldProtocol).not.toBeNull();
-        const input = '\x1a*bold\x1903color\x1904more';
+        const input = '\x1a\x01bold\x1903color\x1904more';
         const newResult = rawText2Rich(input);
         const oldResult = OldProtocol.rawText2Rich(input);
         expect(compareRichParts(newResult, oldResult, { skipBgColor: true })).toBe(true);
@@ -332,7 +334,7 @@ describe('attrsFromStr behavior via rawText2Rich', () => {
     it('F code without attrs resets attrs (parity with old JS)', async () => {
         // F03 has no attribute prefix — resets to fresh attrs with all-false overrides in both
         expect(OldProtocol).not.toBeNull();
-        const input = '\x1a*bold\x19F03red';
+        const input = '\x1a\x01bold\x19F03red';
         const newResult = rawText2Rich(input);
         const oldResult = OldProtocol.rawText2Rich(input);
         expect(compareRichParts(newResult, oldResult)).toBe(true);
@@ -341,13 +343,34 @@ describe('attrsFromStr behavior via rawText2Rich', () => {
         expect(hasActiveOverride(redPart!.attrs.override)).toBe(false);
     });
 
-    it('| character mid-string returns null (keep attrs)', async () => {
-        // | in the attribute string means "keep current"
-        // For \x1a|, the TS parser checks firstChar !== '|' and skips
-        // Text includes the pipe character since it's part of the raw string
-        const result = rawText2Rich('\x1a*bold\x1a|keep both');
-        const keepPart = result.find(p => p.text === '|keep both');
+    it('keep flag mid-payload keeps the current attributes', () => {
+        // '|' means "keep current attributes" only inside a color payload.
+        const result = rawText2Rich('\x1a\x01bold\x19F|04keep both');
+        const keepPart = result.find(p => p.text === 'keep both');
         expect(keepPart).toBeDefined();
         expect(hasActiveOverride(keepPart!.attrs.override)).toBe(true);
+    });
+});
+
+describe('documented divergence from the old JS parser', () => {
+    // WeeChat recognizes attributes only as control characters after \x1a/\x1b and
+    // as flags inside F/B/* color payloads. The old parser also accepted printable
+    // markers, which is what this app's IRC conversion used to emit; the conversion
+    // now emits WeeChat's own controls, so the printable forms are plain text.
+    it('treats printable attribute markers as literal text', () => {
+        const result = rawText2Rich('\x1a*\x1a!\x1a/\x1a_underlined');
+        const part = result.find(p => p.text === '*!/_underlined');
+        expect(part).toBeDefined();
+        expect(hasActiveOverride(part!.attrs.override)).toBe(false);
+    });
+
+    it('applies attributes from the control-character form', () => {
+        const result = rawText2Rich('\x1a\x01\x1a\x02\x1a\x03\x1a\x04styled');
+        const part = result.find(p => p.text === 'styled');
+        expect(part).toBeDefined();
+        expect(part!.attrs.override.b).toBe(true);
+        expect(part!.attrs.override.r).toBe(true);
+        expect(part!.attrs.override.i).toBe(true);
+        expect(part!.attrs.override.u).toBe(true);
     });
 });

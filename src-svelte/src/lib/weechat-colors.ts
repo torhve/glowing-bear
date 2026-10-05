@@ -1,468 +1,440 @@
-// Standalone WeeChat color/format parser — no protocol or transport code.
-// Extracted from weechat.ts during the relay API migration (phase 3) so the
-// formatting engine survives the legacy protocol retirement.
+// Application adapter for WeeChat's inline chat formatting.
+//
+// The color grammar lives in @glowingbear/weechat-format, which follows WeeChat
+// 4.10.1 (see packages/weechat-format/docs/format.md). This file contains no
+// grammar of its own: it maps the library's symbolic styles onto the app's
+// RichTextPart shape and CSS class vocabulary, and converts mIRC formatting
+// into the control sequences WeeChat's own IRC plugin produces.
+//
+// Deliberate app-side choices are recorded in
+// packages/weechat-format/docs/behavior-differences.md.
 
+import { MAX_EXTENDED_COLOR, WEECHAT_PALETTE, parseWeeChatStyle, parseWeeChatText } from '@glowingbear/weechat-format';
+import type { AttributeName, ColorRef, Style } from '@glowingbear/weechat-format';
 import type { ColorInfo, TextAttrs, RichTextPart } from '#lib/types.ts';
 
 type RichPart = RichTextPart;
 export type { RichPart };
 
-// --- Static color/attribute parsing ---
+// --- Style → app color/attribute vocabulary ---
 
-const weeChatColorsNames = [
-    'default', 'black', 'darkgray', 'red', 'lightred', 'green', 'lightgreen',
-    'brown', 'yellow', 'blue', 'lightblue', 'magenta', 'lightmagenta',
-    'cyan', 'lightcyan', 'gray', 'white'
-];
+const DEFAULT_COLOR: ColorInfo = { type: 'weechat', name: 'default' };
+const EMPHASIS_COLOR: ColorInfo = { type: 'option', name: 'emphasis' };
 
-// Reverse lookup: color name -> index (avoids O(n) indexOf in richText2Str loop)
-const colorNameToIndex = new Map(weeChatColorsNames.map((name, i) => [name, i]));
-
-// Style options names — STD color codes map to these option names for theme-defined rendering
-const colorsOptionsNames = [
-    'separator',
-    'chat',
-    'chat_time',
-    'chat_time_delimiters',
-    'chat_prefix_error',
-    'chat_prefix_network',
-    'chat_prefix_action',
-    'chat_prefix_join',
-    'chat_prefix_quit',
-    'chat_prefix_more',
-    'chat_prefix_suffix',
-    'chat_buffer',
-    'chat_server',
-    'chat_channel',
-    'chat_nick',
-    'chat_nick_self',
-    'chat_nick_other',
-    'invalid',
-    'invalid',
-    'invalid',
-    'invalid',
-    'invalid',
-    'invalid',
-    'invalid',
-    'invalid',
-    'invalid',
-    'invalid',
-    'chat_host',
-    'chat_delimiters',
-    'chat_highlight',
-    'chat_read_marker',
-    'chat_text_found',
-    'chat_value',
-    'chat_prefix_buffer',
-    'chat_tags',
-    'chat_inactive_window',
-    'chat_inactive_buffer',
-    'chat_prefix_buffer_inactive_buffer',
-    'chat_nick_offline',
-    'chat_nick_offline_highlight',
-    'chat_nick_prefix',
-    'chat_nick_suffix',
-    'emphasis',
-    'chat_day_change',
-    'chat_value_null',
-    'chat_status_disabled',
-    'chat_status_enabled'
-];
-
-const attrNameChars: Record<string, string> = {
-    '*': 'b', '!': 'r', '/': 'i', '_': 'u', '%': 'k', '.': 'd',
-    '\x01': 'b', '\x02': 'r', '\x03': 'i', '\x04': 'u', '\x05': 'k', '\x06': 'd'
+// Attribute keys used by the CSS vocabulary (app.css: .a-b, .a-no-b, …).
+const ATTRIBUTE_NAMES: readonly AttributeName[] = ['bold', 'reverse', 'italic', 'underline', 'blink', 'dim'];
+const attributeKeys: Record<AttributeName, string> = {
+    bold: 'b', reverse: 'r', italic: 'i', underline: 'u', blink: 'k', dim: 'd',
 };
 
-// Reverse lookup: attribute key -> char (avoids Object.entries().find in richText2Str loop)
+// Reverse lookup: attribute key -> char (used by richText2Str)
 const attrValueToChar: Record<string, string> = {
-    'b': '*', 'r': '!', 'i': '/', 'u': '_', 'k': '%', 'd': '.'
+    'b': '*', 'r': '!', 'i': '/', 'u': '_', 'k': '%', 'd': '.',
 };
 
-function getDefaultColor(): ColorInfo {
-    return { type: 'weechat', name: 'default' };
+// Palette name -> index, for the diagnostic formatter in richText2Str.
+const colorNameToIndex = new Map<string, number>(WEECHAT_PALETTE.map((name, index) => [name, index]));
+
+// t_gui_color_enum slots 17-26 are the chat_nick1..chat_nick10 colors removed in
+// WeeChat 0.3.4 but kept in the enum (gui-color.h:61-74). Upstream still renders
+// them from a hardcoded palette (gui-curses-color.c:1590-1599); the app has no
+// CSS for them, so they resolve to the default text color instead. Recorded as
+// row 9 of the behavior ledger, decided 2026-10-05.
+const OBSOLETE_THEME_FIRST = 17;
+const OBSOLETE_THEME_LAST = 26;
+
+/** True for the theme slots the app deliberately renders as the default color. */
+function isObsoleteTheme(ref: ColorRef): boolean {
+    return ref.kind === 'theme' && ref.index >= OBSOLETE_THEME_FIRST && ref.index <= OBSOLETE_THEME_LAST;
 }
 
-function getDefaultAttributes(): TextAttrs {
-    return { name: null, override: { b: false, r: false, i: false, u: false, k: false, d: false } };
-}
-
-function getColorObj(str: string): ColorInfo {
-    if (str.length === 2) {
-        const code = parseInt(str, 10);
-        if (code > 16) {
-            return getDefaultColor();
-        }
-        return { type: 'weechat', name: weeChatColorsNames[code]! };
+/** Resolve one of the library's symbolic color references to the app's ColorInfo. */
+function toColorInfo(ref: ColorRef): ColorInfo {
+    switch (ref.kind) {
+    case 'default':
+        return DEFAULT_COLOR;
+    case 'weechat':
+        return { type: 'weechat', name: ref.name };
+    case 'theme':
+        return isObsoleteTheme(ref) ? DEFAULT_COLOR : { type: 'option', name: ref.name };
+    case 'extended':
+        return { type: 'ext', name: String(ref.value) };
     }
-    // Extended color code: strip leading @ and convert to numeric string
-    const codeStr = str.startsWith('@') ? str.substring(1) : str;
-    return { type: 'ext', name: parseInt(codeStr, 10).toString() };
 }
 
-interface StyleResult {
-    fgColor: ColorInfo | null;
-    bgColor: ColorInfo | null;
-    attrs: TextAttrs | null;
-    text: string;
+/**
+ * Foreground for a run. Emphasis is a marker in the library; here it becomes the
+ * emphasis option color, which is how the app's CSS already renders it. Upstream
+ * overlays the emphasis color on top of whatever was drawn
+ * (gui-curses-chat.c:477-483), so overriding the foreground — and not the
+ * background — keeps the app's existing appearance while fixing the toggle.
+ */
+function toFgColor(style: Style): ColorInfo {
+    return style.emphasis ? EMPHASIS_COLOR : toColorInfo(style.fg);
 }
 
-type StyleMatcherFn = (txt: string, m: RegExpMatchArray) => StyleResult;
-
-// Pre-built style matchers to avoid per-call array allocation in getStyle().
-const styleMatchers: Array<{ regex: RegExp; fn: StyleMatcherFn }> = [
-    // STD color codes: 2 digits → option colors (bare STD codes set both fg and bg)
-    // Old JS treats all bare STD codes as option type with bgColor = fgColor.
-    // Codes > 46 are out of range, return default color.
-    {
-        regex: /^(\d{2})/,
-        fn: (txt, m) => {
-            const code = parseInt(m[1]!, 10);
-            if (code > 46) {
-                return { fgColor: getDefaultColor(), bgColor: null, attrs: null, text: txt.substring(m[0].length) };
-            }
-            const optionName = colorsOptionsNames[code];
-            if (!optionName || optionName === 'invalid') {
-                return { fgColor: getDefaultColor(), bgColor: null, attrs: null, text: txt.substring(m[0].length) };
-            }
-            const fgColor: ColorInfo = { type: 'option' as const, name: optionName };
-            return {
-                fgColor,
-                bgColor: { ...fgColor },
-                attrs: { name: optionName, override: {} },
-                text: txt.substring(m[0].length)
-            };
+/**
+ * Attributes for a run.
+ *
+ * A theme color or emphasis carries its attributes from CSS (`coa-*` rules), so
+ * only attributes an instruction decided explicitly become `a-*` / `a-no-*`
+ * classes. Otherwise every attribute is stated, because a color control clears
+ * the attributes it does not carry.
+ */
+function toAttrs(style: Style): TextAttrs {
+    const themeName = isObsoleteTheme(style.fg) ? null : style.themeAttrs;
+    const name = style.emphasis ? 'emphasis' : themeName;
+    const cssCarriesAttributes = style.emphasis || themeName !== null;
+    const override: Record<string, boolean> = {};
+    for (const attribute of ATTRIBUTE_NAMES) {
+        const state = style.attrs[attribute];
+        if (state === 'inherited' && cssCarriesAttributes) {
+            continue;
         }
-    },
-    // Extended color codes: bare @NNNNN is unimplemented in old JS (returns null)
-    // F/B prefixed EXT colors are handled by their respective matchers below
-    {
-        regex: /^@\d{5}/,
-        fn: (txt, m) => ({
-            fgColor: null, bgColor: null, attrs: null,
-            text: txt.substring(m[0].length)
-        })
-    },
-    // Foreground color: F + optional attributes + STD or EXT
-    {
-        // eslint-disable-next-line no-control-regex
-        regex: /^F(?:([*!_/.%|]*)(\d{2})|@([\x01-\x06*!_/.%|]*)(\d{5}))/,
-        fn: (txt, m) => {
-            if (m[2]) {
-                return { fgColor: getColorObj(m[2]), bgColor: null, attrs: attrsFromStr(m[1] ?? ''), text: txt.substring(m[0].length) };
-            }
-            return { fgColor: getColorObj('@' + m[4]), bgColor: null, attrs: attrsFromStr(m[3] ?? ''), text: txt.substring(m[0].length) };
-        }
-    },
-    // Background color: B + STD or EXT
-    {
-        regex: /^B(\d{2}|@\d{5})/,
-        fn: (txt, m) => ({
-            fgColor: null, bgColor: getColorObj(m[1]!), attrs: null,
-            text: txt.substring(m[0].length)
-        })
-    },
-    // Foreground + background with optional attributes (WeeChat 2.6+ uses ~ or ,)
-    // Leading * is the FG+BG marker, not bold - old JS doesn't add bold from it
-    {
-        // eslint-disable-next-line no-control-regex
-        regex: /^\*(?:([\x01-\x06*!_/.%|]*)(\d{2})|@([\x01-\x06*!_/.%|]*)(\d{5}))[,~](\d{2}|@\d{5})/,
-        fn: (txt, m) => {
-            let fgColor: ColorInfo;
-            let attrs: TextAttrs | null;
-            if (m[2]) {
-                attrs = attrsFromStr(m[1] ?? '');
-                fgColor = getColorObj(m[2]);
-            } else {
-                attrs = attrsFromStr(m[3] ?? '');
-                fgColor = getColorObj('@' + m[4]);
-            }
-            return { fgColor, bgColor: getColorObj(m[5]!), attrs, text: txt.substring(m[0].length) };
-        }
-    },
-    // Foreground color with * prefix (+ attributes)
-    // Leading * is just the pattern marker, not bold - old JS doesn't add bold from it
-    {
-        // eslint-disable-next-line no-control-regex
-        regex: /^\*([\x01-\x06*!_/.%|]*)(\d{2}|@\d{5})/,
-        fn: (txt, m) => ({
-            fgColor: getColorObj(m[2]!), bgColor: null,
-            attrs: attrsFromStr(m[1] ?? ''),
-            text: txt.substring(m[0].length)
-        })
-    },
-    // Foreground color with % prefix (+ attributes) - includes blink
-    {
-        // eslint-disable-next-line no-control-regex
-        regex: /^%([\x01-\x06*!_/.%|]*)(\d{2}|@\d{5})/,
-        fn: (txt, m) => ({
-            fgColor: getColorObj(m[2]!), bgColor: null,
-            attrs: attrsFromStr('%' + (m[1] ?? '')),
-            text: txt.substring(m[0].length)
-        })
-    },
-    // Foreground color with . prefix (+ attributes) - includes dim
-    {
-        // eslint-disable-next-line no-control-regex
-        regex: /^\.([\x01-\x06*!_/.%|]*)(\d{2}|@\d{5})/,
-        fn: (txt, m) => ({
-            fgColor: getColorObj(m[2]!), bgColor: null,
-            attrs: attrsFromStr('.' + (m[1] ?? '')),
-            text: txt.substring(m[0].length)
-        })
-    },
-    // Emphasis
-    {
-        regex: /^E/,
-        fn: (txt) => ({
-            fgColor: { type: 'option', name: 'emphasis' },
-            bgColor: null,
-            attrs: { name: 'emphasis', override: {} },
-            text: txt.substring(1)
-        })
+        override[attributeKeys[attribute]] = state === 'enabled';
     }
+    return { name, override };
+}
+
+function emptyPart(): RichPart {
+    return { text: '', fgColor: { ...DEFAULT_COLOR }, bgColor: { ...DEFAULT_COLOR }, attrs: { name: null, override: {} } };
+}
+
+// --- mIRC → WeeChat conversion ---
+//
+// Follows WeeChat's IRC plugin, irc_color_decode()
+// (src/plugins/irc/irc-color.c:206-488): attribute toggles become the control
+// characters WeeChat's renderer understands, colors are mapped through WeeChat's
+// IRC color table and emitted as custom-color controls that keep attributes, and
+// a bare reset becomes the full reset.
+//
+// WeeChat's own controls are copied through untouched. No style-skipping lookahead
+// is needed: a WeeChat color payload only contains digits, `@`, `F`, `B`, `*`,
+// `~`, `,` and the printable attribute flags, so no mIRC control byte can appear
+// inside one. The `\x01`-`\x06` bytes that do appear in WeeChat text are attribute
+// characters following `\x1a`/`\x1b`, which the guard below passes through.
+
+const IRC_BOLD_CHAR = '\x02';
+const IRC_COLOR_CHAR = '\x03';
+const IRC_HEX_COLOR_CHAR = '\x04';
+const IRC_RESET_CHAR = '\x0f';
+const IRC_REVERSE_CHAR = '\x16';
+const IRC_ITALIC_CHAR = '\x1d';
+const IRC_STRIKETHROUGH_CHAR = '\x1e';
+const IRC_UNDERLINE_CHAR = '\x1f';
+
+// WeeChat attribute control characters (GUI_COLOR_ATTR_*, gui-color.h).
+const WEECHAT_ATTR_BOLD = '\x01';
+const WEECHAT_ATTR_REVERSE = '\x02';
+const WEECHAT_ATTR_ITALIC = '\x03';
+const WEECHAT_ATTR_UNDERLINE = '\x04';
+const WEECHAT_ATTR_DIM = '\x06';
+
+// Attribute flag WeeChat's IRC plugin prepends so a color keeps the current attributes.
+const KEEP_ATTRIBUTES_FLAG = '|';
+
+const WEECHAT_COLOR_CHAR = '\x19';
+const WEECHAT_SET_ATTR_CHAR = '\x1a';
+const WEECHAT_REMOVE_ATTR_CHAR = '\x1b';
+const WEECHAT_RESET_CHAR = '\x1c';
+
+// irc_color_to_weechat[] (irc-color.c:36-65): palette names for 0-15 and 99,
+// terminal color numbers for 16-98.
+const IRC_COLOR_NAMES: readonly string[] = [
+    'white', 'black', 'blue', 'green', 'lightred', 'red', 'magenta', 'brown',
+    'yellow', 'lightgreen', 'cyan', 'lightcyan', 'lightblue', 'lightmagenta',
+    'darkgray', 'gray',
+    '52', '94', '100', '58', '22', '29', '23', '24',
+    '17', '54', '53', '89', '88', '130', '142', '64',
+    '28', '35', '30', '25', '18', '91', '90', '125',
+    '124', '166', '184', '106', '34', '49', '37', '33',
+    '19', '129', '127', '161', '196', '208', '226', '154',
+    '46', '86', '51', '75', '21', '171', '201', '198',
+    '203', '215', '227', '191', '83', '122', '87', '111',
+    '63', '177', '207', '205', '217', '223', '229', '193',
+    '157', '158', '159', '153', '147', '183', '219', '212',
+    '16', '233', '235', '237', '239', '241', '244', '247',
+    '250', '254', '231',
+    'default',
+];
+const IRC_NUM_COLORS = IRC_COLOR_NAMES.length;
+
+// gui_color_term256[] (gui-color.c:59-104): the RGB values WeeChat searches when
+// it maps an mIRC hex color to a terminal color.
+const TERM256_RGB: readonly number[] = [
+    0x000000, 0x800000, 0x008000, 0x808000, 0x000080, 0x800080, 0x008080, 0xc0c0c0,
+    0x808080, 0xff0000, 0x00ff00, 0xffff00, 0x0000ff, 0xff00ff, 0x00ffff, 0xffffff,
+    0x000000, 0x00005f, 0x000087, 0x0000af, 0x0000d7, 0x0000ff, 0x005f00, 0x005f5f,
+    0x005f87, 0x005faf, 0x005fd7, 0x005fff, 0x008700, 0x00875f, 0x008787, 0x0087af,
+    0x0087d7, 0x0087ff, 0x00af00, 0x00af5f, 0x00af87, 0x00afaf, 0x00afd7, 0x00afff,
+    0x00d700, 0x00d75f, 0x00d787, 0x00d7af, 0x00d7d7, 0x00d7ff, 0x00ff00, 0x00ff5f,
+    0x00ff87, 0x00ffaf, 0x00ffd7, 0x00ffff, 0x5f0000, 0x5f005f, 0x5f0087, 0x5f00af,
+    0x5f00d7, 0x5f00ff, 0x5f5f00, 0x5f5f5f, 0x5f5f87, 0x5f5faf, 0x5f5fd7, 0x5f5fff,
+    0x5f8700, 0x5f875f, 0x5f8787, 0x5f87af, 0x5f87d7, 0x5f87ff, 0x5faf00, 0x5faf5f,
+    0x5faf87, 0x5fafaf, 0x5fafd7, 0x5fafff, 0x5fd700, 0x5fd75f, 0x5fd787, 0x5fd7af,
+    0x5fd7d7, 0x5fd7ff, 0x5fff00, 0x5fff5f, 0x5fff87, 0x5fffaf, 0x5fffd7, 0x5fffff,
+    0x870000, 0x87005f, 0x870087, 0x8700af, 0x8700d7, 0x8700ff, 0x875f00, 0x875f5f,
+    0x875f87, 0x875faf, 0x875fd7, 0x875fff, 0x878700, 0x87875f, 0x878787, 0x8787af,
+    0x8787d7, 0x8787ff, 0x87af00, 0x87af5f, 0x87af87, 0x87afaf, 0x87afd7, 0x87afff,
+    0x87d700, 0x87d75f, 0x87d787, 0x87d7af, 0x87d7d7, 0x87d7ff, 0x87ff00, 0x87ff5f,
+    0x87ff87, 0x87ffaf, 0x87ffd7, 0x87ffff, 0xaf0000, 0xaf005f, 0xaf0087, 0xaf00af,
+    0xaf00d7, 0xaf00ff, 0xaf5f00, 0xaf5f5f, 0xaf5f87, 0xaf5faf, 0xaf5fd7, 0xaf5fff,
+    0xaf8700, 0xaf875f, 0xaf8787, 0xaf87af, 0xaf87d7, 0xaf87ff, 0xafaf00, 0xafaf5f,
+    0xafaf87, 0xafafaf, 0xafafd7, 0xafafff, 0xafd700, 0xafd75f, 0xafd787, 0xafd7af,
+    0xafd7d7, 0xafd7ff, 0xafff00, 0xafff5f, 0xafff87, 0xafffaf, 0xafffd7, 0xafffff,
+    0xd70000, 0xd7005f, 0xd70087, 0xd700af, 0xd700d7, 0xd700ff, 0xd75f00, 0xd75f5f,
+    0xd75f87, 0xd75faf, 0xd75fd7, 0xd75fff, 0xd78700, 0xd7875f, 0xd78787, 0xd787af,
+    0xd787d7, 0xd787ff, 0xd7af00, 0xd7af5f, 0xd7afaf, 0xd7afd7, 0xd7afff, 0xd7d700,
+    0xd7d75f, 0xd7d787, 0xd7d7af, 0xd7d7d7, 0xd7d7ff, 0xd7ff00, 0xd7ff5f, 0xd7ff87,
+    0xd7ffaf, 0xd7ffd7, 0xd7ffff, 0xff0000, 0xff005f, 0xff0087, 0xff00af, 0xff00d7,
+    0xff00ff, 0xff5f00, 0xff5f5f, 0xff5f87, 0xff5faf, 0xff5fd7, 0xff5fff, 0xff8700,
+    0xff875f, 0xff8787, 0xff87af, 0xff87d7, 0xff87ff, 0xffaf00, 0xffaf5f, 0xffaf87,
+    0xffafaf, 0xffafd7, 0xffafff, 0xffd700, 0xffd75f, 0xffd787, 0xffd7af, 0xffd7d7,
+    0xffd7ff, 0xffff00, 0xffff5f, 0xffff87, 0xffffaf, 0xffffd7, 0xffffff,
+    0x080808, 0x121212, 0x1c1c1c, 0x262626, 0x303030, 0x3a3a3a, 0x444444, 0x4e4e4e,
+    0x585858, 0x626262, 0x6c6c6c, 0x767676, 0x808080, 0x8a8a8a, 0x949494, 0x9e9e9e,
+    0xa8a8a8, 0xb2b2b2, 0xbcbcbc, 0xc6c6c6, 0xd0d0d0, 0xdadada, 0xe4e4e4, 0xeeeeee,
 ];
 
-// First-character dispatch map — reduces regex checks from up to 9 down to 1-2 per style block.
-const matchersByFirstChar: Record<string, Array<{ regex: RegExp; fn: StyleMatcherFn }>> = {
-    '0': [styleMatchers[0]!], '1': [styleMatchers[0]!], '2': [styleMatchers[0]!],
-    '3': [styleMatchers[0]!], '4': [styleMatchers[0]!], '5': [styleMatchers[0]!],
-    '6': [styleMatchers[0]!], '7': [styleMatchers[0]!], '8': [styleMatchers[0]!],
-    '9': [styleMatchers[0]!], '@': [styleMatchers[1]!], 'F': [styleMatchers[2]!],
-    'B': [styleMatchers[3]!], '*': [styleMatchers[4]!, styleMatchers[5]!],
-    '%': [styleMatchers[6]!], '.': [styleMatchers[7]!], 'E': [styleMatchers[8]!]
-};
-
-function getStyle(txt: string): StyleResult {
-    if (txt.length > 0) {
-        const first = txt[0]!;
-        const matchers = matchersByFirstChar[first];
-        if (matchers) {
-            for (let i = 0; i < matchers.length; i++) {
-                const matcher = matchers[i]!;
-                const m = txt.match(matcher.regex);
-                if (m) {
-                    return matcher.fn(txt, m);
-                }
-            }
+/**
+ * Nearest terminal color for an RGB value, matching gui_color_convert_rgb_to_term
+ * (gui-color.c:563-597): squared RGB distance over the 256-entry table, first
+ * exact match wins.
+ */
+function rgbToTerminalColor(rgb: number): number {
+    const r1 = (rgb >> 16) & 0xff;
+    const g1 = (rgb >> 8) & 0xff;
+    const b1 = rgb & 0xff;
+    let bestDiff = Number.POSITIVE_INFINITY;
+    let bestColor = 0;
+    for (let i = 0; i < TERM256_RGB.length; i++) {
+        const rgb2 = TERM256_RGB[i]!;
+        const dr = ((rgb2 >> 16) & 0xff) - r1;
+        const dg = ((rgb2 >> 8) & 0xff) - g1;
+        const db = (rgb2 & 0xff) - b1;
+        const diff = dr * dr + dg * dg + db * db;
+        if (diff === 0) {
+            return i;
+        }
+        if (diff < bestDiff) {
+            bestDiff = diff;
+            bestColor = i;
         }
     }
-    return { fgColor: null, bgColor: null, attrs: null, text: txt };
+    return bestColor;
 }
 
-function attrsFromStr(str: string): TextAttrs | null {
-    // Matches old JS behavior: '|' anywhere means "keep attributes" (null);
-    // an empty string returns a reset (all-false) attributes object.
-    const attrs: TextAttrs = { name: null, override: { b: false, r: false, i: false, u: false, k: false, d: false } };
-    for (const ch of str) {
-        if (ch === '|') {
-            return null;
-        }
-        if (ch in attrNameChars) {
-            attrs.override[attrNameChars[ch]!] = true;
-        }
+/**
+ * Render one color name as a WeeChat color payload: named palette colors become a
+ * two-digit index, numeric terminal colors an `@NNNNN` extended index. Attribute
+ * flags go between the `@` and the digits, exactly as gui_color_get_custom()
+ * builds them (gui-color.c:472-496).
+ */
+function colorPayload(name: string, attributes: string): string | null {
+    const index = colorNameToIndex.get(name);
+    if (index !== undefined) {
+        return attributes + String(index).padStart(2, '0');
     }
-    return attrs;
+    if (/^\d+$/.test(name)) {
+        const value = Math.min(Number(name), MAX_EXTENDED_COLOR);
+        return '@' + attributes + String(value).padStart(5, '0');
+    }
+    return null;
 }
 
+/**
+ * Build the control WeeChat emits for a custom "fg,bg" color name
+ * (gui_color_get_custom, gui-color.c:498-527). The keep-attributes flag is how
+ * the IRC plugin passes colors through (irc-color.c:353-366); background
+ * payloads carry no attribute flags.
+ */
+function customColorControl(fg: string | null, bg: string | null): string {
+    const fgPayload = fg === null ? null : colorPayload(fg, KEEP_ATTRIBUTES_FLAG);
+    const bgPayload = bg === null ? null : colorPayload(bg, '');
+    if (fgPayload === null && bgPayload === null) {
+        return WEECHAT_COLOR_CHAR + WEECHAT_RESET_CHAR; // weechat_color("resetcolor")
+    }
+    if (fgPayload !== null && bgPayload !== null) {
+        return WEECHAT_COLOR_CHAR + '*' + fgPayload + '~' + bgPayload;
+    }
+    if (fgPayload !== null) {
+        return WEECHAT_COLOR_CHAR + 'F' + fgPayload;
+    }
+    return WEECHAT_COLOR_CHAR + 'B' + bgPayload;
+}
+
+/** Read up to `max` decimal digits from `text` starting at `start`. */
+function readDigits(text: string, start: number, max: number): { value: string; next: number } {
+    let value = '';
+    let i = start;
+    while (i < text.length && value.length < max && text[i]! >= '0' && text[i]! <= '9') {
+        value += text[i];
+        i++;
+    }
+    return { value, next: i };
+}
+
+/** Read up to `max` hexadecimal digits from `text` starting at `start`. */
+function readHexDigits(text: string, start: number, max: number): { value: string; next: number } {
+    let value = '';
+    let i = start;
+    while (i < text.length && value.length < max && /[0-9a-fA-F]/.test(text[i]!)) {
+        value += text[i];
+        i++;
+    }
+    return { value, next: i };
+}
+
+/** Map an mIRC color index through irc_color_to_weechat[], wrapping at 100 like irc_color_decode. */
+function ircColorName(digits: string): string | null {
+    if (digits === '') {
+        return null;
+    }
+    let index = Number(digits);
+    if (!Number.isFinite(index)) {
+        return null;
+    }
+    index %= IRC_NUM_COLORS;
+    return IRC_COLOR_NAMES[index] ?? null;
+}
+
+// mIRC control bytes; a line without any of them is already WeeChat text.
+// eslint-disable-next-line no-control-regex -- the mIRC controls *are* control characters
+const IRC_CONTROL_CHARS = /[\x02\x03\x04\x0f\x16\x1d\x1e\x1f]/;
+
+/**
+ * Convert mIRC formatting into WeeChat controls.
+ *
+ * Attribute bytes toggle, so the conversion tracks them exactly as
+ * irc_color_decode() does and emits the matching set/remove control pairs.
+ */
 export function convertIrcCodes(text: string): string {
-    // Single-pass conversion avoids V8 .replace() bug where multi-char
-    // replacement strings ending with a digit matching the next source char
-    // cause that character to be duplicated.
-    // Pre-compiled regex matches any valid WeeChat style sequence so we can
-    // skip entire style blocks in one step instead of tracking state manually.
-    // When preceded by \x1a or \x1b, raw bytes are WeeChat attribute chars.
-    // eslint-disable-next-line no-control-regex
-    const weechatStyleRegex = /^(?:(?:\d{2})|@\d{5}|F(?:[*!_/.%|]*\d{2}|@[\x01-\x06*!_/.%|]*\d{5})|B(?:\d{2}|@\d{5})|\*(?:[\x01-\x06*!_/.%|]*\d{2}|@[\x01-\x06*!_/.%|]*\d{5})[,~](?:\d{2}|@\d{5})|\*(?:[\x01-\x06*!_/.%|]*)(?:\d{2}|@\d{5})|%(?:[\x01-\x06*!_/.%|]*)(?:\d{2}|@\d{5})|\.(?:[\x01-\x06*!_/.%|]*)(?:\d{2}|@\d{5})|E)/;
+    // Fast path: relayed chat usually carries WeeChat controls, and every byte
+    // outside the table above is copied through unchanged.
+    if (!IRC_CONTROL_CHARS.test(text)) {
+        return text;
+    }
 
     let result = '';
+    let bold = false;
+    let reverse = false;
+    let italic = false;
+    let strikethrough = false;
+    let underline = false;
+
     for (let i = 0; i < text.length; i++) {
         const ch = text[i]!;
         const prevChar = i > 0 ? text[i - 1] : '';
-        const isWeechatAttr = prevChar === '\x1a' || prevChar === '\x1b';
+        // \x01-\x06 after \x1a/\x1b are WeeChat attribute characters, not mIRC bytes.
+        const isWeechatAttr = prevChar === WEECHAT_SET_ATTR_CHAR || prevChar === WEECHAT_REMOVE_ATTR_CHAR;
+
         switch (ch) {
-        case '\x19': {
-            // Start of a WeeChat style code — consume entire block via regex
-            result += ch;
-            const remaining = text.substring(i + 1);
-            const match = remaining.match(weechatStyleRegex);
-            if (match) {
-                result += match[0];
-                i += match[0].length;
-            }
+        case IRC_BOLD_CHAR:
+            result += isWeechatAttr ? ch : (bold ? `${WEECHAT_REMOVE_ATTR_CHAR}${WEECHAT_ATTR_BOLD}` : `${WEECHAT_SET_ATTR_CHAR}${WEECHAT_ATTR_BOLD}`);
+            bold = !bold;
             break;
-        }
-        case '\x1a': case '\x1b': case '\x1c':
-            // WeeChat control codes — pass through unchanged
-            result += ch;
+        case IRC_REVERSE_CHAR:
+            result += isWeechatAttr ? ch : (reverse ? `${WEECHAT_REMOVE_ATTR_CHAR}${WEECHAT_ATTR_REVERSE}` : `${WEECHAT_SET_ATTR_CHAR}${WEECHAT_ATTR_REVERSE}`);
+            reverse = !reverse;
             break;
-        case '\x02':
-            result += isWeechatAttr ? ch : '\x1a*';
-            break;   // mIRC bold → WeeChat *
-        case '\x1d':
-            result += isWeechatAttr ? ch : '\x1a/';
-            break;   // mIRC italic → WeeChat /
-        case '\x1f':
-            result += isWeechatAttr ? ch : '\x1a_';
-            break;   // mIRC underline → WeeChat _
-        case '\x16':
-            result += isWeechatAttr ? ch : '\x1a!';
-            break;   // mIRC reverse → WeeChat !
-        case '\x0f':
-            result += isWeechatAttr ? ch : '\x1c';
-            break;   // mIRC reset → WeeChat \x1c
-        case '\x03': {
+        case IRC_ITALIC_CHAR:
+            result += isWeechatAttr ? ch : (italic ? `${WEECHAT_REMOVE_ATTR_CHAR}${WEECHAT_ATTR_ITALIC}` : `${WEECHAT_SET_ATTR_CHAR}${WEECHAT_ATTR_ITALIC}`);
+            italic = !italic;
+            break;
+        case IRC_UNDERLINE_CHAR:
+            result += isWeechatAttr ? ch : (underline ? `${WEECHAT_REMOVE_ATTR_CHAR}${WEECHAT_ATTR_UNDERLINE}` : `${WEECHAT_SET_ATTR_CHAR}${WEECHAT_ATTR_UNDERLINE}`);
+            underline = !underline;
+            break;
+        case IRC_STRIKETHROUGH_CHAR:
+            // WeeChat has no strikethrough; the IRC plugin maps it to dim.
+            result += isWeechatAttr ? ch : (strikethrough ? `${WEECHAT_REMOVE_ATTR_CHAR}${WEECHAT_ATTR_DIM}` : `${WEECHAT_SET_ATTR_CHAR}${WEECHAT_ATTR_DIM}`);
+            strikethrough = !strikethrough;
+            break;
+        case IRC_RESET_CHAR:
+            result += isWeechatAttr ? ch : WEECHAT_RESET_CHAR;
+            bold = false;
+            reverse = false;
+            italic = false;
+            strikethrough = false;
+            underline = false;
+            break;
+        case IRC_COLOR_CHAR: {
             if (isWeechatAttr) {
                 result += ch;
                 break;
             }
-            let j = i + 1;
-            // Parse fg color digits
-            let fg = '';
-            while (j < text.length && text[j]! >= '0' && text[j]! <= '9') {
-                fg += text[j]!;
-                j++;
+            const fg = readDigits(text, i + 1, 2);
+            let bg = { value: '', next: fg.next };
+            if (text[fg.next] === ',' && (text[fg.next + 1] ?? '') >= '0' && (text[fg.next + 1] ?? '') <= '9') {
+                bg = readDigits(text, fg.next + 1, 2);
             }
-            if (fg.length === 0) {
-                result += '\x1c';
-            } else {
-                // Pad single-digit fg to 2 digits for downstream style matchers
-                if (fg.length === 1) {
-                    fg = '0' + fg;
-                }
-                // Check for optional ,NN (bg color)
-                let bg = '';
-                if (j < text.length && text[j]! === ',') {
-                    j++;
-                    while (j < text.length && text[j]! >= '0' && text[j]! <= '9') {
-                        bg += text[j]!;
-                        j++;
-                    }
-                    // Pad single-digit bg to 2 digits
-                    if (bg.length === 1) {
-                        bg = '0' + bg;
-                    }
-                    // mIRC codes 0-16 map to option indices, not WeeChat palette.
-                    // \x19*fg,bg routes through getColorObj → weechat names.
-                    // For codes ≤ 16, emit separate bare codes so pattern 0
-                    // handles them with option names instead.
-                    if (parseInt(fg, 10) <= 16) {
-                        result += '\x19' + fg + '\x19B' + bg;
-                    } else {
-                        result += '\x19*' + fg + ',' + bg;
-                    }
-                } else {
-                    result += '\x19' + fg;
-                }
-            }
-            i = j - 1;
+            result += customColorControl(ircColorName(fg.value), ircColorName(bg.value));
+            i = bg.next - 1;
             break;
         }
-        case '\x01': case '\x04': case '\x05': case '\x06':
-            // mIRC-style attribute bytes — preserve as-is
-            result += ch;
+        case IRC_HEX_COLOR_CHAR: {
+            if (isWeechatAttr) {
+                result += ch;
+                break;
+            }
+            const fg = readHexDigits(text, i + 1, 6);
+            let bg = { value: '', next: fg.next };
+            if (text[fg.next] === ',' && /[0-9a-fA-F]/.test(text[fg.next + 1] ?? '')) {
+                bg = readHexDigits(text, fg.next + 1, 6);
+            }
+            result += customColorControl(hexColorName(fg.value), hexColorName(bg.value));
+            i = bg.next - 1;
             break;
+        }
         default:
             result += ch;
         }
     }
+
     return result;
 }
 
+/** Name an mIRC hex color by its nearest terminal color, as irc_color_decode() does. */
+function hexColorName(digits: string): string | null {
+    if (digits === '') {
+        return null;
+    }
+    return String(rgbToTerminalColor(parseInt(digits, 16)));
+}
+
+// --- Public parsing ---
+
+/** Parse a line of WeeChat chat text into styled runs. */
 export function rawText2Rich(rawText: string): RichPart[] {
     if (!rawText) {
-        return [{ text: '', fgColor: getDefaultColor(), bgColor: getDefaultColor(), attrs: getDefaultAttributes() }];
+        return [emptyPart()];
     }
 
-    const cleaned = convertIrcCodes(rawText);
-    // eslint-disable-next-line no-control-regex -- WeeChat rich format delimiters
-    const parts = cleaned.split(/(\x19|\x1a|\x1b|\x1c)/);
-
-    if (parts.length === 1) {
-        return [{
-            fgColor: getDefaultColor(),
-            bgColor: getDefaultColor(),
-            attrs: getDefaultAttributes(),
-            text: parts[0]!
-        }];
+    const runs = parseWeeChatText(convertIrcCodes(rawText));
+    if (runs.length === 0) {
+        return [];
     }
 
-    let curFgColor = getDefaultColor();
-    let curBgColor = getDefaultColor();
-    let curAttrs = getDefaultAttributes();
-    let curSpecialToken: number | null = null;
-
-    const result: RichPart[] = [];
-
-    for (const p of parts) {
-        if (p.length === 0) {
-            continue;
-        }
-
-        const firstCharCode = p.charCodeAt(0);
-        const firstChar = p.charAt(0);
-
-        if (firstCharCode >= 0x19 && firstCharCode <= 0x1c) {
-            // Special control token
-            if (firstCharCode === 0x1c) {
-                // Always reset colors
-                curFgColor = getDefaultColor();
-                curBgColor = getDefaultColor();
-                if (curSpecialToken !== 0x19) {
-                    // Also reset attributes
-                    curAttrs = getDefaultAttributes();
-                }
-            }
-            curSpecialToken = firstCharCode;
-            continue;
-        }
-
-        let text = p;
-        if (curSpecialToken === 0x19) {
-            // Get new style from _getStyle
-            const style = getStyle(p);
-            if (style.fgColor !== null) {
-                curFgColor = style.fgColor;
-            }
-            if (style.bgColor !== null) {
-                curBgColor = style.bgColor;
-            }
-            if (style.attrs !== null) {
-                // Old JS replaces curAttrs with style.attrs unconditionally (\x19 resets attrs)
-                curAttrs = style.attrs;
-            }
-            text = style.text;
-        } else if (curSpecialToken === 0x1a || curSpecialToken === 0x1b) {
-            // Set/reset attribute
-            const orideVal = curSpecialToken === 0x1a;
-            if (firstChar !== '|') {
-                const orideName = attrNameChars[firstChar];
-                if (orideName) {
-                    curAttrs.override[orideName] = orideVal;
-                    text = p.substring(1);
-                }
-            }
-        }
-
-        curSpecialToken = null;
-
-        if (text.length === 0) {
-            continue;
-        }
-
-        result.push({
-            fgColor: { ...curFgColor },
-            bgColor: { ...curBgColor },
-            attrs: { name: curAttrs.name, override: { ...curAttrs.override } },
-            text
-        });
+    const result: RichPart[] = new Array(runs.length);
+    for (let i = 0; i < runs.length; i++) {
+        const run = runs[i]!;
+        result[i] = {
+            text: run.text,
+            fgColor: toFgColor(run.style),
+            bgColor: toColorInfo(run.style.bg),
+            attrs: toAttrs(run.style),
+        };
     }
-
     return result;
 }
 
+/**
+ * Diagnostic rendering of parsed parts as `%NN`/`^option` style text.
+ *
+ * This is a debug view for the parity tests, not a WeeChat serializer: nothing
+ * here is sent back to the relay.
+ */
 export function richText2Str(parts: RichPart[]): string {
-    // Pre-sized array avoids .map() intermediate allocation.
     const segments = new Array<string>(parts.length);
     for (let i = 0; i < parts.length; i++) {
         const part = parts[i]!;
@@ -518,39 +490,28 @@ function nickColorClass(color: ColorInfo, isFg: boolean): string {
 
 /**
  * Parse a WeeChat internal color string — the `colors=weechat` encoding of the
- * nick `color`/`prefix_color` fields, e.g. "\x19F06", "\x19*03,05", "\x19@12345",
- * "\x19F" — into the same CSS class vocabulary line parts use. Leading attribute
- * chars (from attrNameChars) become a-* classes; the color body is resolved with
- * the shared getStyle() engine. Returns null when the string is not a parseable
+ * nick `color`/`prefix_color` fields, e.g. "\x19F06", "\x19*03,05", "\x19F|04" —
+ * into the CSS class vocabulary line parts use. Attribute flags inside the
+ * payload become `a-*` classes. Returns null when the string is not a parseable
  * internal code so callers can fall back to name-based mapping.
  */
 export function parseWeechatNickColor(code: string): string[] | null {
-    if (!code || !code.includes('\x19')) return null;
-    // A nick color payload is one spec; keep the last non-empty segment.
-    let spec = '';
-    for (const seg of code.split('\x19')) {
-        if (seg.length > 0) spec = seg;
+    if (!code || !code.includes(WEECHAT_COLOR_CHAR)) {
+        return null;
     }
-    if (spec.length === 0) return null;
+
+    const parsed = parseWeeChatStyle(code);
+    if (!parsed.ok) {
+        return null;
+    }
+
     const classes: string[] = [];
-    // Bare F/B = default fg/bg. (Option colors like bar_fg encode marker
-    // bytes the style engine does not model; those fall through to null and
-    // the caller's name-based mapping handles them.)
-    if (spec === 'F') return ['cwf-default'];
-    if (spec === 'B') return ['cwb-default'];
-    // Bare extended color: getStyle() treats bare @NNNNN as unimplemented.
-    const ext = spec.match(/^@(\d{5})/);
-    if (ext) return ['cef-' + ext[1]!];
-    // Otherwise delegate to the shared style engine. Attributes live inside
-    // the F/%/. patterns (e.g. F*06 = bold lightgreen); a leading * is the
-    // fg+bg marker, so no separate attribute scan is needed.
-    const style = getStyle(spec);
-    if (style.text.length > 0) return null; // trailing garbage: not a color code
-    if (style.fgColor) classes.push(nickColorClass(style.fgColor, true));
-    if (style.bgColor) classes.push(nickColorClass(style.bgColor, false));
-    if (style.attrs) {
-        for (const attr in style.attrs.override) {
-            if (style.attrs.override[attr]) classes.push('a-' + attr);
+    classes.push(nickColorClass(toFgColor(parsed.style), true));
+    classes.push(nickColorClass(toColorInfo(parsed.style.bg), false));
+    const attrs = toAttrs(parsed.style);
+    for (const attr in attrs.override) {
+        if (attrs.override[attr]) {
+            classes.push('a-' + attr);
         }
     }
     return classes.length > 0 ? classes : null;

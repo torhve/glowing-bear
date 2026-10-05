@@ -1,7 +1,8 @@
 /**
  * Shared loader for the two parsers this package is measured against.
  *
- *   - current:  src-svelte/src/lib/weechat-colors.ts   (`rawText2Rich`)
+ *   - current:  src-svelte/src/lib/weechat-colors.ts   (`rawText2Rich`, an adapter
+ *     over @glowingbear/weechat-format)
  *   - legacy:   src-angular/js/weechat.js              (`WeeChatProtocol.rawText2Rich`)
  *
  * They are imported by absolute URL from outside the package so the library never
@@ -27,6 +28,8 @@ export interface LegacyPart {
 export interface LegacyParsers {
     /** The parser the Svelte application uses today. */
     current: (input: string) => LegacyPart[];
+    /** The adapter's mIRC -> WeeChat translation, which `current` applies first. */
+    convertIrcCodes: (input: string) => string;
     /** The original AngularJS parser, kept as a historical baseline. */
     legacy: (input: string) => LegacyPart[];
 }
@@ -34,12 +37,13 @@ export interface LegacyParsers {
 export async function loadLegacyParsers(): Promise<LegacyParsers> {
     const currentModule = (await import(
         new URL('../../../../src-svelte/src/lib/weechat-colors.ts', import.meta.url).href
-    )) as unknown as { rawText2Rich: (input: string) => LegacyPart[] };
+    )) as unknown as { rawText2Rich: (input: string) => LegacyPart[]; convertIrcCodes: (input: string) => string };
     const legacyModule = (await import(
         new URL('../../../../src-angular/js/weechat.js', import.meta.url).href
     )) as unknown as { Protocol: { rawText2Rich: (input: string) => LegacyPart[] } };
     return {
         current: currentModule.rawText2Rich,
+        convertIrcCodes: currentModule.convertIrcCodes,
         legacy: legacyModule.Protocol.rawText2Rich,
     };
 }

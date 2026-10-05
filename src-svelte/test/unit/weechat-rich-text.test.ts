@@ -105,46 +105,66 @@ describe('Protocol rawText2Rich conversion', () => {
             expect(part!.fgColor.name).toBe('emphasis');
         });
 
-        it('parses STD color with attributes before code', () => {
-            // *03: leading * is FG-only marker (not bold), no attrs → no bold
+        // A combined \x19* control needs a separator; without one WeeChat consumes
+        // the fixed payload but applies no style (gui-curses-window.c:765-880), and
+        // attribute flags are only recognized in F/B/* payload positions.
+        it('consumes a combined control without a separator and keeps the default color', () => {
             const result = rawText2Rich('\x19*03bold red\x1c');
             const part = result.find(p => p.text === 'bold red');
             expect(part).toBeDefined();
             expect(part!.fgColor.type).toBe('weechat');
-            expect(part!.fgColor.name).toBe('red');
+            expect(part!.fgColor.name).toBe('default');
         });
 
-        it('parses STD color with multiple attributes', () => {
-            // *!/03: leading * is FG-only marker, attrs !/ add reverse+italic
+        it('consumes attribute flags in a combined control that has no separator', () => {
             const result = rawText2Rich('\x19*!/03styled');
             const part = result.find(p => p.text === 'styled');
             expect(part).toBeDefined();
-            expect(part!.attrs.override.r).toBe(true);
-            expect(part!.attrs.override.i).toBe(true);
+            expect(part!.attrs.override.r).toBe(false);
+            expect(part!.attrs.override.i).toBe(false);
         });
 
-        it('parses color code with blink attribute (%)', () => {
+        it('leaves an attribute flag outside a payload position as literal text', () => {
             const result = rawText2Rich('\x19%03blinking');
-            const part = result.find(p => p.text === 'blinking');
+            const part = result.find(p => p.text === '%03blinking');
             expect(part).toBeDefined();
-            expect(part!.attrs.override.k).toBe(true);
+            expect(part!.attrs.override.k).toBe(false);
         });
 
-        it('parses color code with dim attribute (.)', () => {
+        it('leaves a leading dot before a color code as literal text', () => {
             const result = rawText2Rich('\x19.04dimmed');
-            const part = result.find(p => p.text === 'dimmed');
+            const part = result.find(p => p.text === '.04dimmed');
             expect(part).toBeDefined();
-            expect(part!.attrs.override.d).toBe(true);
+            expect(part!.attrs.override.d).toBe(false);
         });
 
-        it('parses EXT color with explicit bold attribute', () => {
-            // *\x01@00123: leading * is FG-only marker, \x01 adds bold
-            const result = rawText2Rich('\x19*\x01@00123ext bold');
+        it('parses extended color with attributes in the payload position', () => {
+            // Upstream order is @, then attribute flags, then five digits.
+            const result = rawText2Rich('\x19F@*00123ext bold');
             const part = result.find(p => p.text === 'ext bold');
             expect(part).toBeDefined();
             expect(part!.fgColor.type).toBe('ext');
             expect(part!.fgColor.name).toBe('123');
             expect(part!.attrs.override.b).toBe(true);
+        });
+
+        it('parses blink and dim flags on a two-digit foreground color', () => {
+            const blink = rawText2Rich('\x19F%03blinking').find(p => p.text === 'blinking');
+            expect(blink).toBeDefined();
+            expect(blink!.fgColor.name).toBe('red');
+            expect(blink!.attrs.override.k).toBe(true);
+
+            const dim = rawText2Rich('\x19F.04dimmed').find(p => p.text === 'dimmed');
+            expect(dim).toBeDefined();
+            expect(dim!.fgColor.name).toBe('lightred');
+            expect(dim!.attrs.override.d).toBe(true);
+        });
+
+        it('consumes an unrecognized control payload without styling', () => {
+            const result = rawText2Rich('\x19*\x01@00123ext bold');
+            const part = result.find(p => p.text === '00123ext bold');
+            expect(part).toBeDefined();
+            expect(part!.fgColor.name).toBe('default');
         });
     });
 
@@ -277,49 +297,87 @@ describe('Protocol rawText2Rich conversion', () => {
     });
 
     describe('IRC code conversion (\\x03, \\x02, etc → WeeChat format)', () => {
+        // The conversion mirrors WeeChat's own IRC plugin, irc_color_decode()
+        // (src/plugins/irc/irc-color.c:206-488): attribute toggles become the
+        // control characters WeeChat's renderer understands, and colors are mapped
+        // through WeeChat's IRC color table into custom-color controls that keep
+        // the current attributes.
         describe('convertIrcCodes', () => {
-            it('converts mIRC color \\x0304 to WeeChat \\x1904', () => {
-                expect(convertIrcCodes('\x0304red')).toBe('\x1904red');
+            it('converts mIRC color \x0304 to the mapped WeeChat color', () => {
+                // IRC 4 is lightred, which is WeeChat palette index 04.
+                expect(convertIrcCodes('\x0304red')).toBe('\x19F|04red');
             });
 
-            it('converts mIRC color with fg+bg \\x0312,04 to \\x1912\\x19B04 (option range)', () => {
-                expect(convertIrcCodes('\x0312,04text')).toBe('\x1912\x19B04text');
+            it('converts mIRC color with fg+bg \x0312,04 to one combined control', () => {
+                expect(convertIrcCodes('\x0312,04text')).toBe('\x19*|10~04text');
             });
 
-            it('converts bare \\x03 to WeeChat reset \\x1c', () => {
-                expect(convertIrcCodes('\x03text')).toBe('\x1ctext');
+            it('converts bare \x03 to WeeChat resetcolor', () => {
+                expect(convertIrcCodes('\x03text')).toBe('\x19\x1ctext');
             });
 
-            it('converts the bug report pattern \\x0328(Leaving\\x03 to \\x1928(Leaving\\x1c', () => {
-                expect(convertIrcCodes('\x0328(Leaving\x03')).toBe('\x1928(Leaving\x1c');
+            it('converts the bug report pattern \x0328(Leaving\x03 to a terminal color', () => {
+                // IRC 28 maps to terminal color 88 (irc-color.c:47), which WeeChat
+                // writes as an extended payload with the attribute flags between
+                // the @ and the digits.
+                expect(convertIrcCodes('\x0328(Leaving\x03')).toBe('\x19F@|00088(Leaving\x19\x1c');
             });
 
-            it('converts \\x0327gbbot to \\x1927gbbot', () => {
-                expect(convertIrcCodes('\x0327gbbot')).toBe('\x1927gbbot');
+            it('converts \x0327gbbot to a terminal color', () => {
+                expect(convertIrcCodes('\x0327gbbot')).toBe('\x19F@|00089gbbot');
             });
 
-            it('converts \\x02 (bold) to WeeChat \\x1a*', () => {
-                expect(convertIrcCodes('\x02bold')).toBe('\x1a*bold');
+            it('converts \x02 (bold) to WeeChat set-attribute bold', () => {
+                expect(convertIrcCodes('\x02bold')).toBe('\x1a\x01bold');
             });
 
-            it('converts \\x0f (reset) to WeeChat \\x1c', () => {
+            it('converts a second \x02 to the matching remove-attribute control', () => {
+                expect(convertIrcCodes('\x02bold\x02normal')).toBe('\x1a\x01bold\x1b\x01normal');
+            });
+
+            it('converts \x0f (reset) to WeeChat \x1c', () => {
                 expect(convertIrcCodes('\x0freset')).toBe('\x1creset');
             });
 
-            it('converts \\x16 (reverse) to WeeChat \\x1a!', () => {
-                expect(convertIrcCodes('\x16reverse')).toBe('\x1a!reverse');
+            it('converts \x16 (reverse) to WeeChat set-attribute reverse', () => {
+                expect(convertIrcCodes('\x16reverse')).toBe('\x1a\x02reverse');
             });
 
-            it('converts \\x1d (italic) to WeeChat \\x1a/', () => {
-                expect(convertIrcCodes('\x1ditalic')).toBe('\x1a/italic');
+            it('converts \x1d (italic) to WeeChat set-attribute italic', () => {
+                expect(convertIrcCodes('\x1ditalic')).toBe('\x1a\x03italic');
             });
 
-            it('converts \\x1f (underline) to WeeChat \\x1a_', () => {
-                expect(convertIrcCodes('\x1funderline')).toBe('\x1a_underline');
+            it('converts \x1f (underline) to WeeChat set-attribute underline', () => {
+                expect(convertIrcCodes('\x1funderline')).toBe('\x1a\x04underline');
+            });
+
+            it('converts \x1e (strikethrough) to WeeChat dim, as the IRC plugin does', () => {
+                expect(convertIrcCodes('\x1estrikethrough')).toBe('\x1a\x06strikethrough');
+            });
+
+            it('converts \x04 hex colors to the nearest terminal color', () => {
+                // 0xff0000 is terminal color 9 exactly (gui_color_convert_rgb_to_term).
+                expect(convertIrcCodes('\x04ff0000hex')).toBe('\x19F@|00009hex');
+            });
+
+            it('converts \x04 hex colors with a background into one combined control', () => {
+                expect(convertIrcCodes('\x04000000,fffffftext')).toBe('\x19*@|00000~@00015text');
+            });
+
+            it('converts a truncated hex color using the digits that are present', () => {
+                // irc_color_decode() reads up to six hex digits; `ff` becomes 0x0000ff,
+                // which is terminal color 12 exactly (the base 16-color table entry).
+                expect(convertIrcCodes('\x04ffshort')).toBe('\x19F@|00012short');
+            });
+
+            it('leaves a comma with no background digits as literal text', () => {
+                // Same guard as irc_color_decode(): a comma only starts a background
+                // when a digit follows it.
+                expect(convertIrcCodes('\x0304,trailing')).toBe('\x19F|04,trailing');
             });
 
             it('converts multiple IRC codes in one string', () => {
-                expect(convertIrcCodes('\x02bold\x03 normal')).toBe('\x1a*bold\x1c normal');
+                expect(convertIrcCodes('\x02bold\x03 normal')).toBe('\x1a\x01bold\x19\x1c normal');
             });
 
             it('leaves plain text unchanged', () => {
@@ -328,6 +386,10 @@ describe('Protocol rawText2Rich conversion', () => {
 
             it('leaves WeeChat control codes alone', () => {
                 expect(convertIrcCodes('\x1903error\x1900')).toBe('\x1903error\x1900');
+            });
+
+            it('leaves WeeChat attribute controls alone', () => {
+                expect(convertIrcCodes('\x1a\x01bold\x1b\x01plain')).toBe('\x1a\x01bold\x1b\x01plain');
             });
         });
 

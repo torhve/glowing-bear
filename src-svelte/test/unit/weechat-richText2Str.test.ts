@@ -239,11 +239,11 @@ describe('richText2Str serialization', () => {
         });
 
         it('round-trips join message pattern with distinct colors', () => {
-            // \x1915 = chat_nick_self (option type) + bold via \x1a*
+            // \x1915 = chat_nick_self (option type) + bold via \x1a\x01
             // \x1929 = chat_highlight (option type) for delimiters
             // \x1927 = chat_host (option type) for host info
             // Note: bare STD code \x1929 resets attrs, so bold is lost after nick
-            const input = '\x1915\x1a* xt \x1929(\x1927~xt@83.242.23.252)\x1929 has joined #vev';
+            const input = '\x1915\x1a\x01 xt \x1929(\x1927~xt@83.242.23.252)\x1929 has joined #vev';
             const parts = rawText2Rich(input);
             const serialized = richText2Str(parts);
 
@@ -294,14 +294,14 @@ describe('richText2Str serialization', () => {
         });
 
         it('round-trips attribute set/reset sequence', () => {
-            // \x1a* sets bold=true, \x1b/ sets italic=false
-            // After reset, italic=false means no '//', bold persists → '/*'
-            const input = '\x1a*bold\x1b/unbold text';
+            // \x1a\x01 sets bold, \x1b\x03 removes italic
+            // After the removal, bold persists → '/*'
+            const input = '\x1a\x01bold\x1b\x03unbold text';
             const parts = rawText2Rich(input);
             const result = richText2Str(parts);
-            // Bold persists through \x1b/ (which resets italic only)
+            // Bold persists through \x1b\x03 (which removes italic only)
             expect(result).toContain('/*');
-            // Both parts should have bold since \x1b/ only affects italic
+            // Both parts should have bold since \x1b\x03 only affects italic
             expect(result).toMatch(/\/\*:bold.*\/\*:unbold text/);
         });
 

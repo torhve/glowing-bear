@@ -109,14 +109,20 @@ describe('documentation', () => {
         expect(spec).toContain('GUI_CURSES_NUM_WEECHAT_COLORS == 17');
     });
 
-    it('records a migration decision for every divergence the differential suite asserts', () => {
+    it('names every divergence the differential suite asserts', () => {
         const ledger = readFileSync(new URL('../docs/behavior-differences.md', import.meta.url), 'utf8');
         const differential = readFileSync(new URL('../test/differential.test.ts', import.meta.url), 'utf8');
-        const divergingCases = [...differential.matchAll(/current: \[([^\]]*)\]/g)]
-            .filter((match) => (match[1] ?? '').trim().length > 0).length;
-        const decidedRows = [...ledger.matchAll(/\*\*(decide|adapter|approved|match)\*\*/g)].length;
-        expect(divergingCases).toBeGreaterThan(5);
-        // Every divergence the suite locks in must carry a status in the ledger.
-        expect(decidedRows).toBeGreaterThanOrEqual(divergingCases);
+        const caseLines = differential.split('\n').filter((line) => line.includes("id: '"));
+        const diverging = caseLines
+            .filter((line) => /current: \[[^\]]+\]/.test(line) || /legacy: \[[^\]]+\]/.test(line))
+            .map((line) => /id: '([^']+)'/.exec(line)?.[1])
+            .filter((id): id is string => id !== undefined);
+
+        expect(diverging.length).toBeGreaterThan(10);
+        // Every divergence the suite locks in must be named by a ledger row.
+        for (const id of diverging) {
+            expect(ledger, `ledger is missing a row for case "${id}"`).toContain(id);
+        }
     });
+
 });

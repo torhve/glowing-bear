@@ -44,5 +44,8 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: WeeChat format library tests
+        run: npm run test:weechat-format
+
       - name: Build
         run: npm run build

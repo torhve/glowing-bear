@@ -12,6 +12,17 @@ Source code in `src-svelte/src/` has `components/`, `lib/`, `routes/`, and `serv
 - **`components/`** — UI components (chat, buffers, nicklist, modals, shared UI)
 - **`routes/`** — SvelteKit routes (+layout, +page, 404)
 
+### WeeChat Formatting (npm workspace)
+
+`packages/weechat-format` (`@glowingbear/weechat-format`) is the authoritative decoder for WeeChat's inline chat color/attribute controls, following WeeChat 4.10.1 semantics. It is dependency-free, has its own strict `tsconfig.json`, Vitest config and benchmark, and is built by its `prepare` script during `npm install`/`npm ci` (the app imports its `dist/`, so a missing `dist/` breaks the app build). Spec: `packages/weechat-format/docs/format.md`.
+
+`src-svelte/src/lib/weechat-colors.ts` is the application **adapter** over it and is the only application-side formatter. It contains no WeeChat color grammar of its own: it converts mIRC formatting into WeeChat controls (mirroring WeeChat's `irc_color_decode()`), maps the library's symbolic styles onto `RichTextPart` and the CSS class vocabulary (`cwf-`/`cwb-`, `cof-`/`cob-`, `cef-`/`ceb-`, `coa-`, `a-*`/`a-no-*`), and keeps `richText2Str()` as a diagnostic. Callers (`lib/weechat.ts`, `lib/stores/models.ts`) are unchanged, so the API and legacy relay paths share one decoder.
+
+- Do not add color grammar, color tables or parser state to the adapter or to components — extend the library and its tests instead, and keep IRC/CSS compatibility in the adapter.
+- Deliberate departures from upstream are recorded in `packages/weechat-format/docs/behavior-differences.md`; `test/differential.test.ts` locks every divergence it covers to that ledger, so a new undocumented difference — or a documented one that disappeared — fails the suite. The ledger covers the cases the suite exercises, not every possible input.
+- Visible color/attribute rendering is covered by `src-svelte/e2e/specs/MessageColors.test.ts` (serial project: it sends channel messages).
+
+
 ## Commands
 
 ```bash

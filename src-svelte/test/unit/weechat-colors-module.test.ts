@@ -31,17 +31,21 @@ describe('weechat-colors (standalone formatting module)', () => {
 
     describe('parseWeechatNickColor (new API colors=weechat encoding)', () => {
         it('maps a 16-color foreground spec to a cwf- class', () => {
-            expect(parseWeechatNickColor('\x19F06')).toEqual(['cwf-lightgreen']);
-            expect(parseWeechatNickColor('\x19F10')).toEqual(['cwf-lightblue']);
+            expect(parseWeechatNickColor('\x19F06')).toEqual(['cwf-lightgreen', 'cwb-default']);
+            expect(parseWeechatNickColor('\x19F10')).toEqual(['cwf-lightblue', 'cwb-default']);
         });
 
         it('maps a bare F/B to default fg/bg', () => {
-            expect(parseWeechatNickColor('\x19F')).toEqual(['cwf-default']);
-            expect(parseWeechatNickColor('\x19B')).toEqual(['cwb-default']);
+            // A truncated payload is consumed without changing the style, so both
+            // stay at the chat default.
+            expect(parseWeechatNickColor('\x19F')).toEqual(['cwf-default', 'cwb-default']);
+            expect(parseWeechatNickColor('\x19B')).toEqual(['cwf-default', 'cwb-default']);
         });
 
-        it('maps extended colors to cef- classes', () => {
-            expect(parseWeechatNickColor('\x19@12345')).toEqual(['cef-12345']);
+        it('maps a bare pair number to default colors', () => {
+            // \x19@NNNNN selects a curses color pair, which has no DOM equivalent;
+            // WeeChat leaves the style untouched, so the classes stay default.
+            expect(parseWeechatNickColor('\x19@12345')).toEqual(['cwf-default', 'cwb-default']);
         });
 
         it('maps fg+bg specs to both classes', () => {
@@ -56,11 +60,25 @@ describe('weechat-colors (standalone formatting module)', () => {
             expect(classes).toContain('cwf-lightgreen');
         });
 
-        it('returns null for non-internal and unparseable strings', () => {
+        it('maps a theme color reference to cof-/cob- classes', () => {
+            expect(parseWeechatNickColor('\x1914')).toEqual(['cof-chat_nick', 'cob-chat_nick']);
+            expect(parseWeechatNickColor('\x1915')).toEqual(['cof-chat_nick_self', 'cob-chat_nick_self']);
+        });
+
+        it('renders the removed chat_nick1..chat_nick10 slots as the default color', () => {
+            // Slots 17-26 survive in WeeChat's theme enum; the app has no CSS for
+            // them, so they resolve to the default text color.
+            expect(parseWeechatNickColor('\x1917')).toEqual(['cwf-default', 'cwb-default']);
+        });
+
+        it('maps bar references to the default colors', () => {
+            expect(parseWeechatNickColor('\x19bF')).toEqual(['cwf-default', 'cwb-default']);
+        });
+
+        it('returns null for names that are not internal codes', () => {
             expect(parseWeechatNickColor('')).toBeNull();
             expect(parseWeechatNickColor('lightgreen')).toBeNull();
             expect(parseWeechatNickColor('bar_fg')).toBeNull();
-            expect(parseWeechatNickColor('\x19bF')).toBeNull();
         });
     });
 });
