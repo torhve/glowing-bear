@@ -1,9 +1,8 @@
 <script lang="ts">
-  import { get } from 'svelte/store';
   import type { NickGroup, Nick } from '#lib/types.ts';
   import Users from '@lucide/svelte/icons/users';
   import Search from '@lucide/svelte/icons/search';
-  import { currentBuffer, pendingBufferSwitch } from '#lib/stores/models.ts';
+  import { currentBuffer, pendingBufferSwitch, newPendingSwitch, getBuffer, clearPendingSwitchIfCurrent } from '#lib/stores/models.ts';
   import { sendBufferCommand } from '#lib/stores/connectionManager.ts';
   import { settings } from '#lib/stores/settings.ts';
   import { insertNickIntoInput, bufferHasNicklist, makeKeyboardActivatable } from '#lib/utils.ts';
@@ -26,14 +25,22 @@
     const nicklist = $currentBuffer?.nicklist;
     if (!nicklist) return [];
     return (Object.entries(nicklist) as [string, NickGroup][])
-      // Skip root group (it's just a placeholder, not displayed in Angular either)
-      .filter(([name]) => name !== 'root')
+      // The root group (nicks with no group) is kept: it renders as bare rows
+      // without a section box, above the grouped sections.
       .filter(([name, group]) => {
         if (!query) return true;
         return name.toLowerCase().includes(query) ||
           group.nicks.some((nick: Nick) => nick.name.toLowerCase().includes(query));
-      });
+      })
+      // WeeChat's root group is the ungrouped nicks; keep it first so they read
+      // as a preamble to the grouped sections.
+      .sort((a, b) => (a[0] === 'root' ? -1 : b[0] === 'root' ? 1 : 0));
   });
+
+  function nickSectionClass(groupName: string): string {
+    // Root nicks have no header and no section box — they are bare rows.
+    return groupName === 'root' ? '' : 'nick-group border-b border-border';
+  }
 
   function getPrefixClass(prefix: string): string {
     switch (prefix) {
@@ -86,36 +93,33 @@
 
     <div class="flex-1 overflow-y-auto" data-testid="nicklist-items">
       {#each filteredNickGroups as [groupName, group], gi (gi)}
-        {#if groupName !== 'root'}
-          <div class="nick-group border-b border-border">
-            {#each group.nicks as nick (nick.name)}
-              <div
-                data-testid="nick-item"
-                class="nick-item flex items-center hover:bg-surface-raised transition-colors"
-                onclick={() => {
-                  if (DEBUG_NICKLIST) console.log('[nicklist] clicked', nick.name);
-                  pendingBufferSwitch.set(nick.name);
-                  sendBufferCommand(nick.buffer, `/query ${nick.name}`);
-                  setTimeout(() => {
-                    if (get(pendingBufferSwitch) === nick.name) {
-                      pendingBufferSwitch.set(null);
-                    }
-                  }, 5000);
-                }}
-                role="button"
-                tabindex="0"
-                onkeydown={makeKeyboardActivatable(() => insertNickIntoInput(nick.name))}
-              >
-                <span class="nick-prefix text-xs {getPrefixClass(getPrefix(nick.prefix))} mr-1">
-                  {getPrefix(nick.prefix)}
-                </span>
-                <span class="nick-name text-sm truncate {nick.nameClasses.join(' ')}">
-                  {nick.name}
-                </span>
-              </div>
-            {/each}
-          </div>
-        {/if}
+        <div class={nickSectionClass(groupName)}>
+          {#each group.nicks as nick (nick.name)}
+            <div
+              data-testid="nick-item"
+              class="nick-item flex items-center hover:bg-surface-raised transition-colors"
+              onclick={() => {
+                if (DEBUG_NICKLIST) console.log('[nicklist] clicked', nick.name);
+                // The nick's own buffer supplies the server context: the same nick
+                  // can be queried on several servers at once.
+                const request = newPendingSwitch(nick.name, getBuffer(nick.buffer)?.server || null);
+                pendingBufferSwitch.set(request);
+                sendBufferCommand(nick.buffer, `/query ${nick.name}`);
+                setTimeout(() => clearPendingSwitchIfCurrent(request.requestId), 5000);
+              }}
+              role="button"
+              tabindex="0"
+              onkeydown={makeKeyboardActivatable(() => insertNickIntoInput(nick.name))}
+            >
+              <span class="nick-prefix text-xs {getPrefixClass(getPrefix(nick.prefix))} mr-1">
+                {getPrefix(nick.prefix)}
+              </span>
+              <span class="nick-name text-sm truncate {nick.nameClasses.join(' ')}">
+                {nick.name}
+              </span>
+            </div>
+          {/each}
+        </div>
 
         <style>
       /* Spacing — overridable by themes via --spacing-* vars */

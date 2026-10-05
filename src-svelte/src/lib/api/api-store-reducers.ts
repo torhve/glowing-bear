@@ -19,7 +19,7 @@ import {
     createBuffer, createBufferLine, createNick, createNickGroup,
     parseRichText, removeBuffer, isSyncing, isRelayStatusBuffer,
     maxBufferLines, setReadBoundary, setReadBoundaryUnknown,
-    injectDateChangeMessageIfNeeded, pendingBufferSwitch, setActiveBuffer,
+    injectDateChangeMessageIfNeeded, pendingBufferSwitch, setActiveBuffer, matchesPendingSwitch,
 } from '#lib/stores/models.ts';
 import { shouldResume } from '#lib/stores/bufferResume.ts';
 import { createHighlight, playNotificationSound, updateTitle, updateFavico } from '#lib/notifications.ts';
@@ -335,10 +335,11 @@ export function createApiStoreReducers(): ApiReducers {
             // from the live store, so a brand-new buffer must exist there before
             // the switch (and resume) logic runs.
             buffers.set(copy);
-            // Auto-switch to a /query buffer once WeeChat opens it (pending
-            // switch set by InputBar when the target buffer did not exist yet).
-            const targetNick = get(pendingBufferSwitch);
-            if (targetNick && buffer.shortName.toLowerCase() === targetNick.toLowerCase()) {
+            // Auto-switch to a /query buffer once WeeChat opens it (pending switch
+            // set by InputBar or a nicklist click when the target buffer did not
+            // exist yet; the server context disambiguates same-nick queries).
+            const pending = get(pendingBufferSwitch);
+            if (matchesPendingSwitch(buffer, pending)) {
                 setActiveBuffer(buffer.id);
                 pendingBufferSwitch.set(null);
             } else if (shouldResume(buffer.fullName) && !get(activeBufferId)) {

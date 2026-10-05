@@ -1,0 +1,251 @@
+{
+  "capturedAt": "2026-10-05T19:16:39.705Z",
+  "steps": [
+    {
+      "step": "open",
+      "data": "subprotocol=api.weechat"
+    },
+    {
+      "step": "STEP scripts",
+      "data": {
+        "code": 200,
+        "message": "OK",
+        "request": "GET /api/scripts",
+        "request_body": null,
+        "request_id": "p1",
+        "body_type": "scripts",
+        "body": [
+          {
+            "name": "grep.py",
+            "version": "1.0",
+            "description": "grep: search buffer content (gbtest shim)",
+            "author": "glowing-bear",
+            "license": "GPL3"
+          }
+        ]
+      }
+    },
+    {
+      "step": "STEP sync",
+      "data": {
+        "code": 204,
+        "message": "No Content",
+        "request": "POST /api/sync",
+        "request_body": {
+          "body": {
+            "sync": true,
+            "nicks": true,
+            "input": true,
+            "colors": true
+          }
+        },
+        "request_id": "p3",
+        "body_type": null,
+        "body": null
+      }
+    },
+    {
+      "step": "STEP core-buffer",
+      "data": {
+        "id": 1791227706398748,
+        "keys": [
+          "id",
+          "name",
+          "short_name",
+          "number",
+          "type",
+          "hidden",
+          "title",
+          "modes",
+          "input_prompt",
+          "input",
+          "input_position",
+          "input_multiline",
+          "nicklist",
+          "nicklist_case_sensitive",
+          "nicklist_display_groups",
+          "time_displayed",
+          "local_variables",
+          "keys",
+          "last_read_line_id"
+        ]
+      }
+    },
+    {
+      "step": "STEP grep-before",
+      "data": {
+        "id": 1791227749609888,
+        "name": "python.grep"
+      }
+    },
+    {
+      "step": "STEP input-say",
+      "data": {
+        "code": 204,
+        "message": "No Content",
+        "request": "POST /api/input",
+        "request_body": {
+          "buffer_id": 1791227706398748,
+          "command": "/say probe-needle-42"
+        },
+        "request_id": "p4",
+        "body_type": null,
+        "body": null
+      }
+    },
+    {
+      "step": "STEP input-grep-hit",
+      "data": {
+        "code": 204,
+        "message": "No Content",
+        "request": "POST /api/input",
+        "request_body": {
+          "buffer_id": 1791227706398748,
+          "command": "/grep probe-needle-42"
+        },
+        "request_id": "p5",
+        "body_type": null,
+        "body": null
+      }
+    },
+    {
+      "step": "STEP events-after-hit",
+      "data": [
+        "buffer_cleared buffer 1791227749609888",
+        "buffer_line_added line 1791227749609888",
+        "buffer_line_added line 1791227749609888"
+      ]
+    },
+    {
+      "step": "STEP grep-buffer-opened",
+      "data": {
+        "id": 1791227749609888,
+        "name": "python.grep",
+        "fields": [
+          "id",
+          "name",
+          "short_name",
+          "number",
+          "type",
+          "hidden",
+          "title",
+          "modes",
+          "input_prompt",
+          "input",
+          "input_position",
+          "input_multiline",
+          "nicklist",
+          "nicklist_case_sensitive",
+          "nicklist_display_groups",
+          "time_displayed",
+          "local_variables",
+          "keys",
+          "last_read_line_id"
+        ]
+      }
+    },
+    {
+      "step": "STEP hit-lines",
+      "data": {
+        "code": 200,
+        "message": "OK",
+        "request": "GET /api/buffers/1791227749609888/lines?count=50",
+        "request_body": null,
+        "request_id": "p7",
+        "body_type": "lines",
+        "body": [
+          {
+            "id": 2,
+            "y": -1,
+            "date": "2026-10-05T19:16:40.136513Z",
+            "date_printed": "2026-10-05T19:16:40.136513Z",
+            "displayed": true,
+            "highlight": false,
+            "notify_level": 0,
+            "prefix": "",
+            "message": "Searching text 'probe-needle-42' in buffer core.weechat",
+            "tags": []
+          },
+          {
+            "id": 3,
+            "y": -1,
+            "date": "2026-10-05T19:16:40.136745Z",
+            "date_printed": "2026-10-05T19:16:40.136745Z",
+            "displayed": true,
+            "highlight": false,
+            "notify_level": 0,
+            "prefix": "",
+            "message": "No results found for 'probe-needle-42'",
+            "tags": []
+          }
+        ]
+      }
+    },
+    {
+      "step": "STEP input-grep-miss",
+      "data": {
+        "code": 204,
+        "message": "No Content",
+        "request": "POST /api/input",
+        "request_body": {
+          "buffer_id": 1791227706398748,
+          "command": "/grep nomatch-xyzzy"
+        },
+        "request_id": "p10",
+        "body_type": null,
+        "body": null
+      }
+    },
+    {
+      "step": "STEP events-after-miss",
+      "data": [
+        "buffer_cleared buffer 1791227749609888",
+        "buffer_title_changed buffer 1791227749609888",
+        "buffer_line_added line 1791227749609888",
+        "buffer_line_added line 1791227749609888"
+      ]
+    },
+    {
+      "step": "STEP miss-lines",
+      "data": [
+        {
+          "id": 4,
+          "y": -1,
+          "date": "2026-10-05T19:16:41.641377Z",
+          "date_printed": "2026-10-05T19:16:41.641377Z",
+          "displayed": true,
+          "highlight": false,
+          "notify_level": 0,
+          "prefix": "",
+          "message": "Searching text 'nomatch-xyzzy' in buffer core.weechat",
+          "tags": []
+        },
+        {
+          "id": 5,
+          "y": -1,
+          "date": "2026-10-05T19:16:41.641582Z",
+          "date_printed": "2026-10-05T19:16:41.641582Z",
+          "displayed": true,
+          "highlight": false,
+          "notify_level": 0,
+          "prefix": "",
+          "message": "No results found for 'nomatch-xyzzy'",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "step": "STEP infolist-before-after",
+      "data": {
+        "before": {
+          "error": "Sub-resource of buffers not found: \"infolist\""
+        },
+        "after": {
+          "error": "Sub-resource of buffers not found: \"infolist\""
+        },
+        "beforeCount": 2,
+        "afterCount": 2
+      }
+    }
+  ]
+}

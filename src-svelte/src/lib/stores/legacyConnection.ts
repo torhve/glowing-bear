@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
 import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, incrementReconnectAttempts, setNextReconnectAt } from '#lib/stores/connectionStore.ts';
-import { buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer, localUnreadBuffers, hotlistClearedBuffers, bufferBottom, previousBufferId, pendingBufferSwitch, beginSyncPhase, endSyncPhase, weechatVersion, relayApiVersion } from '#lib/stores/models.ts';
+import { buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer, localUnreadBuffers, hotlistClearedBuffers, bufferBottom, previousBufferId, pendingBufferSwitch, beginSyncPhase, endSyncPhase, weechatVersion, relayApiVersion, hasNoHistoryToFetch, markHistoryComplete } from '#lib/stores/models.ts';
 import { settings } from '#lib/stores/settings.ts';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist, flushLineBatch, setOnUpgrade, setOnUpgradeEnded } from '#lib/stores/handlers.ts';
 import { addToast, removeToast, clearToasts, updateToast, toastStore } from '#lib/toast.ts';
@@ -884,6 +884,14 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
 
     // Prevent redundant fetches when all lines have already been loaded
     if (buffer.allLinesFetched) {
+        return;
+    }
+
+    // Free buffers (/exec -nf, plugin output) have no older history — their rows
+    // are live-only, so asking for history would re-deliver the current rows as
+    // duplicates. Mark them complete instead of issuing a line request.
+    if (hasNoHistoryToFetch(buffer)) {
+        markHistoryComplete(bufferId);
         return;
     }
 

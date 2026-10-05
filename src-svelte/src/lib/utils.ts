@@ -328,13 +328,99 @@ export function isPopoverOpen(): boolean {
 }
 
 /**
- * Check if a buffer has non-empty nicklist data (excluding root group).
+ * Check if a buffer has non-empty nicklist data.
  */
 export function bufferHasNicklist(buffer: BufferData | null | undefined): boolean {
     if (!buffer?.nicklist) return false;
-    return Object.entries(buffer.nicklist).some(([name, group]) =>
-        name !== 'root' && group.nicks.length > 0
-    );
+    // The root group counts too: a buffer whose only nicks are ungrouped still
+    // has a nicklist to show.
+    return Object.entries(buffer.nicklist).some(([, group]) => group.nicks.length > 0);
+}
+
+/** What the buffer called `shortName` looks like at one moment in time. */
+export interface BufferAppearance {
+    /** Store key of the buffer that was seen. */
+    id: string;
+    /** Buffer clear counter, so a re-cleared buffer reads as new results. */
+    clearEpoch: number;
+    lineCount: number;
+}
+
+/** Snapshot what the buffer called `shortName` looks like right now, so a later
+ *  wait can tell newly produced content from a stale pre-existing buffer. */
+export function captureBufferAppearance(shortName: string): BufferAppearance | null {
+    for (const [id, buffer] of Object.entries(get(buffers))) {
+        if (buffer.shortName === shortName) {
+            return { id, clearEpoch: buffer.clearEpoch ?? 0, lineCount: buffer.lines.length };
+        }
+    }
+    return null;
+}
+
+/** The id of a buffer named `shortName` whose content differs from `before`,
+ *  or null when nothing looks fresh yet. */
+function freshBufferId(value: Record<string, BufferData>, shortName: string, before: BufferAppearance | null): string | null {
+    for (const [id, buffer] of Object.entries(value)) {
+        if (buffer.shortName !== shortName) continue;
+        // The name was absent when the action started, so this buffer was opened
+        // by the action and its content is fresh by construction.
+        if (before === null) return id;
+        if (id !== before.id) return id;
+        if (buffer.clearEpoch !== before.clearEpoch) return id;
+        if (buffer.lines.length !== before.lineCount) return id;
+    }
+    return null;
+}
+
+/** Wait until the buffer named `shortName` shows content that differs from
+ *  `before`, then resolve its id — or null after `timeoutMs`. Subscribing to
+ *  `buffers` instead of sleeping means a fast WeeChat costs almost nothing,
+ *  and the unsubscribe handle is declared before subscribing so an immediate
+ *  synchronous match cannot leak or dereference an uninitialised handle. */
+export async function waitForFreshBuffer(
+    shortName: string,
+    before: BufferAppearance | null,
+    timeoutMs: number,
+): Promise<string | null> {
+    return new Promise((resolve) => {
+        let unsubscribe: (() => void) | null = null;
+        let cleanedUp = false;
+        let settled = false;
+        let timer: ReturnType<typeof setTimeout> | null = null;
+
+        const cleanup = () => {
+            // The handle may not exist yet when a match arrives during the
+            // `subscribe()` call itself; the caller cleans up right after.
+            const unsub = unsubscribe;
+            if (cleanedUp || unsub === null) return;
+            cleanedUp = true;
+            unsub();
+            if (timer !== null) clearTimeout(timer);
+        };
+        const settle = (id: string | null) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            if (timer !== null) clearTimeout(timer);
+            resolve(id);
+        };
+
+        timer = setTimeout(() => settle(null), timeoutMs);
+        unsubscribe = buffers.subscribe((value) => {
+            const id = freshBufferId(value, shortName, before);
+            if (id !== null) settle(id);
+        });
+        if (settled) cleanup();
+    });
+}
+
+/** Whether `script` (e.g. the `grep` script) is installed, or null when the
+ *  listing is unknown. `/api/scripts` reports file names, so the extension is
+ *  normalised away before comparing. */
+export function scriptInstalled(names: string[] | null, script: string): boolean | null {
+    if (names === null) return null;
+    const wanted = script.toLowerCase();
+    return names.some((name) => name.toLowerCase().split('.')[0] === wanted);
 }
 
 /**

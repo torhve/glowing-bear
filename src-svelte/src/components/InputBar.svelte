@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { currentBuffer, buffers, pendingBufferSwitch, setActiveBuffer, findBufferByShortName } from '#lib/stores/models.ts';
+  import { currentBuffer, buffers, pendingBufferSwitch, setActiveBuffer, findBufferByShortName, newPendingSwitch } from '#lib/stores/models.ts';
   import { sendMessage, sendWeeChatCommand, getSession, getActiveTransport } from '#lib/stores/connectionManager.ts';
   import { requestCompletion, rankCandidates, completionInsert } from '#lib/api/api-features.ts';
   import { settings } from '#lib/stores/settings.ts';
@@ -146,14 +146,18 @@
       const queryMatch = line.match(/^\/(?:q|query)\s+(\S+)/i);
       if (queryMatch) {
         const nick = queryMatch[1] ?? '';
+        // Only the buffer in the current IRC server context is the intended target
+        // — the same nick can be queried on two servers at once.
+        const serverContext = $currentBuffer && $currentBuffer.server ? $currentBuffer.server : null;
         // Find existing query/private buffer matching the nick (case-insensitive)
-        const existingBuf = findBufferByShortName(nick, ['query', 'private']);
+        const existingBuf = findBufferByShortName(nick, ['query', 'private'], serverContext);
         if (existingBuf) {
           // Buffer exists — switch immediately
           setActiveBuffer(existingBuf.id);
         } else {
-          // Buffer doesn't exist yet — set pending so handler auto-switches on _buffer_opened
-          pendingBufferSwitch.set(nick || null);
+          // Buffer doesn't exist yet — set pending so the transport auto-switches
+          // on buffer_opened once WeeChat creates it.
+          pendingBufferSwitch.set(nick ? newPendingSwitch(nick, serverContext) : null);
         }
       }
 

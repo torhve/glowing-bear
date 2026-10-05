@@ -15,9 +15,9 @@
   import { get } from 'svelte/store';
   import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig, sortedVisibleBuffers, checkAndNavigatePendingNotificationBuffer } from '#lib/stores/models.ts';
   import { connectionState, setReconnectAttempts, setNextReconnectAt, setErrors } from '#lib/stores/connectionStore.ts';
-  import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer, getSession, getWs, initFocusReconnect, cleanupFocusReconnect, setHotlistPollInterval } from '#lib/stores/connectionManager.ts';
+  import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer, listScripts, getSession, getWs, initFocusReconnect, cleanupFocusReconnect, setHotlistPollInterval } from '#lib/stores/connectionManager.ts';
   import { initNotifications, updateTitle, updateFavico, onDisconnect } from '#lib/notifications.ts';
-  import { parseRelayUrl, isPopoverOpen, bufferHasNicklist, modifyTextareaValue } from '#lib/utils.ts';
+  import { parseRelayUrl, isPopoverOpen, bufferHasNicklist, modifyTextareaValue, captureBufferAppearance, waitForFreshBuffer, scriptInstalled } from '#lib/utils.ts';
   import { addToast, toastStore } from '#lib/toast.ts';
   import { showWindow } from '#lib/tauriWindow.ts';
 
@@ -424,17 +424,26 @@
     modal?.showPopover();
   }
 
+  // WeeChat's grep result buffer (fullName: 'python.grep', shortName: 'grep').
+  const GREP_BUFFER = 'grep';
+
   async function executeContentSearch(query: string) {
-    // Send /grep scoped to the current buffer so WeeChat searches the right one
     const bufId = get(activeBufferId);
+    // The result buffer is reused across searches, so snapshot it first: an
+    // existing buffer only counts as a result once it was cleared or changed.
+    const before = captureBufferAppearance(GREP_BUFFER);
     sendWeeChatCommand(`/grep ${query}`, bufId);
-    // Wait for WeeChat to process — the *grep buffer may already exist
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    const allBuffers = Object.values(get(buffers)) as BufferData[];
-    // WeeChat's grep buffer shortName is 'grep' (fullName: 'python.grep')
-    const grepBuffer = allBuffers.find(b => b.shortName === 'grep');
-    if (grepBuffer) {
-      await switchBuffer(grepBuffer.id);
+    // Wait for the buffer to open or change instead of sleeping a fixed second.
+    const freshId = await waitForFreshBuffer(GREP_BUFFER, before, 3000);
+    if (freshId !== null) {
+      await switchBuffer(freshId);
+      return;
+    }
+    // Nothing changed within the wait: either the script is missing or WeeChat
+    // rejected the command. Only blame the script when the listing proves it.
+    const scripts = await listScripts();
+    if (scriptInstalled(scripts, 'grep') === false) {
+      addToast('The /grep script is not installed', { type: 'info', duration: 4000 });
     } else {
       addToast('No results found', { type: 'info', duration: 2000 });
     }

@@ -29,6 +29,8 @@ form; this directory keeps the reproducible evidence.
    ```bash
    node probes/probe-session.mjs        # bootstrap, completion, input, lines, G1 notify experiment
    node probes/probe-lifecycle.mjs      # free buffers, errors, close events, event inventory
+   node probes/probe-scripts-grep.mjs   # /api/scripts shape + /grep buffer freshness (needs the
+                                        # gbtest grep shim autoloaded; isolated profile, port 9012)
    node probes/probe-auth-algorithms.mjs # all five auth algorithms, HTTP + WS (needs a
                                           # dedicated instance on 9011 with
                                           # password_hash_algo=*; see that file's header)
@@ -112,6 +114,24 @@ No PUT/DELETE resources exist despite the CORS Allow header.
   (nick candidates embed the configured completer suffix).
 - `/msg prob` → context `command_arg`, `position_replace:5`, `list:["probebot"]`.
 - `/ver` (core) → context `command`, `position_replace:1`, `list:["version"]`.
+
+### Scripts list + content-search freshness (live, `probes/probe-scripts-grep.mjs`)
+
+- `GET /api/scripts` → `body_type:"scripts"`, `body:[{name,version,description,
+  author,license}]`. **`name` is the script filename** (`grep.py`, not `grep`),
+  so a script check must strip the extension before comparing.
+- The `*grep` results buffer is **shared and reused** (`name:"python.grep",
+  short_name:"grep"`), so it can already exist before a search is sent.
+- Every `/grep` run — hit **or** miss — emits `buffer_cleared`, then
+  `buffer_title_changed`, then `buffer_line_added` lines. A miss still writes
+  two lines (`Searching text '…' in buffer …` + `No results found for '…'`).
+  Consequence for the app: buffer *existence* cannot prove results; freshness
+  must come from the clear (the app's `clearEpoch`) or new lines, and the
+  "script missing" case is the only one where nothing ever changes.
+- `GET /api/buffers/{id}/infolist` → 404 `Sub-resource of buffers not found:
+  "infolist"` — there is no infolist sub-resource; buffer state comes from
+  `GET /api/buffers/{id}` plus events.
+- Raw evidence: `raw/scripts-grep-freshness.json`, `frames/probe-scripts-grep.jsonl`.
 
 ### Lifecycle events (live)
 

@@ -191,6 +191,19 @@ export interface BufferData {
     active: boolean;
 }
 
+// ---- Pending navigation ----
+
+// A requested auto-switch: WeeChat opens the target buffer asynchronously, so
+// the app remembers what the user asked for until the buffer arrives. The nick
+// alone is not enough — two IRC servers can each open a query buffer for the
+// same nick — and `requestId` identifies one request so an older timeout cannot
+// clear a newer identical request.
+export interface PendingQuery {
+    nick: string;
+    /** IRC server the request came from; null means the context is unknown. */
+    server: string | null;
+    requestId: number;
+}
 // ---- Connection ----
 
 export interface ConnectionConfig {

@@ -47,6 +47,10 @@ src-svelte/coverage/
 
 # Personal notes
 /src-svelte/TODO.md
+# Root-level planning notes (personal, not for the repo)
+/TODO.md
+/plan-*.md
+
 # local performance journal (not for the repo)
 /PERFORMANCE.md
 

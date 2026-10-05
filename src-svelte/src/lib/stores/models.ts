@@ -9,6 +9,7 @@ import type {
     BufferType,
     Nick,
     NickGroup,
+    PendingQuery,
     RichTextPart,
 } from "#lib/types.ts";
 import { rawText2Rich, parseWeechatNickColor } from "#lib/weechat-colors.ts";
@@ -542,11 +543,33 @@ export const reconnecting = writable<boolean>(false);
 
 export const lastError = writable<number>(0);
 
-// Stores the nickname of a user clicked in the nicklist so we can auto-switch to their private buffer once /query creates it; cleared on match or timeout
+// A pending auto-switch to a private/query buffer WeeChat has not opened yet. The
+// nick alone is not enough: two IRC servers can each open a query buffer for the
+// same nick, so the originating server is carried along (null = context unknown).
+// `requestId` identifies one request so an older click timeout cannot clear a
+// newer identical request.
+let pendingSwitchRequestSeq = 0;
+
+/** Fresh pending-switch payload for `nick` inside the `server` context. */
+export function newPendingSwitch(nick: string, server: string | null): PendingQuery {
+    return { nick, server, requestId: ++pendingSwitchRequestSeq };
+}
+
+/** Whether a buffer that just opened is the one a pending switch asked for. */
+export function matchesPendingSwitch(buffer: BufferData, pending: PendingQuery | null): boolean {
+    if (!pending) return false;
+    if (buffer.shortName.toLowerCase() !== pending.nick.toLowerCase()) return false;
+    return pending.server === null || buffer.server === pending.server;
+}
+
+/** Clear the pending switch only while it is still the request `requestId`
+ * belongs to, so an older click timeout cannot drop a newer request. */
+export function clearPendingSwitchIfCurrent(requestId: number): void {
+    if (get(pendingBufferSwitch)?.requestId === requestId) pendingBufferSwitch.set(null);
+}
+
 import { type Writable } from "svelte/store";
-export const pendingBufferSwitch: Writable<string | null> = writable<
-  string | null
->(null);
+export const pendingBufferSwitch: Writable<PendingQuery | null> = writable<PendingQuery | null>(null);
 
 export const previousBufferId = writable<string>("");
 
@@ -668,13 +691,33 @@ export function getBuffer(bufferId: string): BufferData | undefined {
  */
 export function findBufferByShortName(
     name: string,
-    types?: BufferType[]
+    types?: BufferType[],
+    server?: string | null,
 ): BufferData | undefined {
     const lower = name.toLowerCase();
     return Object.values(get(buffers)).find((b) => {
         if (b.shortName.toLowerCase() !== lower) return false;
         if (types && types.length > 0 && !types.includes(b.type as BufferType)) return false;
+        // A nick can be queried on several IRC servers at once; only the one in
+        // this server context is the intended target (null = context unknown).
+        if (server !== undefined && server !== null && b.server !== server) return false;
         return true;
+    });
+}
+
+/** Whether a buffer has no older history to ask for. Free buffers (`/exec -nf`,
+ * plugin output) hold live-only rows: a history request would re-deliver the
+ * current rows as duplicates rather than older content. */
+export function hasNoHistoryToFetch(buffer: BufferData): boolean {
+    return buffer.bufferType === 1;
+}
+
+/** Mark a buffer's history complete so no further history request is issued. */
+export function markHistoryComplete(bufferId: string): void {
+    buffers.update((current) => {
+        const buf = current[bufferId];
+        if (!buf || buf.allLinesFetched) return current;
+        return { ...current, [bufferId]: { ...buf, allLinesFetched: true } };
     });
 }
 

@@ -199,3 +199,65 @@ test('search results appear in grep buffer', async () => {
         .first();
     await expect(grepResult).toBeVisible({ timeout: 10000 });
 });
+
+async function expectActiveBuffer(
+    p: import('@playwright/test').Page,
+    name: string,
+) {
+    // Topic bar names the active buffer, so this also scopes row assertions to
+    // that buffer: ChatView only renders rows for the buffer in view.
+    await expect(
+        p.getByTestId('topic-bar').locator('.topic-channel-name'),
+    ).toContainText(name, { timeout: 15000 });
+}
+
+test('a second search replaces the previous results', async () => {
+    await switchToBuffer(page, '#glowing-bear');
+    const stamp = Date.now();
+    const termA = `grep-alpha-${stamp}`;
+    const termB = `grep-beta-${stamp}`;
+    await botSayVisible(page, termA);
+    await botSayVisible(page, termB);
+
+    const rows = page.locator('[data-testid="bufferline-row"] td.message');
+
+    await openContentSearch(page);
+    await page.locator('#content-search-input').fill(termA);
+    await page.locator('#content-search-input').press('Enter');
+    await expectActiveBuffer(page, 'grep');
+    await expect(rows.filter({ hasText: termA }).first()).toBeVisible();
+
+    // WeeChat reuses the same grep buffer, so the second run must replace the
+    // first run's rows rather than leave them on screen.
+    await switchToBuffer(page, '#glowing-bear');
+    await openContentSearch(page);
+    await page.locator('#content-search-input').fill(termB);
+    await page.locator('#content-search-input').press('Enter');
+    await expectActiveBuffer(page, 'grep');
+
+    await expect(rows.filter({ hasText: termB }).first()).toBeVisible();
+    await expect(rows.filter({ hasText: termA })).toHaveCount(0);
+});
+
+test('a search with no matches leaves stale results behind', async () => {
+    await switchToBuffer(page, '#glowing-bear');
+    const stamp = Date.now();
+    const term = `grep-visible-${stamp}`;
+    await botSayVisible(page, term);
+
+    // Populate the grep buffer with a matching search first.
+    await openContentSearch(page);
+    await page.locator('#content-search-input').fill(term);
+    await page.locator('#content-search-input').press('Enter');
+    await expectActiveBuffer(page, 'grep');
+
+    await switchToBuffer(page, '#glowing-bear');
+    const missing = `grep-no-match-${stamp}`;
+    await openContentSearch(page);
+    await page.locator('#content-search-input').fill(missing);
+    await page.locator('#content-search-input').press('Enter');
+    await expectActiveBuffer(page, 'grep');
+
+    const rows = page.locator('[data-testid="bufferline-row"] td.message');
+    await expect(rows.filter({ hasText: term })).toHaveCount(0);
+});

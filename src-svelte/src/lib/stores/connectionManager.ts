@@ -15,6 +15,7 @@
 //  - 'api' / 'legacy': skip probing and connect directly on the choice.
 
 import { get } from 'svelte/store';
+import { getBuffer, activeBufferId, hasNoHistoryToFetch, markHistoryComplete } from '#lib/stores/models.ts';
 import { settings } from '#lib/stores/settings.ts';
 import { activeTransport } from '#lib/stores/connectionStore.ts';
 import { resolveApiEndpoint } from '#lib/api/api-endpoint.ts';
@@ -126,8 +127,24 @@ export async function requestNicklist(bufferId: string): Promise<void> {
 }
 
 export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: string): Promise<void> {
+    // Free buffers (/exec -nf, plugin output) have no older history: gate them
+    // here as well as inside each transport, because each transport also calls
+    // its own fetchMoreLines when you switch to a buffer.
+    const bufferId = explicitBufferId ?? get(activeBufferId);
+    const buffer = getBuffer(bufferId);
+    if (buffer && hasNoHistoryToFetch(buffer)) {
+        markHistoryComplete(bufferId);
+        return;
+    }
     if (transport === 'legacy') return legacy.fetchMoreLines(numLines, explicitBufferId);
     return api.fetchMoreLines(numLines, explicitBufferId);
+}
+
+/** Installed script names, or null when they cannot be listed. The legacy
+ *  protocol has no script listing, so it reports unknown rather than empty. */
+export async function listScripts(): Promise<string[] | null> {
+    if (transport === 'legacy') return null;
+    return api.listScripts();
 }
 
 export async function sendWeeChatCommand(command: string, bufferId?: string): Promise<boolean> {

@@ -17,6 +17,7 @@ import {
     buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer,
     localUnreadBuffers, hotlistClearedBuffers, bufferBottom, previousBufferId,
     pendingBufferSwitch, beginSyncPhase, endSyncPhase, weechatVersion, relayApiVersion,
+    hasNoHistoryToFetch, markHistoryComplete,
 } from '#lib/stores/models.ts';
 import { settings } from '#lib/stores/settings.ts';
 import { addToast, removeToast, updateToast, toastStore } from '#lib/toast.ts';
@@ -26,6 +27,7 @@ import { ApiOrchestrator, type OrchestratorStatus } from '#lib/api/api-orchestra
 import { createApiStoreReducers } from '#lib/api/api-store-reducers.ts';
 import { mapHotlist, applyNicklistRoot } from '#lib/api/api-mapping.ts';
 import { fetchHistory, sendInput, clearHiddenLineIdTracking, type InputOutcome } from '#lib/api/api-features.ts';
+import { validateScript } from '#lib/api/api-validation.ts';
 import type { ApiSession } from '#lib/api/api-session.ts';
 import type { ApiBufferId } from '#lib/api/api-ids.ts';
 import { DEBUG_NICKLIST, DEBUG_WEECHAT_COMMANDS, DEBUG_CONNECTION } from '#lib/debug.ts';
@@ -371,6 +373,25 @@ export async function requestNicklist(bufferId: string) {
     }
 }
 
+/** Installed script names, or null when the listing is unavailable or failed.
+ *  `null` means "unknown": a caller must not conclude a script is missing. */
+export async function listScripts(): Promise<string[] | null> {
+    const session = currentSession();
+    if (!session) return null;
+    try {
+        const res = await session.request({ method: 'GET', path: '/api/scripts' });
+        if (res.code !== 200 || !Array.isArray(res.body)) return null;
+        const names = res.body.flatMap((raw) => {
+            const v = validateScript(raw);
+            return v.value ? [v.value.name] : [];
+        });
+        flushByteStats();
+        return names;
+    } catch {
+        return null;
+    }
+}
+
 const pendingFetchBuffers = new Set<string>();
 
 export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: string): Promise<void> {
@@ -384,6 +405,14 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
     if (apiId === null) return;
 
     if (buffer.allLinesFetched) return;
+
+    // Free buffers (/exec -nf, plugin output) have no older history — their rows
+    // are live-only, so asking for history would re-deliver the current rows as
+    // duplicates. Mark them complete instead of issuing a lines request.
+    if (hasNoHistoryToFetch(buffer)) {
+        markHistoryComplete(bufferId);
+        return;
+    }
     if (pendingFetchBuffers.has(buffer.id)) return;
     pendingFetchBuffers.add(buffer.id);
 

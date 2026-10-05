@@ -20,6 +20,7 @@ import {
     parseRichText,
     removeBuffer,
     pendingBufferSwitch,
+    matchesPendingSwitch,
     isSyncing,
     maxBufferLines,
     setReadBoundary,
@@ -1022,14 +1023,12 @@ export function handleBufferOpened(message: ProtocolMessage) {
         }
     }
 
-    // Check if this buffer matches a pending switch request from nicklist click
-    const targetNick = get(pendingBufferSwitch) as string | null;
-    if (
-        targetNick &&
-      newBuffer.shortName.toLowerCase() === targetNick.toLowerCase()
-    ) {
+    // Check if this buffer matches a pending switch request from /q or a nicklist
+    // click; the server context disambiguates same-nick queries on different servers.
+    const pending = get(pendingBufferSwitch);
+    if (matchesPendingSwitch(newBuffer, pending)) {
         if (DEBUG_HANDLERS)
-            console.log("[handler] auto-switching to query buffer for:", targetNick);
+            console.log("[handler] auto-switching to query buffer for:", pending?.nick);
         setActiveBuffer(newBuffer.id);
         pendingBufferSwitch.set(null);
     }
