@@ -1,4 +1,12 @@
 # A web client for WeeChat [![Build Status](https://api.travis-ci.org/glowing-bear/glowing-bear.png)](https://travis-ci.org/glowing-bear/glowing-bear?branch=master)
+> **Archived.** This is the original AngularJS client, kept for reference only. It is not
+> built, tested, or shipped from this repository — the active client is the Svelte version
+> at the repository root (`src-svelte/`). Do not modify these files unless explicitly asked,
+> and do not read them as current behaviour: the transport code here speaks only the legacy
+> `weechat` WebSocket protocol, while the Svelte client additionally speaks the WeeChat 4.10.1+
+> `api` relay.
+
+
 
 Glowing Bear is a web frontend for the [WeeChat](https://weechat.org) IRC client and strives to be a modern interface. It relies on WeeChat to do all the heavy lifting and then provides some nice features on top of that, like embedding images, videos, and other content. The best part, however, is that you can use it from any modern internet device -- whether it's a computer, tablet, or smart phone -- and all your stuff is there, wherever you are. You don't have to deal with the messy technical details, and all you need to have installed is a browser or our app.
 

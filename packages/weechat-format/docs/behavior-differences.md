@@ -2,7 +2,8 @@
 
 Every intentional or discovered difference between:
 
-- **upstream** — WeeChat 4.10.1 (`/tmp/weechat-4.10.1`, verified against source)
+- **upstream** — WeeChat 4.10.1 source (the installed `/opt/homebrew/bin/weechat` is the
+  same version; `oracle/weechat_color_scan.c` vendors two scanner functions verbatim)
 - **adapter** — `src-svelte/src/lib/weechat-colors.ts` (`rawText2Rich`), the application parser
 - **legacy** — `src-angular/js/weechat.js` (`WeeChatProtocol.rawText2Rich`), kept as a historical baseline
 - **library** — `@glowingbear/weechat-format`

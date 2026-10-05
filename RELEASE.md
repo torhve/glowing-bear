@@ -48,7 +48,7 @@ npm run lint
 npm test
 
 # E2E tests (required)
-npm run test:e2e
+npm run test:e2e                # must be a CLEAN run — see the flake note below
 
 # Production build (static web)
 npm run build
@@ -58,6 +58,12 @@ npm run tauri build
 ```
 
 If any step fails, fix before proceeding.
+
+E2E flakes are load-sensitive, not free: `ChatView-scroll` and `Nicklist-mobileSwipe`
+have failed under a loaded machine before, and full UI runs have intermittently failed in
+App-layout and KeyboardShortcuts. A release requires a full clean run of both passes —
+rerun the whole suite before believing an isolated failure, and never release on a run
+that had a failure even if the failing spec passes on its own.
 
 ---
 
@@ -91,6 +97,18 @@ git push origin v0.21.0
 3. Click **Publish release**
 
 Publishing the release automatically triggers the **Build & Release** workflow. Write release notes directly in the GitHub UI — no separate changelog file is maintained.
+
+A release note for this codebase has to name the transport facts, because they change
+what the user has to run on the WeeChat side:
+
+- which relay transports the release speaks (`api` on WeeChat 4.10.1+, legacy `weechat`
+  on older WeeChat), and that the app probes the address and picks one transport per connection
+- the minimum WeeChat version for the API transport, and that the legacy transport still
+  works but is no longer the default path
+- anything the release refuses rather than degrades: a TOTP-protected relay is rejected
+  with an error, not half-supported
+- the `/grep` requirement for content search, and that a missing script is reported as
+  such only when the script listing from the relay proves it is missing
 
 ---
 

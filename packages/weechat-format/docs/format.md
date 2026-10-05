@@ -1,9 +1,10 @@
 # WeeChat inline chat format — verified specification
 
-Ground truth: **WeeChat 4.10.1** source at `/tmp/weechat-4.10.1` (identical to the
-installed `/opt/homebrew/bin/weechat`). Every rule below cites the file and line
-range it was transcribed from. Where two upstream routines disagree with each
-other, both are recorded and the library's choice is stated.
+Ground truth: **WeeChat 4.10.1** source. Every rule below cites the file and line
+range it was transcribed from; the installed `/opt/homebrew/bin/weechat` is the same
+version, and `oracle/weechat_color_scan.c` vendors two scanner functions verbatim
+(their upstream line ranges are recorded in `oracle/divergences.json`). Where two
+upstream routines disagree with each other, both are recorded and the library's choice is stated.
 
 This document describes the protocol the library implements. Divergences from the
 two existing Glowing Bear parsers are in [behavior-differences.md](behavior-differences.md).

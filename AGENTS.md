@@ -1,16 +1,33 @@
 # Glowing Bear Svelte — Agent Guide
 
-Browser frontend for WeeChat IRC via WebSockets — **no backend**. Client-side SvelteKit 3.x + Svelte 5 + TypeScript (strict) + Tailwind CSS v4. Wrapped in Tauri 2.x for desktop. Includes basic PWA via SvelteKit's service worker at `src-svelte/src/service-worker/index.ts` (fetch-through, no caching). Requires WeeChat >= 3.x. The buffer hdata `id` (LONGLONG) exists only in WeeChat 4.3+ and is treated as optional.
+Browser frontend for WeeChat IRC via WebSockets — **no backend**. Client-side SvelteKit 3.x + Svelte 5 + TypeScript (strict) + Tailwind CSS v4. Wrapped in Tauri 2.x for desktop. Includes basic PWA via SvelteKit's service worker at `src-svelte/src/service-worker/index.ts` (fetch-through, no caching). Talks to WeeChat over two relay transports: the 4.10.1+ `api` relay (REST + WebSocket) and the legacy `weechat` WebSocket protocol (WeeChat >= 3.x). The buffer hdata `id` (LONGLONG) exists only in WeeChat 4.3+ and is treated as optional.
 
 ## Project Structure
 
-Source code in `src-svelte/src/` has `components/`, `lib/`, `routes/`, and `service-worker/` (own `tsconfig.json` extending `$app/tsconfig/service-worker`, excluded from the root tsconfig). SvelteKit 3 has no `svelte.config.js` — all Kit config lives in the `sveltekit({...})` plugin options in `vite.config.ts`. Other root config files: `package.json`, `vitest.config.ts`, `eslint.config.js`, `tsconfig.json`, `tsconfig.app.json`. Static assets in `static/`. Test suites in `src-svelte/test/unit/` and `src-svelte/e2e/specs/`. Gbtest environment in `test/fixtures/gbtest/`.
+Source code in `src-svelte/src/` has `components/`, `lib/`, `lib/api/`, `lib/stores/`, `routes/`, and `service-worker/` (own `tsconfig.json` extending `$app/tsconfig/service-worker`, excluded from the root tsconfig). SvelteKit 3 has no `svelte.config.js` — all Kit config lives in the `sveltekit({...})` plugin options in `vite.config.ts`. Other root config files: `package.json`, `vitest.config.ts`, `eslint.config.js`, `tsconfig.json`, `tsconfig.app.json`. Static assets in `static/`. Test suites in `src-svelte/test/unit/` and `src-svelte/e2e/specs/`. Gbtest environment in `test/fixtures/gbtest/`. Live-verified WeeChat API evidence in `src-svelte/test/fixtures/api-dossier/`.
 
 - **`lib/stores/`** — Reactive state (buffers, connection, settings, theme, handlers)
 - **`lib/`** — Core utilities (types, linkTokens, weechat protocol, notifications, etc.)
 - **`lib/utils/`** — Helper utilities (bufferTooltip, crypto, mediaExtensions, etc.)
 - **`components/`** — UI components (chat, buffers, nicklist, modals, shared UI)
 - **`routes/`** — SvelteKit routes (+layout, +page, 404)
+- **`lib/api/`** — WeeChat Relay API transport (auth, endpoint, session, orchestrator, validation, store reducers)
+
+### Live API evidence (`src-svelte/test/fixtures/api-dossier/`)
+
+The API surface is not guessed: `api-dossier/README.md` records what a real WeeChat 4.10.1 relay returns (endpoint shapes, error codes, unsupported endpoints, auth negotiation, freshness events), with probe scripts under `probes/` and captured frames under `frames/` and `raw/`. Read it before changing anything in `lib/api/` — it lists the traps (404 endpoints, `lines_free` overriding `lines` on free buffers, buffer reuse for `/grep`, `infolist` being unsupported).
+
+### Relay transports (dual protocol — never regress)
+
+The app is a **dual-protocol client**. `connectionManager.ts` chooses one transport per connection profile (`host:port:tls`): `api` when the address answers the API probe, `legacy` otherwise; settings can pin `protocol: "api" | "legacy" | "auto"`. The choice is cached until an explicit disconnect, so reconnects do not re-probe.
+
+- Exactly one transport is active per connection. Never add a mid-connection fallback: a failed API connection must not silently switch to legacy, and a legacy connection must not be re-tried over the API.
+
+- The phase-13 items that removed binary decoding, decompression and the legacy frame grammar from the API path are **deliberate**; do not re-tick them. `fflate` stays in the app because the legacy transport still needs zlib — deleting it breaks the legacy path, not the API path.
+
+- gbtest runs both relays on separate ports (API 9010, legacy 9001) so both transports are exercised; E2E connects to one or the other, never both at once.
+
+- Evidence rule: any claim about a relay endpoint, response shape or error code in code comments and docs must come from a live probe recorded in `api-dossier/`, not from the REST docs alone — the docs and the 4.10.1 relay disagree in places.
 
 ### WeeChat Formatting (npm workspace)
 

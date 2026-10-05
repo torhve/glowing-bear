@@ -39,6 +39,46 @@ form; this directory keeps the reproducible evidence.
 3. Raw frames land in `frames/probe-session.jsonl` and `frames/probe-lifecycle.jsonl`
    (one JSON record per line; `step:"frame"` records are exact server frames).
 
+## Relay configuration on the WeeChat side
+
+Relay names follow `[ipv4.][ipv6.][tls.]<protocol.name>` or `unix.[tls.]<protocol.name>`
+(manual §11.9, `/help relay`). This client uses the `api` and `weechat` protocols:
+
+```weechat
+/relay add tls.api 9010        # JSON API over TLS (preferred transport)
+/relay add tls.weechat 9013    # legacy WebSocket protocol over TLS
+/relay add api 9010            # unencrypted — local testing only
+/set relay.network.password YOURPASSWORD
+/set relay.network.tls_cert_key ~/.config/weechat/tls/relay.pem
+```
+
+The gbtest fixture in `test/fixtures/gbtest/start.sh` adds the unencrypted pair instead: `api` on 9010 and `weechat` on 9001, which is what the E2E helpers connect to.
+
+- `tls.*` needs ONE file holding the certificate AND the private key; the default path
+  is `relay.network.tls_cert_key`. `/relay tlscertkey` reloads it in a running WeeChat,
+  which is what an operator runs when certbot renews a certificate mid-upgrade.
+- `relay.network.websocket_allowed_origins` (default empty) is a POSIX regex matched
+  against the browser `Origin` header. `relay-websocket.c:relay_websocket_client_handshake_valid`
+  skips the check entirely when the option is empty; when it is set, a missing or
+  non-matching `Origin` returns `-2` and the upgrade is rejected. A relay that restricts
+  origins must list the origin the app is served from, or every browser connection
+  fails at the handshake rather than at the payload.
+- `relay.network.password_hash_algo` picks the handshake algorithms (`plain`, `sha256`,
+  `sha512`, `pbkdf2+sha256`, `pbkdf2+sha512`; a leading `!` excludes a name).
+  `probe-auth-algorithms.mjs` exercises all five over both HTTP and WS.
+- Hashed credentials embed a Unix timestamp that must fall inside `relay.network.time_window`
+  (default 5 s) of server time — the reason credentials are regenerated per retry.
+- `relay.network.websocket_permessage_deflate` (on by default) is where the API transport
+  sees compression; the legacy transport negotiates zlib per message instead. Keep it
+  on unless a client is known to mishandle the extension.
+- `unix.[tls.]<protocol>` listens on a socket path instead of a port, which is the
+  migration path for hosts where no port can be exposed: add a `unix.api` relay under
+  the WeeChat runtime dir and reach it with `ssh -L 9010:.weechat/relay_socket`, so the
+  browser still connects to a local port.
+- TOTP (`relay.network.totp_secret`) is NOT supported by this client: the app refuses a
+  TOTP-protected relay with an explicit error instead of half-connecting, so gate G3
+  in `TODO.md` §5 stays open.
+
 ## Verified facts (with evidence pointers)
 
 ### Transport and envelope

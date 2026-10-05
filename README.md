@@ -64,6 +64,83 @@ Then enter your WeeChat host, port, and password in Glowing Bear's connection fo
 
 **Please note that the above sets up an unencrypted relay.** All data will be transmitted in clear text. Set up TLS encryption (via Let's Encrypt or similar) before using over the internet. See our [wiki](https://github.com/glowing-bear/glowing-bear/wiki/Proxying-WeeChat-relay-with-a-web-server) for proxying and encryption guides.
 
+Add one relay, not both: Glowing Bear probes the address you enter and talks to it over
+one transport — the API relay when the address answers the API probe, the legacy relay
+otherwise. The choice is remembered per `host:port:tls` until you disconnect, so a
+reconnect does not re-probe; disconnecting clears it and lets you change the relay
+configuration. Settings → Relay protocol can pin the transport (`Auto`, `API` or `Legacy`)
+instead of probing.
+
+Options worth knowing (all under `relay.network.*` unless noted):
+
+| Option | Why it matters here |
+| --- | --- |
+| `password` | required by both transports; the stored value is the plain password, while the app sends a timestamped hash of it rather than the password itself |
+| `password_hash_algo` | the app negotiates `plain`, `sha256`, `sha512`, `pbkdf2+sha256`, `pbkdf2+sha512`; set `*,!plain` to refuse the plaintext handshake |
+| `time_window` | hashed credentials carry a Unix timestamp and must fall within this window of server time (default 5 s) — a clock-skewed server makes every hashed handshake fail |
+| `tls_cert_key` | combined certificate + private key file for `tls.*` relays; reload it with `/relay tlscertkey` without restarting WeeChat |
+| `websocket_allowed_origins` | empty (default) accepts any `Origin`; when set it is a POSIX regex the browser's `Origin` must match, or the WebSocket handshake is rejected — set it when you serve one origin |
+| `websocket_permessage_deflate` | API transport only; browsers request `permessage-deflate` and the relay answers when this is on |
+| `bind_address` / `allowed_ips` | `127.0.0.1` for a local-only relay, or restrict client IPs with a POSIX regex |
+| `totp_secret` | **not supported by this client** — a TOTP-protected relay is refused with an explicit error rather than half-connected, because the browser cannot carry a TOTP in the WebSocket handshake |
+
+A reverse proxy must forward the WebSocket upgrade intact: the API transport opens
+`<base>/api` with subprotocols `api.weechat` and
+`base64url.bearer.authorization.weechat.<credential>` (the credential is the same
+payload the HTTP `Authorization` header carries, base64url-encoded), and the legacy
+transport opens `<base>/weechat`. WeeChat picks the protocol from the URL path and
+authenticates from the subprotocol, so a proxy that rewrites the path or drops
+`Sec-WebSocket-Protocol` breaks the handshake rather than just the framing.
+
+The test fixture (`test/fixtures/gbtest/`) runs both relays on separate ports — API on 9010,
+legacy on 9001 — so both transports are exercised in CI.
+
+### Migrating an existing relay (operator checklist)
+
+Back up the WeeChat configuration (`relay.conf`, `weechat.conf`) before touching the relay,
+and keep a tagged previous release as rollback material — rollback is redeploying that
+release, not a runtime fallback in the client.
+
+1. Confirm the WeeChat version: the API transport needs 4.10.1 or newer (Relay API 0.6.0).
+   Older builds keep working, but only over the legacy relay.
+2. Change the **listener**, not the browser path. A browser update never converts a
+   `weechat` listener into an `api` one:
+
+   ```weechat
+   /relay del weechat
+   /relay add tls.api 9010
+   ```
+
+   `addreplace` swaps a relay without restarting WeeChat.
+3. Serve certificate and private key as ONE file at `relay.network.tls_cert_key`. After
+   certbot renews it, run `/relay tlscertkey` — a running WeeChat keeps serving the old
+   material until you do.
+4. If you set `relay.network.websocket_allowed_origins`, include the origin the app is
+   served from. An empty value skips the check; a set value that omits your origin makes
+   every browser connection fail at the handshake.
+5. Keep `relay.network.websocket_permessage_deflate` on unless a client is known to
+   mishandle it.
+6. Do not enable `relay.network.totp_secret`: this client refuses a TOTP-protected relay
+   rather than half-connecting (see the row above).
+7. If no port can be exposed, listen on a socket instead — `/relay add unix.api` under the
+   WeeChat runtime dir plus `ssh -L 9010:.weechat/relay_socket` gives the browser a local
+   port.
+8. Update the proxy routes to match the new listener — the upgrade must reach WeeChat on
+   `/api` (and `/weechat` while older clients still use it), see the paragraph above.
+9. Update the saved endpoint in the app (host, port, TLS). A bookmark keeps pointing at the
+   previous listener, and the app cannot tell you that the address changed.
+10. Deploy the new frontend only after the listener answers the API probe: an address without
+   an `api` listener still connects, over the legacy transport, which hides a half-migrated
+   relay.
+11. Verify the features against the new listener before retiring the old one: connect, let the
+   unread baseline settle, chat, complete a nick, run a content search.
+12. Retire the old `weechat` listener only when no older client needs it — that is a
+   deployment choice, not dual-protocol support in the client.
+
+The transport choice is cached per `host:port:tls`, so after changing the relay
+configuration, disconnect in the app before reconnecting — otherwise the cached transport
+is reused and a reconfigured listener looks unchanged.
+
 ## Development
 
 ### Tech Stack
@@ -143,7 +220,7 @@ Custom CSS injection is also available in settings for unlimited personalization
 ### Key Features
 
 - **Buffer list** — sortable by number or server, filter unread/pinned, search modal (Alt+G)
-- **Content search** — Ctrl+F to search buffer content (requires WeeChat `/grep` script)
+- **Content search** — Ctrl+F to search buffer content (requires the WeeChat `/grep` script; a relay that does not list a grep script says so instead of reporting no results)
 - **Chat view** — scrollable message history with lazy loading, time grouping, nick prefixes
 - **Nicklist** — searchable nickname list with prefix icons; inline on desktop, swipe overlay on mobile
 - **Hotlist bar** — horizontal strip of buffers with unread activity in the top bar; prominent on mobile when buffer list is hidden
