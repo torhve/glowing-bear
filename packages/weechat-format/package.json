@@ -24,7 +24,9 @@
     "test": "vitest run --config vitest.config.ts",
     "test:watch": "vitest --config vitest.config.ts",
     "bench": "npm run build && node bench/parse.bench.mjs",
-    "lint": "eslint src test bench",
-    "smoke:dist": "npm run build && node test/smoke-dist.mjs"
+    "lint": "eslint src test bench oracle",
+    "smoke:dist": "npm run build && node test/smoke-dist.mjs",
+    "oracle:build": "cc -O2 -std=c99 -Wall -Wextra -o oracle/build/weechat-color-scan oracle/weechat_color_scan.c",
+    "oracle": "npm run oracle:build && node oracle/generate.mjs"
   }
 }

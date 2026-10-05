@@ -1,0 +1,37 @@
+{
+  "comment": [
+    "Places where WeeChat's scanner (gui_color_code_size) and WeeChat's renderer",
+    "(gui_chat_string_next_char + gui_window_string_apply_color_*) consume different",
+    "amounts of the same input. The library follows the renderer, because the",
+    "renderer is what decides what a line looks like; gui_color_code_size exists to",
+    "measure code sizes for line bookkeeping. test/oracle.test.ts asserts that every",
+    "corpus mismatch is explained by exactly one of these rules, that each rule is",
+    "still exercised, and that each example still diverges by the recorded extents."
+  ],
+  "rules": [
+    {
+      "id": "attr-payload-unsupported",
+      "control": "\\x1a / \\x1b followed by anything that is not \\x01-\\x06",
+      "scanner": "consumes the control plus one following character whatever it is (src/gui/gui-color.c:760-768)",
+      "renderer": "advances only for \\x01-\\x06, leaving any other character as literal text (src/gui/curses/gui-curses-window.c:940-1038)",
+      "library": "follows the renderer",
+      "example": { "input": "\u001a*", "scanner": [[0, 2]], "library": [[0, 1]] }
+    },
+    {
+      "id": "bg-extended-truncated",
+      "control": "\\x19B@ with fewer than five characters after the '@'",
+      "scanner": "consumes the '@' and then whatever five-character window is available (src/gui/gui-color.c:650-666)",
+      "renderer": "consumes the '@' only when a full five-character payload follows, otherwise stops before it (src/gui/curses/gui-curses-window.c:710-755)",
+      "library": "follows the renderer",
+      "example": { "input": "\u0019B@", "scanner": [[0, 3]], "library": [[0, 2]] }
+    },
+    {
+      "id": "combined-bg-extended-truncated",
+      "control": "\\x19*<fg>,@ or \\x19*<fg>~@ with fewer than five characters after the '@'",
+      "scanner": "consumes the separator and the '@' unconditionally (src/gui/gui-color.c:697-715)",
+      "renderer": "consumes the separator, then the '@' only when a full five-character payload follows (src/gui/curses/gui-curses-window.c:824-857)",
+      "library": "follows the renderer",
+      "example": { "input": "\u0019*03,@", "scanner": [[0, 6]], "library": [[0, 5]] }
+    }
+  ]
+}

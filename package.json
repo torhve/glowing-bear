@@ -2,7 +2,7 @@
   "name": "glowing-bear",
   "private": true,
   "version": "0.23.1",
-  "description": "Glowing Bear — A web client for WeeChat",
+  "description": "Glowing Bear \u2014 A web client for WeeChat",
   "type": "module",
   "workspaces": [
     "packages/*"
@@ -43,7 +43,8 @@
     "irc:stop": "bash test/fixtures/gbtest/stop.sh",
     "tauri": "npx tauri",
     "tauri:dev": "npx tauri dev",
-    "tauri:build": "npx tauri build"
+    "tauri:build": "npx tauri build",
+    "oracle:weechat-format": "npm run oracle --workspace @glowingbear/weechat-format"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

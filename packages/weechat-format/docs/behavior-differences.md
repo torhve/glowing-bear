@@ -124,11 +124,36 @@ The `*` that used to leak into rendered text from the old `\x1a*` conversion is 
 - Upstream *rendering* was verified by reading C source, not by capturing terminal
   output from a live WeeChat instance. A curses fixture (isolated profile, not the
   user's) would strengthen rows 2–5.
-- `gui_color_code_size()` and the renderer disagree with each other in two places
-  (documented in `format.md` §3). The library follows the renderer; a C oracle harness
-  comparing consumption against `gui_color_code_size` is not yet built.
+- `gui_color_code_size()` and the renderer disagree with each other, and the library
+  follows the renderer. That choice is recorded in `oracle/divergences.json`: three rules,
+  each with the upstream line ranges it came from and one example whose scanner and
+  library extents are both written down. `test/oracle.test.ts` always checks, from the
+  ledger alone, that every example still diverges in the library by the recorded
+  extents. The rules:
+
+  | rule | scanner | renderer | library follows |
+  |---|---|---|---|
+  | `\u001a`/`\u001b` + a character outside `\u0001`–`\u0006` | consumes both | consumes the control only | renderer |
+  | `\u0019B@` with fewer than five characters after `@` | consumes the `@` | stops before it | renderer |
+  | `\u0019*<fg>,@` or `\u0019*<fg>~@` with fewer than five after `@` | consumes separator and `@` | consumes the separator only | renderer |
+
+  A corpus mismatch that fits no rule fails the suite, and a rule that stops occurring
+  fails it too. The corpus is ASCII and checks consumption extents only — not style
+  application, and not Unicode (see `test/unicode.test.ts`).
+- The stronger check is a local tool and is not tracked: `oracle/weechat_color_scan.c` vendors
+  `gui_color_code_size()` and `gui_color_attr_get_flag()` verbatim from WeeChat 4.10.1,
+  and `npm run oracle` compiles it over a 13,928-input ASCII sweep, writing the scanner
+  verdicts to `oracle/weechat-oracle.txt` alongside the inputs in `oracle/corpus.txt`. When
+  those three artifacts are on disk the suite compares every input against the scanner
+  itself; when they are absent, as in a fresh checkout, the ledger checks above still run.
+  Regenerating them needs `cc` and a scanner re-vendored by hand from the upstream
+  files the ledger cites — the ledger records where the scanner came from, not every
+  wrapper byte, so re-vendoring is a manual step that re-verifies the ledger against
+  upstream rather than against the ledger prose alone.
 - The differential corpus is 30 inline-control cases plus 11 raw-IRC cases and a
-  324-case combinatorial matrix; it is not an exhaustive grammar sweep against upstream.
+  324-case combinatorial matrix; it is not an exhaustive grammar sweep against
+  upstream. The oracle sweep above is a separate 13,928-input check of consumption only,
+  ASCII-only so that WeeChat byte offsets and JavaScript UTF-16 offsets coincide.
 - Row 7's background choice and row 9's default-color choice are app policy, not
   upstream behavior; they are the only places where the adapter deliberately departs
   from WeeChat.

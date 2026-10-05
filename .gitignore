@@ -58,3 +58,12 @@ src-svelte/e2e/e2e/
 
 # standalone library build output
 packages/*/dist/
+packages/weechat-format/oracle/build/
+
+# Generated WeeChat consumption-oracle evidence: the vendored upstream scanner,
+# the corpus and the scanner's verdicts. `npm run oracle` (needs cc) rebuilds the
+# corpus and verdicts from the scanner, but the scanner itself has to be re-vendored
+# from WeeChat 4.10.1 by hand. The tracked record is oracle/divergences.json.
+packages/weechat-format/oracle/weechat_color_scan.c
+packages/weechat-format/oracle/corpus.txt
+packages/weechat-format/oracle/weechat-oracle.txt

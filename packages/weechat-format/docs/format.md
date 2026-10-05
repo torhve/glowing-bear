@@ -108,7 +108,16 @@ The two upstream routines are not identical, and the library follows the
 | --- | --- | --- | --- |
 | `\x1a*` | consumes 2 (`\x1a` + any char) | consumes 1, `*` is text | renderer |
 | `\x1b*` | consumes 2 | consumes 1, `*` is text | renderer |
+| `\x19B@` (fewer than five characters after `@`) | consumes the `@` | leaves `@` as text | renderer |
 | `\x19*03,@12` | consumes the `@` window | leaves `@12` as text when the window is truncated | renderer |
+
+These are not hypothetical: `gui_color_attr_get_flag()` and `gui_color_code_size()`
+are vendored verbatim from WeeChat 4.10.1 into `oracle/weechat_color_scan.c`, `npm run
+oracle` runs that scanner over 13,928 generated inputs, and `test/oracle.test.ts` fails
+unless every difference between the library and that scanner is one of the rows above.
+The scanner, its corpus and its verdicts are local artifacts — `oracle/divergences.json`
+is the tracked record of these rows, and the suite checks the library against it even
+without them.
 
 A malformed control is therefore **consumed** (it never appears as text) but
 applies **no** style change. The library reports it through the diagnostic

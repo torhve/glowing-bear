@@ -20,6 +20,8 @@ Source code in `src-svelte/src/` has `components/`, `lib/`, `routes/`, and `serv
 
 - Do not add color grammar, color tables or parser state to the adapter or to components — extend the library and its tests instead, and keep IRC/CSS compatibility in the adapter.
 - Deliberate departures from upstream are recorded in `packages/weechat-format/docs/behavior-differences.md`; `test/differential.test.ts` locks every divergence it covers to that ledger, so a new undocumented difference — or a documented one that disappeared — fails the suite. The ledger covers the cases the suite exercises, not every possible input.
+- The tracked record of scanner-vs-renderer divergence is `packages/weechat-format/oracle/divergences.json`: three rules, each with upstream line ranges and one example whose scanner and library extents are both recorded. `test/oracle.test.ts` always checks, from that ledger alone, that every example still diverges in the library by the recorded extents and that a documented divergence cannot excuse a later one.
+- A stronger check is a local, untracked tool: `oracle/weechat_color_scan.c` vendors `gui_color_code_size()` and `gui_color_attr_get_flag()` verbatim from WeeChat 4.10.1, `npm run oracle:weechat-format` compiles it (needs `cc`) over a 13,928-input ASCII corpus and writes `oracle/corpus.txt` + `oracle/weechat-oracle.txt`, and `test/oracle.test.ts` then fails unless every library-vs-scanner difference is one of the ledger's rules (and unless each rule still occurs). Those three files are generated evidence, gitignored on purpose — the repo carries the conclusion, not ~700 KB of evidence. Regenerate when the scanner, the generator or the corpus changes; regeneration is idempotent and re-pins the sha256 header, so that check only catches an oracle left stale beside an edited scanner. Re-vendoring a deleted scanner is a manual step: the ledger's upstream line ranges say where the scanner came from, not every wrapper byte. The oracle covers consumption only, not style application.
 - Visible color/attribute rendering is covered by `src-svelte/e2e/specs/MessageColors.test.ts` (serial project: it sends channel messages).
 
 
@@ -36,6 +38,7 @@ npm run test:weechat-format    # Standalone formatter package tests (packages/we
 npm run check:weechat-format   # Formatter package typecheck
 npm run bench:weechat-format   # Formatter throughput benchmark + linear-scaling guard
 npm run smoke:weechat-format   # Build + consumer/packaging smoke test
+npm run oracle:weechat-format  # Regenerate the local WeeChat consumption oracle from the vendored scanner (needs cc; re-vendor the scanner by hand if it is missing; artifacts untracked)
 npm run test:e2e               # Full E2E: serial channel specs, then parallel UI-only specs
 npm run test:e2e:serial -- --grep "X" # Targeted E2E (channel-dependent specs)
 npm run test:e2e:ui -- --grep "X"     # Targeted E2E (UI-only specs)
