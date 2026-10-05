@@ -42,8 +42,7 @@ async function waitForBatch(sock: FakeSocket): Promise<Array<{ request_id: strin
 function testReducers() {
     return {
         buffers: vi.fn(), bufferOpened: vi.fn(), bufferClosing: vi.fn(), bufferClosed: vi.fn(),
-        bufferTitleChanged: vi.fn(), bufferLocalvarSet: vi.fn(), bufferLocalvarRemoved: vi.fn(),
-        bufferModesChanged: vi.fn(), bufferNotifyChanged: vi.fn(), bufferInputChanged: vi.fn(), lineAdded: vi.fn(),
+        bufferUpdated: vi.fn(), bufferNotifyChanged: vi.fn(), bufferInputChanged: vi.fn(), lineAdded: vi.fn(),
         lineDataChanged: vi.fn(), bufferCleared: vi.fn(), nickGroupChanged: vi.fn(),
         nickGroupRemoved: vi.fn(), nickChanged: vi.fn(), nickRemoved: vi.fn(),
         hotlist: vi.fn(), completion: vi.fn(), inputRejected: vi.fn(), unhandled: vi.fn(),

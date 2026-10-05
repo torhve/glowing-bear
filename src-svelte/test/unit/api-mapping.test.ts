@@ -9,8 +9,7 @@ import type { ApiSessionEvent } from '#lib/api/api-session.ts';
 function reducers(): ApiReducers {
     return {
         buffers: vi.fn(), bufferOpened: vi.fn(), bufferClosing: vi.fn(), bufferClosed: vi.fn(),
-        bufferTitleChanged: vi.fn(), bufferLocalvarSet: vi.fn(), bufferLocalvarRemoved: vi.fn(),
-        bufferModesChanged: vi.fn(), bufferNotifyChanged: vi.fn(), bufferInputChanged: vi.fn(), lineAdded: vi.fn(),
+        bufferUpdated: vi.fn(), bufferNotifyChanged: vi.fn(), bufferInputChanged: vi.fn(), lineAdded: vi.fn(),
         lineDataChanged: vi.fn(), bufferCleared: vi.fn(), nickGroupChanged: vi.fn(),
         nickGroupRemoved: vi.fn(), nickChanged: vi.fn(), nickRemoved: vi.fn(),
         hotlist: vi.fn(), completion: vi.fn(), inputRejected: vi.fn(), unhandled: vi.fn(),
@@ -139,14 +138,40 @@ describe('dispatchEvent', () => {
         expect(r.unhandled).toHaveBeenCalled();
     });
 
-    it('routes simple string-body events (title, localvar removed, modes)', () => {
+    // Live 4.10.1 shape: every buffer_* change signal carries a FULL buffer
+    // snapshot as its body — there is no string-body variant and no
+    // buffer_localvar_set event (real names: added/changed/removed).
+    it('routes buffer change events through bufferUpdated with full buffer bodies', () => {
+        const r = reducers();
+        dispatchEvent(event('buffer_title_changed', 1759000000000001, { ...BUFFER, title: 'new title' }, 'buffer'), r);
+        dispatchEvent(event('buffer_localvar_added', 1759000000000001, { ...BUFFER, local_variables: { ...BUFFER.local_variables, pinned: 'true' } }, 'buffer'), r);
+        dispatchEvent(event('buffer_localvar_changed', 1759000000000001, { ...BUFFER, local_variables: { ...BUFFER.local_variables, channel: '#chan2' } }, 'buffer'), r);
+        // Removal does NOT name the variable: the remaining map is authoritative.
+        dispatchEvent(event('buffer_localvar_removed', 1759000000000001, { ...BUFFER, local_variables: { type: 'channel' } }, 'buffer'), r);
+        dispatchEvent(event('buffer_modes_changed', 1759000000000001, { ...BUFFER, modes: 'vo' }, 'buffer'), r);
+        dispatchEvent(event('buffer_hidden', 1759000000000001, { ...BUFFER, hidden: true }, 'buffer'), r);
+        dispatchEvent(event('buffer_unhidden', 1759000000000001, { ...BUFFER }, 'buffer'), r);
+        dispatchEvent(event('buffer_renamed', 1759000000000001, { ...BUFFER, name: 'irc.glowing-bear.#renamed', short_name: '#renamed' }, 'buffer'), r);
+        dispatchEvent(event('buffer_type_changed', 1759000000000001, { ...BUFFER, type: 'free' }, 'buffer'), r);
+        dispatchEvent(event('buffer_moved', 1759000000000001, { ...BUFFER, number: 9 }, 'buffer'), r);
+        expect(r.bufferUpdated).toHaveBeenCalledTimes(10);
+        expect(r.bufferUpdated).toHaveBeenCalledWith(expect.objectContaining({ title: 'new title' }));
+        expect(r.bufferUpdated).toHaveBeenCalledWith(expect.objectContaining({ modes: 'vo' }));
+        expect(r.bufferUpdated).toHaveBeenCalledWith(expect.objectContaining({ hidden: true }));
+        expect(r.bufferUpdated).toHaveBeenCalledWith(expect.objectContaining({ shortName: '#renamed' }));
+        expect(r.bufferUpdated).toHaveBeenCalledWith(expect.objectContaining({ contentType: 'free' }));
+        expect(r.bufferUpdated).toHaveBeenCalledWith(expect.objectContaining({ number: 9 }));
+        expect(r.unhandled).not.toHaveBeenCalled();
+    });
+
+    it('rejects fabricated string bodies on buffer change events', () => {
         const r = reducers();
         dispatchEvent(event('buffer_title_changed', 1759000000000001, 'new title'), r);
         dispatchEvent(event('buffer_localvar_removed', 1759000000000001, 'pinned'), r);
-        dispatchEvent(event('buffer_modes_changed', 1759000000000001, 'vo'), r);
-        expect(r.bufferTitleChanged).toHaveBeenCalledWith(1759000000000001, 'new title');
-        expect(r.bufferLocalvarRemoved).toHaveBeenCalledWith(1759000000000001, 'pinned');
-        expect(r.bufferModesChanged).toHaveBeenCalledWith(1759000000000001, 'vo');
+        expect(r.bufferUpdated).not.toHaveBeenCalled();
+        expect(r.unhandled).toHaveBeenCalledTimes(2);
+        expect(r.unhandled.mock.calls[0][0]).toContain('buffer_title_changed invalid');
+        expect(r.unhandled.mock.calls[1][0]).toContain('buffer_localvar_removed invalid');
     });
 
     it('routes buffer_notify_changed from a buffer body or a bare level string', () => {
@@ -171,12 +196,17 @@ describe('dispatchEvent', () => {
         expect(mapBuffer(BUFFER)?.notify).toBeUndefined();
     });
 
-    it('routes object-body events (localvar set, input changed)', () => {
+    it('routes buffer_cleared and the real input events (not fabricated names)', () => {
         const r = reducers();
-        dispatchEvent(event('buffer_localvar_set', 1759000000000001, { name: 'pinned', value: 'true' }), r);
-        dispatchEvent(event('buffer_input_changed', 1759000000000001, { input: 'hello', cursor_pos: 5 }), r);
-        expect(r.bufferLocalvarSet).toHaveBeenCalledWith(1759000000000001, 'pinned', 'true');
+        dispatchEvent(event('buffer_cleared', 1759000000000001, { ...BUFFER }, 'buffer'), r);
+        dispatchEvent(event('input_text_changed', 1759000000000001, { ...BUFFER, input: 'hello', input_position: 5 }, 'buffer'), r);
+        dispatchEvent(event('input_text_cursor_moved', 1759000000000001, { ...BUFFER, input_position: 3 }, 'buffer'), r);
+        dispatchEvent(event('input_prompt_changed', 1759000000000001, { ...BUFFER, input_prompt: '<nicks>' }, 'buffer'), r);
+        expect(r.bufferCleared).toHaveBeenCalledWith(1759000000000001);
         expect(r.bufferInputChanged).toHaveBeenCalledWith(1759000000000001, 'hello', 5);
+        expect(r.bufferInputChanged).toHaveBeenCalledWith(1759000000000001, '', 3);
+        expect(r.bufferInputChanged).toHaveBeenCalledWith(1759000000000001, '', 0);
+        expect(r.unhandled).not.toHaveBeenCalled();
     });
 
     it('routes nick/group lifecycle events', () => {
@@ -247,8 +277,8 @@ describe('dispatchEvent', () => {
 
     it('unknown events go to unhandled without crashing', () => {
         const r = reducers();
-        dispatchEvent(event('input_prompt_changed', 1759000000000001, 'new prompt'), r);
         dispatchEvent(event('brand_new_event_from_the_future', 1, {}), r);
+        dispatchEvent(event('buffer_hidden', 1759000000000001, 'not a buffer'), r);
         expect(r.unhandled).toHaveBeenCalledTimes(2);
     });
 

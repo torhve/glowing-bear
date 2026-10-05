@@ -24,7 +24,7 @@ import {
 import { shouldResume } from '#lib/stores/bufferResume.ts';
 import { createHighlight, playNotificationSound, updateTitle, updateFavico } from '#lib/notifications.ts';
 import { isWindowFocused } from '#lib/windowFocus.ts';
-import type { BufferData, Nick, NickGroup } from '#lib/types.ts';
+import type { BufferData, BufferType, Nick, NickGroup } from '#lib/types.ts';
 import type {
     ApiReducers, BufferSnapshot, LineSnapshot, NickSnapshot, NickGroupSnapshot,
     HotlistSnapshot,
@@ -123,7 +123,14 @@ function upsertBuffer(map: Record<string, BufferData>, snap: BufferSnapshot): Bu
     existing.rtitle = existing.title.map((t) => t.text).join('');
     existing.localVariables = Object.keys(snap.localVariables).length ? { ...snap.localVariables } : undefined;
     existing.pinned = snap.localVariables.pinned === 'true';
+    // Content type (formatted/free) is the legacy numeric bufferType; the
+    // semantic BufferType ('channel'…) lives in local_variables, exactly as
+    // the legacy buffer handlers derive it.
+    existing.bufferType = snap.contentType === 'free' ? 1 : 0;
     existing.hideBufferLineTimes = snap.contentType === 'free';
+    if (snap.localVariables.type) existing.type = snap.localVariables.type as BufferType;
+    if (snap.localVariables.plugin) existing.plugin = snap.localVariables.plugin;
+    if (snap.localVariables.server) existing.server = snap.localVariables.server;
     if (snap.notify !== undefined) existing.notify = snap.notify;
     return existing;
 }
@@ -343,58 +350,24 @@ export function createApiStoreReducers(): ApiReducers {
             removeBuffer(key, buffer.active);
         },
 
-        bufferTitleChanged(bufferId, title): void {
-            const key = storeKeyForBufferId(bufferId);
+        bufferUpdated(snap): void {
+            // Any buffer_* change event delivers a full authoritative buffer
+            // snapshot; merge metadata only (no lines/nicks, no switching).
+            const key = storeKeyForBufferId(snap.id);
             buffers.update((current) => {
                 const buffer = current[key];
-                if (!buffer) return current;
+                if (!buffer) return current; // opened buffers get full snapshots anyway
                 const copy = { ...current, [key]: { ...buffer } };
-                copy[key]!.title = parseRichText(title);
-                copy[key]!.rtitle = copy[key]!.title.map((t) => t.text).join('');
+                upsertBuffer(copy, snap);
+                // Content/semantic type flips (buffer_type_changed, localvar
+                // edits) are applied by upsertBuffer from the snapshot.
+                // snap.modes is intentionally not stored: BufferData has no
+                // modes field, no consumer needs it, and localVariables must
+                // stay exactly what the server reports.
                 return copy;
             });
         },
 
-        bufferLocalvarSet(bufferId, name, value): void {
-            const key = storeKeyForBufferId(bufferId);
-            buffers.update((current) => {
-                const buffer = current[key];
-                if (!buffer) return current;
-                const copy = { ...current, [key]: { ...buffer } };
-                const target = copy[key]!;
-                target.localVariables = { ...(target.localVariables ?? {}), [name]: value };
-                if (name === 'pinned') target.pinned = value === 'true';
-                return copy;
-            });
-        },
-
-        bufferLocalvarRemoved(bufferId, name): void {
-            const key = storeKeyForBufferId(bufferId);
-            buffers.update((current) => {
-                const buffer = current[key];
-                if (!buffer) return current;
-                const copy = { ...current, [key]: { ...buffer } };
-                const target = copy[key]!;
-                const vars = { ...(target.localVariables ?? {}) };
-                delete vars[name];
-                target.localVariables = Object.keys(vars).length ? vars : undefined;
-                if (name === 'pinned') target.pinned = false;
-                return copy;
-            });
-        },
-
-        bufferModesChanged(bufferId, modes): void {
-            // BufferData has no dedicated modes field; keep the authoritative
-            // string on localVariables so consumers can read it.
-            const key = storeKeyForBufferId(bufferId);
-            buffers.update((current) => {
-                const buffer = current[key];
-                if (!buffer) return current;
-                const copy = { ...current, [key]: { ...buffer } };
-                copy[key]!.localVariables = { ...(copy[key]!.localVariables ?? {}), modes };
-                return copy;
-            });
-        },
 
         bufferNotifyChanged(bufferId, notify): void {
             // WeeChat >= 5.0.0 sends buffer_notify_changed; the tally and

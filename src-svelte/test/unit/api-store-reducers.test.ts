@@ -98,8 +98,9 @@ describe('buffers + identity', () => {
         expect(buf.lines).toHaveLength(1);
     });
 
-    it('free buffers map to hideBufferLineTimes', () => {
+    it('free buffers map to bufferType 1 and hideBufferLineTimes', () => {
         reducers.buffers([bufferSnap({ contentType: 'free', name: 'python.eval' })]);
+        expect(get(buffers)[KEY]!.bufferType).toBe(1);
         expect(get(buffers)[KEY]!.hideBufferLineTimes).toBe(true);
     });
 });
@@ -164,6 +165,80 @@ describe('buffer_opened bootstrap', () => {
         expect(nicks).toHaveLength(1);
         expect(nicks[0]!.nickId).toBe(200);
         expect(nicks[0]!.prefix).toBe('@');
+    });
+
+    // Live 4.10.1: every buffer_* change event carries a full buffer snapshot.
+    // localvar removal does not name the variable — the remaining map wins.
+    it('bufferUpdated merges snapshot metadata without touching lines', () => {
+        reducers.buffers([bufferSnap()]);
+        dispatchEvent(event('buffer_line_added', WIRE_LINE(50), 'line'), reducers);
+
+        dispatchEvent(event('buffer_title_changed', { ...WIRE_BUFFER, title: 'New topic' }, 'buffer'), reducers);
+        expect(get(buffers)[KEY]!.rtitle).toBe('New topic');
+
+        dispatchEvent(event('buffer_localvar_added', {
+            ...WIRE_BUFFER, local_variables: { ...WIRE_BUFFER.local_variables, pinned: 'true' },
+        }, 'buffer'), reducers);
+        expect(get(buffers)[KEY]!.pinned).toBe(true);
+
+        // Removal: body lists what REMAINS — pinned is gone even though the
+        // event never names it.
+        dispatchEvent(event('buffer_localvar_removed', {
+            ...WIRE_BUFFER, local_variables: { type: 'channel', plugin: 'irc', server: 'glowing-bear', channel: '#chan' },
+        }, 'buffer'), reducers);
+        const afterRemove = get(buffers)[KEY]!;
+        expect(afterRemove.pinned).toBe(false);
+        expect(afterRemove.localVariables!.pinned).toBeUndefined();
+
+        dispatchEvent(event('buffer_hidden', { ...WIRE_BUFFER, hidden: true }, 'buffer'), reducers);
+        expect(get(buffers)[KEY]!.hidden).toBe(true);
+
+        dispatchEvent(event('buffer_renamed', { ...WIRE_BUFFER, name: 'irc.glowing-bear.#new', short_name: '#new' }, 'buffer'), reducers);
+        expect(get(buffers)[KEY]!.shortName).toBe('#new');
+
+        dispatchEvent(event('buffer_type_changed', { ...WIRE_BUFFER, type: 'free' }, 'buffer'), reducers);
+        expect(get(buffers)[KEY]!.bufferType).toBe(1);
+        expect(get(buffers)[KEY]!.hideBufferLineTimes).toBe(true);
+        expect(get(buffers)[KEY]!.type).toBe('channel'); // semantic type survives
+
+        // Metadata-only: the line from before survives untouched.
+        expect(get(buffers)[KEY]!.lines.map((l) => l.lineId)).toEqual(['weechat:50']);
+    });
+
+    it('free→formatted transition reverses bufferType and time hiding', () => {
+        reducers.buffers([bufferSnap({ contentType: 'free', name: 'python.eval' })]);
+        expect(get(buffers)[KEY]!.bufferType).toBe(1);
+        dispatchEvent(event('buffer_type_changed', { ...WIRE_BUFFER, type: 'formatted' }, 'buffer'), reducers);
+        expect(get(buffers)[KEY]!.bufferType).toBe(0);
+        expect(get(buffers)[KEY]!.hideBufferLineTimes).toBe(false);
+    });
+
+    // Legacy parity (handlers.ts): semantic type/plugin/server fall back to
+    // the previous value when the authoritative snapshot no longer carries
+    // the localvar — creation defaults must not clobber a live buffer.
+    it('semantic fields survive localvar removal; pinned is recomputed', () => {
+        reducers.buffers([bufferSnap()]);
+        expect(get(buffers)[KEY]!.type).toBe('channel');
+        dispatchEvent(event('buffer_localvar_removed', {
+            ...WIRE_BUFFER, local_variables: {},
+        }, 'buffer'), reducers);
+        const buf = get(buffers)[KEY]!;
+        expect(buf.type).toBe('channel');
+        expect(buf.plugin).toBe('irc');
+        expect(buf.server).toBe('glowing-bear');
+        expect(buf.localVariables).toBeUndefined(); // empty map → undefined
+        expect(buf.pinned).toBe(false);
+    });
+
+    it('bufferUpdated preserves nicklist entries', () => {
+        reducers.buffers([bufferSnap()]);
+        reducers.nickChanged(BUFFER_ID, {
+            id: 300, group: 1, name: 'alice', prefix: '', suffix: '',
+            flags: 0, visible: true, color: null, tags: {},
+        });
+        dispatchEvent(event('buffer_title_changed', { ...WIRE_BUFFER, title: 't' }, 'buffer'), reducers);
+        const nicks = Object.values(get(buffers)[KEY]!.nicklist).flatMap((g) => g.nicks);
+        expect(nicks.map((n) => n.nickId)).toEqual([300]);
     });
 });
 
@@ -383,15 +458,16 @@ describe('buffer lifecycle + localvars', () => {
 
     it('pinned localvar round-trips through set/remove', () => {
         reducers.buffers([bufferSnap()]);
-        dispatchEvent(event('buffer_localvar_set', { name: 'pinned', value: 'true' }), reducers);
+        dispatchEvent(event('buffer_localvar_added', { ...WIRE_BUFFER, local_variables: { ...WIRE_BUFFER.local_variables, pinned: 'true' } }, 'buffer'), reducers);
         expect(get(buffers)[KEY]!.pinned).toBe(true);
-        dispatchEvent(event('buffer_localvar_removed', 'pinned'), reducers);
+        // Removal names no variable: the remaining map is authoritative.
+        dispatchEvent(event('buffer_localvar_removed', { ...WIRE_BUFFER, local_variables: WIRE_BUFFER.local_variables }, 'buffer'), reducers);
         expect(get(buffers)[KEY]!.pinned).toBe(false);
     });
 
     it('title changes re-parse rich text', () => {
         reducers.buffers([bufferSnap()]);
-        dispatchEvent(event('buffer_title_changed', 'topic \u0019C*red*'), reducers);
+        dispatchEvent(event('buffer_title_changed', { ...WIRE_BUFFER, title: 'topic \u0019C*red*' }, 'buffer'), reducers);
         const buf = get(buffers)[KEY]!;
         expect(buf.rtitle).toContain('red');
         expect(buf.title.some((p) => p.classes?.length)).toBe(true);

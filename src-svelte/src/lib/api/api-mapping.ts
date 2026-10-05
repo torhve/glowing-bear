@@ -230,36 +230,47 @@ export function dispatchEvent(event: ApiSessionEvent, reducers: ApiReducers): vo
         if (bufferId === null) { reducers.unhandled('buffer_closed with invalid buffer_id'); return; }
         reducers.bufferClosed(bufferId);
         return;
-    case 'buffer_title_changed': {
+    // Every buffer_* change signal sends a FULL buffer snapshot as its body
+    // (4.10.1 source: relay_api_protocol.c → relay_api_msg_buffer_to_json for
+    // all buffer_* signals; verified live in the dossier). localvar removal
+    // does NOT name the removed variable — WeeChat's own relay receiver diffs
+    // the remaining local_variables map, and so do we via bufferUpdated.
+    case 'buffer_title_changed':
+    case 'buffer_localvar_added':
+    case 'buffer_localvar_changed':
+    case 'buffer_localvar_removed':
+    case 'buffer_modes_changed':
+    case 'buffer_renamed':
+    case 'buffer_hidden':
+    case 'buffer_unhidden':
+    case 'buffer_type_changed':
+    case 'buffer_moved':
+    case 'buffer_merged':
+    case 'buffer_unmerged':
+    case 'buffer_time_for_each_line_changed': {
         if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
-        const title = typeof event.body === 'string' ? event.body
-            : (isObj(event.body) && typeof event.body.title === 'string') ? event.body.title : null;
-        if (title === null) { reducers.unhandled('buffer_title_changed without title'); return; }
-        reducers.bufferTitleChanged(bufferId, title);
+        const v = validateBuffer(event.body);
+        if (!v.value) { reducers.unhandled(`${event.event_name} invalid: ${v.issues.join('; ')}`); return; }
+        const snap = mapBuffer(v.value);
+        if (snap === null) { reducers.unhandled(`${event.event_name} invalid id`); return; }
+        reducers.bufferUpdated(snap);
         return;
     }
-    case 'buffer_localvar_set': {
-        if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
-        if (!isObj(event.body) || typeof event.body.name !== 'string' || typeof event.body.value !== 'string') {
-            reducers.unhandled('buffer_localvar_set without name/value'); return;
-        }
-        reducers.bufferLocalvarSet(bufferId, event.body.name, event.body.value);
+    case 'buffer_cleared': {
+        // Body is the full buffer; only the id matters — lines are dropped.
+        if (bufferId === null) { reducers.unhandled('buffer_cleared with invalid buffer_id'); return; }
+        reducers.bufferCleared(bufferId);
         return;
     }
-    case 'buffer_localvar_removed': {
-        if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
-        const name = typeof event.body === 'string' ? event.body
-            : (isObj(event.body) && typeof event.body.name === 'string') ? event.body.name : null;
-        if (name === null) { reducers.unhandled('buffer_localvar_removed without name'); return; }
-        reducers.bufferLocalvarRemoved(bufferId, name);
-        return;
-    }
-    case 'buffer_modes_changed': {
-        if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
-        const modes = typeof event.body === 'string' ? event.body
-            : (isObj(event.body) && typeof event.body.modes === 'string') ? event.body.modes : null;
-        if (modes === null) { reducers.unhandled('buffer_modes_changed without modes'); return; }
-        reducers.bufferModesChanged(bufferId, modes);
+    case 'input_text_changed':
+    case 'input_text_cursor_moved':
+    case 'input_prompt_changed': {
+        // Input state is client-owned; consume the events (body = full buffer)
+        // so they are not reported as unrouted. The reducer is a no-op.
+        if (bufferId === null) return;
+        const input = isObj(event.body) && typeof event.body.input === 'string' ? event.body.input : '';
+        const pos = isObj(event.body) && typeof event.body.input_position === 'number' ? event.body.input_position : 0;
+        reducers.bufferInputChanged(bufferId, input, pos);
         return;
     }
     case 'buffer_notify_changed': {
@@ -272,15 +283,8 @@ export function dispatchEvent(event: ApiSessionEvent, reducers: ApiReducers): vo
         reducers.bufferNotifyChanged(bufferId, level);
         return;
     }
-    case 'buffer_input_changed': {
-        if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
-        if (!isObj(event.body) || typeof event.body.input !== 'string') {
-            reducers.unhandled('buffer_input_changed without input'); return;
-        }
-        const pos = typeof event.body.cursor_pos === 'number' ? event.body.cursor_pos : 0;
-        reducers.bufferInputChanged(bufferId, event.body.input, pos);
-        return;
-    }
+    // No 'buffer_input_changed' case: that event name does not exist in
+    // WeeChat — the real input events are handled above.
     case 'buffer_line_added': {
         if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
         const v = validateLine(event.body);

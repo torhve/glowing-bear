@@ -131,6 +131,23 @@ No PUT/DELETE resources exist despite the CORS Allow header.
   `nicklist_nick_added`/`nicklist_group_added` are real events and must be
   routed, not left unrouted (raw capture: `raw/nicklist-events.json`).
 
+### Buffer metadata + input events (live, `probes/probe-metadata-events.mjs`)
+
+- `buffer_localvar_added`, `buffer_localvar_changed` and `buffer_localvar_removed`
+  each carry a FULL buffer snapshot in `body` — removal does NOT name the
+  removed variable; the snapshot's `local_variables` map (what REMAINS) is
+  authoritative, so the client must replace its map from the snapshot rather
+  than delete a named key (raw capture: `raw/metadata-events.json`).
+- Trigger commands: `/buffer set localvar_set_<name> <value>` and
+  `localvar_del_<name>` (the bare `localvar_<name>` form is only the hdata
+  accessor, not a settable property).
+- `input_text_changed` / `input_text_cursor_moved` / `input_prompt_changed`
+  carry full buffer snapshots including `input` and `input_position`.
+- `buffer_cleared` carries the full buffer snapshot; only the id matters.
+- Event names `buffer_input_changed`, `buffer_localvar_set` and `input_changed`
+  do NOT exist in WeeChat source — they were fake names in the client's type
+  union/mapper and have been removed.
+
 ### Read markers / hotlist control (source-verified)
 
 - `/buffer set unread` (`""` mark read; `-N`/`+N` move; `N` mark N latest unread),

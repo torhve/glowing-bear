@@ -1,0 +1,188 @@
+{
+  "capturedAt": "2026-10-05T07:46:07.271Z",
+  "events": [
+    {
+      "code": 0,
+      "message": "Event",
+      "event_name": "buffer_localvar_added",
+      "buffer_id": 1791149912951360,
+      "body_type": "buffer",
+      "body": {
+        "id": 1791149912951360,
+        "name": "core.weechat",
+        "short_name": "weechat",
+        "number": 1,
+        "type": "formatted",
+        "hidden": false,
+        "title": "WeeChat 4.10.1 (C) 2003-2026 - https://weechat.org/",
+        "modes": "",
+        "input_prompt": "",
+        "input": "probe-text",
+        "input_position": 10,
+        "input_multiline": false,
+        "nicklist": false,
+        "nicklist_case_sensitive": false,
+        "nicklist_display_groups": true,
+        "time_displayed": true,
+        "local_variables": {
+          "plugin": "core",
+          "name": "weechat",
+          "pinned": "true",
+          "probe": "hello"
+        },
+        "keys": [],
+        "last_read_line_id": -1
+      }
+    },
+    {
+      "code": 0,
+      "message": "Event",
+      "event_name": "buffer_localvar_changed",
+      "buffer_id": 1791149912951360,
+      "body_type": "buffer",
+      "body": {
+        "id": 1791149912951360,
+        "name": "core.weechat",
+        "short_name": "weechat",
+        "number": 1,
+        "type": "formatted",
+        "hidden": false,
+        "title": "WeeChat 4.10.1 (C) 2003-2026 - https://weechat.org/",
+        "modes": "",
+        "input_prompt": "",
+        "input": "probe-text",
+        "input_position": 10,
+        "input_multiline": false,
+        "nicklist": false,
+        "nicklist_case_sensitive": false,
+        "nicklist_display_groups": true,
+        "time_displayed": true,
+        "local_variables": {
+          "plugin": "core",
+          "name": "weechat",
+          "pinned": "true",
+          "probe": "bye"
+        },
+        "keys": [],
+        "last_read_line_id": -1
+      }
+    },
+    {
+      "code": 0,
+      "message": "Event",
+      "event_name": "buffer_localvar_removed",
+      "buffer_id": 1791149912951360,
+      "body_type": "buffer",
+      "body": {
+        "id": 1791149912951360,
+        "name": "core.weechat",
+        "short_name": "weechat",
+        "number": 1,
+        "type": "formatted",
+        "hidden": false,
+        "title": "WeeChat 4.10.1 (C) 2003-2026 - https://weechat.org/",
+        "modes": "",
+        "input_prompt": "",
+        "input": "probe-text",
+        "input_position": 10,
+        "input_multiline": false,
+        "nicklist": false,
+        "nicklist_case_sensitive": false,
+        "nicklist_display_groups": true,
+        "time_displayed": true,
+        "local_variables": {
+          "plugin": "core",
+          "name": "weechat",
+          "pinned": "true"
+        },
+        "keys": [],
+        "last_read_line_id": -1
+      }
+    },
+    {
+      "code": 0,
+      "message": "Event",
+      "event_name": "input_text_changed",
+      "buffer_id": 1791149912951360,
+      "body_type": "buffer",
+      "body": {
+        "id": 1791149912951360,
+        "name": "core.weechat",
+        "short_name": "weechat",
+        "number": 1,
+        "type": "formatted",
+        "hidden": false,
+        "title": "WeeChat 4.10.1 (C) 2003-2026 - https://weechat.org/",
+        "modes": "",
+        "input_prompt": "",
+        "input": "probe-textprobe-text",
+        "input_position": 20,
+        "input_multiline": false,
+        "nicklist": false,
+        "nicklist_case_sensitive": false,
+        "nicklist_display_groups": true,
+        "time_displayed": true,
+        "local_variables": {
+          "plugin": "core",
+          "name": "weechat",
+          "pinned": "true"
+        },
+        "keys": [],
+        "last_read_line_id": -1
+      }
+    },
+    {
+      "code": 0,
+      "message": "Event",
+      "event_name": "buffer_line_added",
+      "buffer_id": 1791149912951360,
+      "body_type": "line",
+      "body": {
+        "id": 978,
+        "y": -1,
+        "date": "2026-10-05T07:46:05.268225Z",
+        "date_printed": "2026-10-05T07:46:05.268225Z",
+        "displayed": true,
+        "highlight": false,
+        "notify_level": 0,
+        "prefix": "\u001904=!=",
+        "message": "Error with command \"/input delete_all\" (help on command: /help input)",
+        "tags": [
+          "no_filter"
+        ]
+      }
+    },
+    {
+      "code": 0,
+      "message": "Event",
+      "event_name": "buffer_cleared",
+      "buffer_id": 1791149912951360,
+      "body_type": "buffer",
+      "body": {
+        "id": 1791149912951360,
+        "name": "core.weechat",
+        "short_name": "weechat",
+        "number": 1,
+        "type": "formatted",
+        "hidden": false,
+        "title": "WeeChat 4.10.1 (C) 2003-2026 - https://weechat.org/",
+        "modes": "",
+        "input_prompt": "",
+        "input": "probe-textprobe-text",
+        "input_position": 20,
+        "input_multiline": false,
+        "nicklist": false,
+        "nicklist_case_sensitive": false,
+        "nicklist_display_groups": true,
+        "time_displayed": true,
+        "local_variables": {
+          "plugin": "core",
+          "name": "weechat",
+          "pinned": "true"
+        },
+        "keys": [],
+        "last_read_line_id": -1
+      }
+    }
+  ]
+}

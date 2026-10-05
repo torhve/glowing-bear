@@ -219,14 +219,16 @@ export interface WebSocketResponse {
 // The union stays open (`string & {}`) because WeeChat may add events.
 export type ApiEventName =
     | 'buffer_opened' | 'buffer_closing' | 'buffer_closed'
-    | 'buffer_title_changed' | 'buffer_localvar_set' | 'buffer_localvar_removed'
-    | 'buffer_modes_changed' | 'buffer_input_changed'
+    | 'buffer_title_changed' | 'buffer_localvar_added' | 'buffer_localvar_changed' | 'buffer_localvar_removed'
+    | 'buffer_modes_changed' | 'buffer_cleared' | 'buffer_renamed' | 'buffer_hidden' | 'buffer_unhidden'
+    | 'buffer_type_changed' | 'buffer_moved' | 'buffer_merged' | 'buffer_unmerged'
+    | 'buffer_time_for_each_line_changed'
     | 'buffer_line_added' | 'buffer_line_data_changed'
     | 'nicklist_group_added' | 'nicklist_group_removed' | 'nicklist_group_moved'
     | 'nicklist_group_changed' | 'nicklist_group_removing'
     | 'nicklist_nick_added' | 'nicklist_nick_removed' | 'nicklist_nick_moved'
     | 'nicklist_nick_removing' | 'nicklist_nick_changed'
-    | 'input_changed' | 'input_prompt_changed'
+    | 'input_text_changed' | 'input_text_cursor_moved' | 'input_prompt_changed'
     | (string & {});
 
 export interface WebSocketEvent {

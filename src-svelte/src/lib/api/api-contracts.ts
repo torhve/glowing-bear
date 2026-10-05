@@ -116,10 +116,16 @@ export interface ApiReducers {
     bufferOpened(snapshot: BufferSnapshot, lines: LineSnapshot[] | undefined, groups: NickGroupSnapshot[] | undefined, nicks: NickSnapshot[] | undefined): void;
     bufferClosing(bufferId: ApiBufferId): void;
     bufferClosed(bufferId: ApiBufferId): void;
-    bufferTitleChanged(bufferId: ApiBufferId, title: string): void;
-    bufferLocalvarSet(bufferId: ApiBufferId, name: string, value: string): void;
-    bufferLocalvarRemoved(bufferId: ApiBufferId, name: string): void;
-    bufferModesChanged(bufferId: ApiBufferId, modes: string): void;
+    /**
+     * Merge authoritative buffer metadata from any buffer_* change event
+     * (title_changed, localvar_added/changed/removed, modes_changed, renamed,
+     * hidden/unhidden, type_changed, moved, merged/unmerged,
+     * time_for_each_line_changed). Verified live + in 4.10.1 source: every
+     * such event carries a FULL buffer snapshot as its body; localvar removal
+     * does NOT name the removed variable — the remaining local_variables map
+     * is authoritative and must replace ours. No lines/nicks, no switching.
+     */
+    bufferUpdated(snapshot: BufferSnapshot): void;
     bufferNotifyChanged(bufferId: ApiBufferId, notify: 0 | 1 | 2 | 3): void;
     bufferInputChanged(bufferId: ApiBufferId, input: string, cursorPos: number): void;
     lineAdded(bufferId: ApiBufferId, line: LineSnapshot): void;
