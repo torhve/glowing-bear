@@ -117,10 +117,17 @@ test('prodflood: in-page measurement of a 2000-message flood', async ({ browser 
     // Layout counts come from the browser, so "the follow effect forces a layout
     // per batch" can be measured rather than inferred from CPU samples.
     await cdp.send('Performance.enable');
-    const layoutMetrics = async (): Promise<{ count: number; durationMs: number }> => {
+    const layoutMetrics = async (): Promise<{ count: number; durationMs: number; scriptMs: number }> => {
         const { metrics } = await cdp.send('Performance.getMetrics');
         const pick = (name: string) => metrics.find((m: { name: string }) => m.name === name)?.value ?? 0;
-        return { count: pick('LayoutCount'), durationMs: pick('LayoutDuration') * 1000 };
+        // ScriptDuration is the browser's own tally of main-thread JavaScript time.
+        // A change that only removes store-pipeline work barely moves wall time at
+        // 2000 messages, so this is the metric that can actually see it.
+        return {
+            count: pick('LayoutCount'),
+            durationMs: pick('LayoutDuration') * 1000,
+            scriptMs: pick('ScriptDuration') * 1000,
+        };
     };
     try {
         if (cdp) {
@@ -150,7 +157,7 @@ test('prodflood: in-page measurement of a 2000-message flood', async ({ browser 
         const REPEATS = Number(process.env.GB_E2E_REPEATS ?? 3);
         const renders: number[] = [];
         const sends: number[] = [];
-        const layoutTotals: { layouts: number; layoutMs: number }[] = [];
+        const layoutTotals: { layouts: number; layoutMs: number; scriptMs: number }[] = [];
         let last: any = {};
 
         for (let round = 0; round < REPEATS; round++) {
@@ -220,14 +227,15 @@ test('prodflood: in-page measurement of a 2000-message flood', async ({ browser 
             const layoutsAfter = await layoutMetrics();
             const layouts = layoutsAfter.count - layoutsBefore.count;
             const layoutMs = layoutsAfter.durationMs - layoutsBefore.durationMs;
-            layoutTotals.push({ layouts, layoutMs });
+            const scriptMs = layoutsAfter.scriptMs - layoutsBefore.scriptMs;
+            layoutTotals.push({ layouts, layoutMs, scriptMs });
 
             renders.push(pf.renderMs);
             last = pf;
             console.log(
                 `[prodflood][round ${round}] render=${pf.renderMs.toFixed(0)}ms send=${sends[round]}ms ` +
                 `rows=${pf.rowsAdded} faviconWrites=${pf.faviconWrites} scrollIntoView=${pf.sivCalls} ` +
-                `layouts=${layouts} layoutMs=${layoutMs.toFixed(0)}`,
+                `layouts=${layouts} layoutMs=${layoutMs.toFixed(0)} scriptMs=${scriptMs.toFixed(0)}`,
             );
         }
 
@@ -259,7 +267,8 @@ test('prodflood: in-page measurement of a 2000-message flood', async ({ browser 
             `longtasks=${last.longtaskCount}(sum=${last.longtaskTotalMs}ms max=${last.longtaskMaxMs}ms) ` +
             `scrollIntoView=${last.sivCalls} bodyRows=${last.bodyRows} visibleRows=${rows.length} ` +
             `layouts=${layoutTotals.reduce((t, r) => t + r.layouts, 0)} ` +
-            `layoutMs=${layoutTotals.reduce((t, r) => t + r.layoutMs, 0).toFixed(0)} snapshot=${SNAPSHOT_PATH}`,
+            `layoutMs=${layoutTotals.reduce((t, r) => t + r.layoutMs, 0).toFixed(0)} ` +
+            `scriptMs=${layoutTotals.reduce((t, r) => t + r.scriptMs, 0).toFixed(0)} snapshot=${SNAPSHOT_PATH}`,
         );
         for (const [stack, count] of (last.sivStacks ?? [])) {
             console.log(`[prodflood][siv] x${count} ${stack}`);

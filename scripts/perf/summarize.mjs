@@ -36,12 +36,18 @@ function parseResults(text) {
     const out = new Map();
     if (!text) return out;
     for (const line of text.split('\n')) {
-        const m = line.match(/^(A inactive|B active|H history)\b.*?median\s+([\d.]+)ms/);
+        const m = line.match(/^(A inactive|B active|H history|C api-inactive|D api-active)\b.*?median\s+([\d.]+)ms/);
         if (m) { out.set(m[1], { median: Number(m[2]), raw: line }); continue; }
         // E2E arms report the median of several in-page floods per run.
         const e2e = line.match(/\[prodflood\] renderMedian=(\d+)ms/)
             ?? line.match(/\[prodbadge\] elapsedMedian=(\d+)ms/);
-        if (e2e) out.set('E2E production flood', { median: Number(e2e[1]), raw: line });
+        if (e2e) {
+            out.set('E2E production flood', { median: Number(e2e[1]), raw: line });
+            // ScriptDuration is the browser's own main-thread JavaScript tally:
+            // the metric that can see store-pipeline work wall time cannot.
+            const script = line.match(/scriptMs=(\d+)/);
+            if (script) out.set('E2E main-thread JS', { median: Number(script[1]), raw: line });
+        }
     }
     return out;
 }
