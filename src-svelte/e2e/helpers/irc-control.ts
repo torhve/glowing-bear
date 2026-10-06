@@ -64,3 +64,60 @@ export const irc = {
     sendPm: (nick: string, text: string) =>
         sendCommand({ cmd: 'send_pm', nick, text }),
 };
+
+/**
+ * Send a sequence of channel messages over ONE control connection.
+ *
+ * Each command is still sent and acknowledged one at a time, so the pacing the
+ * app sees is unchanged; only the socket churn goes away. A 2000-message flood
+ * sent as 2000 separate connections ran the host out of ephemeral ports partway
+ * through a benchmark batch (ECONNREFUSED / EADDRNOTAVAIL on the control port),
+ * which read as a failed experiment rather than as a harness defect.
+ */
+export function sendSequence(channel: string, texts: string[]): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const client = new net.Socket();
+        const timeout = setTimeout(() => {
+            client.destroy();
+            reject(new Error('Control sequence timeout'));
+        }, 120000);
+        let sent = 0;
+        let buf = '';
+
+        const queueNext = () => {
+            if (sent >= texts.length) {
+                clearTimeout(timeout);
+                client.end();
+                resolve();
+                return;
+            }
+            client.write(JSON.stringify({
+                cmd: 'send_message', channel, text: texts[sent], more: true,
+            }) + '\n');
+        };
+
+        client.connect(CONTROL_PORT, CONTROL_HOST, queueNext);
+        client.on('data', (chunk) => {
+            buf += chunk.toString();
+            let nl: number;
+            while ((nl = buf.indexOf('\n')) >= 0) {
+                const line = buf.slice(0, nl).trim();
+                buf = buf.slice(nl + 1);
+                if (!line) continue;
+                let parsed: ControlResponse;
+                try { parsed = JSON.parse(line); }
+                catch {
+                    clearTimeout(timeout); client.destroy();
+                    reject(new Error('Invalid response: ' + line)); return;
+                }
+                if (parsed.success === false || parsed.error) {
+                    clearTimeout(timeout); client.destroy();
+                    reject(new Error(String(parsed.error ?? 'control command failed'))); return;
+                }
+                sent++;
+                queueNext();
+            }
+        });
+        client.on('error', (err) => { clearTimeout(timeout); reject(err); });
+    });
+}

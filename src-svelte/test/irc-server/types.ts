@@ -33,8 +33,11 @@ export interface ParsedIrcLine {
 }
 
 export type ControlCommand =
-  | { cmd: 'send_message'; channel: string; text: string }
-  | { cmd: 'send_notice'; channel: string; text: string }
+  // `more: true` keeps the control connection open after answering, so a
+  // benchmark can send a long sequence over one socket instead of one socket
+  // per message.
+  | { cmd: 'send_message'; channel: string; text: string; more?: boolean }
+  | { cmd: 'send_notice'; channel: string; text: string; more?: boolean }
   | { cmd: 'colored_message'; channel: string; text: string; fg?: string; bg?: string }
   | { cmd: 'join'; channel: string }
   | { cmd: 'part'; channel: string }

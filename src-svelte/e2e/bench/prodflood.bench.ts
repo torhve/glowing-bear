@@ -21,7 +21,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createConnectedPage } from '../fixtures/auth';
 import { switchToBuffer } from '../helpers/buffers';
-import { irc } from '../helpers/irc-control';
+import { irc, sendSequence } from '../helpers/irc-control';
 
 const FLOOD_COUNT = Number(process.env.GB_E2E_FLOOD_COUNT ?? 2000);
 const CHANNEL = '#glowing-bear';
@@ -93,6 +93,15 @@ window.__pf = { marker: '', t0: 0, tLast: 0, rowsAdded: 0, faviconWrites: 0, tit
 })();
 `;
 
+/** The flood payload for one round, in delivery order. */
+function floodTexts(tag: string): string[] {
+    const out: string[] = [];
+    for (let i = 1; i <= FLOOD_COUNT; i++) {
+        out.push(`pfb ${tag} ${String(i).padStart(5, '0')} over the lazy dog`);
+    }
+    return out;
+}
+
 function median(values: number[]): number {
     if (values.length === 0) return 0;
     const sorted = [...values].sort((a, b) => a - b);
@@ -111,49 +120,97 @@ test('prodflood: in-page measurement of a 2000-message flood', async ({ browser 
             await cdp.send('Profiler.setSamplingInterval', { interval: 100 });
             await cdp.send('Profiler.start');
         }
+        // The flood lands on the buffer being rendered, which is what makes the
+        // row timing measurable. But a client with nothing unread never draws a
+        // badge, so without a holder buffer this workload silently skips the
+        // unread/title/favicon path that a real flood exercises. Leaving one
+        // unread elsewhere keeps the total non-zero for the whole run.
+        const UNREAD_HOLDER = process.env.GB_E2E_UNREAD_HOLDER ?? '';
         await switchToBuffer(page, CHANNEL);
-
-        const marker = `pfb ${String(FLOOD_COUNT).padStart(5, '0')}`;
-        await page.evaluate((m: string) => {
-            const pf = (window as any).__pf;
-            pf.marker = m;
-            pf.tLast = 0;
-            pf.rowsAdded = 0;
-            pf.faviconWrites = 0;
-            pf.titleWrites = 0;
-            pf.longtasks = [];
-            pf.sivCalls = 0;
-            pf.sivStacks = {};
-            pf.sivSamples = 0;
-        }, marker);
-
-        const sendStart = Date.now();
-        for (let i = 1; i <= FLOOD_COUNT; i++) {
-            await irc.sendMessage(CHANNEL, `pfb ${String(i).padStart(5, '0')} over the lazy dog`);
+        if (UNREAD_HOLDER) {
+            // A private message from the bot opens a query buffer WeeChat is not
+            // looking at, so it stays unread for the whole run and the
+            // unread/title/favicon path stays live. Sending to a channel would
+            // land in the buffer on screen and be read immediately.
+            await irc.raw(`PRIVMSG ${UNREAD_HOLDER} :pfb holder ${Date.now()}`);
         }
-        const sendMs = Date.now() - sendStart;
 
-        // Stamp from the page clock; the round trip is outside the measured span.
-        await page.evaluate(() => { (window as any).__pf.t0 = performance.now(); });
+        // One flood per arm is far too noisy to resolve anything under ~30%:
+        // baseline arms of the same build have measured anywhere from 550 ms to
+        // 1400 ms. Several floods in the same page give the comparison a median
+        // to stand on without paying page setup again.
+        const REPEATS = Number(process.env.GB_E2E_REPEATS ?? 3);
+        const renders: number[] = [];
+        const sends: number[] = [];
+        let last: any = {};
 
-        try {
-            await page.waitForFunction(
-                () => (window as any).__pf.tLast > 0,
-                null,
-                { timeout: Number(process.env.GB_E2E_WAIT_MS ?? 90000), polling: 50 },
-            );
-        } catch (e) {
-            const dbg = await page.evaluate(() => {
+        for (let round = 0; round < REPEATS; round++) {
+            // Unique per round: tLast only stamps on a row that has not been
+            // seen yet, so the marker must be a message this page has not had.
+            const tag = `r${round}`;
+            const marker = `pfb ${tag} ${String(FLOOD_COUNT).padStart(5, '0')}`;
+            await page.evaluate((m: string) => {
+                const pf = (window as any).__pf;
+                pf.marker = m;
+                pf.tLast = 0;
+                pf.rowsAdded = 0;
+                pf.faviconWrites = 0;
+                pf.titleWrites = 0;
+                pf.longtasks = [];
+                pf.sivCalls = 0;
+                pf.sivStacks = {};
+                pf.sivSamples = 0;
+            }, marker);
+
+            const sendStart = Date.now();
+            await sendSequence(CHANNEL, floodTexts(tag));
+            sends.push(Date.now() - sendStart);
+
+            // Stamp from the page clock; the round trip is outside the measured span.
+            await page.evaluate(() => { (window as any).__pf.t0 = performance.now(); });
+
+            try {
+                await page.waitForFunction(
+                    () => (window as any).__pf.tLast > 0,
+                    null,
+                    { timeout: Number(process.env.GB_E2E_WAIT_MS ?? 90000), polling: 50 },
+                );
+            } catch (e) {
+                const dbg = await page.evaluate(() => {
+                    const p = (window as any).__pf;
+                    const rows = Array.from(document.querySelectorAll('[data-testid="bufferline-row"]'));
+                    return {
+                        marker: p.marker, t0: p.t0, tLast: p.tLast, rowsAdded: p.rowsAdded,
+                        lastSeenText: p.lastSeenText, domRows: rows.length,
+                        tail: rows.slice(-4).map((r) => (r.querySelector('td.message')?.dataset?.message ?? r.textContent ?? '').slice(0, 60)),
+                    };
+                });
+                console.log('[prodflood][debug] ' + JSON.stringify(dbg, null, 1));
+                throw e;
+            }
+
+            const pf = await page.evaluate(() => {
                 const p = (window as any).__pf;
-                const rows = Array.from(document.querySelectorAll('[data-testid="bufferline-row"]'));
                 return {
-                    marker: p.marker, t0: p.t0, tLast: p.tLast, rowsAdded: p.rowsAdded,
-                    lastSeenText: p.lastSeenText, samples: p.samples, domRows: rows.length,
-                    tail: rows.slice(-4).map((r) => (r.querySelector('td.message')?.dataset?.message ?? r.textContent ?? '').slice(0, 60)),
+                    renderMs: p.tLast - p.t0,
+                    rowsAdded: p.rowsAdded,
+                    lastSeenText: p.lastSeenText,
+                    bodyRows: document.querySelectorAll('[data-testid="bufferline-row"]').length,
+                    faviconWrites: p.faviconWrites,
+                    titleWrites: p.titleWrites,
+                    longtaskCount: p.longtasks.length,
+                    longtaskTotalMs: p.longtasks.reduce((s: number, v: number) => s + v, 0),
+                    longtaskMaxMs: p.longtasks.reduce((m: number, v: number) => Math.max(m, v), 0),
+                    sivCalls: p.sivCalls,
+                    sivStacks: Object.entries(p.sivStacks).sort((a, b) => b[1] - a[1]).slice(0, 5),
                 };
             });
-            console.log('[prodflood][debug] ' + JSON.stringify(dbg, null, 1));
-            throw e;
+            renders.push(pf.renderMs);
+            last = pf;
+            console.log(
+                `[prodflood][round ${round}] render=${pf.renderMs.toFixed(0)}ms send=${sends[round]}ms ` +
+                `rows=${pf.rowsAdded} faviconWrites=${pf.faviconWrites} scrollIntoView=${pf.sivCalls}`,
+            );
         }
 
         if (cdp) {
@@ -161,23 +218,6 @@ test('prodflood: in-page measurement of a 2000-message flood', async ({ browser 
             fs.writeFileSync('/tmp/gb-perf/e2e-prodflood-profile.json', JSON.stringify(profile));
             console.log(`[prodflood] profile samples=${profile?.nodes?.length ?? 0} saved=/tmp/gb-perf/e2e-prodflood-profile.json`);
         }
-
-        const pf = await page.evaluate(() => {
-            const p = (window as any).__pf;
-            return {
-                renderMs: p.tLast - p.t0,
-                rowsAdded: p.rowsAdded,
-                lastSeenText: p.lastSeenText,
-                bodyRows: document.querySelectorAll('[data-testid="bufferline-row"]').length,
-                faviconWrites: p.faviconWrites,
-                titleWrites: p.titleWrites,
-                longtaskCount: p.longtasks.length,
-                longtaskTotalMs: p.longtasks.reduce((s: number, v: number) => s + v, 0),
-                longtaskMaxMs: p.longtasks.reduce((m: number, v: number) => Math.max(m, v), 0),
-                sivCalls: p.sivCalls,
-                sivStacks: Object.entries(p.sivStacks).sort((a, b) => b[1] - a[1]).slice(0, 5),
-            };
-        });
 
         // Output identity: the visible rows, prefix + message, in DOM order.
         const rows = await page.evaluate(() => {
@@ -194,19 +234,20 @@ test('prodflood: in-page measurement of a 2000-message flood', async ({ browser 
         fs.writeFileSync(SNAPSHOT_PATH, JSON.stringify(rows));
 
         console.log(
-            `[prodflood] render=${pf.renderMs.toFixed(0)}ms send=${sendMs}ms rows=${pf.rowsAdded} ` +
-            `faviconWrites=${pf.faviconWrites} titleWrites=${pf.titleWrites} ` +
-            `lastText=${pf.lastSeenText} bodyRows=${pf.bodyRows} longtasks=${pf.longtaskCount}(sum=${pf.longtaskTotalMs}ms max=${pf.longtaskMaxMs}ms) ` +
-            `scrollIntoView=${pf.sivCalls} visibleRows=${rows.length} snapshot=${SNAPSHOT_PATH}`,
+            `[prodflood] renderMedian=${median(renders).toFixed(0)}ms ` +
+            `renderMin=${Math.min(...renders).toFixed(0)}ms renderMax=${Math.max(...renders).toFixed(0)}ms ` +
+            `rounds=${renders.map((r) => r.toFixed(0)).join(',')} sendMedian=${median(sends).toFixed(0)}ms ` +
+            `rows=${last.rowsAdded} faviconWrites=${last.faviconWrites} titleWrites=${last.titleWrites} ` +
+            `longtasks=${last.longtaskCount}(sum=${last.longtaskTotalMs}ms max=${last.longtaskMaxMs}ms) ` +
+            `scrollIntoView=${last.sivCalls} bodyRows=${last.bodyRows} visibleRows=${rows.length} snapshot=${SNAPSHOT_PATH}`,
         );
-        for (const [stack, count] of pf.sivStacks) {
+        for (const [stack, count] of (last.sivStacks ?? [])) {
             console.log(`[prodflood][siv] x${count} ${stack}`);
         }
 
-        expect(pf.renderMs).toBeGreaterThan(0);
-        expect(pf.rowsAdded).toBeGreaterThanOrEqual(FLOOD_COUNT);
+        expect(median(renders)).toBeGreaterThan(0);
+        expect(last.rowsAdded).toBeGreaterThanOrEqual(FLOOD_COUNT);
         expect(rows.length).toBeGreaterThan(0);
-        expect(JSON.stringify(median([pf.renderMs]))).toBeTruthy();
     } finally {
         await cdp?.detach().catch(() => {});
         await page.close();

@@ -367,8 +367,18 @@ export class IRCServer {
             return;
         }
 
-        const sendOk = () => { if (!socket.destroyed) socket.end(JSON.stringify({ ok: true }) + '\n'); };
-        const sendErr = (msg: string) => { if (!socket.destroyed) socket.end(JSON.stringify({ ok: false, error: msg }) + '\n'); };
+        // Answer, and close only when the client has nothing else queued on
+        // this connection. Without `more`, every control command costs a fresh
+        // TCP connection: a 2000-message flood burned through the host's
+        // ephemeral ports mid-experiment (EADDRNOTAVAIL), which surfaced as a
+        // failed benchmark arm rather than as what it really was.
+        const reply = (payload: unknown) => {
+            if (socket.destroyed) return;
+            const text = JSON.stringify(payload) + '\n';
+            if (cmd.more) socket.write(text); else socket.end(text);
+        };
+        const sendOk = () => reply({ ok: true });
+        const sendErr = (msg: string) => reply({ ok: false, error: msg });
         const bot = this.clients.get(this.botId);
         if (!bot) { sendErr('Bot not found'); return; }
 
@@ -382,7 +392,7 @@ export class IRCServer {
                 if (c.registered && c.channels.has(ch)) members.push(c.nick);
             }
             if (!socket.destroyed) {
-                socket.end(JSON.stringify({ ok: true, channel: ch, members }) + '\n');
+                reply({ ok: true, channel: ch, members });
             }
             return;
         }

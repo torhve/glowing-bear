@@ -60,7 +60,7 @@ echo "load_before: $(load)" > "$RUNDIR/meta.txt"
 } > "$RUNDIR/stdout.txt" 2> "$RUNDIR/stderr.txt"
 echo "load_after: $(load)" >> "$RUNDIR/meta.txt"
 
-grep -E '^\[prodflood\] render' "$RUNDIR/stdout.txt" > "$RUNDIR/unit-results.txt" || true
+grep -E '^\[prodflood\] renderMedian' "$RUNDIR/stdout.txt" > "$RUNDIR/unit-results.txt" || true
 if [ ! -s "$RUNDIR/unit-results.txt" ] || [ ! -s "$GB_E2E_SNAPSHOT" ]; then
   echo "FAIL: arm produced no [prodflood] result or no row snapshot (wedged or timed-out run)" >&2
   echo "status: incomplete" >> "$RUNDIR/meta.txt"
