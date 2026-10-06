@@ -39,7 +39,8 @@ function parseResults(text) {
         const m = line.match(/^(A inactive|B active|H history)\b.*?median\s+([\d.]+)ms/);
         if (m) { out.set(m[1], { median: Number(m[2]), raw: line }); continue; }
         // E2E arms report the median of several in-page floods per run.
-        const e2e = line.match(/\[prodflood\] renderMedian=(\d+)ms/);
+        const e2e = line.match(/\[prodflood\] renderMedian=(\d+)ms/)
+            ?? line.match(/\[prodbadge\] elapsedMedian=(\d+)ms/);
         if (e2e) out.set('E2E production flood', { median: Number(e2e[1]), raw: line });
     }
     return out;

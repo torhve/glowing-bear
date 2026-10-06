@@ -50,19 +50,27 @@ npm run build > "$RUNDIR/build.txt" 2>&1 || {
   exit 1
 }
 
+# Which bench this arm runs. prodflood renders a flood in the buffer on screen;
+# prodbadge floods a buffer you are NOT looking at, which is the only way the
+# unread badge path runs at all.
+E2E_GREP="${GB_PERF_E2E_GREP:-prodflood}"
+RESULT_PATTERN="${GB_PERF_E2E_RESULT_PATTERN:-^\[prodflood\] renderMedian}"
+
 export GB_E2E_SNAPSHOT="$RUNDIR/e2e-rows.json"
 export GB_E2E_FLOOD_COUNT="${GB_E2E_FLOOD_COUNT:-2000}"
+export GB_E2E_BADGE_COUNT="${GB_E2E_BADGE_COUNT:-2000}"
+export GB_E2E_REPEATS="${GB_E2E_REPEATS:-3}"
 
 echo "load_before: $(load)" > "$RUNDIR/meta.txt"
 {
   run_guarded /usr/bin/time -l npx playwright test \
-    --config src-svelte/e2e/playwright.prodbench.config.ts -g prodflood
+    --config src-svelte/e2e/playwright.prodbench.config.ts -g "$E2E_GREP"
 } > "$RUNDIR/stdout.txt" 2> "$RUNDIR/stderr.txt"
 echo "load_after: $(load)" >> "$RUNDIR/meta.txt"
 
-grep -E '^\[prodflood\] renderMedian' "$RUNDIR/stdout.txt" > "$RUNDIR/unit-results.txt" || true
+grep -E "$RESULT_PATTERN" "$RUNDIR/stdout.txt" > "$RUNDIR/unit-results.txt" || true
 if [ ! -s "$RUNDIR/unit-results.txt" ] || [ ! -s "$GB_E2E_SNAPSHOT" ]; then
-  echo "FAIL: arm produced no [prodflood] result or no row snapshot (wedged or timed-out run)" >&2
+  echo "FAIL: arm produced no $E2E_GREP result or no snapshot (wedged or timed-out run)" >&2
   echo "status: incomplete" >> "$RUNDIR/meta.txt"
   exit 1
 fi
@@ -72,7 +80,7 @@ shasum -a 256 "$GB_E2E_SNAPSHOT" > "$RUNDIR/hashes.txt"
 echo "arm: $ARM" >> "$RUNDIR/meta.txt"
 echo "git: $(git rev-parse --short HEAD)$(git diff --quiet || echo '-dirty')" >> "$RUNDIR/meta.txt"
 echo "date: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$RUNDIR/meta.txt"
-echo "cmd: /usr/bin/time -l npx playwright test --config src-svelte/e2e/playwright.prodbench.config.ts -g prodflood" >> "$RUNDIR/meta.txt"
+echo "cmd: /usr/bin/time -l npx playwright test --config src-svelte/e2e/playwright.prodbench.config.ts -g $E2E_GREP" >> "$RUNDIR/meta.txt"
 echo "flood_count: $GB_E2E_FLOOD_COUNT" >> "$RUNDIR/meta.txt"
 
 cat "$RUNDIR/unit-results.txt"
