@@ -593,7 +593,7 @@
         <!-- Fetch more lines -->
         {#if !$currentBuffer.allLinesFetched}
           <div class="bubble-fetchmore-row">
-            <button type="button" class="fetchmorelines flex items-center gap-1 px-3 py-1 rounded text-xs font-medium text-text-secondary hover:text-text hover:bg-surface-raised transition-colors" onclick={handleFetchMore}>
+            <button type="button" data-testid="fetch-more-lines" class="fetchmorelines flex items-center gap-1 px-3 py-1 rounded text-xs font-medium text-text-secondary hover:text-text hover:bg-surface-raised transition-colors" onclick={handleFetchMore}>
               <ChevronUp size={14} class="text-text-muted" />
               Fetch more lines
             </button>
@@ -671,7 +671,7 @@
           {#if !$currentBuffer.allLinesFetched}
             <tr class="bufferline fetchmore-row">
               <td class="text-center py-1" colspan=3>
-                <button type="button" class="fetchmorelines flex items-center gap-1 px-3 py-1 rounded text-xs font-medium text-text-secondary hover:text-text hover:bg-surface-raised transition-colors" onclick={handleFetchMore}>
+                <button type="button" data-testid="fetch-more-lines" class="fetchmorelines flex items-center gap-1 px-3 py-1 rounded text-xs font-medium text-text-secondary hover:text-text hover:bg-surface-raised transition-colors" onclick={handleFetchMore}>
                   <ChevronUp size={14} class="text-text-muted" />
                   Fetch more lines
                 </button>

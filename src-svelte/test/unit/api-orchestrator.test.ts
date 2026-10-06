@@ -358,4 +358,52 @@ describe('ApiOrchestrator reconnect lifecycle', () => {
         expect(orch.currentGeneration).toBe(2);
         orch.dispose();
     });
+
+    it('a superseded attempt whose baseline batch answers late cannot publish it', async () => {
+        // The batch carries the hotlist baseline, so a delayed baseline response from
+        // a dead attempt must not reach the current generation.
+        stubFetch(false);
+        const { orch, reducers, ends } = makeOrchestrator();
+        orch.start(); // attempt 1
+        const sock1 = await waitForSocket();
+        sock1.emitOpen();
+        const pending = await waitForBatch(sock1); // sent, but unanswered
+
+        orch.reconnectNow(); // attempt 2 takes over
+        for (let i = 0; i < 2000 && FakeSocket.instances.length < 2; i++) await Promise.resolve();
+        expect(FakeSocket.instances.length).toBe(2);
+        const sock2 = FakeSocket.instances[1]!;
+        sock2.emitOpen();
+        await completeBootstrap(sock2);
+        // The newer generation's own baseline must really be published before the
+        // stale frames are answered, otherwise the count assertions prove nothing.
+        await vi.waitFor(() => expect(reducers.buffers).toHaveBeenCalledTimes(1));
+        await vi.waitFor(() => expect(reducers.hotlist).toHaveBeenCalledTimes(1));
+        // Lifecycle signal that attempt 1 is finished: it closed its own sync token
+        // and its socket is closed.
+        await vi.waitFor(() => expect(ends).toContain(1));
+        expect(sock1.readyState).toBe(3);
+
+        // Attempt 1's batch finally answers on its own socket.
+        for (const frame of pending) {
+            const kind = frame.request.includes('/api/buffers') ? 'buffers'
+                : frame.request.includes('/api/sync') ? 'sync' : 'hotlist';
+            const body = kind === 'buffers' ? [VALID_BUFFER] : kind === 'hotlist' ? VALID_HOTLIST : null;
+            sock1.emitMessage({
+                code: kind === 'sync' ? 204 : 200, request: frame.request, request_id: frame.request_id,
+                body_type: kind === 'sync' ? null : 'array', body,
+            });
+        }
+        // Settle window only: attempt 1 already terminated (its token is closed and
+        // its socket is closed) before these frames were answered, so the primary
+        // claim is deterministic; this just catches a late publication from a stray
+        // handler.
+        await new Promise((r) => setTimeout(r, 30));
+
+        // The stale batch added nothing to the newer generation's state.
+        expect(reducers.buffers).toHaveBeenCalledTimes(1);
+        expect(reducers.hotlist).toHaveBeenCalledTimes(1);
+        expect(orch.currentGeneration).toBe(2);
+        orch.dispose();
+    });
 });

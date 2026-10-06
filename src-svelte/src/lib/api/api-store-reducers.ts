@@ -18,7 +18,7 @@ import {
     buffers, servers, activeBufferId, previousBufferId, localUnreadBuffers,
     createBuffer, createBufferLine, createNick, createNickGroup,
     parseRichText, removeBuffer, isSyncing, isRelayStatusBuffer,
-    maxBufferLines, setReadBoundary, setReadBoundaryUnknown,
+    maxBufferLines, setReadBoundary, setReadBoundaryUnknown, applyServerReadMarker, markHotlistBaselineApplied,
     injectDateChangeMessageIfNeeded, pendingBufferSwitch, setActiveBuffer, matchesPendingSwitch,
 } from '#lib/stores/models.ts';
 import { shouldResume } from '#lib/stores/bufferResume.ts';
@@ -82,27 +82,8 @@ function snapshotToBuffer(snap: BufferSnapshot): BufferData {
     buffer.apiBufferId = snap.id;
     if (snap.notify !== undefined) buffer.notify = snap.notify;
     buffer.clearEpoch = 0;
-    applyReadMarker(buffer, snap.lastReadLineId);
+    applyServerReadMarker(buffer, snap.lastReadLineId);
     return buffer;
-}
-
-/**
- * last_read_line_id → read boundary. -1 (NO_READ_LINE) means WeeChat has no
- * read marker: every retained line is unread (boundary known, id null).
- * An id for a line outside retained history leaves the boundary unknown —
- * pendingReadBoundaryUnread carries the hotlist count until history resolves
- * it (set by the hotlist reducer).
- */
-function applyReadMarker(buffer: BufferData, lastReadLineId: number): void {
-    if (lastReadLineId === -1) {
-        buffer.readBoundaryKnown = true;
-        buffer.readBoundaryId = null;
-    } else {
-        const boundaryId = `weechat:${lastReadLineId}`;
-        const found = buffer.lines.some((l) => l.lineId === boundaryId);
-        buffer.readBoundaryKnown = found;
-        buffer.readBoundaryId = found ? boundaryId : null;
-    }
 }
 
 function upsertBuffer(map: Record<string, BufferData>, snap: BufferSnapshot): BufferData {
@@ -330,7 +311,7 @@ export function createApiStoreReducers(): ApiReducers {
                 trimToLimit(buffer);
             }
             if (groups && groups.length) buildNicklist(buffer, groups, nicks ?? []);
-            if (lines && lines.length) applyReadMarker(buffer, snap.lastReadLineId);
+            if (lines && lines.length) applyServerReadMarker(buffer, snap.lastReadLineId);
             // Publish the store first: setActiveBuffer resolves the buffer by id
             // from the live store, so a brand-new buffer must exist there before
             // the switch (and resume) logic runs.
@@ -541,6 +522,9 @@ export function createApiStoreReducers(): ApiReducers {
         },
 
         hotlist(map: Map<ApiBufferId, HotlistSnapshot>): void {
+            // Applying counts makes them authoritative for read-boundary inference;
+            // endSyncPhase uses this to decide whether it may resolve boundaries.
+            markHotlistBaselineApplied();
             const activeId = get(activeBufferId);
             const previousId = get(previousBufferId);
             buffers.update((current) => {

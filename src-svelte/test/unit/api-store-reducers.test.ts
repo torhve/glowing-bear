@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import {
     buffers, servers, activeBufferId, previousBufferId, localUnreadBuffers,
-    beginSyncPhase, endSyncPhase, isSyncing, getEffectiveUnread,
+    beginSyncPhase, endSyncPhase, isSyncing, getEffectiveUnread, getReadBoundaryIndex,
 } from '#lib/stores/models.ts';
 import { createApiStoreReducers, storeKeyForBufferId } from '#lib/api/api-store-reducers.ts';
 import { dispatchEvent } from '#lib/api/api-mapping.ts';
@@ -455,11 +455,14 @@ describe('bootstrap default + resume selection', () => {
 });
 
 describe('read marker + clear epoch', () => {
-    it('last_read_line_id -1 means every retained line is unread (boundary known, id null)', () => {
+    it('last_read_line_id -1 means WeeChat has no marker: the boundary stays unknown', () => {
         reducers.buffers([bufferSnap({ lastReadLineId: -1 })]);
         const buf = get(buffers)[KEY]!;
-        expect(buf.readBoundaryKnown).toBe(true);
-        expect(buf.readBoundaryId).toBeNull();
+        // -1 is not evidence that every retained line is unread: unread counts
+        // come from the hotlist, so no marker is shown until one is known.
+        expect(buf.serverReadLineId).toBe(-1);
+        expect(buf.readBoundaryKnown).toBe(false);
+        expect(getReadBoundaryIndex(buf)).toBeNull();
     });
 
     it('a read marker inside retained history sets a stable boundary', () => {

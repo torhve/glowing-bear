@@ -174,6 +174,15 @@ export interface BufferData {
     readBoundaryId?: string | null;
     /** Hotlist count retained while more history is needed to infer an initial boundary. */
     pendingReadBoundaryUnread?: number;
+    /**
+     * WeeChat's own read marker as reported by the API transport
+     * (`buffer.last_read_line_id`): >= 0 is a line id, -1 means WeeChat has no
+     * marker, undefined means the transport never reported one (legacy protocol).
+     * Remembered because a bootstrap snapshot taken with `lines=0` can never
+     * contain the marker line, so the boundary must be re-anchored once history
+     * reaches it.
+     */
+    serverReadLineId?: number;
     localUnread: number;
     unread: number;
     notification: number;

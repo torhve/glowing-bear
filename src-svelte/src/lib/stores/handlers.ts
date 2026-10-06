@@ -26,6 +26,7 @@ import {
     setReadBoundary,
     setReadBoundaryUnknown,
     resolvePendingReadBoundary,
+    markHotlistBaselineApplied,
     isRelayStatusBuffer,
 } from "#lib/stores/models.ts";
 import { shouldResume, getLastBuffer, recordLastBuffer } from "#lib/stores/bufferResume.ts";
@@ -1219,6 +1220,9 @@ export function handleBufferClosing(message: ProtocolMessage) {
 
 // ---- Hotlist handler ----
 export function handleHotlistInfo(message: ProtocolMessage) {
+    // Applying counts makes them authoritative for read-boundary inference;
+    // endSyncPhase uses this to decide whether it may resolve boundaries.
+    markHotlistBaselineApplied();
     const currentBuffers = get(buffers);
     const activeId = get(activeBufferId);
     const previousId = get(previousBufferId);

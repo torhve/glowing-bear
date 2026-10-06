@@ -5,10 +5,14 @@ import {
     fetchHistory, sendInput, requestCompletion, rankCandidates, completionInsert, clearHiddenLineIdTracking,
 } from '#lib/api/api-features.ts';
 import { createApiStoreReducers } from '#lib/api/api-store-reducers.ts';
-import { buffers } from '#lib/stores/models.ts';
+import {
+    buffers, activeBufferId, previousBufferId, getReadBoundaryIndex, isUserMessageLine,
+    beginSyncPhase, endSyncPhase, setActiveBuffer,
+} from '#lib/stores/models.ts';
+import type { BufferData } from '#lib/types.ts';
 import type { ApiSession, ApiSessionResponse } from '#lib/api/api-session.ts';
 import type { ApiBufferId } from '#lib/api/api-ids.ts';
-import type { BufferSnapshot } from '#lib/api/api-contracts.ts';
+import type { BufferSnapshot, HotlistSnapshot } from '#lib/api/api-contracts.ts';
 
 const BUFFER_ID = 1759000000000001 as ApiBufferId;
 const KEY = String(BUFFER_ID);
@@ -25,6 +29,17 @@ function wireLine(id: number, message = `msg ${id}`) {
         id, y: id, date: '2026-10-04T12:00:00.000Z', date_printed: '2026-10-04T12:00:00.000Z',
         displayed: true, highlight: false, notify_level: 0, prefix: '', message, tags: [],
     };
+}
+
+function wireMessage(id: number, message = `msg ${id}`) {
+    return { ...wireLine(id, message), notify_level: 1, tags: ['irc_privmsg'] };
+}
+
+/** The badge the chat view renders: retained lines after the read boundary. */
+function displayedUnread(buffer: BufferData): number {
+    const readEndIndex = getReadBoundaryIndex(buffer);
+    const messages = buffer.lines.filter(isUserMessageLine);
+    return readEndIndex < messages.length - 1 ? messages.length - Math.max(0, readEndIndex + 1) : 0;
 }
 
 beforeEach(() => {
@@ -229,6 +244,126 @@ describe('fetchHistory', () => {
         const session2 = fakeSession(() => ({ code: 200, body: [hidden] }));
         await fetchHistory(session2, { bufferId: BUFFER_ID, count: 1 });
         expect(get(buffers)[KEY]!.requestedLines).toBe(1);
+    });
+
+    // The reported bug, driven through the real bootstrap + paging path.
+    it('paging history does not turn the loaded lines into unread ones', async () => {
+        // Bootstrap snapshot: no lines, and WeeChat reports no read marker (-1).
+        expect(get(buffers)[KEY]!.readBoundaryKnown).toBe(false);
+
+        const newest = fakeSession(() => ({
+            code: 200,
+            body: Array.from({ length: 100 }, (_, i) => wireMessage(101 + i)),
+        }));
+        await fetchHistory(newest, { bufferId: BUFFER_ID, count: 100 });
+        expect(displayedUnread(get(buffers)[KEY]!)).toBe(0);
+
+        // Second "Fetch more lines" page: a wider window of older history.
+        const older = fakeSession(() => ({
+            code: 200,
+            body: Array.from({ length: 70 }, (_, i) => wireMessage(31 + i)),
+        }));
+        await fetchHistory(older, { bufferId: BUFFER_ID, count: 170 });
+
+        const buf = get(buffers)[KEY]!;
+        expect(buf.lines.filter(isUserMessageLine)).toHaveLength(170);
+        expect(buf.readBoundaryKnown).toBe(true);
+        expect(displayedUnread(buf)).toBe(0);
+    });
+
+    it('leaves the boundary unresolved when the unread count exceeds the retained history', async () => {
+        // WeeChat's marker is older than anything fetched and the hotlist reports
+        // more unread than there are lines: no window can prove where the unread
+        // region starts, so nothing may be claimed as read or as new.
+        // The hotlist only feeds the boundary for buffers the user is not
+        // currently viewing — the active one is managed by setActiveBuffer.
+        activeBufferId.set('');
+        previousBufferId.set('');
+        const entry: HotlistSnapshot = {
+            priority: 1, date: '2026-10-04T12:00:00.000Z', counts: { low: 0, message: 12, private: 0, highlight: 0 },
+        };
+        createApiStoreReducers().hotlist(new Map([[BUFFER_ID, entry]]));
+        const session = fakeSession(() => ({
+            code: 200,
+            body: Array.from({ length: 5 }, (_, i) => wireMessage(101 + i)),
+        }));
+        await fetchHistory(session, { bufferId: BUFFER_ID, count: 5 });
+
+        const buf = get(buffers)[KEY]!;
+        expect(buf.readBoundaryKnown).toBe(false);
+        expect(getReadBoundaryIndex(buf)).toBeNull();
+    });
+
+    // Bootstrap order: buffers and their history land before the hotlist baseline,
+    // so a zero count during the sync phase must not be read as "this buffer is
+    // read" — that would lock the boundary and hide the unread that arrives next.
+    it('history that lands before the hotlist baseline does not claim the buffer is read', async () => {
+        const generation = beginSyncPhase();
+        activeBufferId.set('');
+        previousBufferId.set('');
+        try {
+            const session = fakeSession(() => ({
+                code: 200,
+                body: Array.from({ length: 5 }, (_, i) => wireMessage(101 + i)),
+            }));
+            await fetchHistory(session, { bufferId: BUFFER_ID, count: 5 });
+            // Counts are not authoritative yet, so nothing may be claimed as read.
+            expect(get(buffers)[KEY]!.readBoundaryKnown).toBe(false);
+
+            createApiStoreReducers().hotlist(new Map([[BUFFER_ID, {
+                priority: 1, date: '2026-10-04T12:00:00.000Z', counts: { low: 0, message: 2, private: 0, highlight: 0 },
+            }]]));
+        } finally {
+            endSyncPhase(generation);
+        }
+
+        // Closing the phase is the protocol event that places the boundary from the
+        // baseline that has just become authoritative: two of the five lines unread.
+        const buf = get(buffers)[KEY]!;
+        expect(buf.readBoundaryKnown).toBe(true);
+        expect(getReadBoundaryIndex(buf)).toBe(2);
+        expect(displayedUnread(buf)).toBe(2);
+    });
+
+    it('a buffer activated during the sync phase is resolved once the baseline lands', async () => {
+        const generation = beginSyncPhase();
+        try {
+            // Bootstrap activates the resumed buffer before any history is loaded,
+            // then the chat view fetches a window while the phase is still open.
+            setActiveBuffer(KEY);
+            const session = fakeSession(() => ({
+                code: 200,
+                body: Array.from({ length: 5 }, (_, i) => wireMessage(101 + i)),
+            }));
+            await fetchHistory(session, { bufferId: BUFFER_ID, count: 5 });
+            expect(get(buffers)[KEY]!.readBoundaryKnown).toBe(false);
+
+            // The real baseline: WeeChat reports this buffer as read.
+            createApiStoreReducers().hotlist(new Map([[BUFFER_ID, {
+                priority: 1, date: '2026-10-04T12:00:00.000Z', counts: { low: 0, message: 0, private: 0, highlight: 0 },
+            }]]));
+        } finally {
+            endSyncPhase(generation);
+        }
+
+        // With the baseline applied the retained history is read: no separator above
+        // the lines the user is looking at.
+        const buf = get(buffers)[KEY]!;
+        expect(buf.readBoundaryKnown).toBe(true);
+        expect(displayedUnread(buf)).toBe(0);
+    });
+
+    it('a sync phase that closes without a baseline resolves nothing', async () => {
+        const generation = beginSyncPhase();
+        const session = fakeSession(() => ({
+            code: 200,
+            body: Array.from({ length: 5 }, (_, i) => wireMessage(101 + i)),
+        }));
+        await fetchHistory(session, { bufferId: BUFFER_ID, count: 5 });
+        // Attempt failed: the phase closes but no counts were ever applied.
+        endSyncPhase(generation);
+
+        expect(get(buffers)[KEY]!.readBoundaryKnown).toBe(false);
     });
 });
 

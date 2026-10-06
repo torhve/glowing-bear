@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { buffers, servers, activeBufferId, setActiveBuffer, hotlistClearedBuffers, createBufferLine, getReadBoundaryIndex, isUserMessageLine, setReadBoundary, setReadBoundaryUnknown } from '#lib/stores/models.ts';
+import { buffers, servers, activeBufferId, setActiveBuffer, hotlistClearedBuffers, createBufferLine, getReadBoundaryIndex, isUserMessageLine, setReadBoundary, setReadBoundaryUnknown, endSyncPhase } from '#lib/stores/models.ts';
 import type { BufferData, ProtocolMessage, HotlistEntry } from '#lib/types.ts';
 
 // Mock settings store to avoid localStorage access at module load time
@@ -599,7 +599,10 @@ describe('Readmarker behavior', () => {
             expect(getReadBoundaryIndex(buffer)).toBe(1);
             buffer.lines = [];
             setReadBoundary(buffer, -1);
-            expect(getReadBoundaryIndex(buffer)).toBe(-1);
+            // An empty buffer cannot carry a boundary: -1 would survive into the
+            // next history load and make every line that arrives count as unread.
+            expect(getReadBoundaryIndex(buffer)).toBeNull();
+            expect(buffer.readBoundaryKnown).toBe(false);
         });
 
         it('remaps a known boundary when history is prepended by line identity', () => {
@@ -633,6 +636,29 @@ describe('Readmarker behavior', () => {
             expect(getReadBoundaryIndex(get(buffers)['0x4']!)).toBe(null);
             setReadBoundaryUnknown(get(buffers)['0x4']!);
             expect(getReadBoundaryIndex(get(buffers)['0x4']!)).toBe(null);
+        });
+    });
+
+    describe('legacy transport history fetch', () => {
+        it('an empty buffer stays unknown and its fetched history is not unread', () => {
+            // Counts are authoritative here: no connection is mid-sync.
+            endSyncPhase();
+            buffers.set({ '0x400': makeBuffer('0x400', { lines: [], lastSeen: -1, unread: 0, notification: 0, localUnread: 0 }) });
+
+            setActiveBuffer('0x400');
+            expect(get(buffers)['0x400']!.readBoundaryKnown).toBe(false);
+
+            // The chat view's "Fetch more lines" request arrives as a legacy lineInfo.
+            const older = createLineMessage('0x400', ['irc_privmsg'], 0, 1, 0, 1, 'older');
+            const newer = createLineMessage('0x400', ['irc_privmsg'], 0, 1, 0, 2, 'newer');
+            handleLineInfo({ objects: [{ pointer: '0x400', content: [older.objects[0]!.content[0]!, newer.objects[0]!.content[0]!] }] }, true, '0x400');
+
+            const after = get(buffers)['0x400']!;
+            expect(after.lines.length).toBe(2);
+            // WeeChat reports no unread for this buffer, so the loaded history is read:
+            // the separator sits after the last line instead of above all of it.
+            expect(after.readBoundaryKnown).toBe(true);
+            expect(getReadBoundaryIndex(after)).toBe(1);
         });
     });
 });

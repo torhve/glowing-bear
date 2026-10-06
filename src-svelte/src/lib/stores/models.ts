@@ -134,8 +134,10 @@ export function isUserMessageLine(line: BufferLine): boolean {
 
 /** Infer the last read row from an initial hotlist count when no saved boundary exists. */
 function inferReadBoundaryFromHotlist(buffer: BufferData, unreadCount: number): number | null {
-    if (unreadCount <= 0) return buffer.lines.length - 1;
+    // No lines means nothing to anchor: stay unknown until history loads, because
+    // a boundary pinned before the first line would make every later line unread.
     if (buffer.lines.length === 0) return null;
+    if (unreadCount <= 0) return buffer.lines.length - 1;
 
     let remaining = unreadCount;
     for (let index = buffer.lines.length - 1; index >= 0; index--) {
@@ -185,7 +187,14 @@ export function getReadBoundaryIndex(buffer: BufferData): number | null {
 
 /** Set a known read boundary without using a synthetic date row as an anchor. */
 export function setReadBoundary(buffer: BufferData, index: number): void {
-    const clamped = buffer.lines.length === 0 ? -1 : Math.max(-1, Math.min(index, buffer.lines.length - 1));
+    // An empty buffer has nothing to anchor to. Pinning a boundary before its
+    // first line would make every line that later loads — history paging or
+    // replayed lines — count as unread, so an empty buffer stays unknown.
+    if (buffer.lines.length === 0) {
+        setReadBoundaryUnknown(buffer);
+        return;
+    }
+    const clamped = Math.max(-1, Math.min(index, buffer.lines.length - 1));
     const boundaryLineId = clamped >= 0 ? buffer.lines[clamped]?.lineId : undefined;
     if (boundaryLineId !== undefined && findUniqueLineIndex(buffer.lines, boundaryLineId) === null) {
         setReadBoundaryUnknown(buffer);
@@ -212,6 +221,76 @@ export function resolvePendingReadBoundary(buffer: BufferData): boolean {
     if (inferredBoundary === null) return false;
     setReadBoundary(buffer, inferredBoundary);
     return buffer.readBoundaryKnown !== false;
+}
+
+/**
+ * Index of WeeChat's own read marker among the retained lines, or null when the
+ * transport never reported one, reported none (-1), or the marked line is not
+ * in the retained window.
+ */
+export function findServerReadBoundaryIndex(buffer: BufferData): number | null {
+    const marker = buffer.serverReadLineId;
+    if (marker === undefined || marker < 0) return null;
+    const index = findUniqueLineIndex(buffer.lines, `weechat:${marker}`);
+    return index !== null && index >= 0 ? index : null;
+}
+
+/** Anchor the boundary to WeeChat's marker when the retained history contains it. */
+export function reanchorReadBoundaryFromServer(buffer: BufferData): boolean {
+    const index = findServerReadBoundaryIndex(buffer);
+    if (index === null) return false;
+    setReadBoundary(buffer, index);
+    return true;
+}
+
+/**
+ * Resolve an unresolved boundary once the buffer actually has lines.
+ *
+ * Priority: WeeChat's own marker (exact), then the hotlist count, and finally
+ * "the retained history is read" — a buffer with no hotlist entry is read as far
+ * as WeeChat is concerned, and leaving its boundary unresolved would make the
+ * chat view count every retained line as new.
+ *
+ * The count-based half is skipped while the sync phase is open: until this
+ * connection's hotlist baseline has been applied, a zero count is not yet
+ * evidence of "read", and establishing the boundary then would lock out the real
+ * counts that arrive moments later (the hotlist reducer only defers a boundary
+ * that is still unresolved).
+ */
+export function resolveReadBoundaryAfterHistory(buffer: BufferData): boolean {
+    // Tri-state: true is established, false is explicitly uncertain, undefined is
+    // "never established". Only an established boundary is left alone.
+    if (buffer.readBoundaryKnown === true) return false;
+    if (reanchorReadBoundaryFromServer(buffer)) return true;
+    if (isSyncing()) return false;
+    const index = inferReadBoundaryFromHotlist(
+        buffer,
+        Math.max(buffer.pendingReadBoundaryUnread || 0, getEffectiveUnread(buffer)),
+    );
+    if (index === null) return false;
+    setReadBoundary(buffer, index);
+    return true;
+}
+
+/**
+ * Apply WeeChat's authoritative read marker (API transport `last_read_line_id`).
+ *
+ * A marker that is not among the retained lines is NOT evidence that every line
+ * is unread: the bootstrap snapshot requests `lines=0`, so "not found" is the
+ * normal first response, and -1 simply means WeeChat has no marker. In both
+ * cases the id is remembered so a later history fetch can anchor it exactly, and
+ * the boundary is left as it is: unknown until something establishes it, or the
+ * boundary this session already committed. Unread counts stay with the hotlist,
+ * which is the authoritative source for them.
+ *
+ * Re-anchoring is limited to an unresolved boundary for the same reason
+ * `applyHistory` limits it: a snapshot that arrives after the user has read to
+ * the bottom carries WeeChat's older marker, and honouring it would resurrect
+ * unread the user has already seen.
+ */
+export function applyServerReadMarker(buffer: BufferData, lastReadLineId: number): void {
+    buffer.serverReadLineId = lastReadLineId;
+    if (buffer.readBoundaryKnown !== true) reanchorReadBoundaryFromServer(buffer);
 }
 
 // Sort buffers: pinned first, then by number. Optionally groups by server when orderByServer is true.
@@ -631,21 +710,64 @@ export function recalculateLinesPerScreen(numLines: number) {
  */
 let syncGeneration = 0;
 let baselinePending = false;
+let baselineApplied = false;
 
 /** Open the sync phase for a new connection; returns its generation token. */
 export function beginSyncPhase(): number {
     syncGeneration += 1;
     baselinePending = true;
+    baselineApplied = false;
     return syncGeneration;
 }
 
 /**
- * Close the sync phase. With a generation token, only the attempt that opened the
- * current phase may close it. Without one, close unconditionally (disconnect).
+ * Record that a hotlist baseline has been applied, so the counts behind a read
+ * boundary are authoritative. Called by both transports when they apply the
+ * baseline (API hotlist reducer, legacy handleHotlistInfo).
+ */
+export function markHotlistBaselineApplied(): void {
+    // Only an open phase can be authorized; a poll outside a phase marks nothing,
+    // and a close that never saw a baseline resolves nothing from counts.
+    if (baselinePending) baselineApplied = true;
+}
+
+/**
+ * Closing is a protocol event: when a hotlist baseline has actually been applied,
+ * buffers whose boundary could not be placed earlier can be resolved, because a
+ * zero count was not evidence of "read" before the baseline and is after it. A
+ * cancelled or failed attempt applied no baseline, so it must not resolve anything
+ * from counts that never arrived.
  */
 export function endSyncPhase(generation?: number): void {
     if (generation !== undefined && generation !== syncGeneration) return;
     baselinePending = false;
+    if (!baselineApplied) return;
+    baselineApplied = false;
+    resolveUnresolvedReadBoundaries();
+}
+
+/** Place every still-unresolved read boundary now that the baseline is in. */
+function resolveUnresolvedReadBoundaries(): void {
+    buffers.update((current) => {
+        const copy: Record<string, BufferData> = {};
+        let changed = false;
+        for (const id in current) {
+            const buf = current[id];
+            if (!buf) continue;
+            if (buf.readBoundaryKnown === true) {
+                copy[id] = buf;
+                continue;
+            }
+            const updated = { ...buf };
+            if (resolveReadBoundaryAfterHistory(updated)) {
+                changed = true;
+                copy[id] = updated;
+            } else {
+                copy[id] = buf;
+            }
+        }
+        return changed ? copy : current;
+    });
 }
 
 export function isSyncing(): boolean {
@@ -806,11 +928,14 @@ export function setActiveBuffer(bufferId: string): boolean {
     // status/date rows in the unread section. Keep the boundary unknown only until lines load.
     const existingBoundary = getReadBoundaryIndex(buffer);
     const pendingUnread = Math.max(buffer.pendingReadBoundaryUnread || 0, getEffectiveUnread(buffer));
-    const inferredBoundary = existingBoundary === null
+    // WeeChat's own marker is exact; the hotlist count only guesses where the
+    // unread region starts, so it is the fallback.
+    const serverBoundary = existingBoundary === null ? findServerReadBoundaryIndex(buffer) : null;
+    const inferredBoundary = existingBoundary === null && serverBoundary === null
         ? inferReadBoundaryFromHotlist(buffer, pendingUnread)
         : null;
-    const targetBoundaryKnown = existingBoundary !== null || inferredBoundary !== null;
-    const targetLastSeen = existingBoundary ?? inferredBoundary ?? -1;
+    const targetBoundaryKnown = existingBoundary !== null || serverBoundary !== null || inferredBoundary !== null;
+    const targetLastSeen = existingBoundary ?? serverBoundary ?? inferredBoundary ?? -1;
 
     if (DEBUG_BUFFERS)
         console.log("[setActiveBuffer] targetLastSeen:", targetLastSeen, "known:", targetBoundaryKnown);

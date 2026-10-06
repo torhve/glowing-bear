@@ -15,7 +15,7 @@ import type { ApiSession, ApiSessionResponse } from '#lib/api/api-session.ts';
 import { validateCompletionResponse, validateLineArray } from '#lib/api/api-validation.ts';
 import { mapLine, isServerHiddenLine } from '#lib/api/api-mapping.ts';
 import { storeKeyForBufferId, trimBufferLines } from '#lib/api/api-store-reducers.ts';
-import { buffers, maxBufferLines } from '#lib/stores/models.ts';
+import { buffers, maxBufferLines, resolveReadBoundaryAfterHistory } from '#lib/stores/models.ts';
 import type { CompletionResponse } from '#lib/weechat-rest-types.ts';
 import type { LineSnapshot } from '#lib/api/api-contracts.ts';
 import type { ApiBufferId, ApiLineId } from '#lib/api/api-ids.ts';
@@ -163,6 +163,14 @@ function applyHistory(buffer: BufferData, lines: LineSnapshot[]): void {
     // like the legacy history pass (trimmed lines still count in
     // requestedLines so scroll-up paging knows it is exhausted).
     trimBufferLines(buffer, get(maxBufferLines));
+    // Bootstrap snapshots carry no lines, so WeeChat's read marker was almost
+    // always outside the retained window when the buffer first appeared and the
+    // boundary stayed unresolved. This is the moment it can be resolved: from the
+    // marker if the window now contains it, otherwise from the hotlist count (no
+    // unread means the retained history is read). Only an unresolved boundary is
+    // touched — re-applying an older state would resurrect unread the user has
+    // already seen.
+    resolveReadBoundaryAfterHistory(buffer);
 }
 
 function lineSnapshotToBufferLine(buffer: BufferData, l: LineSnapshot) {

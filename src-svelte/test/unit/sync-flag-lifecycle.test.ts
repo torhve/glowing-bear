@@ -4,11 +4,14 @@ import {
     buffers,
     servers,
     activeBufferId,
+    previousBufferId,
+    hotlistClearedBuffers,
     setActiveBuffer,
     beginSyncPhase,
     endSyncPhase,
     isSyncing,
     getEffectiveUnread,
+    getReadBoundaryIndex,
 } from '#lib/stores/models.ts';
 import type { BufferData, ProtocolMessage } from '#lib/types.ts';
 
@@ -206,6 +209,10 @@ describe('Sync phase lifecycle', () => {
         buffers.set({});
         servers.set({ 'irc.server': { id: '0x100', unread: 0 } });
         activeBufferId.set('');
+        previousBufferId.set('');
+        // setActiveBuffer parks an id here so a stale hotlist cannot restore its unread;
+        // only a disconnect or reset clears the set, so the harness must clear it too.
+        hotlistClearedBuffers.update(() => new Set());
     });
 
     afterEach(() => {
@@ -265,6 +272,62 @@ describe('Sync phase lifecycle', () => {
         expect(isSyncing()).toBe(true);
         endSyncPhase(); // init failure / disconnect path
         expect(isSyncing()).toBe(false);
+    });
+
+    it('a phase closed without a baseline still closes but resolves no boundary', () => {
+        // A failed attempt must still leave the phase (resetAllState relies on it)
+        // without inventing a read boundary from counts that never arrived.
+        const phase = beginSyncPhase();
+        buffers.set({ '0x100': makeBuffer('0x100', { lines: [], lastSeen: -1, unread: 0, notification: 0 }) });
+        setActiveBuffer('0x100');
+        handleLineInfo(historyMessage('0x100', 5), true, '0x100');
+
+        endSyncPhase(phase);
+
+        expect(isSyncing()).toBe(false);
+        const buf = get(buffers)['0x100']!;
+        expect(buf.lines.length).toBe(5);
+        expect(buf.readBoundaryKnown).toBe(false);
+    });
+
+    it('a superseded close neither ends the phase nor spends its baseline', () => {
+        const stale = beginSyncPhase();
+        const current = beginSyncPhase();
+        buffers.set({ '0x100': makeBuffer('0x100', { lines: [], lastSeen: -1, unread: 0, notification: 0 }) });
+        setActiveBuffer('0x100');
+        handleLineInfo(historyMessage('0x100', 5), true, '0x100');
+        handleHotlistInfo(hotlistMessage([{ id: '0x100', count: [0, 0, 0, 0] }]));
+
+        endSyncPhase(stale);
+        expect(isSyncing()).toBe(true);
+        expect(get(buffers)['0x100']!.readBoundaryKnown).toBe(false);
+
+        // Only the current phase's close consumes its own baseline — and that is what
+        // places the boundary: the loaded history is read.
+        endSyncPhase(current);
+        expect(isSyncing()).toBe(false);
+        expect(getReadBoundaryIndex(get(buffers)['0x100']!)).toBe(4);
+    });
+
+    it("a new phase does not inherit the previous phase's baseline", () => {
+        const first = beginSyncPhase();
+        buffers.set({ '0x100': makeBuffer('0x100', { unread: 0, notification: 0 }) });
+        setActiveBuffer('0x100');
+        handleLineInfo(historyMessage('0x100', 5), true, '0x100');
+        handleHotlistInfo(hotlistMessage([{ id: '0x100', count: [0, 0, 0, 0] }]));
+        endSyncPhase(first);
+        expect(getReadBoundaryIndex(get(buffers)['0x100']!)).toBe(4);
+
+        // A reconnect reopens the phase with a fresh baseline requirement: history that
+        // lands before the new baseline may not be resolved from the old one.
+        const second = beginSyncPhase();
+        buffers.set({ '0x100': makeBuffer('0x100', { unread: 0, notification: 0 }) });
+        setActiveBuffer('0x100');
+        handleLineInfo(historyMessage('0x100', 5), true, '0x100');
+        expect(get(buffers)['0x100']!.readBoundaryKnown).toBe(false);
+
+        endSyncPhase(second); // closed without a new baseline
+        expect(get(buffers)['0x100']!.readBoundaryKnown).toBe(false);
     });
 
     it('badges a live line while the baseline is pending but defers server counts', () => {
