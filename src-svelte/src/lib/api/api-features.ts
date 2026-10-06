@@ -14,7 +14,7 @@ import { get } from 'svelte/store';
 import type { ApiSession, ApiSessionResponse } from '#lib/api/api-session.ts';
 import { validateCompletionResponse, validateLineArray } from '#lib/api/api-validation.ts';
 import { mapLine, isServerHiddenLine } from '#lib/api/api-mapping.ts';
-import { storeKeyForBufferId, trimBufferLines } from '#lib/api/api-store-reducers.ts';
+import { storeKeyForBufferId, trimBufferLines, flushApiLineBatch } from '#lib/api/api-store-reducers.ts';
 import { buffers, maxBufferLines, resolveReadBoundaryAfterHistory } from '#lib/stores/models.ts';
 import type { CompletionResponse } from '#lib/weechat-rest-types.ts';
 import type { LineSnapshot } from '#lib/api/api-contracts.ts';
@@ -107,6 +107,9 @@ export async function fetchHistory(session: ApiSession, req: HistoryRequest): Pr
     }
     const mapped = v.value.map(mapLine).filter((l): l is LineSnapshot => l !== null);
 
+    // Live lines queued in the current frame belong to the buffer this history
+    // response is being merged into; apply them before reading and mutating it.
+    flushApiLineBatch();
     const buffer = get(buffers)[key];
     if (!buffer || (buffer.clearEpoch ?? 0) !== epochBefore) {
         return { lines: mapped, applied: false, complete: mapped.length < req.count };

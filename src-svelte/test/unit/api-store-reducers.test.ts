@@ -7,7 +7,7 @@ import {
     buffers, servers, activeBufferId, previousBufferId, localUnreadBuffers,
     beginSyncPhase, endSyncPhase, isSyncing, getEffectiveUnread, getReadBoundaryIndex,
 } from '#lib/stores/models.ts';
-import { createApiStoreReducers, storeKeyForBufferId } from '#lib/api/api-store-reducers.ts';
+import { createApiStoreReducers, storeKeyForBufferId, flushApiLineBatch } from '#lib/api/api-store-reducers.ts';
 import { dispatchEvent } from '#lib/api/api-mapping.ts';
 import type { ApiReducers, BufferSnapshot, LineSnapshot, HotlistSnapshot } from '#lib/api/api-contracts.ts';
 import type { ApiSessionEvent } from '#lib/api/api-session.ts';
@@ -80,6 +80,16 @@ const WIRE_LINE = (id: number, extra: Record<string, unknown> = {}) => ({
 
 let reducers: ApiReducers;
 
+/**
+ * `lineAdded` is frame-aligned: it queues the event and one flush applies the
+ * whole batch (the same contract the legacy transport's line handling has).
+ * Tests that call it directly and then read the store must drain the queue.
+ */
+function addLine(bufferId: ApiBufferId, line: LineSnapshot): void {
+    reducers.lineAdded(bufferId, line);
+    flushApiLineBatch();
+}
+
 beforeEach(() => {
     buffers.set({});
     servers.set({});
@@ -104,7 +114,7 @@ describe('buffers + identity', () => {
 
     it('upserts metadata without dropping lines or local state', () => {
         reducers.buffers([bufferSnap()]);
-        reducers.lineAdded(BUFFER_ID, lineSnap(10));
+        addLine(BUFFER_ID, lineSnap(10));
         reducers.buffers([bufferSnap({ title: 'renamed', localVariables: { ...bufferSnap().localVariables, pinned: 'true' } })]);
         const buf = get(buffers)[KEY]!;
         expect(buf.rtitle).toBe('renamed');
@@ -331,7 +341,7 @@ describe('line tally gates (ported legacy rules)', () => {
         activeBufferId.set(''); // bootstrap auto-selects a default; tally needs an inactive buffer
         // lastReadLineId -1 marks the boundary known; force the unknown case:
         get(buffers)[KEY]!.readBoundaryKnown = false;
-        reducers.lineAdded(BUFFER_ID, lineSnap(1));
+        addLine(BUFFER_ID, lineSnap(1));
         const buf = get(buffers)[KEY]!;
         // Alert ⇒ badge invariant: the badge tally is never gated (the alert
         // path rings for these lines too); only the boundary-resolution
@@ -339,7 +349,7 @@ describe('line tally gates (ported legacy rules)', () => {
         expect(buf.localUnread).toBe(1);
         expect(buf.unread).toBe(0);
         endSyncPhase(token);
-        reducers.lineAdded(BUFFER_ID, lineSnap(2));
+        addLine(BUFFER_ID, lineSnap(2));
         expect(get(buffers)[KEY]!.localUnread).toBe(2);
         expect(get(buffers)[KEY]!.unread).toBe(1);
     });
@@ -350,7 +360,7 @@ describe('line tally gates (ported legacy rules)', () => {
         activeBufferId.set('');
         get(buffers)[KEY]!.readBoundaryKnown = false;
         // A highlight races in live before the hotlist baseline is applied...
-        reducers.lineAdded(BUFFER_ID, lineSnap(1, { notifyLevel: 3, highlight: true, tags: ['notify_highlight'] }));
+        addLine(BUFFER_ID, lineSnap(1, { notifyLevel: 3, highlight: true, tags: ['notify_highlight'] }));
         // ...and the baseline (generated after the line) already includes it.
         reducers.hotlist(new Map([[BUFFER_ID, { priority: 3, counts: { low: 0, message: 0, private: 0, highlight: 1 } }]]));
         const buf = get(buffers)[KEY]!;
@@ -370,7 +380,7 @@ describe('line tally gates (ported legacy rules)', () => {
         // sync)...
         reducers.hotlist(new Map([[BUFFER_ID, { priority: 1, counts: { low: 0, message: 2, private: 0, highlight: 0 } }]]));
         // ...and a third line races in after the baseline was generated.
-        reducers.lineAdded(BUFFER_ID, lineSnap(3));
+        addLine(BUFFER_ID, lineSnap(3));
         let buf = get(buffers)[KEY]!;
         // Transiently max(2, 1) = 2: the badge is visible (alert ⇒ badge) even
         // though the disjoint counts undercount until the next poll.
@@ -386,7 +396,7 @@ describe('line tally gates (ported legacy rules)', () => {
     it('active buffer never tallies', () => {
         reducers.buffers([bufferSnap()]);
         activeBufferId.set(KEY);
-        reducers.lineAdded(BUFFER_ID, lineSnap(1, { notifyLevel: 3, highlight: true, tags: ['notify_highlight'] }));
+        addLine(BUFFER_ID, lineSnap(1, { notifyLevel: 3, highlight: true, tags: ['notify_highlight'] }));
         const buf = get(buffers)[KEY]!;
         expect(buf.localUnread).toBe(0);
         expect(buf.notification).toBe(0);
@@ -395,8 +405,8 @@ describe('line tally gates (ported legacy rules)', () => {
     it('notify_level 1 increments unread and server totals; >=2 with highlight increments notification', () => {
         reducers.buffers([bufferSnap()]);
         activeBufferId.set('');
-        reducers.lineAdded(BUFFER_ID, lineSnap(1));
-        reducers.lineAdded(BUFFER_ID, lineSnap(2, { notifyLevel: 3, highlight: true, tags: ['notify_highlight'] }));
+        addLine(BUFFER_ID, lineSnap(1));
+        addLine(BUFFER_ID, lineSnap(2, { notifyLevel: 3, highlight: true, tags: ['notify_highlight'] }));
         const buf = get(buffers)[KEY]!;
         expect(buf.unread).toBe(1);
         expect(buf.notification).toBe(1);
@@ -406,8 +416,8 @@ describe('line tally gates (ported legacy rules)', () => {
 
     it('lineDataChanged replaces the line in place by weechat:<id>', () => {
         reducers.buffers([bufferSnap()]);
-        reducers.lineAdded(BUFFER_ID, lineSnap(7));
-        reducers.lineAdded(BUFFER_ID, lineSnap(8));
+        addLine(BUFFER_ID, lineSnap(7));
+        addLine(BUFFER_ID, lineSnap(8));
         reducers.lineDataChanged(BUFFER_ID, lineSnap(7, { message: 'edited', notifyLevel: 0, tags: [] }));
         const buf = get(buffers)[KEY]!;
         expect(buf.lines).toHaveLength(2);
@@ -416,16 +426,16 @@ describe('line tally gates (ported legacy rules)', () => {
     });
 
     it('lines for unsynced buffers are ignored without crashing', () => {
-        reducers.lineAdded(999 as ApiBufferId, lineSnap(1));
+        addLine(999 as ApiBufferId, lineSnap(1));
         expect(get(buffers)[String(999)]).toBeUndefined();
     });
 
     it('skips smart-filtered lines (irc_smart_filter tag or displayed:false) — no render, no tally', () => {
         reducers.buffers([bufferSnap()]);
         activeBufferId.set('');
-        reducers.lineAdded(BUFFER_ID, lineSnap(1, { tags: ['irc_privmsg', 'irc_smart_filter'] }));
-        reducers.lineAdded(BUFFER_ID, lineSnap(2, { displayed: false }));
-        reducers.lineAdded(BUFFER_ID, lineSnap(3));
+        addLine(BUFFER_ID, lineSnap(1, { tags: ['irc_privmsg', 'irc_smart_filter'] }));
+        addLine(BUFFER_ID, lineSnap(2, { displayed: false }));
+        addLine(BUFFER_ID, lineSnap(3));
         const buf = get(buffers)[KEY]!;
         expect(buf.lines.map((l) => l.lineId)).toEqual(['weechat:3']);
         expect(buf.localUnread).toBe(1); // only the unfiltered line is tallied
@@ -436,7 +446,7 @@ describe('notification body (API path)', () => {
     it('strips WeeChat color and attribute controls from prefix and message', () => {
         reducers.buffers([bufferSnap()]);
         activeBufferId.set('');
-        reducers.lineAdded(BUFFER_ID, lineSnap(1, {
+        addLine(BUFFER_ID, lineSnap(1, {
             notifyLevel: 3,
             highlight: true,
             tags: ['notify_highlight'],
@@ -467,8 +477,8 @@ describe('buffer notify level (WeeChat >= 5.0.0)', () => {
     it('muted buffer (notify none) tallies no unread or notification counts', () => {
         reducers.buffers([bufferSnap({ notify: 0 })]);
         activeBufferId.set(''); // bootstrap auto-selects; tally needs an inactive buffer
-        reducers.lineAdded(BUFFER_ID, lineSnap(1));
-        reducers.lineAdded(BUFFER_ID, lineSnap(2, { notifyLevel: 3, highlight: true, tags: ['notify_highlight'] }));
+        addLine(BUFFER_ID, lineSnap(1));
+        addLine(BUFFER_ID, lineSnap(2, { notifyLevel: 3, highlight: true, tags: ['notify_highlight'] }));
         const buf = get(buffers)[KEY]!;
         expect(buf.unread).toBe(0);
         expect(buf.notification).toBe(0);
@@ -478,8 +488,8 @@ describe('buffer notify level (WeeChat >= 5.0.0)', () => {
     it('highlight-notify buffer counts highlights but not plain messages', () => {
         reducers.buffers([bufferSnap({ notify: 1 })]);
         activeBufferId.set('');
-        reducers.lineAdded(BUFFER_ID, lineSnap(1));
-        reducers.lineAdded(BUFFER_ID, lineSnap(2, { notifyLevel: 3, highlight: true, tags: ['notify_highlight'] }));
+        addLine(BUFFER_ID, lineSnap(1));
+        addLine(BUFFER_ID, lineSnap(2, { notifyLevel: 3, highlight: true, tags: ['notify_highlight'] }));
         const buf = get(buffers)[KEY]!;
         expect(buf.unread).toBe(0); // message priority needs notify >= 2
         expect(buf.notification).toBe(1); // highlight needs notify >= 1
@@ -490,7 +500,7 @@ describe('buffer notify level (WeeChat >= 5.0.0)', () => {
         const buf = get(buffers)[KEY]!;
         expect(buf.notify).toBe(0);
         activeBufferId.set('');
-        reducers.lineAdded(BUFFER_ID, lineSnap(1, { notifyLevel: 3, highlight: true, tags: ['notify_highlight'] }));
+        addLine(BUFFER_ID, lineSnap(1, { notifyLevel: 3, highlight: true, tags: ['notify_highlight'] }));
         expect(get(buffers)[KEY]!.notification).toBe(0);
     });
 
@@ -500,7 +510,7 @@ describe('hotlist baseline', () => {
     it('applies server counts and preserves separately modeled localUnread', () => {
         reducers.buffers([bufferSnap()]);
         activeBufferId.set('');
-        reducers.lineAdded(BUFFER_ID, lineSnap(1)); // localUnread 1, unread 1
+        addLine(BUFFER_ID, lineSnap(1)); // localUnread 1, unread 1
         const map = new Map<ApiBufferId, HotlistSnapshot>([[BUFFER_ID, {
             priority: 3,
             counts: { low: 0, message: 5, private: 1, highlight: 2 },
@@ -585,7 +595,7 @@ describe('read marker + clear epoch', () => {
 
     it('bufferCleared bumps the clear epoch and empties lines', () => {
         reducers.buffers([bufferSnap()]);
-        reducers.lineAdded(BUFFER_ID, lineSnap(1));
+        addLine(BUFFER_ID, lineSnap(1));
         reducers.bufferCleared(BUFFER_ID);
         const buf = get(buffers)[KEY]!;
         expect(buf.lines).toHaveLength(0);

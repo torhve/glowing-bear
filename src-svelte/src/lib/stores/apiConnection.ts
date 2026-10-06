@@ -24,7 +24,7 @@ import { addToast, removeToast, updateToast, toastStore } from '#lib/toast.ts';
 import { onDisconnect } from '#lib/notifications.ts';
 import { resolveApiEndpoint } from '#lib/api/api-endpoint.ts';
 import { ApiOrchestrator, type OrchestratorStatus } from '#lib/api/api-orchestrator.ts';
-import { createApiStoreReducers } from '#lib/api/api-store-reducers.ts';
+import { createApiStoreReducers, flushApiLineBatch } from '#lib/api/api-store-reducers.ts';
 import { mapHotlist, applyNicklistRoot } from '#lib/api/api-mapping.ts';
 import { fetchHistory, sendInput, clearHiddenLineIdTracking, type InputOutcome } from '#lib/api/api-features.ts';
 import { validateScript } from '#lib/api/api-validation.ts';
@@ -79,6 +79,9 @@ function resetAllState() {
     pendingBufferSwitch.set(null);
     bufferBottom.set(true);
     // Clear all buffer/server state — no stale entries accumulate across reconnects.
+    // Drain the frame's queued line events before wiping state, so nothing is
+    // left pending for the next session to apply against reused buffer ids.
+    flushApiLineBatch();
     buffers.set({});
     // Line ids restart from a low counter in a new session: drop the
     // per-buffer seen-hidden-line tracking so nothing dedupes against stale ids.
@@ -368,12 +371,14 @@ export async function requestNicklist(bufferId: string) {
             // Authoritative replace (legacy `fresh` parity): nick deltas may
             // have left a partial or stale list behind, so clear before the
             // snapshot is applied and only then mark the buffer fetched.
+            flushApiLineBatch();
             buffers.update((current) => {
                 const buffer = current[bufferId];
                 if (!buffer) return current;
                 return { ...current, [bufferId]: { ...buffer, nicklist: {} } };
             });
             applyNicklistRoot(res.body, apiId, createApiStoreReducers());
+            flushApiLineBatch();
             buffers.update((current) => {
                 const buffer = current[bufferId];
                 if (!buffer) return current;
@@ -438,6 +443,7 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
         // it — applied=false — and nothing may be written from here).
         const freshBuffer = getBuffer(bufferId);
         if (!freshBuffer || result.applied === false) return;
+        flushApiLineBatch();
         buffers.update(current => {
             const buf = current[bufferId];
             if (!buf) return current;

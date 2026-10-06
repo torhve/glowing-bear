@@ -9,7 +9,7 @@ import {
     hasNoHistoryToFetch,
     markHistoryComplete,
 } from '#lib/stores/models.ts';
-import { createApiStoreReducers } from '#lib/api/api-store-reducers.ts';
+import { createApiStoreReducers, flushApiLineBatch } from '#lib/api/api-store-reducers.ts';
 import type { BufferSnapshot } from '#lib/api/api-contracts.ts';
 import type { ApiBufferId, ApiLineId } from '#lib/api/api-ids.ts';
 
@@ -61,6 +61,9 @@ describe('free-buffer history gate', () => {
             message: 'live row',
             tags: [],
         });
+        // lineAdded is frame-aligned: it queues the event, one flush applies
+        // the batch. Drain it before reading the store.
+        flushApiLineBatch();
 
         markHistoryComplete(String(FREE_ID));
 
