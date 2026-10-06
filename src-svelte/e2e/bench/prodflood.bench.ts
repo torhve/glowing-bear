@@ -113,7 +113,15 @@ test('prodflood: in-page measurement of a 2000-message flood', async ({ browser 
 
     const page = await createConnectedPage(browser, { initScript: INSTRUMENT });
     const profiling = process.env.GB_E2E_PROFILE === '1';
-    const cdp = profiling ? await page.context().newCDPSession(page) : null;
+    const cdp = await page.context().newCDPSession(page);
+    // Layout counts come from the browser, so "the follow effect forces a layout
+    // per batch" can be measured rather than inferred from CPU samples.
+    await cdp.send('Performance.enable');
+    const layoutMetrics = async (): Promise<{ count: number; durationMs: number }> => {
+        const { metrics } = await cdp.send('Performance.getMetrics');
+        const pick = (name: string) => metrics.find((m: { name: string }) => m.name === name)?.value ?? 0;
+        return { count: pick('LayoutCount'), durationMs: pick('LayoutDuration') * 1000 };
+    };
     try {
         if (cdp) {
             await cdp.send('Profiler.enable');
@@ -142,6 +150,7 @@ test('prodflood: in-page measurement of a 2000-message flood', async ({ browser 
         const REPEATS = Number(process.env.GB_E2E_REPEATS ?? 3);
         const renders: number[] = [];
         const sends: number[] = [];
+        const layoutTotals: { layouts: number; layoutMs: number }[] = [];
         let last: any = {};
 
         for (let round = 0; round < REPEATS; round++) {
@@ -162,12 +171,15 @@ test('prodflood: in-page measurement of a 2000-message flood', async ({ browser 
                 pf.sivSamples = 0;
             }, marker);
 
+            // t0 is stamped before the flood is sent, so the measured span is the
+            // user-visible one: first message in, last row on screen. Sending is
+            // now fast enough (~120 ms) that stamping after it would quietly drop
+            // the first slice of the app's own work from the window.
+            const layoutsBefore = await layoutMetrics();
+            await page.evaluate(() => { (window as any).__pf.t0 = performance.now(); });
             const sendStart = Date.now();
             await sendSequence(CHANNEL, floodTexts(tag));
             sends.push(Date.now() - sendStart);
-
-            // Stamp from the page clock; the round trip is outside the measured span.
-            await page.evaluate(() => { (window as any).__pf.t0 = performance.now(); });
 
             try {
                 await page.waitForFunction(
@@ -205,11 +217,17 @@ test('prodflood: in-page measurement of a 2000-message flood', async ({ browser 
                     sivStacks: Object.entries(p.sivStacks).sort((a, b) => b[1] - a[1]).slice(0, 5),
                 };
             });
+            const layoutsAfter = await layoutMetrics();
+            const layouts = layoutsAfter.count - layoutsBefore.count;
+            const layoutMs = layoutsAfter.durationMs - layoutsBefore.durationMs;
+            layoutTotals.push({ layouts, layoutMs });
+
             renders.push(pf.renderMs);
             last = pf;
             console.log(
                 `[prodflood][round ${round}] render=${pf.renderMs.toFixed(0)}ms send=${sends[round]}ms ` +
-                `rows=${pf.rowsAdded} faviconWrites=${pf.faviconWrites} scrollIntoView=${pf.sivCalls}`,
+                `rows=${pf.rowsAdded} faviconWrites=${pf.faviconWrites} scrollIntoView=${pf.sivCalls} ` +
+                `layouts=${layouts} layoutMs=${layoutMs.toFixed(0)}`,
             );
         }
 
@@ -239,7 +257,9 @@ test('prodflood: in-page measurement of a 2000-message flood', async ({ browser 
             `rounds=${renders.map((r) => r.toFixed(0)).join(',')} sendMedian=${median(sends).toFixed(0)}ms ` +
             `rows=${last.rowsAdded} faviconWrites=${last.faviconWrites} titleWrites=${last.titleWrites} ` +
             `longtasks=${last.longtaskCount}(sum=${last.longtaskTotalMs}ms max=${last.longtaskMaxMs}ms) ` +
-            `scrollIntoView=${last.sivCalls} bodyRows=${last.bodyRows} visibleRows=${rows.length} snapshot=${SNAPSHOT_PATH}`,
+            `scrollIntoView=${last.sivCalls} bodyRows=${last.bodyRows} visibleRows=${rows.length} ` +
+            `layouts=${layoutTotals.reduce((t, r) => t + r.layouts, 0)} ` +
+            `layoutMs=${layoutTotals.reduce((t, r) => t + r.layoutMs, 0).toFixed(0)} snapshot=${SNAPSHOT_PATH}`,
         );
         for (const [stack, count] of (last.sivStacks ?? [])) {
             console.log(`[prodflood][siv] x${count} ${stack}`);
