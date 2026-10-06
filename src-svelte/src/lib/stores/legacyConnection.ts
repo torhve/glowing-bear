@@ -871,6 +871,10 @@ export async function requestNicklist(bufferId: string) {
         const nicklist = response.objects[0]?.content;
         if (nicklist) {
             handleNicklist(response, true);
+            // fresh=true cleared and repopulated: the snapshot is authoritative.
+            buffers.update((current) =>
+                current[bufferId] ? { ...current, [bufferId]: { ...current[bufferId]!, nicklistFetched: true } } : current,
+            );
         }
     } catch (err) {
         if (DEBUG_NICKLIST) console.error('[nicklist] request failed:', err);

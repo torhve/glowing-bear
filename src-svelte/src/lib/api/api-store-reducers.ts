@@ -199,6 +199,9 @@ function sortGroupNicks(nicks: Nick[]): void {
  *  group display order matches the server tree. */
 function buildNicklist(buffer: BufferData, groups: NickGroupSnapshot[], nicks: NickSnapshot[]): void {
     buffer.nicklist = {};
+    // A snapshot carrying the nick tree is authoritative: the switch-time
+    // fetch gate must not refetch over it.
+    buffer.nicklistFetched = true;
     // Groups arrive depth-first from the tree walk; keep that display order.
     for (const group of groups) {
         const key = registerGroupKey(buffer.id, group.id, group.name);

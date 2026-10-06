@@ -28,6 +28,7 @@ form; this directory keeps the reproducible evidence.
 
    ```bash
    node probes/probe-session.mjs        # bootstrap, completion, input, lines, G1 notify experiment
+   node probes/probe-nicklist-sync.mjs  # sync nicks semantics: no initial nick state, deltas only
    node probes/probe-lifecycle.mjs      # free buffers, errors, close events, event inventory
    node probes/probe-scripts-grep.mjs   # /api/scripts shape + /grep buffer freshness (needs the
                                         # gbtest grep shim autoloaded; isolated profile, port 9012)
@@ -289,6 +290,23 @@ client-owned), and `upgrade`/`upgrade_ended`/`quit` route through
 `buffer_time_for_each_line_changed`, `buffer_notify_default_changed`) are
 routed or tolerated via the open `ApiEventName` union.
 
+### Nicklist sync semantics (live, `probes/probe-nicklist-sync.mjs`)
+
+- `POST /api/sync` with `nicks:true` streams **deltas only**: after enabling
+  sync and sitting idle, zero `nicklist_*` events arrive for the channel's
+  existing nicks (2 known via `GET /nicks`, 0 events for them) while
+  `buffer_line_added` events keep flowing — sync is active, nick STATE is not
+  included. No initial nicklist snapshot is sent on connect.
+  Evidence: `probe-nicklist-sync.mjs` run against gbtest on 4.10.1 (2026-07-20).
+- Consequence: a buffer's nicklist is EMPTY until an authoritative snapshot is
+  applied — `GET /api/buffers/{id}/nicks` on first open, or a `buffer_opened`
+  event carrying `nicklist_root`. Delta events for an unopened buffer create a
+  PARTIAL group and must not be treated as a complete list (the app tracks this
+  with `BufferData.nicklistFetched` and gates the switch-time fetch on it, not
+  on the presence of a 'root' group).
+- `GET /api/buffers/{id}/nicks` is the authoritative full state; the client
+  applies it as a replace (clear then upsert), matching the legacy
+  `_nicklist` fresh-fetch semantics.
 ## Coverage limitations (2026-10-06 audit pass)
 
 Recorded here so the gaps survive in tracked history, not only in local notes:

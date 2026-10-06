@@ -159,7 +159,10 @@
         }
       })();
     }
-    if (!('root' in (buf.nicklist || {}))) {
+    // Deltas can create a partial 'root' group before the buffer is first
+    // opened (the API streams no initial nicklist state), so the gate is the
+    // authoritative-snapshot flag, not group presence.
+    if (!buf.nicklistFetched) {
       requestNicklist(buf.id);
     }
   });

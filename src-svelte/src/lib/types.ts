@@ -188,6 +188,11 @@ export interface BufferData {
     notification: number;
     notify: number;
     nicklist: Record<string, NickGroup>;
+    /** An authoritative nicklist snapshot was applied (explicit fetch or a
+     *  buffer_opened carrying the tree). Nick deltas alone only build a
+     *  partial list, so the switch-time fetch gate reads this, not the
+     *  presence of a 'root' group. */
+    nicklistFetched?: boolean;
     localVariables?: Record<string, string>;
     serverSortKey: string;
     indent: boolean;

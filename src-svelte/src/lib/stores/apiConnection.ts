@@ -365,7 +365,20 @@ export async function requestNicklist(bufferId: string) {
         const res = await session.request({ method: 'GET', path: `/api/buffers/${apiId}/nicks?colors=weechat` });
         if (DEBUG_NICKLIST) console.log('[nicklist] response code:', res.code);
         if (res.code === 200) {
+            // Authoritative replace (legacy `fresh` parity): nick deltas may
+            // have left a partial or stale list behind, so clear before the
+            // snapshot is applied and only then mark the buffer fetched.
+            buffers.update((current) => {
+                const buffer = current[bufferId];
+                if (!buffer) return current;
+                return { ...current, [bufferId]: { ...buffer, nicklist: {} } };
+            });
             applyNicklistRoot(res.body, apiId, createApiStoreReducers());
+            buffers.update((current) => {
+                const buffer = current[bufferId];
+                if (!buffer) return current;
+                return { ...current, [bufferId]: { ...buffer, nicklistFetched: true } };
+            });
         }
         flushByteStats();
     } catch (err) {

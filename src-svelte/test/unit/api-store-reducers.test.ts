@@ -225,6 +225,30 @@ describe('buffer_opened bootstrap', () => {
         expect(get(buffers)[KEY]!.nicklist['root']!.nicks.map((n) => n.prefix + n.name)).toEqual(['@bob', '+carol']);
     });
 
+    // The API relay streams NO initial nicklist state on sync — only deltas
+    // (live-verified; see api-dossier README). Deltas for an unopened buffer
+    // therefore build a PARTIAL list, and the switch-time fetch gate must
+    // not mistake that for an authoritative snapshot.
+    it('marks nicklistFetched only for authoritative snapshots, not deltas', () => {
+        reducers.buffers([bufferSnap()]);
+        expect(get(buffers)[KEY]!.nicklistFetched).toBeFalsy();
+        // A delta for an unopened buffer creates a partial 'root' group…
+        dispatchEvent(event('nicklist_nick_added', NICK(1, '', 'bob'), 'nick'), reducers);
+        const partial = get(buffers)[KEY]!;
+        expect(partial.nicklist['root']!.nicks).toHaveLength(1);
+        expect(partial.nicklistFetched).toBeFalsy();
+        // …and a snapshot carrying the tree is authoritative.
+        dispatchEvent(event('buffer_opened', {
+            ...WIRE_BUFFER,
+            nicklist_root: {
+                id: 0, parent_group_id: -1, name: '', color_name: '', color: '', visible: true,
+                groups: [],
+                nicks: [NICK(1, '', 'bob'), NICK(2, '+', 'carol')],
+            },
+        }, 'buffer'), reducers);
+        expect(get(buffers)[KEY]!.nicklistFetched).toBe(true);
+    });
+
     // Live 4.10.1: every buffer_* change event carries a full buffer snapshot.
     // localvar removal does not name the variable — the remaining map wins.
     it('bufferUpdated merges snapshot metadata without touching lines', () => {
