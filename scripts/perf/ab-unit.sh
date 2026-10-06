@@ -2,6 +2,7 @@
 # Interleaved paired A/B: candidate (current working tree) vs saved baseline.
 #
 # Usage: scripts/perf/ab-unit.sh <label> <reps>
+# Set GB_PERF_ARM_SCRIPT=scripts/perf/e2e-arm.sh to run the E2E production bench instead.
 #
 # The baseline arm is defined by artifacts/perf/swap-manifest.txt: one
 # repo-relative path per line, each with a saved baseline copy at
@@ -20,6 +21,9 @@ REPS="${2:-6}"
 
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO"
+
+# Which harness runs a single arm. Unit by default; ab-e2e.sh overrides it.
+ARM_SCRIPT="${GB_PERF_ARM_SCRIPT:-scripts/perf/unit-arm.sh}"
 
 MANIFEST="artifacts/perf/swap-manifest.txt"
 BASE_DIR="artifacts/perf/baseline-src"
@@ -55,7 +59,7 @@ run_arm() { # $1 = cand|base, $2 = rep dir
   else
     for f in "${FILES[@]}"; do cp "$CAND_DIR/$f" "$f"; done
   fi
-  scripts/perf/unit-arm.sh "$arm" "$repdir/$arm"
+  "$ARM_SCRIPT" "$arm" "$repdir/$arm"
 }
 
 for r in $(seq 1 "$REPS"); do
