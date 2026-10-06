@@ -10,7 +10,7 @@
  * returns "Invalid Date").
  */
 import { describe, expect, it } from 'vitest';
-import { createBufferLine } from '#lib/stores/models.ts';
+import { createBufferLine, formatShortTime } from '#lib/stores/models.ts';
 
 const ORIGINAL_EXPR = (d: Date): string =>
     d.toLocaleTimeString("en-US", {
@@ -118,5 +118,57 @@ describe("createBufferLine shortTime equivalence", () => {
                 id: 1,
             }).date).toBe(new Date(ts).getTime());
         }
+    });
+});
+
+describe("formatShortTime equivalence (the changed helper itself)", () => {
+    it("uses the manual branch on this platform (h23 hour cycle)", () => {
+        // The manual path is only taken when en-US + hour12:false resolves to the
+        // h23 cycle. Pinning which branch is live keeps the benchmark honest: a
+        // measurement that never executed the new code is not a result.
+        const cycle = new Intl.DateTimeFormat("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+        }).resolvedOptions().hourCycle;
+        expect(cycle).toBe("h23");
+    });
+
+    it(
+        "matches the original expression over a 200k-date sweep",
+        () => {
+            // Collecting mismatches instead of asserting per iteration keeps the
+            // sweep cheap enough to stay inside the test timeout while still
+            // covering every hour/minute combination the sweep reaches.
+            const mismatches: string[] = [];
+            let checked = 0;
+            for (let i = 0; i < 200_000; i++) {
+                const d = new Date(1970 + (i % 55), i % 12, 1 + (i % 28), 0, 0, 0, (i * 97) % 86_400_000);
+                const got = formatShortTime(d, d.getTime());
+                const want = ORIGINAL_EXPR(d);
+                if (got !== want) {
+                    mismatches.push(`#${i} ${d.toISOString()}: got ${JSON.stringify(got)} want ${JSON.stringify(want)}`);
+                }
+                checked++;
+            }
+            expect(checked).toBe(200_000);
+            expect(mismatches.slice(0, 10), `${mismatches.length} mismatches`).toEqual([]);
+        },
+        60_000,
+    );
+
+    it("matches for every hour and minute of a day, including zero padding", () => {
+        for (let h = 0; h < 24; h++) {
+            for (let m = 0; m < 60; m++) {
+                const d = new Date(2024, 5, 21, h, m, 0);
+                expect(formatShortTime(d, d.getTime()), `h${h} m${m}`).toBe(ORIGINAL_EXPR(d));
+            }
+        }
+        expect(formatShortTime(new Date(2024, 0, 1, 0, 0, 0), 0)).toBe("00:00");
+    });
+
+    it("keeps 'Invalid Date' for a NaN time value", () => {
+        const d = new Date(Number.NaN);
+        expect(formatShortTime(d, Number.NaN)).toBe("Invalid Date");
     });
 });
