@@ -23,6 +23,7 @@ import {
 } from '#lib/stores/models.ts';
 import { shouldResume } from '#lib/stores/bufferResume.ts';
 import { createHighlight, playNotificationSound, updateTitle, updateFavico } from '#lib/notifications.ts';
+import { toPlainText } from '#lib/weechat-colors.ts';
 import { isWindowFocused } from '#lib/windowFocus.ts';
 import type { BufferData, BufferType, Nick, NickGroup } from '#lib/types.ts';
 import type {
@@ -175,6 +176,25 @@ function trimToLimit(buffer: BufferData): void {
     trimBufferLines(buffer, get(maxBufferLines));
 }
 
+// Prefix display rank for nick sorting: '@' op, '%' halfop, '+' voice,
+// everything else (no prefix) last.
+const NICK_PREFIX_RANK: Record<string, number> = { '@': 0, '%': 1, '+': 2 };
+
+/** Legacy parity: the old protocol delivered pre-bucketed nick groups
+ *  (operators, halfops, voices, regular); the API sends one nick tree in
+ *  join order, so the client restores the expected display order:
+ *  operators first, then halfops, voices, the rest — alphabetical within
+ *  each rank. Nick lists are small, so a full sort after each mutation
+ *  beats tracking insertion positions. */
+function sortGroupNicks(nicks: Nick[]): void {
+    nicks.sort((a, b) => {
+        const rankA = NICK_PREFIX_RANK[a.prefix] ?? 3;
+        const rankB = NICK_PREFIX_RANK[b.prefix] ?? 3;
+        if (rankA !== rankB) return rankA - rankB;
+        return a.name.localeCompare(b.name);
+    });
+}
+
 /** Flatten the API nick tree into the legacy flat group map, depth-first so
  *  group display order matches the server tree. */
 function buildNicklist(buffer: BufferData, groups: NickGroupSnapshot[], nicks: NickSnapshot[]): void {
@@ -186,6 +206,7 @@ function buildNicklist(buffer: BufferData, groups: NickGroupSnapshot[], nicks: N
         for (const snap of nicks) {
             if (snap.parentGroupId === group.id) entry.nicks.push(createNickFromApi(buffer, snap));
         }
+        sortGroupNicks(entry.nicks);
         buffer.nicklist[key] = entry;
     }
 }
@@ -275,7 +296,10 @@ function alertForLine(buffer: BufferData, line: LineSnapshot, activeId: string):
     if (buffer.notify !== 0 && (line.highlight || isPrivateMessage || isPrivate)) {
         playNotificationSound();
         if (!isWindowFocused()) {
-            createHighlight(buffer, `${line.prefix} ${line.message}`.trim());
+            // Desktop notifications render plain text: run the raw relay text
+            // (WeeChat color/attr controls, same encoding the chat view parses)
+            // through the shared plain-text renderer, matching the legacy path.
+            createHighlight(buffer, `${toPlainText(line.prefix)} ${toPlainText(line.message)}`.trim());
         }
     }
 }
@@ -501,6 +525,9 @@ export function createApiStoreReducers(): ApiReducers {
                 const nicks = existingIndex >= 0
                     ? group.nicks.map((n, i) => (i === existingIndex ? created : n))
                     : [...group.nicks, created];
+                // A mode change (upsert with a new prefix) must re-rank the
+                // nick: ops, halfops, voices, rest — see sortGroupNicks.
+                sortGroupNicks(nicks);
                 target.nicklist[key2] = { ...group, nicks };
                 return copy;
             });

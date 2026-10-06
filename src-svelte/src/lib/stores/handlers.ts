@@ -38,6 +38,7 @@ import {
 } from "#lib/notifications.ts";
 import { isWindowFocused } from "#lib/windowFocus.ts";
 import { DEBUG_NICKLIST, DEBUG_HANDLERS, DEBUG_HOTLIST } from "#lib/debug.ts";
+import { toPlainText } from "#lib/weechat-colors.ts";
 import type {
     ProtocolMessage,
     BufferLine,
@@ -440,24 +441,12 @@ function handleBufferUpdate(
 
 // ---- Buffer line added handler ----
 /**
- * Strips remaining control codes (mIRC/WeeChat) that may leak through parsing
- * when input contains mixed-format codes (e.g., mIRC \x03 inside WeeChat \x19).
- */
-const stripControlCodes = (text: string) =>
-// eslint-disable-next-line no-control-regex -- strips mIRC/WeeChat control bytes from parsed text
-    text.replace(/[\x01-\x06\x0f\x16\x19-\x1f]/g, "");
-
-/**
  * Strips WeeChat formatting codes from prefix and message for notification display.
  * Returns a plain-text body suitable for desktop notifications.
  */
 function formatNotificationBody(lineMsg: BufferLineMessage): string {
-    const prefixParts = parseRichText(lineMsg.prefix);
-    const messageParts = parseRichText(lineMsg.message);
-    const prefixText = stripControlCodes(
-        prefixParts.map((p) => p.text).join(""),
-    ).trim();
-    const msgText = stripControlCodes(messageParts.map((p) => p.text).join(""));
+    const prefixText = toPlainText(lineMsg.prefix).trim();
+    const msgText = toPlainText(lineMsg.message);
     return prefixText ? `<${prefixText}> ${msgText}` : msgText;
 }
 

@@ -12,6 +12,20 @@ import { dispatchEvent } from '#lib/api/api-mapping.ts';
 import type { ApiReducers, BufferSnapshot, LineSnapshot, HotlistSnapshot } from '#lib/api/api-contracts.ts';
 import type { ApiSessionEvent } from '#lib/api/api-session.ts';
 import type { ApiBufferId, ApiLineId } from '#lib/api/api-ids.ts';
+import { createHighlight } from '#lib/notifications.ts';
+
+// The reducer's alert path must be observable without OS notifications:
+// the highlight body is asserted below, sound/title/favico are no-ops here.
+vi.mock('#lib/notifications.ts', () => ({
+    createHighlight: vi.fn(),
+    playNotificationSound: vi.fn(),
+    updateTitle: vi.fn(),
+    updateFavico: vi.fn(),
+}));
+// Treat the window as unfocused so createHighlight is reached.
+vi.mock('#lib/windowFocus.ts', () => ({
+    isWindowFocused: () => false,
+}));
 
 const BUFFER_ID = 1759000000000001 as ApiBufferId;
 const KEY = String(BUFFER_ID);
@@ -165,6 +179,50 @@ describe('buffer_opened bootstrap', () => {
         expect(nicks).toHaveLength(1);
         expect(nicks[0]!.nickId).toBe(200);
         expect(nicks[0]!.prefix).toBe('@');
+    });
+
+    const NICK = (id: number, prefix: string, name: string) => ({
+        id, parent_group_id: 0, prefix, prefix_color_name: '', prefix_color: '',
+        name, color_name: '', color: '', visible: true,
+    });
+
+    // Legacy parity: the old protocol delivered pre-bucketed groups (ops,
+    // halfops, voices, regular); the API sends one tree in join order, so
+    // the client must restore the display order.
+    it('sorts nicks by mode rank (ops, halfops, voices, rest), alphabetical within rank', () => {
+        reducers.buffers([bufferSnap()]);
+        dispatchEvent(event('buffer_opened', {
+            ...WIRE_BUFFER,
+            nicklist_root: {
+                id: 0, parent_group_id: -1, name: '', color_name: '', color: '', visible: true,
+                groups: [],
+                nicks: [
+                    NICK(1, '', 'zeta'),
+                    NICK(2, '+', 'bvoice'),
+                    NICK(3, '%', 'bhalf'),
+                    NICK(4, '@', 'zop'),
+                    NICK(5, '@', 'aop'),
+                    NICK(6, '', 'alpha'),
+                ],
+            },
+        }, 'buffer'), reducers);
+        const nicks = get(buffers)[KEY]!.nicklist['root']!.nicks;
+        expect(nicks.map((n) => n.prefix + n.name)).toEqual(['@aop', '@zop', '%bhalf', '+bvoice', 'alpha', 'zeta']);
+    });
+
+    it('re-ranks a nick when its mode changes (upsert with new prefix)', () => {
+        reducers.buffers([bufferSnap()]);
+        dispatchEvent(event('buffer_opened', {
+            ...WIRE_BUFFER,
+            nicklist_root: {
+                id: 0, parent_group_id: -1, name: '', color_name: '', color: '', visible: true,
+                groups: [],
+                nicks: [NICK(1, '', 'bob'), NICK(2, '+', 'carol')],
+            },
+        }, 'buffer'), reducers);
+        expect(get(buffers)[KEY]!.nicklist['root']!.nicks.map((n) => n.prefix + n.name)).toEqual(['+carol', 'bob']);
+        dispatchEvent(event('nicklist_nick_changed', NICK(1, '@', 'bob'), 'nick'), reducers);
+        expect(get(buffers)[KEY]!.nicklist['root']!.nicks.map((n) => n.prefix + n.name)).toEqual(['@bob', '+carol']);
     });
 
     // Live 4.10.1: every buffer_* change event carries a full buffer snapshot.
@@ -347,6 +405,24 @@ describe('line tally gates (ported legacy rules)', () => {
         const buf = get(buffers)[KEY]!;
         expect(buf.lines.map((l) => l.lineId)).toEqual(['weechat:3']);
         expect(buf.localUnread).toBe(1); // only the unfiltered line is tallied
+    });
+});
+
+describe('notification body (API path)', () => {
+    it('strips WeeChat color and attribute controls from prefix and message', () => {
+        reducers.buffers([bufferSnap()]);
+        activeBufferId.set('');
+        reducers.lineAdded(BUFFER_ID, lineSnap(1, {
+            notifyLevel: 3,
+            highlight: true,
+            tags: ['notify_highlight'],
+            prefix: '\x19F06alice\x19',
+            message: '\x19F03hello \x1a\x02bold',
+        }));
+        expect(createHighlight).toHaveBeenCalledTimes(1);
+        const body = vi.mocked(createHighlight).mock.calls[0]![1];
+        expect(body).toBe('alice hello bold');
+        expect(body).not.toMatch(/[\x01-\x1f]/);
     });
 });
 

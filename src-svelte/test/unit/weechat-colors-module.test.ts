@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 // Phase 3 boundary test: the color/format engine must stand alone in
 // weechat-colors.ts with no dependency on the legacy protocol module.
-import { rawText2Rich, richText2Str, convertIrcCodes } from '#lib/weechat-colors.ts';
+import { rawText2Rich, richText2Str, convertIrcCodes, toPlainText } from '#lib/weechat-colors.ts';
 import { parseWeechatNickColor } from '#lib/weechat-colors.ts';
 
 describe('weechat-colors (standalone formatting module)', () => {
@@ -27,6 +27,29 @@ describe('weechat-colors (standalone formatting module)', () => {
         const file = path.resolve(__dirname, '../../src/lib/weechat-colors.ts');
         const src = fs.readFileSync(file, 'utf8');
         expect(src).not.toMatch(/from\s+['"]#lib\/weechat\.ts['"]/);
+    });
+
+    describe('toPlainText (notification body rendering)', () => {
+        it('drops WeeChat color and attribute controls, keeping the text', () => {
+            expect(toPlainText('\x19F06alice\x19')).toBe('alice');
+            expect(toPlainText('\x19F03hello \x1a\x02bold')).toBe('hello bold');
+            expect(toPlainText('\x19F|04nick: \x19F09msg')).toBe('nick: msg');
+        });
+
+        it('drops mIRC controls mixed into relay text', () => {
+            expect(toPlainText('\x02bold\x03,10mirc')).toBe('boldmirc');
+        });
+
+        it('passes plain text through and tolerates empty input', () => {
+            expect(toPlainText('plain text')).toBe('plain text');
+            expect(toPlainText('')).toBe('');
+            expect(toPlainText(null)).toBe('');
+        });
+
+        it('never leaves control bytes in the output', () => {
+            const out = toPlainText('\x19F10\x1a\x02\x1b\x01\x03stray\x1c');
+            expect(out).not.toMatch(/[\x01-\x1f]/);
+        });
     });
 
     describe('parseWeechatNickColor (new API colors=weechat encoding)', () => {

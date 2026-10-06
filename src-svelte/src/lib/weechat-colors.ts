@@ -478,6 +478,25 @@ export function richText2Str(parts: RichPart[]): string {
     return segments.join('');
 }
 
+// Control bytes the parser may leave behind in mixed-format text (mIRC
+// toggles, WeeChat color/attr chars) — same set the legacy notification
+// path stripped.
+// eslint-disable-next-line no-control-regex -- the stray codes *are* control characters
+const STRAY_CONTROL_CODES = /[\x01-\x06\x0f\x16\x19-\x1f]/g;
+
+/**
+ * Plain-text rendering of formatted chat text for non-visual surfaces (the
+ * desktop notification body): styled runs are reduced to text and stray
+ * control bytes the parser did not consume are dropped, so no color values
+ * leak into the OS notification.
+ */
+export function toPlainText(text: string | undefined | null): string {
+    if (!text) {
+        return '';
+    }
+    return rawText2Rich(text).map((p) => p.text).join('').replace(STRAY_CONTROL_CODES, '');
+}
+
 /// Color class for a parsed ColorInfo in the nick/line CSS vocabulary
 /// (cwf-/cef-/cof- foreground, cwb-/ceb-/cob- background).
 function nickColorClass(color: ColorInfo, isFg: boolean): string {
