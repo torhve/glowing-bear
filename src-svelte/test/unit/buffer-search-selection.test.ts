@@ -61,6 +61,52 @@ afterEach(async () => {
     Reflect.deleteProperty(HTMLElement.prototype, 'hidePopover');
 });
 
+it('keeps the result list untouched while the dialog is closed', async () => {
+    const values = [1, 2, 3].map(i => channel(`quiet-${i}`, i));
+    showBuffer(values[0]!.id, values);
+    const target = render(BufferSearchModal, { onBufferSelect: vi.fn() });
+    const scroll = HTMLElement.prototype.scrollIntoView as ReturnType<typeof vi.fn>;
+
+    // The dialog is mounted but never opened: incoming buffers must not make it
+    // query the document and scroll a row nobody can see.
+    for (let i = 0; i < 5; i++) {
+        buffers.update(current => ({ ...current, [`quiet-extra-${i}`]: channel(`quiet-extra-${i}`, 10 + i) }));
+        flushSync();
+    }
+    expect(scroll).not.toHaveBeenCalled();
+
+    // Opening the dialog re-arms it, so the highlighted row is still scrolled.
+    const dialog = target.querySelector('#buffer-search-modal')!;
+    const beforeToggle = new Event('beforetoggle') as Event & { newState: string; oldState: string };
+    beforeToggle.newState = 'open';
+    beforeToggle.oldState = 'closed';
+    dialog.dispatchEvent(beforeToggle);
+    flushSync();
+
+    buffers.update(current => ({ ...current, 'quiet-late': channel('quiet-late', 20) }));
+    flushSync();
+    await settleFrames();
+    expect(scroll).toHaveBeenCalled();
+});
+
+it('acts on the clamped row when results shrink without an input event', async () => {
+    const values = [1, 2, 3, 4].map(i => channel(`clamp-${i}`, i));
+    showBuffer(values[0]!.id, values);
+    const target = render(BufferSearchModal, { onBufferSelect: vi.fn() });
+    const input = target.querySelector<HTMLInputElement>('input[placeholder="Search buffers..."]')!;
+    for (let i = 0; i < 3; i++) {
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+        flushSync();
+    }
+
+    // Only one result is left; the highlight must follow it, not the stale index.
+    buffers.set({ [`clamp-2`]: values[1]! });
+    flushSync();
+    const highlighted = Array.from(target.querySelectorAll('.buffer-search-item'))
+        .filter(el => el.className.includes('bg-accent'));
+    expect(highlighted.map(el => el.getAttribute('data-search-index'))).toEqual(['0']);
+});
+
 it('selects the remaining search result on Enter after narrowing a keyboard selection', async () => {
     const values = [1, 2, 3, 4].map(i => channel(`channel-${i}`, i));
     showBuffer(values[0]!.id, values);

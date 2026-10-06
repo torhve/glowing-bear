@@ -16,6 +16,9 @@
   let { onBufferSelect = () => {} } = $props();
   let bufferSearchQuery = $state('');
   let selectedIndex = $state(0);
+  // The dialog is rendered unconditionally — popover visibility is toggled, not
+  // mounted — so its result rows exist in the DOM even while it is closed.
+  let isOpen = $state(false);
 
   let filteredBuffers = $derived(
     $visibleBuffers.filter((buf: BufferData) => {
@@ -40,6 +43,17 @@
       return groups;
     }, [])
   );
+
+  // The row the dialog actually acts on. `selectedIndex` can go stale when the
+  // result list shrinks underneath it (a buffer closes while the dialog is
+  // open), so every consumer clamps through this instead of reading
+  // `selectedIndex` directly. Clamping here rather than in an effect keeps it
+  // correct regardless of whether the popover's toggle events have fired.
+  let activeIndex = $derived.by(() => {
+    const count = groupedBuffers.length;
+    if (count === 0) return -1;
+    return Math.min(Math.max(selectedIndex, 0), count - 1);
+  });
 
   async function handleBufferClick(buffer: BufferData) {
     const switched = await switchBuffer(buffer.id);
@@ -67,7 +81,7 @@
     if (key === 'Enter') {
       e.preventDefault();
       // Results can change between key events; never dereference a stale selection.
-      const buffer = groupedBuffers[selectedIndex]?.buffers[0];
+      const buffer = groupedBuffers[activeIndex]?.buffers[0];
       if (buffer) {
         void handleBufferClick(buffer);
       }
@@ -80,6 +94,7 @@
   // microtask, by which time the popover is shown and the input is focusable.
   function handleBeforeToggle(event: ToggleEvent) {
     if (event.newState !== 'open') return;
+    isOpen = true;
     queueMicrotask(() => {
       const input = document.getElementById('buffer-search') as HTMLInputElement;
       input?.focus();
@@ -88,16 +103,26 @@
   }
 
   function handleToggle(event: ToggleEvent) {
+    isOpen = event.newState === 'open';
     if (event.newState === 'closed') {
       bufferSearchQuery = '';
       selectedIndex = 0;
     }
   }
 
-  // Keep selection valid when live buffer updates shrink the result list.
+  // Scroll the highlighted result into view while the dialog is open.
+  //
+  // Gated on the dialog being open. `activeIndex` derives from
+  // `$visibleBuffers`, so reading it here made this effect re-run on every
+  // `buffers` store write — once per incoming message batch — and every run
+  // did a document-wide querySelector plus a scrollIntoView on a row inside a
+  // closed popover. A CPU profile of a 2000-message flood against the
+  // production build put that scrollIntoView at 42% of all samples. While the
+  // dialog is closed nothing observes the highlight, and opening it re-runs
+  // this effect through the isOpen dependency.
   $effect(() => {
-    selectedIndex = Math.min(selectedIndex, Math.max(0, groupedBuffers.length - 1));
-    const idx = selectedIndex;
+    if (!isOpen) return;
+    const idx = activeIndex;
     if (idx >= 0) {
       const el = document.querySelector(`[data-search-index="${idx}"]`);
       el?.scrollIntoView({ block: 'nearest' });
@@ -141,7 +166,7 @@
       {#each groupedBuffers as group, idx (group.number)}
         <button
           onclick={() => handleBufferClick(group.buffers[0]!)}
-          class="buffer-search-item w-full px-3 py-3 text-left flex items-center relative rounded hover:bg-surface-raised transition-colors {idx === selectedIndex ? '!bg-accent' : ''}"
+          class="buffer-search-item w-full px-3 py-3 text-left flex items-center relative rounded hover:bg-surface-raised transition-colors {idx === activeIndex ? '!bg-accent' : ''}"
           data-search-index={idx}
         >
           <div class="flex items-center gap-2 min-w-0">
