@@ -72,6 +72,11 @@ const BATCHES = 30;
 const BATCH_SIZE = 20;
 const FLOODED_LINES = BATCHES * BATCH_SIZE; // 600
 const BASE_EPOCH = 1_700_000_000_000; // fixed → deterministic timestamps
+// In-process repetitions. A single timed pass is ~25 ms and scheduling noise
+// is a large fraction of it, so every run reports the MEDIAN over GB_PERF_REPS
+// identical passes (default 5). Comparing medians across batches is what makes
+// a paired A/B meaningful; a single pass is not a result.
+const REPS = Number(process.env.GB_PERF_REPS ?? 5);
 
 // Realistic payload variety: plain, colored, and highlighted IRC messages.
 const NICKS = ['alice', 'gbbot', 'carol', 'dave'];
@@ -161,61 +166,81 @@ describe('perf: flood benchmark', () => {
         console.debug = () => {};
     });
 
-    async function runScenario(scenario: 'inactive' | 'active', seed: number): Promise<number> {
-        // Reset stores
-        buffers.set({});
-        activeBufferId.set('');
-        recalculateLinesPerScreen(500); // maxBufferLines = 1000 → no trimming in bench
+    async function runScenario(
+        scenario: 'inactive' | 'active',
+        seed: number,
+    ): Promise<{ median: number; min: number; max: number; reps: number[] }> {
+        const reps: number[] = [];
+        let snap = '';
 
-        const rng = makeRng(seed);
+        for (let rep = 0; rep < REPS; rep++) {
+            // Reset stores
+            buffers.set({});
+            activeBufferId.set('');
+            recalculateLinesPerScreen(500); // maxBufferLines = 1000 → no trimming in bench
 
-        // Seed buffer with 300 existing lines through the same code path.
-        const buffer = createBuffer({
-            pointers: ['0xbench'],
-            full_name: 'bench',
-            short_name: 'bench',
-            type: 2,
-            notify: 3,
-            local_variables: { type: 'channel', plugin: 'irc', server: 'irc.freenode.net' }
-        });
-        buffers.set({ [buffer.id]: buffer });
-        if (scenario === 'active') activeBufferId.set(buffer.id);
+            const rng = makeRng(seed);
 
-        // Seed existing lines (not timed).
-        for (let b = 0; b < EXISTING_LINES / BATCH_SIZE; b++) {
-            handleBufferLineAdded(makeLineMsgs(buffer.id, BATCH_SIZE, b * BATCH_SIZE, rng));
+            // Seed buffer with 300 existing lines through the same code path.
+            const buffer = createBuffer({
+                pointers: ['0xbench'],
+                full_name: 'bench',
+                short_name: 'bench',
+                type: 2,
+                notify: 3,
+                local_variables: { type: 'channel', plugin: 'irc', server: 'irc.freenode.net' }
+            });
+            buffers.set({ [buffer.id]: buffer });
+            if (scenario === 'active') activeBufferId.set(buffer.id);
+
+            // Seed existing lines (not timed).
+            for (let b = 0; b < EXISTING_LINES / BATCH_SIZE; b++) {
+                handleBufferLineAdded(makeLineMsgs(buffer.id, BATCH_SIZE, b * BATCH_SIZE, rng));
+            }
+            expect(get(buffers)[buffer.id]?.lines.length).toBe(EXISTING_LINES);
+
+            // Timed flood.
+            const t0 = performance.now();
+            for (let b = 0; b < BATCHES; b++) {
+                handleBufferLineAdded(makeLineMsgs(buffer.id, BATCH_SIZE, EXISTING_LINES + b * BATCH_SIZE, rng));
+            }
+            const elapsed = performance.now() - t0;
+            reps.push(elapsed);
+
+            const finalBuf = get(buffers)[buffer.id]!;
+            expect(finalBuf.lines.length).toBe(EXISTING_LINES + FLOODED_LINES);
+
+            // Persist canonical snapshot for cross-build byte comparison.
+            snap = snapshotBuffer(finalBuf);
         }
-        expect(get(buffers)[buffer.id]?.lines.length).toBe(EXISTING_LINES);
 
-        // Timed flood.
-        const t0 = performance.now();
-        for (let b = 0; b < BATCHES; b++) {
-            handleBufferLineAdded(makeLineMsgs(buffer.id, BATCH_SIZE, EXISTING_LINES + b * BATCH_SIZE, rng));
-        }
-        const elapsed = performance.now() - t0;
-
-        const finalBuf = get(buffers)[buffer.id]!;
-        expect(finalBuf.lines.length).toBe(EXISTING_LINES + FLOODED_LINES);
-
-        // Persist canonical snapshot for cross-build byte comparison.
-        const snap = snapshotBuffer(finalBuf);
         const path = `/tmp/gb-perf/unit-snapshot-${scenario}.json`;
         fs.writeFileSync(path, snap);
 
-        return elapsed;
+        const sorted = [...reps].sort((a, b) => a - b);
+        return {
+            median: sorted[Math.floor(sorted.length / 2)],
+            min: sorted[0]!,
+            max: sorted[sorted.length - 1]!,
+            reps,
+        };
+    }
+
+    function report(scenario: 'inactive' | 'active', r: { median: number; min: number; max: number; reps: number[] }): void {
+        const perLine = r.median / FLOODED_LINES;
+        const letter = scenario === 'inactive' ? 'A' : 'B';
+        const line =
+            `${letter} ${scenario} median ${r.median.toFixed(1)}ms min ${r.min.toFixed(1)} max ${r.max.toFixed(1)} ` +
+            `${perLine.toFixed(3)}ms/line reps=${r.reps.map((v) => v.toFixed(1)).join(',')}`;
+        fs.appendFileSync('/tmp/gb-perf/unit-results.txt', line + '\n');
+        console.log(`[perf] ${line}`);
     }
 
     it('flood A: inactive buffer', async () => {
-        const ms = await runScenario('inactive', 1234);
-        const line = `A inactive ${ms.toFixed(1)}ms ${(ms / FLOODED_LINES).toFixed(3)}ms/line`;
-        fs.appendFileSync('/tmp/gb-perf/unit-results.txt', line + '\n');
-        console.log(`[perf] ${line}`);
+        report('inactive', await runScenario('inactive', 1234));
     }, 120000);
 
     it('flood B: active buffer', async () => {
-        const ms = await runScenario('active', 4321);
-        const line = `B active ${ms.toFixed(1)}ms ${(ms / FLOODED_LINES).toFixed(3)}ms/line`;
-        fs.appendFileSync('/tmp/gb-perf/unit-results.txt', line + '\n');
-        console.log(`[perf] ${line}`);
+        report('active', await runScenario('active', 4321));
     }, 120000);
 });

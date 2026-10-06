@@ -71,3 +71,4 @@ packages/weechat-format/oracle/build/
 packages/weechat-format/oracle/weechat_color_scan.c
 packages/weechat-format/oracle/corpus.txt
 packages/weechat-format/oracle/weechat-oracle.txt
+artifacts/

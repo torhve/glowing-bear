@@ -69,6 +69,9 @@ const { handleLineInfo } = await import('#lib/stores/handlers.ts');
 // ---- Workload parameters ----
 const HISTORY_LINES = 5000;
 const BASE_EPOCH = 1_700_000_000_000; // fixed → deterministic timestamps
+// See perf/flood.bench.ts: every run reports the median over GB_PERF_REPS identical
+// passes so a paired A/B compares distributions, not single samples.
+const REPS = Number(process.env.GB_PERF_REPS ?? 5);
 const NICKS = ['alice', 'gbbot', 'carol', 'dave'];
 const COLORS = ['01', '02', '03', '04', '05', '06', '07'];
 
@@ -146,44 +149,63 @@ describe('perf: history load benchmark', () => {
     });
 
     it(`load ${HISTORY_LINES} lines of history via handleLineInfo`, async () => {
-        buffers.set({});
-        activeBufferId.set('');
-        recalculateLinesPerScreen(500);
-
         const rng = makeRng(777);
-        const buffer = createBuffer({
-            pointers: ['0xbench'],
-            full_name: 'bench',
-            short_name: 'bench',
-            type: 2,
-            notify: 3,
-            local_variables: { type: 'channel', plugin: 'irc', server: 'irc.freenode.net' }
-        });
-        buffers.set({ [buffer.id]: buffer });
-        activeBufferId.set(buffer.id);
 
         // WeeChat sends history NEWEST FIRST; mirror that ordering.
+        // Payload generation happens once, outside every timed pass, so the timed
+        // region is handleLineInfo alone.
         const content = [];
         for (let i = 0; i < HISTORY_LINES; i++) {
             content.push(linePayload(HISTORY_LINES - 1 - i, rng));
         }
-        const message = { objects: [{ pointer: buffer.id, content }] } as ProtocolMessage;
 
-        const t0 = performance.now();
-        handleLineInfo(message, true);
-        const elapsed = performance.now() - t0;
+        const reps: number[] = [];
+        let snap = '';
+        let finalRows = 0;
 
-        const finalBuf = get(buffers)[buffer.id]!;
-        // The store trims to maxBufferLines (1000 here); all 5000 are still processed.
-        expect(finalBuf.lines.length).toBeLessThanOrEqual(1000);
-        expect(finalBuf.lines.length).toBeGreaterThan(0);
-        // requestedLines counts all lines RECEIVED (skipped-but-trimmed ones included),
-        // which is what the history re-fetch gates (requestedLines < 100) rely on.
-        expect(finalBuf.requestedLines).toBe(HISTORY_LINES);
+        for (let rep = 0; rep < REPS; rep++) {
+            buffers.set({});
+            activeBufferId.set('');
+            recalculateLinesPerScreen(500);
 
-        const snap = snapshotTail(finalBuf);
+            const buffer = createBuffer({
+                pointers: ['0xbench'],
+                full_name: 'bench',
+                short_name: 'bench',
+                type: 2,
+                notify: 3,
+                local_variables: { type: 'channel', plugin: 'irc', server: 'irc.freenode.net' }
+            });
+            buffers.set({ [buffer.id]: buffer });
+            activeBufferId.set(buffer.id);
+
+            const message = { objects: [{ pointer: buffer.id, content }] } as ProtocolMessage;
+
+            const t0 = performance.now();
+            handleLineInfo(message, true);
+            reps.push(performance.now() - t0);
+
+            const finalBuf = get(buffers)[buffer.id]!;
+            // The store trims to maxBufferLines (1000 here); all 5000 are still processed.
+            expect(finalBuf.lines.length).toBeLessThanOrEqual(1000);
+            expect(finalBuf.lines.length).toBeGreaterThan(0);
+            // requestedLines counts all lines RECEIVED (skipped-but-trimmed ones included),
+            // which is what the history re-fetch gates (requestedLines < 100) rely on.
+            expect(finalBuf.requestedLines).toBe(HISTORY_LINES);
+
+            finalRows = finalBuf.lines.length;
+            snap = snapshotTail(finalBuf);
+        }
+
         fs.writeFileSync('/tmp/gb-perf/history-snapshot.json', snap);
-        const line = `H history ${HISTORY_LINES} lines ${elapsed.toFixed(1)}ms ${(elapsed / HISTORY_LINES).toFixed(3)}ms/line finalRows=${finalBuf.lines.length}`;
+
+        const sorted = [...reps].sort((a, b) => a - b);
+        const median = sorted[Math.floor(sorted.length / 2)];
+        const line =
+            `H history ${HISTORY_LINES} lines median ${median.toFixed(1)}ms ` +
+            `min ${sorted[0]!.toFixed(1)} max ${sorted[sorted.length - 1]!.toFixed(1)} ` +
+            `${(median / HISTORY_LINES).toFixed(3)}ms/line finalRows=${finalRows} ` +
+            `reps=${sorted.map((v) => v.toFixed(1)).join(',')}`;
         fs.appendFileSync('/tmp/gb-perf/unit-results.txt', line + '\n');
         console.log(`[perf] ${line}`);
     }, 120000);
