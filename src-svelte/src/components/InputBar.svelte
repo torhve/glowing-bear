@@ -7,6 +7,7 @@
   import { isPopoverOpen, filterImageFiles, joinMultilineToSingle, MULTILINE_PASTE_THRESHOLD, completeNick } from '#lib/utils.ts';
   import Send from '@lucide/svelte/icons/send';
   import { emojifyInput } from '#lib/emojify.ts';
+  import { tick } from 'svelte';
   import Camera from '@lucide/svelte/icons/camera';
   import Megaphone from '@lucide/svelte/icons/megaphone';
   import Type from '@lucide/svelte/icons/type';
@@ -247,16 +248,26 @@
     }
   }
 
+  // Toolbar and picker buttons must not steal focus from the textarea: mousedown would
+  // blur it and collapse its caret, so the control char would land at the wrong place.
+  function keepFocusOnInput(e: MouseEvent): void {
+    e.preventDefault();
+  }
+
   // Insert text at current cursor position, then advance cursor past inserted text.
   // Uses lastCaretPos (tracked on input/blur) so it works after textarea loses focus on button click.
   // When forceFocus is true, focuses the textarea before inserting (used by global paste handler).
-  function insertAtCursor(text: string, forceFocus = false): void {
+  async function insertAtCursor(text: string, forceFocus = false): Promise<void> {
     const caret = inputRef === document.activeElement ? getCaretPos() : lastCaretPos;
     message = message.slice(0, caret) + text + message.slice(caret);
     if (forceFocus) {
       inputRef?.focus();
     }
-    setTimeout(() => setCaretPos(caret + text.length), 0);
+    // tick() moves the caret in the same flush that writes the new value into the
+    // textarea. A setTimeout(0) here left a window where a keystroke landed at the
+    // old caret and the deferred restore then split the typed text around it.
+    await tick();
+    setCaretPos(caret + text.length);
   }
 
   // Insert a bold/italic/underline mIRC control char at the cursor position.
@@ -762,24 +773,24 @@
     }
   });
 
-  // Close color picker when clicking outside the input bar
+  // Close the color picker when the user presses outside the input bar.
   $effect(() => {
     if (!showColorPicker) return;
-    function handleClickOutside(e: MouseEvent) {
+    function handlePressOutside(e: PointerEvent) {
       const inputBar = document.querySelector('[data-testid="input-bar"]');
       if (inputBar && !inputBar.contains(e.target as Node)) {
         showColorPicker = false;
         showFormatToolbar = false;
-        document.removeEventListener('click', handleClickOutside);
+        document.removeEventListener('pointerdown', handlePressOutside);
       }
     }
-    // Defer past the opening click. Cleanup cancels a pending installation so a
-    // rapid open/close cannot leak a listener that no effect run owns.
-    const timer = setTimeout(() => document.addEventListener('click', handleClickOutside), 0);
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener('click', handleClickOutside);
-    };
+    // Installed immediately, and keyed on pointerdown rather than click: the press that
+    // opened the picker is already over by the time this listener exists, so there is
+    // no window where an outside press is ignored. Keying it on click would need a
+    // deferral, because opening the picker also hides the toolbar and detaches the
+    // button that is still propagating that same click.
+    document.addEventListener('pointerdown', handlePressOutside);
+    return () => document.removeEventListener('pointerdown', handlePressOutside);
   });
 
   // Expose a reset function for E2E tests to clear message and formatting state
@@ -857,6 +868,7 @@
         class="format-toolbar"
         role="toolbar"
         aria-label="Text formatting"
+        onmousedown={keepFocusOnInput}
       >
         <div class="flex items-center gap-1 px-1">
           <button
@@ -978,6 +990,7 @@
       class="color-picker-popover fixed bottom-20 left-4 p-2 bg-surface border border-border rounded shadow-lg z-50"
       role="listbox"
       aria-label="Text color"
+      onmousedown={keepFocusOnInput}
     >
       <div class="grid grid-cols-8 gap-1">
         {#each IRC_COLORS as color (color.code)}
