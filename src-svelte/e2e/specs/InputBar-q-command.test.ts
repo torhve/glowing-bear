@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { createConnectedPage } from '../fixtures/auth';
 import { switchToBuffer, waitForBuffer } from '../helpers/buffers';
 import { sendWeechatCommand } from '../helpers/connection';
+import { expectInputFocused } from '../helpers/input';
 
 let page: import('@playwright/test').Page;
 
@@ -26,7 +27,7 @@ test.beforeEach(async () => {
 async function typeCommand(cmd: string) {
     const input = page.getByTestId('message-input');
     await input.focus();
-    await page.waitForTimeout(50);
+    await expectInputFocused(page);
     await input.fill(cmd);
     await input.press('Enter');
     await expect(input).toHaveValue('', { timeout: 5000 });

@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { createConnectedPage } from "../fixtures/auth";
 import { waitForBuffer, switchToBuffer } from "../helpers/buffers";
 import { irc } from "../helpers/irc-control";
+import { waitForChatSettled } from "../helpers/waits";
 
 async function getChatScrollState(page: import("@playwright/test").Page) {
     return await page.evaluate(() => {
@@ -37,50 +38,37 @@ async function waitForScrollStable(
         },
         { timeout },
     );
-    await page.waitForTimeout(300);
+    await waitForChatSettled(page);
 }
 
-// Poll until the chat is scrolled to bottom. Scrolls down first, then waits
-// for the app's auto-scroll effects (double-rAF) to settle at the bottom —
-// event-driven, so a small buffer resolves immediately instead of paying a
-// fixed 2.5 s sleep. Respects Playwright's actionTimeout by implementing our
-// own retry loop, since it overrides waitForFunction's inline timeout.
+// Bring the chat to the true bottom and leave it there.
+//
+// The follow pin loop and its settle window must be over first: an in-flight pin
+// re-anchors the view and would undo a later deliberate scroll-up. Then re-scroll on
+// each poll until the view reports the bottom, because auto-scroll has readmarker
+// logic that can hold a large buffer short of it — the corrective scroll is part of the
+// wait instead of a fallback sleep.
 async function waitForAtBottom(
     page: import("@playwright/test").Page,
     timeout = 60000,
 ) {
-    // Scroll to bottom directly — more reliable than waiting for auto-scroll,
-    // which has complex readmarker logic that can prevent reaching bottom on
-    // large buffers.
-    await page.evaluate(() => {
-        const c = document.querySelector('[data-testid="chat-messages"]') as HTMLElement;
-        if (c) c.scrollTop = c.scrollHeight;
-    });
-    const deadline = Date.now() + timeout;
-    let atBottom = false;
-    while (Date.now() < deadline) {
-        atBottom = await page.evaluate(() => {
-            const c = document.querySelector('[data-testid="chat-messages"]') as HTMLElement;
-            if (!c) return false;
-            return c.scrollTop >= c.scrollHeight - c.clientHeight - 200;
-        });
-        if (atBottom) break;
-        await page.waitForTimeout(100);
-    }
-    if (!atBottom) {
-        // Fall back to a hard re-scroll after effects settle so the
-        // at-bottom precondition still holds.
-        await page.waitForTimeout(500);
-        await page.evaluate(() => {
-            const c = document.querySelector('[data-testid="chat-messages"]') as HTMLElement;
-            if (c) c.scrollTop = c.scrollHeight;
-        });
-        await page.waitForTimeout(300);
-        return;
-    }
-    // Let the follow pin loop (400 ms cap) and settle window expire so a later
-    // deliberate scroll-up is not overwritten by an in-flight pin.
-    await page.waitForTimeout(500);
+    await waitForChatSettled(page, 300, timeout);
+    await expect
+        .poll(
+            async () => {
+                await page.evaluate(() => {
+                    const c = document.querySelector('[data-testid="chat-messages"]') as HTMLElement;
+                    if (c) c.scrollTop = c.scrollHeight;
+                });
+                return page.evaluate(() => {
+                    const c = document.querySelector('[data-testid="chat-messages"]') as HTMLElement;
+                    if (!c) return false;
+                    return c.scrollTop >= c.scrollHeight - c.clientHeight - 200;
+                });
+            },
+            { timeout },
+        )
+        .toBe(true);
 }
 
 let page: import("@playwright/test").Page;
@@ -249,7 +237,9 @@ test.describe("PageUp/PageDown Global Scroll", () => {
         });
 
         await page.keyboard.press("PageUp");
-        await page.waitForTimeout(300);
+        // The settle window is the interval in which a scroll would have happened; the
+        // position is asserted after it closes.
+        await waitForChatSettled(page);
 
         const stateAfter = await getChatScrollState(page);
         expect(stateAfter).not.toBeNull();
@@ -277,7 +267,7 @@ test.describe("PageUp/PageDown Global Scroll", () => {
         // Press Ctrl+PageUp — should NOT scroll due to modifier guard
         await page.getByTestId("chat-view").click();
         await page.keyboard.press("Control+PageUp");
-        await page.waitForTimeout(300);
+        await waitForChatSettled(page);
 
         const stateAfter = await getChatScrollState(page);
         expect(stateAfter).not.toBeNull();

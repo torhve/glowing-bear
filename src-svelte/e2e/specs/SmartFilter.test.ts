@@ -10,7 +10,9 @@ let page: import('@playwright/test').Page;
 
 test.describe.configure({ mode: 'serial' });
 
-const FILTER_NAME = 'e2e_smf';
+// Unique per run: WeeChat echoes the filter name into the core buffer, and a fixed
+// name would match an earlier run's echo line.
+const FILTER_NAME = `e2e_smf_${Date.now()}`;
 let MARKER = '';
 // Module scope: the control line is re-checked after the reconnect re-fetch.
 const control = `smf-control-${Date.now()}`;
@@ -32,13 +34,22 @@ test.beforeAll(async ({ browser }) => {
     // Idempotent: a filter left behind by an interrupted run is replaced.
     weechatFilter.remove(FILTER_NAME);
     expect(weechatFilter.add(FILTER_NAME, MARKER)).toBe(true);
-    await page.waitForTimeout(500); // let WeeChat register the filter
+    await waitForFilterChange(FILTER_NAME, 'added');
 });
 
 test.afterAll(async () => {
     weechatFilter.remove(FILTER_NAME);
     await page.close();
 });
+
+// WeeChat echoes filter changes into the core buffer (Filter "x" added / Filter "x"
+// deleted). That echo is the only observable proof the server has applied the command,
+// which is what the old 500 ms sleep was guessing at.
+async function waitForFilterChange(name: string, verb: 'added' | 'deleted') {
+    await switchToBuffer(page, 'weechat');
+    await expect(page.getByText(`Filter "${name}" ${verb}`, { exact: false })).toBeVisible({ timeout: 10000 });
+    await switchToBuffer(page, '#glowing-bear');
+}
 
 test('smart-filtered lines are not displayed; other lines are', async () => {
     await irc.sendMessage('#glowing-bear', MARKER);
@@ -61,7 +72,7 @@ test('filtered lines stay out of the view after a reconnect re-fetches history',
 
 test('lines matching the filter display again after it is removed', async () => {
     weechatFilter.remove(FILTER_NAME);
-    await page.waitForTimeout(500);
+    await waitForFilterChange(FILTER_NAME, 'deleted');
     const marker = `${MARKER}-released`;
     await irc.sendMessage('#glowing-bear', marker);
     await expect(page.getByText(marker, { exact: false })).toBeVisible({ timeout: 10000 });

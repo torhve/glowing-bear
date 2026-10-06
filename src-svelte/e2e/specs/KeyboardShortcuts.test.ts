@@ -362,8 +362,9 @@ test.describe('Keyboard Shortcuts', () => {
         test('should disconnect with double Escape', async ({ page }) => {
             const input = page.getByTestId('message-input');
             await input.focus();
+            // Back to back: +page.svelte treats two Escapes within 500 ms as a
+            // disconnect, so no delay is needed between them.
             await page.keyboard.press('Escape');
-            await page.waitForTimeout(50);
             await page.keyboard.press('Escape');
             await expect(page.getByTestId('host-input')).toBeVisible({ timeout: 15000 });
         });

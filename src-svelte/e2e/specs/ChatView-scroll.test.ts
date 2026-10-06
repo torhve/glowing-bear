@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { createConnectedPage } from "../fixtures/auth";
 import { waitForBuffer, switchToBuffer } from "../helpers/buffers";
 import { irc } from "../helpers/irc-control";
+import { waitForChatSettled, waitForUnreadAtLeast } from "../helpers/waits";
 
 let page: import("@playwright/test").Page;
 
@@ -92,8 +93,8 @@ async function waitForScrollStable(timeout = 5000) {
         },
         { timeout },
     );
-    // Give a brief pause for any final scroll adjustments
-    await page.waitForTimeout(300);
+    // Any follow pin still in flight would keep adjusting the view after this check.
+    await waitForChatSettled(page);
 }
 
 test("should scroll to bottom when switching to a buffer with many lines", async () => {
@@ -202,8 +203,8 @@ test("should not auto-scroll when switched away and messages arrive", async () =
     await irc.sendMessage("#glowing-bear", "inactive test message 1");
     await irc.sendMessage("#glowing-bear", "inactive test message 2");
 
-    // Wait for messages to arrive and be processed
-    await page.waitForTimeout(500);
+    // The buffer list's unread badge is the app's own record of the lines arriving.
+    await waitForUnreadAtLeast(page, "#glowing-bear", 2);
 
     // Switch back — should show readmarker since there are unread messages
     await switchToBuffer(page, "#glowing-bear");
@@ -233,8 +234,8 @@ test("should position readmarker at ~45% when unread count is large", async () =
     }
 
     // The flood is sent to #glowing-bear while we're on gbtest, so there is no row to
-    // wait for; a short grace period covers relay round-trip time.
-    await page.waitForTimeout(500);
+    // wait for; the unread badge is the app's own count of the lines that arrived.
+    await waitForUnreadAtLeast(page, "#glowing-bear", 60);
 
     // Switch back — should scroll to readmarker at ~45%, not bottom
     await switchToBuffer(page, "#glowing-bear");
@@ -353,10 +354,9 @@ test("should NOT auto-scroll when user scrolled up in active buffer and messages
     await waitForScrollSettled(8000);
 
     // Verify the chat container is actually scrollable before proceeding.
-    // Also lets ChatView's follow-settle window (250 ms sticky at-bottom state
-    // after the flood's auto-follow) expire, so the park below is registered as a
-    // deliberate scroll-away.
-    await page.waitForTimeout(300);
+    // Also ensures ChatView's follow-settle window has expired, so the park below is
+    // registered as a deliberate scroll-away.
+    await waitForChatSettled(page);
     const state = await getChatScrollState();
     if (!state || state.scrollHeight - state.clientHeight < 100) {
         // Not enough content to scroll — skip rather than fail
@@ -484,10 +484,9 @@ test("should NOT auto-scroll when scrolled up slightly and messages arrive on ac
         return;
     }
 
-    // Let ChatView's follow pin loop (400 ms cap) and settle window expire after
-    // the flood so the park below registers as a deliberate scroll-away instead
-    // of being overwritten by an in-flight pin.
-    await page.waitForTimeout(500);
+    // The follow pin loop and its settle window must be over after the flood so the
+    // park below registers as a deliberate scroll-away instead of being overwritten.
+    await waitForChatSettled(page);
 
     // Scroll up just enough to hide the readmarker (~2 lines worth, ~40px).
     // This simulates: user was at bottom, scrolled down to read recent messages,

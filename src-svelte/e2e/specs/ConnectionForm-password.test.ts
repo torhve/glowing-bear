@@ -113,8 +113,21 @@ test.describe('Connection Form password with saved settings', () => {
         // Uncheck "Save password" — click triggers toggleSavePassword via onclick
         await page.getByTestId('savepassword-checkbox').click();
         await expect(page.getByTestId('savepassword-checkbox')).not.toBeChecked({ timeout: 3000 });
-        // Wait for any async updates to flush
-        await page.waitForTimeout(100);
+        // The real condition is that the app has persisted the change: reloading before
+        // the settings write lands is what the 100 ms was papering over.
+        await expect
+            .poll(
+                () =>
+                    page.evaluate(() => {
+                        try {
+                            return JSON.parse(localStorage.getItem('gb-settings') ?? '{}').savepassword ?? null;
+                        } catch {
+                            return null;
+                        }
+                    }),
+                { timeout: 5000 },
+            )
+            .toBe(false);
 
         // Reload the page to verify the password was cleared from localStorage
         await page.reload();

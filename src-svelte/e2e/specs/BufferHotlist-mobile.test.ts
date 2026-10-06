@@ -32,10 +32,22 @@ async function clearAllUnread(p: typeof page) {
     const orig = (await p.viewportSize()) || { width: 375, height: 667 };
     await p.setViewportSize({ width: 1280, height: 720 });
     await p.evaluate(() => window.dispatchEvent(new Event('resize')));
-    for (let i = 0; i < 10; i++) {
-        await p.keyboard.press('Alt+A');
-        await p.waitForTimeout(200);
-    }
+    // Alt+A jumps to the next unread buffer, which clears its count. Keep jumping while
+    // a badge is still drawn, instead of pressing a fixed number of times and hoping.
+    let presses = 0;
+    await expect
+        .poll(
+            async () => {
+                const remaining = await p.getByTestId('unread-badge').count();
+                if (remaining > 0 && presses < 15) {
+                    presses++;
+                    await p.keyboard.press('Alt+A');
+                }
+                return remaining;
+            },
+            { timeout: 15000 },
+        )
+        .toBe(0);
     await p.setViewportSize(orig);
     await p.evaluate(() => window.dispatchEvent(new Event('resize')));
 }

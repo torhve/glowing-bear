@@ -369,7 +369,19 @@ test.describe('bot message', () => {
         await readmarker.evaluate((el) => {
             el.scrollIntoView({ behavior: 'auto', block: 'center' });
         });
-        await page.waitForTimeout(200);
+        // scrollIntoView lands on the next layout pass; poll the same containment the
+        // assertion below reads instead of guessing how long centering takes.
+        await expect
+            .poll(() =>
+                readmarker.evaluate((rm) => {
+                    const container = document.querySelector('[data-testid="chat-messages"]');
+                    if (!(container instanceof HTMLElement)) return false;
+                    const containerRect = container.getBoundingClientRect();
+                    const rmRect = rm.getBoundingClientRect();
+                    return rmRect.top >= containerRect.top && rmRect.bottom <= containerRect.bottom;
+                }),
+            )
+            .toBe(true);
 
         const scrollInfo = await page.evaluate(() => {
             const container = document.querySelector('[data-testid="chat-messages"]');

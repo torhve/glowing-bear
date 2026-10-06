@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { setSettings, reconnect } from '../helpers/connection';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { createConnectedPage } from '../fixtures/auth';
+import { waitForInputValue } from '../helpers/input';
 
 let page: import('@playwright/test').Page;
 
@@ -79,7 +80,8 @@ test('multiple emoji shortcodes in one message all convert', async () => {
             el.dispatchEvent(new Event('input', { bubbles: true }));
         }
     });
-    await page.waitForTimeout(200);
+    // Emojify rewrites the textarea value from the input event; wait for both emoji.
+    await waitForInputValue(page, /\u{1F604}[\s\S]*\u{1F680}/u);
 
     const val = await input.inputValue();
     expect(val).toContain('\u{1F604}');

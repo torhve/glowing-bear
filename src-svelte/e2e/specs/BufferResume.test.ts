@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { setSettings, reconnect, disconnect } from '../helpers/connection';
-import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
+import { waitForBuffer, switchToBuffer, bufferItemForName } from '../helpers/buffers';
 import { createConnectedPage } from '../fixtures/auth';
 
 let page: import('@playwright/test').Page;
@@ -50,10 +50,9 @@ test('should restore last viewed buffer after reconnect', async () => {
     await waitForBuffer(page, '#glowing-bear', 15000);
     await expect(page.getByTestId('topic-bar')).toContainText('glowing-bear', { timeout: 10000 });
 
-    // Verify the active buffer item is highlighted in the buffer list
-    const activeItem = page.getByTestId('buffer-item')
-        .filter({ hasText: 'glowing-bear' })
-        .first();
+    // Verify the active buffer item is highlighted in the buffer list. Exact name:
+    // a substring match would also hit buffers like exec.gbtest-free-history.
+    const activeItem = bufferItemForName(page, 'glowing-bear').first();
     await expect(activeItem).toHaveClass(/border-s-accent/);
 });
 
@@ -69,9 +68,7 @@ test('should restore last viewed buffer after disconnect/reconnect via helper', 
     // Should have restored to gbtest (the last viewed buffer before disconnect)
     await expect(page.getByTestId('topic-bar')).toContainText('gbtest', { timeout: 10000 });
 
-    const activeItem = page.getByTestId('buffer-item')
-        .filter({ hasText: 'gbtest' })
-        .first();
+    const activeItem = bufferItemForName(page, 'gbtest').first();
     await expect(activeItem).toHaveClass(/border-s-accent/);
 });
 

@@ -38,6 +38,22 @@ export default ts.config(
     }
   },
   {
+    // Fixed sleeps are the main source of E2E flakiness: too short on a loaded machine,
+    // still blind to the real condition on a fast one. Wait for the state the test
+    // actually depends on.
+    files: ['src-svelte/e2e/specs/**/*.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "CallExpression[callee.property.name='waitForTimeout']",
+          message:
+            'No fixed sleeps in E2E specs. Wait for the real condition: e2e/helpers/waits.ts has waitForChatSettled, waitForRowCount, waitForUnreadAtLeast, waitForNoUnread, waitForSizeStable and waitForBotNickApplied; expect.poll covers anything else. A genuinely time-based wait (IRC pacing, a product timing window) needs an eslint-disable saying what it paces.',
+        },
+      ],
+    },
+  },
+  {
     files: ['src-svelte/**/*.test.ts', 'src-svelte/e2e/**/*.ts', 'src-svelte/test/**/*'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',

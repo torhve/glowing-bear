@@ -15,6 +15,23 @@ const WEECHAT_HOME = '/tmp/gbtest-weechat';
  * expected home directory).
  */
 export function weechatFifoCommand(command: string): boolean {
+    return writeFifo(`core.weechat */${command}\n`);
+}
+
+/**
+ * Send a FIFO command and, in the same write, a `print -buffer core.weechat <token>`
+ * that lands in the core buffer the client renders. WeeChat drains the FIFO in order,
+ * so the token appearing on screen is proof the command itself has already been
+ * processed — the honest replacement for a "give WeeChat time" sleep. (`/echo` is not
+ * usable here: its output never reaches the core buffer over the FIFO.) Returns the
+ * token, or null when no live FIFO was found.
+ */
+export function weechatFifoCommandAcked(command: string): string | null {
+    const token = `GBFIFO-ACK-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    return writeFifo(`core.weechat */${command}\ncore.weechat */print -buffer core.weechat ${token}\n`) ? token : null;
+}
+
+function writeFifo(payload: string): boolean {
     let entries: string[];
     try {
         entries = fs.readdirSync(WEECHAT_HOME);
@@ -28,7 +45,7 @@ export function weechatFifoCommand(command: string): boolean {
             // Only real FIFOs are command channels; stale regular files
             // (leftovers of dead instances) silently swallow writes.
             if (!fs.statSync(fifoPath).isFIFO()) continue;
-            fs.writeFileSync(fifoPath, `core.weechat */${command}\n`);
+            fs.writeFileSync(fifoPath, payload);
             return true;
         } catch {
             // Unreadable/unwritable FIFO entry — try the next one.

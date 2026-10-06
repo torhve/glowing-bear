@@ -92,6 +92,10 @@
   // the true bottom (see Tauri repro: FAIL-echo-not-at-bottom).
   const FOLLOW_SETTLE_MS = 250;
   let lastFollowPinAt = 0;
+  // True while the per-frame follow-pin loop is still re-anchoring the viewport.
+  // Read imperatively by the __chatFollowState test hook below so E2E specs can
+  // wait for a follow to finish instead of sleeping a guessed duration.
+  let followPinning = false;
   // ---- Tail revision tracking ----
   // Every store update rebuilds buffer.lines and clones each line, so object
   // identity is only stable within one snapshot. Comparing the tail line object
@@ -374,7 +378,10 @@
           let lastScrollHeight = -1;
           let stableFrames = 0;
           const pinToBottom = () => {
-            if (!containerRef) return;
+            if (!containerRef) {
+              followPinning = false;
+              return;
+            }
             containerRef.scrollTop = containerRef.scrollHeight - containerRef.clientHeight;
             lastFollowPinAt = performance.now();
             const sh = containerRef.scrollHeight;
@@ -382,10 +389,15 @@
             else stableFrames = 0;
             lastScrollHeight = sh;
             const settled = stableFrames >= PIN_SETTLE_FRAMES || performance.now() - pinStart > PIN_CAP_MS;
-            if (!settled) scheduleViewFrame(pinToBottom);
+            if (!settled) {
+              scheduleViewFrame(pinToBottom);
+            } else {
+              followPinning = false;
+            }
           };
           // Auto-follow changes only the viewport. The session's new-message
           // separator remains anchored until setActiveBuffer commits it on exit.
+          followPinning = true;
           scheduleViewFrame(pinToBottom);
         } else {
         // User manually scrolled away from bottom - do nothing.
@@ -515,6 +527,26 @@
   function handleFetchMore() {
     void loadMoreHistory(false, true);
   }
+
+  // Read-only view of the follow/pin state, exposed for E2E specs.
+  // 'Settled' means: the pin loop is not running, no scheduled layout frame is
+  // still pending for this view, and the sticky FOLLOW_SETTLE_MS window has
+  // expired. A spec that scrolls on purpose must wait for all three, otherwise
+  // an in-flight pin overwrites it or handleScroll swallows it as noise.
+  // This reports existing state only - it adds no timer and changes no behavior.
+  $effect(() => {
+    const win = window as typeof window & {
+      __chatFollowState?: () => { pinning: boolean; pendingFrames: number; settlingUntil: number };
+    };
+    win.__chatFollowState = () => ({
+      pinning: followPinning,
+      pendingFrames: viewFrames.size,
+      settlingUntil: lastFollowPinAt + FOLLOW_SETTLE_MS,
+    });
+    return () => {
+      delete win.__chatFollowState;
+    };
+  });
 </script>
 
 <div class="chat-view-container flex-1 flex flex-col overflow-hidden">

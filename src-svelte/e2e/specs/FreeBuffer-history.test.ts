@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { createConnectedPage } from '../fixtures/auth';
 import { switchToBuffer, waitForBuffer } from '../helpers/buffers';
+import { expectInputFocused } from '../helpers/input';
+import { waitForRowCountAtLeast } from '../helpers/waits';
 
 let page: import('@playwright/test').Page;
 
@@ -24,7 +26,7 @@ test.afterAll(async () => {
 async function typeCommand(cmd: string) {
     const input = page.getByTestId('message-input');
     await input.focus();
-    await page.waitForTimeout(50);
+    await expectInputFocused(page);
     await input.fill(cmd);
     await input.press('Enter');
     await expect(input).toHaveValue('', { timeout: 5000 });
@@ -43,6 +45,10 @@ test('a free buffer shows its rows without a fetch-more affordance', async () =>
 
     await waitForBuffer(page, SHORT_NAME, 15000);
     await switchToBuffer(page, SHORT_NAME);
+
+    // The exec output and its “end of command” line arrive as separate relay events,
+    // so the row set is not complete the moment the buffer opens.
+    await waitForRowCountAtLeast(page, 2);
 
     const rowCount = await page.locator('[data-testid="bufferline-row"]').count();
     expect(rowCount).toBeGreaterThanOrEqual(2);

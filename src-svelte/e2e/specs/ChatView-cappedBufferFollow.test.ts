@@ -3,6 +3,7 @@ import { createConnectedPage } from "../fixtures/auth";
 import { switchToBuffer } from "../helpers/buffers";
 import { irc } from "../helpers/irc-control";
 import { setupEffectOrphanFilter } from "../helpers/pageerror";
+import { waitForChatSettled } from "../helpers/waits";
 
 let page: import("@playwright/test").Page;
 
@@ -77,6 +78,28 @@ async function scrollContainerToBottom() {
     );
 }
 
+// Wait until the view stays parked at least `minDiff` px above the true bottom.
+// A deliberate scroll can be re-anchored by an in-flight follow pin; requiring the
+// gap to hold for `quietMs` is what the 400 ms sleep was standing in for.
+async function waitForParked(minDiff = 100, quietMs = 300, timeout = 8000) {
+    let since = 0;
+    await expect
+        .poll(
+            async () => {
+                const diff = (await scrollState())?.diff ?? 0;
+                if (diff <= minDiff) {
+                    since = 0;
+                    return "repinned";
+                }
+                const now = Date.now();
+                if (since === 0) since = now;
+                return now - since >= quietMs ? "parked" : "parked-briefly";
+            },
+            { timeout },
+        )
+        .toBe("parked");
+}
+
 /**
  * Pad the channel until the buffer stops growing, i.e. until it hits
  * settings.maxBufferLines and every incoming line trims one off the front.
@@ -99,6 +122,7 @@ async function padUntilCapped(maxMessages = 600) {
         await irc.sendMessage("#glowing-bear", `cap-pad-${Date.now()}-${i}`);
         // Short pacing so the relay round-trip lands before the next row count check;
         // the loop itself is event-driven via the row-count stability detection.
+        // eslint-disable-next-line no-restricted-syntax -- paces the IRC->relay send loop, not a UI settle
         await page.waitForTimeout(10);
     }
     return prevRows;
@@ -121,10 +145,9 @@ async function setupCappedAtBottom() {
     await switchToBuffer(page, "#glowing-bear");
     const rows = await padUntilCapped();
     await scrollContainerToBottom();
-    // Let the follow pin loop (400 ms cap) and settle window expire before any
-    // test scrolls away; an in-flight pin would re-anchor the view to the bottom
-    // and defeat the park.
-    await page.waitForTimeout(500);
+    // The follow pin loop and its settle window must be over before a test scrolls
+    // away; an in-flight pin would re-anchor the view to the bottom and defeat the park.
+    await waitForChatSettled(page);
     const at = await scrollState();
     // Precondition: the buffer really is capped and really is scrollable.
     expect(rows).toBeGreaterThan(50);
@@ -149,8 +172,8 @@ test("at the line cap, a long own message still follows to the bottom", async ()
     await input.press("Enter");
 
     await waitForRow(text);
-    // Give the settle-window pin loop time to run (it pins for up to ~400ms).
-    await page.waitForTimeout(900);
+    // Wait for the follow pin loop and its settle window to end.
+    await waitForChatSettled(page);
 
     const after = await scrollState();
     expect(after).not.toBeNull();
@@ -170,7 +193,7 @@ test("at the line cap, a long incoming message still follows to the bottom", asy
     const text = `cap-bot-long-${Date.now()}`;
     await irc.sendMessage("#glowing-bear", `${text}: ${longMessage}`);
     await waitForRow(text);
-    await page.waitForTimeout(900);
+    await waitForChatSettled(page);
 
     const after = await scrollState();
     expect(after).not.toBeNull();
@@ -191,7 +214,7 @@ test("at the line cap, a short own message still follows to the bottom", async (
     await input.press("Enter");
 
     await waitForRow(text);
-    await page.waitForTimeout(900);
+    await waitForChatSettled(page);
 
     const after = await scrollState();
     expect(after).not.toBeNull();
@@ -210,7 +233,7 @@ test("at the line cap, a user who scrolled up is not dragged to the bottom", asy
         const c = document.querySelector(sel) as HTMLElement;
         c.scrollTop = c.scrollHeight - c.clientHeight - 600;
     }, CONTAINER);
-    await page.waitForTimeout(400);
+    await waitForParked();
 
     const parked = await scrollState();
     expect(parked).not.toBeNull();
@@ -219,7 +242,7 @@ test("at the line cap, a user who scrolled up is not dragged to the bottom", asy
     const text = `cap-scrollaway-${Date.now()}`;
     await irc.sendMessage("#glowing-bear", `${text}: ${longMessage}`);
     await waitForRow(text);
-    await page.waitForTimeout(900);
+    await waitForChatSettled(page);
 
     const after = await scrollState();
     expect(after).not.toBeNull();
@@ -240,10 +263,11 @@ test("at the line cap, a reader who breaks away after a flood is not dragged bac
 
     for (let i = 0; i < 15; i++) {
         await irc.sendMessage("#glowing-bear", `cap-flood-${Date.now()}-${i}`);
+        // eslint-disable-next-line no-restricted-syntax -- paces the flood so lines arrive one by one instead of in one batch
         await page.waitForTimeout(120);
     }
     // Let the follow-settle window expire.
-    await page.waitForTimeout(600);
+    await waitForChatSettled(page);
 
     // Break away.
     await page.evaluate((sel) => {
@@ -251,7 +275,7 @@ test("at the line cap, a reader who breaks away after a flood is not dragged bac
         c.scrollTop = Math.max(0, c.scrollHeight - c.clientHeight - 400);
         c.dispatchEvent(new Event("scroll", { bubbles: true }));
     }, CONTAINER);
-    await page.waitForTimeout(400);
+    await waitForParked();
 
     const away = await scrollState();
     expect(away).not.toBeNull();
@@ -261,7 +285,7 @@ test("at the line cap, a reader who breaks away after a flood is not dragged bac
     const marker = `cap-after-flood-${Date.now()}`;
     await irc.sendMessage("#glowing-bear", marker);
     await waitForRow(marker);
-    await page.waitForTimeout(900);
+    await waitForChatSettled(page);
 
     const after = await scrollState();
     expect(after).not.toBeNull();

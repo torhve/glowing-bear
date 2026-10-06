@@ -2,6 +2,8 @@ import { test, expect } from '@playwright/test';
 import { createConnectedPage } from '../fixtures/auth';
 import { switchToBuffer } from '../helpers/buffers';
 import { botSay, botPm } from '../helpers/messages';
+import { expectInputFocused } from '../helpers/input';
+import { waitForChatSettled } from '../helpers/waits';
 
 let page: import('@playwright/test').Page;
 
@@ -34,22 +36,20 @@ async function getCurrentBufferName(): Promise<string> {
     return await topicBar.textContent();
 }
 
-// Helper: find a PM buffer locator in the buffer list (gbbot PMs create buffers like "gbbot" or "gbbot1")
-// Polls until found or timeout — relay propagation can take time.
+// Helper: find a PM buffer in the buffer list (gbbot PMs create buffers like "gbbot"
+// or "gbbot1"). Polls the DOM until one appears, or reports none within the timeout.
 async function waitForPmBuffer(timeoutMs = 15000): Promise<import('@playwright/test').Locator | null> {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-        const items = page.getByTestId('buffer-item');
-        const count = await items.count();
-        for (let i = 0; i < count; i++) {
-            const text = await items.nth(i).textContent();
-            if (text && /gbbot/.test(text)) {
-                return items.nth(i);
-            }
-        }
-        await page.waitForTimeout(500);
-    }
-    return null;
+    const appeared = await page
+        .waitForFunction(
+            () =>
+                Array.from(document.querySelectorAll('[data-testid="buffer-item"]')).some((el) =>
+                    /gbbot/.test(el.textContent ?? ''),
+                ),
+            { timeout: timeoutMs, polling: 250 },
+        )
+        .catch(() => null);
+    if (!appeared) return null;
+    return page.getByTestId('buffer-item').filter({ hasText: /gbbot/ }).first();
 }
 
 // Test 1: Alt+A prioritizes notification buffers over plain unread buffers.
@@ -102,9 +102,10 @@ test('Alt+A prioritizes notification buffers over plain unread buffers', async (
     // Switch back to server so we don't clear remaining buffers
     await switchToBuffer(page, 'gbtest');
 
-    // Press Alt+A a third time — no more active buffers, should stay on server
+    // Press Alt+A a third time — no more active buffers, should stay on server. The
+    // settle window is the interval in which a jump would have happened.
     await pressAltA();
-    await page.waitForTimeout(500);
+    await waitForChatSettled(page);
     const afterThirdPress = await getCurrentBufferName();
     expect(afterThirdPress).toContain('gbtest');
 });
@@ -126,7 +127,7 @@ test('Alt+A works from the input bar without typing dead key characters', async 
 
     // Focus the input bar
     await page.getByTestId('message-input').focus();
-    await page.waitForTimeout(100);
+    await expectInputFocused(page);
 
     // Verify input is focused
     const activeBefore = await page.evaluate(() => document.activeElement?.tagName || '');
@@ -164,7 +165,7 @@ test('Alt+A does nothing when no buffers have unread or notification counts', as
     // Press Alt+A — should be a no-op since all buffers are read
     const beforeName = await getCurrentBufferName();
     await pressAltA();
-    await page.waitForTimeout(500);
+    await waitForChatSettled(page);
     const afterName = await getCurrentBufferName();
     expect(afterName).toEqual(beforeName);
 });

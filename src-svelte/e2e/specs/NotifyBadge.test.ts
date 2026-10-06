@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { connectToWeechat, disconnect, reconnect, waitForAppReady } from '../helpers/connection';
-import { weechatFifoCommand } from '../helpers/weechat-fifo';
+import { weechatFifoCommand, weechatFifoCommandAcked } from '../helpers/weechat-fifo';
 import { switchToBuffer } from '../helpers/buffers';
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
 
@@ -49,11 +49,14 @@ test.describe('Sidebar unread badge vs notify level', () => {
         await expect(gb.getByTestId('unread-badge')).toHaveCount(0);
 
         const marker = `E2E-NOTIFY-NONE-${Date.now()}`;
-        test.expect(weechatFifoCommand(`print -buffer #glowing-bear -tags notify_none,no_highlight ${marker}`)).toBe(true);
 
-        // Give the live line event time to land while the buffer is still
-        // inactive, then confirm it never badges, then confirm it rendered.
-        await page.waitForTimeout(1500);
+        const ack = weechatFifoCommandAcked(`print -buffer #glowing-bear -tags notify_none,no_highlight ${marker}`);
+        test.expect(ack).not.toBeNull();
+
+        // The echo lands in the core buffer we are looking at, and WeeChat drains the
+        // FIFO in order: seeing the ack proves the line was already added to the
+        // inactive buffer, so the badge check below is a real negative and not a race.
+        await expect(page.getByText(ack!, { exact: false })).toBeVisible({ timeout: 10000 });
         await expect(gb.getByTestId('unread-badge')).toHaveCount(0);
         await switchToBuffer(page, 'glowing-bear');
         await expect(page.getByText(marker)).toBeVisible({ timeout: 8000 });
@@ -80,10 +83,13 @@ test.describe('Sidebar unread badge vs notify level', () => {
         await disconnect(page);
         test.expect(weechatFifoCommand('buffer 1')).toBe(true);
         const marker = `E2E-NOTIFY-RECONNECT-${Date.now()}`;
-        test.expect(weechatFifoCommand(`print -buffer #glowing-bear -tags notify_highlight ${marker}`)).toBe(true);
-        await page.waitForTimeout(500); // let WeeChat process the print
+        const ack = weechatFifoCommandAcked(`print -buffer #glowing-bear -tags notify_highlight ${marker}`);
+        test.expect(ack).not.toBeNull();
 
         await reconnect(page);
+        // The FIFO is drained in order, so the ack line in the re-fetched core buffer
+        // history shows WeeChat had already handled the print.
+        await expect(page.getByText(ack!, { exact: false })).toBeVisible({ timeout: 15000 });
         await expect(gb.getByTestId('unread-badge')).toHaveText('1', { timeout: 10000 });
 
         // Read it so the shared fixture leaves no hotlist residue for later specs.

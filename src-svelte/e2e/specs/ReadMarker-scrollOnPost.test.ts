@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { createConnectedPage } from '../fixtures/auth';
 import { switchToBuffer } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
+import { waitForChatSettled, waitForNoUnread } from '../helpers/waits';
 
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
 
@@ -42,7 +43,7 @@ test.beforeEach(async () => {
     // Sending a message triggers the handler to update lastSeen to cover all lines,
     // effectively clearing the readmarker and providing a clean baseline for each test.
     await switchToBuffer(page, '#glowing-bear');
-    await page.waitForTimeout(500);
+    await waitForNoUnread(page, '#glowing-bear');
 
     // Scroll to bottom so handler absorbs any existing unread.
     // With very large buffers from many accumulated serial tests, use generous timeout.
@@ -92,7 +93,7 @@ test('should scroll to bottom when posting own message while readmarker is prese
 
     // Wait for readmarker to render AND be positioned in the viewport.
     await waitForReadmarkerPositioned(10000);
-    await page.waitForTimeout(500);
+    await waitForChatSettled(page);
 
     // Now send a message via the input bar — this is the self-posted message.
     const userMsg = `own-msg-${Date.now()}`;

@@ -3,6 +3,7 @@ import { createConnectedPage } from "../fixtures/auth";
 import { waitForBuffer, switchToBuffer } from "../helpers/buffers";
 import { irc } from "../helpers/irc-control";
 import { setupEffectOrphanFilter } from "../helpers/pageerror";
+import { waitForChatSettled } from "../helpers/waits";
 
 let page: import("@playwright/test").Page;
 
@@ -73,7 +74,7 @@ async function waitForScrollStable(timeout = 5000) {
         },
         { timeout },
     );
-    await page.waitForTimeout(300);
+    await waitForChatSettled(page);
 }
 
 test.beforeEach(async () => {
@@ -201,7 +202,7 @@ test("long wrapping message should NOT auto-scroll when user scrolled up", async
         },
         { timeout: 15000 },
     );
-    await page.waitForTimeout(500);
+    await waitForChatSettled(page);
     await waitForScrollSettled(10000);
 
     const state = await getChatScrollState();

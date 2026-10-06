@@ -3,6 +3,7 @@ import { setSettings, reconnect } from "../helpers/connection";
 import { waitForBuffer, switchToBuffer } from "../helpers/buffers";
 import { irc } from "../helpers/irc-control";
 import { createConnectedPage } from "../fixtures/auth";
+import { waitForNoUnread, waitForUnreadAtLeast } from "../helpers/waits";
 
 let page: import("@playwright/test").Page;
 
@@ -37,7 +38,7 @@ test("favicon badge updates when unread messages arrive on inactive buffer", asy
     await waitForBuffer(page, "#glowing-bear", 10000);
     // First absorb any existing unread by switching to the target buffer
     await switchToBuffer(page, "#glowing-bear");
-    await page.waitForTimeout(500);
+    await waitForNoUnread(page, "#glowing-bear");
     // Then switch away so new messages create unread
     await switchToBuffer(page, "gbtest");
 
@@ -58,7 +59,7 @@ test("favicon badge resets when switching to buffer with unread", async () => {
     await waitForBuffer(page, "#glowing-bear", 10000);
     // First absorb any existing unread by switching to the target buffer
     await switchToBuffer(page, "#glowing-bear");
-    await page.waitForTimeout(500);
+    await waitForNoUnread(page, "#glowing-bear");
     // Then switch away so new messages create unread
     await switchToBuffer(page, "gbtest");
 
@@ -88,9 +89,9 @@ test("no badge drawn when favico setting is disabled", async () => {
 
     await irc.sendMessage("#glowing-bear", "favico-disabled-test-" + Date.now());
 
-    // Grace period for the message to be processed (negative assertion: no badge
-    // should ever be drawn while useFavico is disabled)
-    await page.waitForTimeout(1000);
+    // The unread badge is the app's own record that the line arrived. Once it is there,
+    // the favicon check below is a real negative instead of a guess at timing.
+    await waitForUnreadAtLeast(page, "#glowing-bear", 1);
 
     const faviconHref = await getFaviconHref(page);
     expect(faviconHref).toBe("/favicon.png");

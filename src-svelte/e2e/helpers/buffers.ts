@@ -7,7 +7,7 @@ function getBufferText(name: string): string {
 
 // Exact-name locator: matches the .buffer-name span's full text, so a buffer called
 // "glow" can no longer resolve to "glowing-bear" (or a badge's digits to a name).
-function bufferItemForName(page: Page, name: string) {
+export function bufferItemForName(page: Page, name: string) {
     const exact = new RegExp("^" + getBufferText(name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$");
     return page
         .getByTestId("buffer-item")

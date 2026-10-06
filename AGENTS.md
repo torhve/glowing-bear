@@ -177,6 +177,8 @@ E2E runs in two passes: the `chromium` project (channel-state-dependent specs, `
 - Use `waitForAppReady(page)` after `page.goto()`
 - Serial tests need `test.describe.configure({ mode: 'serial' })`
 - Helpers available in `src-svelte/e2e/helpers/`: `connection.ts` (connect, disconnect, reconnect, settings), `buffers.ts` (switch, wait), `irc-control.ts` (IRC server control), `settings.ts`, `pageerror.ts`
+- **No fixed sleeps in specs** — `page.waitForTimeout` is banned by `no-restricted-syntax` in `eslint.config.js`. Wait for the condition the test depends on: `waits.ts` (`waitForChatSettled`, `waitForRowCount`, `waitForUnreadAtLeast`, `waitForNoUnread`, `waitForSizeStable`, `waitForBotNickApplied`), `input.ts` (`expectInputFocused`, `waitForInputValue`, `waitForInputCaret`, `resetInputState`), or an `expect.poll`. A genuinely time-based wait — IRC/relay send pacing, a product timing window — needs an `eslint-disable-next-line` naming what it paces.
+- `waitForChatSettled()` reads `window.__chatFollowState()` from `ChatView.svelte`, a test-only view of the existing follow-pin state (no extra timer, no behavior change). It returns once the pin loop is inactive, no view frames are pending and the settle deadline has passed, then after 300 ms continuously quiet — the window in which a late pin or a missed auto-scroll would have surfaced.
 
 ### Test Rules
 

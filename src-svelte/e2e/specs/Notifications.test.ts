@@ -208,8 +208,6 @@ test('sound plays when soundnotification is enabled', async () => {
     // Wait for PM buffer to appear in buffer list — relay propagation + buffer creation
     // can take time. The notification handler fires only after the buffer exists.
     await waitForBuffer(page, 'gbbot', 15000).catch(() => {});
-    // Short lead-in; the toPass loop below does the real waiting
-    await page.waitForTimeout(300);
 
     // Check that playNotificationSound was called (via debug hook)
     await expect(async () => {

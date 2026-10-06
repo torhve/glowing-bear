@@ -5,6 +5,7 @@ import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
 
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
+import { waitForBotNickApplied } from '../helpers/waits';
 
 let page: import('@playwright/test').Page;
 
@@ -137,13 +138,11 @@ test('shows bot nick change', async () => {
 
     // First reset bot to known nick so we always produce a visible change
     await irc.botNick('gbbot');
-    await page.waitForTimeout(500);
+    await waitForBotNickApplied(page, 'gbbot', '#glowing-bear', 'nick-reset');
 
     // Now change to our unique nick
     await irc.botNick(newNick);
-
-    // Wait for WeeChat to process the nick change
-    await page.waitForTimeout(2000);
+    await waitForBotNickApplied(page, newNick, '#glowing-bear', 'nick-applied');
 
     // Bot sends a message under the new nick to verify the change took effect.
     // WeeChat does NOT relay _nicklist_diff events or "now known as" infolines

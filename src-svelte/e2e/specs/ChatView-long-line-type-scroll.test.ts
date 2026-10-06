@@ -3,6 +3,7 @@ import { createConnectedPage } from "../fixtures/auth";
 import { switchToBuffer } from "../helpers/buffers";
 import { irc } from "../helpers/irc-control";
 import { setupEffectOrphanFilter } from "../helpers/pageerror";
+import { waitForChatSettled, waitForSizeStable } from "../helpers/waits";
 
 let page: import("@playwright/test").Page;
 
@@ -76,6 +77,7 @@ async function padUntilScrollable(minExtra = 250) {
         const s = await scrollState();
         if (s && s.scrollHeight - s.clientHeight > minExtra) break;
         await irc.sendMessage("#glowing-bear", `pad-${Date.now()}-${i}`);
+        // eslint-disable-next-line no-restricted-syntax -- paces the padding loop so each line round-trips before the next scroll check
         await page.waitForTimeout(80);
     }
 }
@@ -85,7 +87,7 @@ test.beforeEach(async () => {
     // Make the buffer scrollable, then sit at the true bottom — the user's
     // starting state before typing the long line.
     await padUntilScrollable();
-    await page.waitForTimeout(400);
+    await waitForChatSettled(page);
     await scrollContainerToBottom();
 });
 
@@ -114,8 +116,9 @@ test("typing a long wrapping line while at the bottom keeps the newest line visi
     const input = page.getByTestId("message-input");
     await input.click();
     await input.fill(fullMessage);
-    // Let the input bar finish growing.
-    await page.waitForTimeout(300);
+    // The input bar grows as the textarea wraps; the chat container shrinks by that
+    // same amount, so the measurement below needs the growth to be finished.
+    await waitForSizeStable(page, '[data-testid="message-input"]');
 
     const afterType = await scrollState();
     expect(afterType).not.toBeNull();
@@ -144,7 +147,7 @@ test("typing a long wrapping line while at the bottom keeps the newest line visi
         CONTAINER,
         { timeout: 15000 },
     );
-    await page.waitForTimeout(600);
+    await waitForChatSettled(page);
 
     // The container must be at its true bottom...
     const after = await scrollState();

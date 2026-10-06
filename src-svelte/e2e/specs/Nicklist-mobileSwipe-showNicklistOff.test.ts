@@ -13,6 +13,7 @@ import {
 } from "../helpers/buffers";
 
 import { createConnectedPage } from '../fixtures/auth';
+import { waitForChatSettled } from "../helpers/waits";
 
 // Inject touch event dispatcher into the page for swipe simulation.
 async function injectSwipeDispatcher(page: import("@playwright/test").Page) {
@@ -210,8 +211,9 @@ test("desktop nicklist remains hidden when showNicklist is off", async () => {
     await browserPage.evaluate(() => window.dispatchEvent(new Event("resize")));
     await connectToWeechat(browserPage);
     await waitForBuffer(browserPage, "#glowing-bear", 10000);
-    // Let layout settle after connection before clicking buffer items
-    await browserPage.waitForTimeout(500);
+    // The follow pin loop that runs on the first render must be over before a test
+    // clicks a buffer item.
+    await waitForChatSettled(browserPage);
     await switchToBuffer(browserPage, "#glowing-bear");
 
     // Desktop nicklist should NOT be visible when showNicklist is off

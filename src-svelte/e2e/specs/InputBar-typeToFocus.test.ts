@@ -129,7 +129,6 @@ test.describe('Type to Focus (Slack-style input capture)', () => {
         // Blur input and click on inert chat area (not a focusable element)
         await input.blur();
         await page.getByTestId('chat-view').click();
-        await page.waitForTimeout(50);
         await expect(input).not.toBeFocused();
 
         // Press ArrowUp — should NOT focus input
@@ -143,7 +142,8 @@ test.describe('Type to Focus (Slack-style input capture)', () => {
 
     test('should not capture on mobile viewport sizes', async () => {
         await page.setViewportSize({ width: 375, height: 667 });
-        await page.waitForTimeout(500);
+        // No settle wait needed: handleTypeToFocus reads window.innerWidth at keydown
+        // time, so the new viewport is already in effect for the next keystroke.
 
         const input = page.getByTestId('message-input');
         await expect(input).toBeVisible({ timeout: 5000 });
@@ -151,7 +151,6 @@ test.describe('Type to Focus (Slack-style input capture)', () => {
         // Blur input and click on inert area
         await input.blur();
         await page.getByTestId('chat-view').click();
-        await page.waitForTimeout(50);
         await expect(input).not.toBeFocused();
 
         // Type a letter — should NOT focus input (mobile mode)
