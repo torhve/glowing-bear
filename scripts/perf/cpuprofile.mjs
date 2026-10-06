@@ -1,88 +1,104 @@
 #!/usr/bin/env node
 /**
- * Summarize a V8 .cpuprofile.
+ * Summarize a V8 .cpuprofile: self time and total time per function, and
+ * (with --lines <fn substring>) self time per source line inside one function.
  *
- * Usage: node scripts/perf/cpuprofile.mjs <file.cpuprofile> [--min 0.1] [--filter <substring>] [--flat]
+ * Line attribution matters because a function's self time is usually one or two
+ * statements, not the whole body — and V8 attributes inlined callees to the
+ * caller, so "self" here means "everything attributed to that frame".
  *
- * Prints self-time (exclusive) and total-time (inclusive) per call frame, as a
- * percentage of profile samples. Frames are keyed by url:line:col:name so the
- * same function appearing in several bundles is not silently merged.
+ * Usage:
+ *   node scripts/perf/cpuprofile.mjs <profile.cpuprofile> [--min 1.0] [--lines <name>]
  */
-import { readFileSync } from 'node:fs';
+import fs from 'node:fs';
 
-const args = process.argv.slice(2);
-const file = args.find((a) => !a.startsWith('--'));
-const minIdx = args.indexOf('--min');
-const minPct = minIdx >= 0 ? Number(args[minIdx + 1]) : 0.1;
-const filterIdx = args.indexOf('--filter');
-const filter = filterIdx >= 0 ? args[filterIdx + 1] : null;
-
+const file = process.argv[2];
 if (!file) {
-    console.error('usage: cpuprofile.mjs <file.cpuprofile> [--min pct] [--filter substring]');
+    console.error('usage: cpuprofile.mjs <profile> [--min <pct>] [--lines <fn substring>]');
     process.exit(1);
 }
+const minIdx = process.argv.indexOf('--min');
+const minPct = minIdx > 0 ? Number(process.argv[minIdx + 1]) : 1.0;
+const linesIdx = process.argv.indexOf('--lines');
+const linesFor = linesIdx > 0 ? process.argv[linesIdx + 1] : null;
 
-const prof = JSON.parse(readFileSync(file, 'utf8'));
-const nodes = prof.nodes;
+const p = JSON.parse(fs.readFileSync(file, 'utf8'));
+const nodes = p.nodes;
+const samples = p.samples;
+
+const selfCount = new Map();
+for (const n of nodes) selfCount.set(n.id, n.hitCount ?? 0);
+
 const byId = new Map(nodes.map((n) => [n.id, n]));
+const parentOf = new Map(nodes.map((n) => [n.id, n.parent ? byId.get(n.parent) : undefined]));
 
-// samples: array of node ids, one per sampling interval.
-const sampleCounts = new Map();
-for (const id of prof.samples) sampleCounts.set(id, (sampleCounts.get(id) ?? 0) + 1);
-const totalSamples = prof.samples.length;
-
-// Self time = samples landing exactly on that node.
-const self = new Map();
-for (const [id, c] of sampleCounts) self.set(id, c);
-
-// Total time = samples in the subtree rooted at that node.
-const children = new Map();
-for (const n of nodes) {
-    if (n.children) {
-        for (const c of n.children) {
-            const arr = children.get(n.id);
-            if (arr) arr.push(c);
-            else children.set(n.id, [c]);
-        }
-    }
-}
 const total = new Map();
-function computeTotal(id) {
-    if (total.has(id)) return total.get(id);
-    let sum = self.get(id) ?? 0;
-    for (const c of children.get(id) ?? []) sum += computeTotal(c);
-    total.set(id, sum);
-    return sum;
-}
-// Roots: nodes never listed as a child.
-const childIds = new Set();
-for (const [, arr] of children) for (const c of arr) childIds.add(c);
-for (const n of nodes) if (!childIds.has(n.id)) computeTotal(n.id);
-
-function label(n) {
-    const cf = n.callFrame;
-    const url = (cf.url ?? '').replace(/^file:\/\//, '');
-    const short = url.length > 60 ? '…' + url.slice(-57) : url;
-    return `${cf.functionName || '(anonymous)'}  ${short}:${cf.lineNumber ?? 0}:${cf.columnNumber ?? 0}`;
-}
-
-function report(title, map) {
-    const rows = [];
-    for (const [id, count] of map) {
-        const pct = (100 * count) / totalSamples;
-        if (pct < minPct) continue;
-        const n = byId.get(id);
-        if (!n) continue;
-        const l = label(n);
-        if (filter && !l.includes(filter)) continue;
-        rows.push([pct, count, l]);
-    }
-    rows.sort((a, b) => b[0] - a[0]);
-    console.log(`\n== ${title} (${totalSamples} samples) ==`);
-    for (const [pct, count, l] of rows) {
-        console.log(`${pct.toFixed(2).padStart(6)}%  ${String(count).padStart(7)}  ${l}`);
+for (const s of samples) {
+    let cur = byId.get(s);
+    const seen = new Set();
+    while (cur) {
+        if (seen.has(cur.id)) break;
+        seen.add(cur.id);
+        const key = `${cur.callFrame.functionName || '(anonymous)'} @ ${short(cur.callFrame.url)}:${cur.callFrame.lineNumber}:${cur.callFrame.columnNumber}`;
+        total.set(key, (total.get(key) ?? 0) + 1);
+        cur = parentOf.get(cur.id);
     }
 }
 
-report('SELF time', self, );
-report('TOTAL time', total);
+function short(url) {
+    return String(url ?? '').replace(/^file:\/\//, '').replace(/^.*\/glowing-bear\//, '');
+}
+
+const selfAgg = new Map();
+for (const n of nodes) {
+    if (!n.hitCount) continue;
+    const key = `${n.callFrame.functionName || '(anonymous)'} @ ${short(n.callFrame.url)}:${n.callFrame.lineNumber}:${n.callFrame.columnNumber}`;
+    selfAgg.set(key, (selfAgg.get(key) ?? 0) + n.hitCount);
+}
+
+const totalSamples = samples.length;
+const top = [...selfAgg.entries()].sort((a, b) => b[1] - a[1]);
+console.log(`\n== SELF time (${totalSamples} samples) ==`);
+for (const [k, v] of top) {
+    const pct = (v / totalSamples) * 100;
+    if (pct < minPct) break;
+    console.log(`${pct.toFixed(2).padStart(6)}%  ${String(v).padStart(6)}  ${k}`);
+}
+
+const topTotal = [...total.entries()].sort((a, b) => b[1] - a[1]).slice(0, 25);
+console.log(`\n== TOTAL time (top 25) ==`);
+for (const [k, v] of topTotal) {
+    console.log(`${((v / totalSamples) * 100).toFixed(2).padStart(6)}%  ${String(v).padStart(6)}  ${k}`);
+}
+
+if (linesFor) {
+    // Per-line self attribution inside one function: node.callFrame.position is a
+    // byte offset into the source, so convert it to a line number.
+    const sourceCache = new Map();
+    const byLine = new Map();
+    let fnTotal = 0;
+    for (const n of nodes) {
+        if (!n.hitCount) continue;
+        const name = n.callFrame.functionName || '(anonymous)';
+        if (!name.includes(linesFor)) continue;
+        const url = String(n.callFrame.url ?? '').replace(/^file:\/\//, '');
+        if (!url || !fs.existsSync(url)) continue;
+        if (!sourceCache.has(url)) sourceCache.set(url, fs.readFileSync(url, 'utf8'));
+        const src = sourceCache.get(url);
+        const pos = n.callFrame.position ?? -1;
+        let line = n.callFrame.lineNumber ?? -1;
+        if (pos >= 0 && pos < src.length) {
+            line = src.slice(0, pos).split('\n').length;
+        }
+        const key = `${url.split('/').pop()}:${line}`;
+        byLine.set(key, (byLine.get(key) ?? 0) + n.hitCount);
+        fnTotal += n.hitCount;
+    }
+    const src = linesFor ? sourceCache.values().next().value : undefined;
+    console.log(`\n== SELF per line inside "${linesFor}" (${fnTotal} samples) ==`);
+    for (const [k, v] of [...byLine.entries()].sort((a, b) => b[1] - a[1]).slice(0, 25)) {
+        const lineNo = Number(k.split(':')[1]);
+        const text = src ? (src.split('\n')[lineNo - 1] ?? '').trim().slice(0, 78) : '';
+        console.log(`${((v / totalSamples) * 100).toFixed(2).padStart(6)}%  ${String(v).padStart(5)}  ${k.padEnd(16)} ${text}`);
+    }
+}

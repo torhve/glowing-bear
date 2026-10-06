@@ -22,12 +22,32 @@ mkdir -p /tmp/gb-perf
 
 load() { uptime | sed 's/.*load averages\{0,1\}:*//'; }
 
+# Vitest occasionally wedges at startup (no RUN header, no exit). A wedged arm
+# must fail the harness loudly, not silently produce an empty artifact set.
+GB_PERF_ARM_TIMEOUT="${GB_PERF_ARM_TIMEOUT:-180}"
+run_guarded() {
+  "$@" &
+  local pid=$!
+  ( sleep "$GB_PERF_ARM_TIMEOUT"; kill -TERM "$pid" 2>/dev/null; sleep 5; kill -KILL "$pid" 2>/dev/null ) &
+  local watchdog=$!
+  local rc=0
+  wait "$pid" || rc=$?
+  kill "$watchdog" 2>/dev/null || true
+  wait "$watchdog" 2>/dev/null || true
+  return $rc
+}
+
 echo "load_before: $(load)" > "$RUNDIR/meta.txt"
 {
-  /usr/bin/time -l npx vitest run --config vitest.perf.config.ts
+  run_guarded /usr/bin/time -l npx vitest run --config vitest.perf.config.ts
 } > "$RUNDIR/stdout.txt" 2> "$RUNDIR/stderr.txt"
 echo "load_after: $(load)" >> "$RUNDIR/meta.txt"
 
+[ -s /tmp/gb-perf/unit-results.txt ] || {
+  echo "FAIL: arm produced no /tmp/gb-perf/unit-results.txt (wedged or timed-out run)" >&2
+  echo "status: incomplete" >> "$RUNDIR/meta.txt"
+  exit 1
+}
 cp /tmp/gb-perf/unit-results.txt "$RUNDIR/unit-results.txt"
 ( cd /tmp/gb-perf && shasum -a 256 ./*.json ) > "$RUNDIR/hashes.txt"
 

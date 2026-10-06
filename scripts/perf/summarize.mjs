@@ -65,7 +65,7 @@ function parseCounters(stderr) {
 }
 
 const arms = {};
-const hashes = new Set();
+const incomplete = [];
 for (const rep of reps) {
     for (const arm of ['cand', 'base']) {
         const dir = path.join(root, rep, arm);
@@ -74,11 +74,14 @@ for (const rep of reps) {
         const hashText = read(path.join(dir, 'hashes.txt')) ?? '';
         const meta = read(path.join(dir, 'meta.txt')) ?? '';
         const counters = parseCounters(read(path.join(dir, 'stderr.txt')));
-        (arms[arm] ??= []).push({ arm, rep, results, hashText, meta, counters });
-        for (const line of hashText.split('\n')) {
-            const h = line.trim().split(/\s+/)[0];
-            if (h) hashes.add(h);
+        // A wedged arm produces a directory but no results and no hashes. It
+        // must not be counted as a run, and above all must not be counted as a
+        // differing output hash — that would read as an output change.
+        if (results.size === 0 || hashText.trim() === '') {
+            incomplete.push(`${rep}/${arm}`);
+            continue;
         }
+        (arms[arm] ??= []).push({ arm, rep, results, hashText, meta, counters });
     }
 }
 
@@ -118,8 +121,10 @@ for (const stage of stages) {
     );
 }
 
-// ---- Identity gate ----
 console.log('== output identity gate ==');
+if (incomplete.length) {
+    console.log(`  skipped ${incomplete.length} incomplete run(s): ${incomplete.join(', ')}`);
+}
 const hashSets = [];
 for (const arm of ['cand', 'base']) {
     for (const run of arms[arm] ?? []) {
@@ -132,6 +137,9 @@ for (const arm of ['cand', 'base']) {
         hashSets.push({ arm: run.arm ?? arm, rep: run.rep, set });
     }
 }
+if (hashSets.length === 0) {
+    console.log('  !! no complete runs to compare — gate is inconclusive');
+} else {
 const distinct = new Set(hashSets.map((h) => h.set));
 if (distinct.size === 1) {
     console.log(`  ALL ${hashSets.length} runs produced identical snapshot hashes ✓`);
@@ -139,6 +147,7 @@ if (distinct.size === 1) {
 } else {
     console.log(`  !! ${distinct.size} DISTINCT hash sets across ${hashSets.length} runs — OUTPUT DIFFERS`);
     for (const h of hashSets) console.log(`  ${h.arm} ${h.rep}: ${h.set}`);
+}
 }
 
 // ---- Counters ----
