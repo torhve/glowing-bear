@@ -76,18 +76,30 @@ export function parseWeeChatText(input: string, options?: ParseOptions): readonl
     return coalesceRuns(runs);
 }
 
-/** Merge adjacent runs whose styles are equivalent. */
+/**
+ * Merge adjacent runs whose styles are equivalent.
+ *
+ * Merges in place: `runs` is private to one parse call, so the second array the
+ * original built (and the iterator it looped with) were pure overhead on every
+ * parsed line.
+ */
 function coalesceRuns(runs: TextRun[]): TextRun[] {
-    const merged: TextRun[] = [];
-    for (const run of runs) {
-        const previous = merged[merged.length - 1];
-        if (previous !== undefined && stylesEqual(previous.style, run.style)) {
-            merged[merged.length - 1] = { text: previous.text + run.text, style: previous.style };
+    if (runs.length < 2) {
+        return runs;
+    }
+    let write = 1;
+    for (let read = 1; read < runs.length; read++) {
+        const run = runs[read]!;
+        const previous = runs[write - 1]!;
+        if (stylesEqual(previous.style, run.style)) {
+            runs[write - 1] = { text: previous.text + run.text, style: previous.style };
         } else {
-            merged.push(run);
+            runs[write] = run;
+            write++;
         }
     }
-    return merged;
+    runs.length = write;
+    return runs;
 }
 
 /**

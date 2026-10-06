@@ -10,7 +10,7 @@
  * object, so runs emitted earlier can never be changed by later controls.
  */
 
-import { attributesOfMask, keepsAttributes, type Instruction } from './decode.js';
+import { keepsAttributes, maskEnablesAttribute, type Instruction } from './decode.js';
 import {
     MAX_EXTENDED_COLOR,
     MAX_THEME_COLOR,
@@ -28,16 +28,24 @@ import type {
     ThemeColorName,
 } from './types.js';
 
-/** Palette index 0 is the terminal default; 1-16 are the named colors. */
+/**
+ * Palette index 0 is the terminal default; 1-16 are the named colors.
+ *
+ * ColorRef objects are immutable and there are only 18 distinct ones, so they
+ * are built once and shared instead of allocated per control: an ordinary chat
+ * line that uses the default or a palette colour now allocates no ColorRef at
+ * all, and `stylesEqual` can settle most of its comparisons on identity.
+ */
+const DEFAULT_COLOR: ColorRef = Object.freeze({ kind: 'default' } as const);
+const PALETTE_COLORS: readonly ColorRef[] = WEECHAT_PALETTE.map((name, index) =>
+    index === 0
+        ? DEFAULT_COLOR
+        : Object.freeze({ kind: 'weechat', name } as const),
+);
+
 function paletteColor(index: number): ColorRef {
-    if (index === 0) {
-        return { kind: 'default' };
-    }
-    const name = WEECHAT_PALETTE[index];
-    if (name === undefined) {
-        return { kind: 'default' };
-    }
-    return { kind: 'weechat', name };
+    // Out-of-table indices fall back to the default, as before.
+    return PALETTE_COLORS[index] ?? DEFAULT_COLOR;
 }
 
 function attributesWith(states: Partial<Record<AttributeName, AttributeState>>): Attributes {
@@ -117,21 +125,20 @@ function clearedAttributes(): Attributes {
  * docs/format.md.
  */
 function adjustedAttributes(mask: number, current: Attributes): Attributes {
-    const enabled = new Set(attributesOfMask(mask));
     const keep = keepsAttributes(mask);
-    const decide = (name: AttributeName): AttributeState => {
-        if (enabled.has(name)) {
+    const decide = (name: AttributeName, enabled: boolean): AttributeState => {
+        if (enabled) {
             return 'enabled';
         }
         return keep ? current[name] : 'disabled';
     };
     return attributesWith({
-        bold: decide('bold'),
-        reverse: decide('reverse'),
-        italic: decide('italic'),
-        underline: decide('underline'),
-        blink: decide('blink'),
-        dim: decide('dim'),
+        bold: decide('bold', maskEnablesAttribute(mask, 'bold')),
+        reverse: decide('reverse', maskEnablesAttribute(mask, 'reverse')),
+        italic: decide('italic', maskEnablesAttribute(mask, 'italic')),
+        underline: decide('underline', maskEnablesAttribute(mask, 'underline')),
+        blink: decide('blink', maskEnablesAttribute(mask, 'blink')),
+        dim: decide('dim', maskEnablesAttribute(mask, 'dim')),
     });
 }
 
@@ -149,7 +156,7 @@ function colorFromPayload(extended: boolean, value: number): ColorRef | null {
     if (value === 0) {
         // Upstream guards the extended branch with `fg > 0` / `bg > 0`, so an
         // extended `@00000` falls through to palette index 0 (the default).
-        return { kind: 'default' };
+        return DEFAULT_COLOR;
     }
     if (!extended && value <= MAX_WEECHAT_COLOR) {
         return paletteColor(value);
@@ -311,23 +318,39 @@ export function applyInstruction(style: Style, instruction: Instruction): StyleT
     }
 }
 
-/** Structural equality used to coalesce adjacent runs. */
+/**
+ * Structural equality used to coalesce adjacent runs.
+ *
+ * Identity first: Style, ColorRef and Attributes are immutable and increasingly
+ * shared, so the common case is a pointer check. The attribute comparison is
+ * unrolled because the loop version allocated a fresh array literal per call.
+ */
 export function stylesEqual(a: Style, b: Style): boolean {
+    if (a === b) {
+        return true;
+    }
     if (a.emphasis !== b.emphasis || a.themeAttrs !== b.themeAttrs) {
         return false;
     }
     if (!colorsEqual(a.fg, b.fg) || !colorsEqual(a.bg, b.bg)) {
         return false;
     }
-    for (const name of ['bold', 'reverse', 'italic', 'underline', 'blink', 'dim'] as const) {
-        if (a.attrs[name] !== b.attrs[name]) {
-            return false;
-        }
-    }
-    return true;
+    const aa = a.attrs;
+    const bb = b.attrs;
+    return (
+        aa.bold === bb.bold &&
+        aa.reverse === bb.reverse &&
+        aa.italic === bb.italic &&
+        aa.underline === bb.underline &&
+        aa.blink === bb.blink &&
+        aa.dim === bb.dim
+    );
 }
 
 function colorsEqual(a: ColorRef, b: ColorRef): boolean {
+    if (a === b) {
+        return true;
+    }
     if (a.kind !== b.kind) {
         return false;
     }

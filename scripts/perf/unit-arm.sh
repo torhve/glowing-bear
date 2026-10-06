@@ -37,6 +37,16 @@ run_guarded() {
   return $rc
 }
 
+# Some arms change a workspace package whose dist/ the app imports; the arm's
+# source swap is meaningless unless the package is rebuilt first.
+if [ -n "${GB_PERF_PREBUILD:-}" ]; then
+  eval "$GB_PERF_PREBUILD" > "$RUNDIR/prebuild.txt" 2>&1 || {
+    echo "FAIL: GB_PERF_PREBUILD failed" >&2
+    cat "$RUNDIR/prebuild.txt" >&2
+    exit 1
+  }
+fi
+
 echo "load_before: $(load)" > "$RUNDIR/meta.txt"
 {
   run_guarded /usr/bin/time -l npx vitest run --config vitest.perf.config.ts

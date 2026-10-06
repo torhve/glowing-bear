@@ -29,7 +29,6 @@ import {
     RESET_CHAR,
     SEPARATOR,
     SET_ATTR_CHAR,
-    ATTRIBUTE_NAMES,
     ATTRIBUTE_CONTROL_CHARS,
     EXTENDED_ATTRIBUTE_CHARS,
     type BarReference,
@@ -57,15 +56,16 @@ const ATTRIBUTE_BITS: Record<AttributeName, number> = {
     dim: BIT_DIM,
 };
 
-/** Attribute names carried by a decoded bitmask, in table order. */
-export function attributesOfMask(mask: number): AttributeName[] {
-    const names: AttributeName[] = [];
-    for (const name of ATTRIBUTE_NAMES) {
-        if (mask & ATTRIBUTE_BITS[name]) {
-            names.push(name);
-        }
-    }
-    return names;
+/**
+ * Whether a decoded payload mask enables one attribute.
+ *
+ * The bitmask is the internal representation, and this is the only way the
+ * style interpreter reads it. The previous shape — `attributesOfMask` building
+ * an array that the caller wrapped in a `Set` for each color control —
+ * allocated three objects per control to answer a bit test.
+ */
+export function maskEnablesAttribute(mask: number, name: AttributeName): boolean {
+    return (mask & ATTRIBUTE_BITS[name]) !== 0;
 }
 
 /** Whether a payload carried `|` (keep the current attributes). */
