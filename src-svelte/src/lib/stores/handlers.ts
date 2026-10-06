@@ -470,6 +470,16 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
     // Accumulate server unread deltas for batch-apply at the end.
     const serverDeltas: Record<string, number> = {};
 
+    // Same batching for the two per-batch side effects below. `buffers`,
+    // `settings` and the derived `currentBuffer` are not written until the very
+    // end of this function, so every iteration would have recomputed the exact
+    // same title and badge from the same stale store snapshot; and the local
+    // unread id set is only ever read by the hotlist handler. Accumulating here
+    // and applying once keeps the final state identical while turning N store
+    // writes (each a full Set copy) and N favicon redraws into one.
+    const pendingLocalUnreadIds = new Set<string>();
+    let alertIndicatorsPending = false;
+
     // First pass: identify all affected buffer IDs
     const affectedIds = new Set<string>();
     for (const lineMsg of lines) {
@@ -584,9 +594,7 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                     // inflate the badge while lines that raced past the baseline still
                     // badge (alert => badge invariant).
                     buffer.localUnread = (buffer.localUnread || 0) + 1;
-                    localUnreadBuffers.update((s: Set<string>) =>
-                        new Set(s).add(buffer.id),
-                    );
+                    pendingLocalUnreadIds.add(buffer.id);
                 }
 
                 if (!isSyncing() || buffer.readBoundaryKnown !== false) {
@@ -639,8 +647,8 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
             ) {
                 // Always update passive indicators regardless of window focus —
                 // title and favicon badge are useful even when tab is visible.
-                updateTitle();
-                updateFavico();
+                // Applied once for the whole batch; see pendingLocalUnreadIds above.
+                alertIndicatorsPending = true;
 
                 // Desktop notifications (popup) fire only when window is not focused,
                 // to avoid spamming the user when they're already looking at the tab.
@@ -666,6 +674,20 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                 }
             }
         }
+    }
+
+    if (pendingLocalUnreadIds.size > 0) {
+        localUnreadBuffers.update((s: Set<string>) => {
+            const next = new Set(s);
+            for (const id of pendingLocalUnreadIds) {
+                next.add(id);
+            }
+            return next;
+        });
+    }
+    if (alertIndicatorsPending) {
+        updateTitle();
+        updateFavico();
     }
 
     // Update spokeAt timestamps for tab completion on the immutable copies
