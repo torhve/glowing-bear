@@ -175,6 +175,14 @@ export interface BufferData {
     /** Hotlist count retained while more history is needed to infer an initial boundary. */
     pendingReadBoundaryUnread?: number;
     /**
+     * Half-open local-day window [localDayStart, localDayEnd) remembered from the
+     * last date-change check. Two timestamps inside one window are on the same
+     * local day, which lets the hot path answer "same day?" with comparisons
+     * instead of Date arithmetic; see injectDateChangeMessageIfNeeded.
+     */
+    localDayStart?: number;
+    localDayEnd?: number;
+    /**
      * WeeChat's own read marker as reported by the API transport
      * (`buffer.last_read_line_id`): >= 0 is a line id, -1 means WeeChat has no
      * marker, undefined means the transport never reported one (legacy protocol).
