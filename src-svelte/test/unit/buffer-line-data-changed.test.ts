@@ -60,7 +60,6 @@ describe('handleBufferLineDataChanged', () => {
                     content: [{ text: 'old message', fgColor: { type: 'option', name: 'default' }, bgColor: { type: 'option', name: 'default' }, attrs: { name: null, override: {} } }],
                     date: LINE1_DATE,
                     shortTime: '12:00',
-                    formattedTime: '12:00:00',
                     buffer: id,
                     tags: ['irc_privmsg'],
                     highlight: false,
@@ -74,7 +73,6 @@ describe('handleBufferLineDataChanged', () => {
                     content: [{ text: 'middle message', fgColor: { type: 'option', name: 'default' }, bgColor: { type: 'option', name: 'default' }, attrs: { name: null, override: {} } }],
                     date: LINE2_DATE,
                     shortTime: '12:00',
-                    formattedTime: '12:00:00',
                     buffer: id,
                     tags: [],
                     highlight: false,
@@ -179,14 +177,14 @@ describe('handleBufferLineDataChanged', () => {
                     {
                         prefix: [{ text: '\x19\u000304A\x19', fgColor: { type: 'weechat', name: 'default' }, bgColor: { type: 'option', name: 'default' }, attrs: { name: null, override: {} } }],
                         content: [{ text: 'first', fgColor: { type: 'option', name: 'default' }, bgColor: { type: 'option', name: 'default' }, attrs: { name: null, override: {} } }],
-                        date: now, shortTime: '12:00', formattedTime: '12:00:00',
+                        date: now, shortTime: '12:00',
                         buffer: '0x02', tags: [], highlight: false, displayed: true,
                         prefixtext: '', text: 'first', showHiddenBrackets: false
                     },
                     {
                         prefix: [{ text: '\x19\u000304B\x19', fgColor: { type: 'weechat', name: 'default' }, bgColor: { type: 'option', name: 'default' }, attrs: { name: null, override: {} } }],
                         content: [{ text: 'second', fgColor: { type: 'option', name: 'default' }, bgColor: { type: 'option', name: 'default' }, attrs: { name: null, override: {} } }],
-                        date: now, shortTime: '12:00', formattedTime: '12:00:00',
+                        date: now, shortTime: '12:00',
                         buffer: '0x02', tags: [], highlight: false, displayed: true,
                         prefixtext: '', text: 'second', showHiddenBrackets: false
                     }

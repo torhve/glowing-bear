@@ -104,7 +104,6 @@ export interface BufferLine {
     content: RichTextPart[];
     date: number;
     shortTime: string;
-    formattedTime: string;
     buffer: string;
     tags: string[];
     highlight: boolean;

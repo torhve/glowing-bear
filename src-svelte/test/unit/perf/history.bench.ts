@@ -120,7 +120,6 @@ function snapshotTail(buf: BufferData, tail = 200): string {
         text: l.text,
         prefixtext: l.prefixtext,
         shortTime: l.shortTime,
-        formattedTime: l.formattedTime,
         highlight: l.highlight,
         isUserMessage: l.isUserMessage,
         notifyLevel: l.notifyLevel,

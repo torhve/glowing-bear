@@ -135,7 +135,6 @@ function snapshotBuffer(buf: BufferData): string {
         text: l.text,
         prefixtext: l.prefixtext,
         shortTime: l.shortTime,
-        formattedTime: l.formattedTime,
         highlight: l.highlight,
         isUserMessage: l.isUserMessage,
         notifyLevel: l.notifyLevel,

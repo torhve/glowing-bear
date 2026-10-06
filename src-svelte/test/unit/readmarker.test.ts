@@ -143,7 +143,7 @@ describe('Readmarker behavior', () => {
     describe('handleBufferLineAdded', () => {
         it('does NOT increment lastSeen for active buffer (readmarker persists)', () => {
             const now = Date.now();
-            const buf = makeBuffer('0x100', { lines: [{ prefix: [], content: [], date: now, shortTime: '', formattedTime: '', buffer: '0x100', tags: [], highlight: false, displayed: true, prefixtext: '', text: 'line1', showHiddenBrackets: false }] as any, lastSeen: 0, active: true });
+            const buf = makeBuffer('0x100', { lines: [{ prefix: [], content: [], date: now, shortTime: '', buffer: '0x100', tags: [], highlight: false, displayed: true, prefixtext: '', text: 'line1', showHiddenBrackets: false }] as any, lastSeen: 0, active: true });
             buffers.set({ '0x100': buf });
             activeBufferId.set('0x100');
             servers.set({ 'irc.server': { id: '0x100', unread: 0 } });
@@ -159,7 +159,7 @@ describe('Readmarker behavior', () => {
         });
 
         it('preserves lastSeen and increments unread for inactive buffer (notify_level=1)', () => {
-            const buf = makeBuffer('0x200', { lines: [{ prefix: [], content: [], date: 0, shortTime: '', formattedTime: '', buffer: '0x200', tags: [], highlight: false, displayed: true, prefixtext: '', text: 'line1', showHiddenBrackets: false }] as any, lastSeen: 0, active: false });
+            const buf = makeBuffer('0x200', { lines: [{ prefix: [], content: [], date: 0, shortTime: '', buffer: '0x200', tags: [], highlight: false, displayed: true, prefixtext: '', text: 'line1', showHiddenBrackets: false }] as any, lastSeen: 0, active: false });
             buffers.set({ '0x200': buf });
             activeBufferId.set('0x999'); // different buffer active
             servers.set({ 'irc.server': { id: '0x200', unread: 0 } });
@@ -172,7 +172,7 @@ describe('Readmarker behavior', () => {
         });
 
         it('preserves lastSeen and increments notification for inactive buffer (notify_level=3)', () => {
-            const buf = makeBuffer('0x200', { lines: [{ prefix: [], content: [], date: 0, shortTime: '', formattedTime: '', buffer: '0x200', tags: [], highlight: false, displayed: true, prefixtext: '', text: 'line1', showHiddenBrackets: false }] as any, lastSeen: 5, active: false });
+            const buf = makeBuffer('0x200', { lines: [{ prefix: [], content: [], date: 0, shortTime: '', buffer: '0x200', tags: [], highlight: false, displayed: true, prefixtext: '', text: 'line1', showHiddenBrackets: false }] as any, lastSeen: 5, active: false });
             buffers.set({ '0x200': buf });
             activeBufferId.set('0x999');
             servers.set({ 'irc.server': { id: '0x200', unread: 0 } });
@@ -203,7 +203,7 @@ describe('Readmarker behavior', () => {
     describe('handleHotlistInfo preserves lastSeen', () => {
         it('sets unread/notification but does not set lastSeen for post-sync hotlist', () => {
             const buf = makeBuffer('0x300', {
-                lines: Array.from({ length: 50 }, (_, i) => ({ prefix: [], content: [], date: i, shortTime: '', formattedTime: '', buffer: '0x300', tags: [], highlight: false, displayed: true, prefixtext: '', text: `line${i}`, showHiddenBrackets: false }) as any),
+                lines: Array.from({ length: 50 }, (_, i) => ({ prefix: [], content: [], date: i, shortTime: '', buffer: '0x300', tags: [], highlight: false, displayed: true, prefixtext: '', text: `line${i}`, showHiddenBrackets: false }) as any),
                 lastSeen: 45,
                 unread: 0,
                 notification: 0,
@@ -224,7 +224,7 @@ describe('Readmarker behavior', () => {
     describe('setActiveBuffer infers initial boundaries from authoritative hotlist counts', () => {
         it('places the boundary before unread messages when no prior boundary exists', () => {
             const buf = makeBuffer('0x200', {
-                lines: Array.from({ length: 100 }, (_, i) => ({ prefix: [], content: [], date: i, shortTime: '', formattedTime: '', buffer: '0x200', tags: [], highlight: false, displayed: true, prefixtext: '', text: `line${i}`, showHiddenBrackets: false }) as any),
+                lines: Array.from({ length: 100 }, (_, i) => ({ prefix: [], content: [], date: i, shortTime: '', buffer: '0x200', tags: [], highlight: false, displayed: true, prefixtext: '', text: `line${i}`, showHiddenBrackets: false }) as any),
                 lastSeen: -1,
                 unread: 5,
                 notification: 2,
@@ -263,7 +263,7 @@ describe('Readmarker behavior', () => {
 
         it('does not recalculate lastSeen if already set', () => {
             const buf = makeBuffer('0x200', {
-                lines: Array.from({ length: 100 }, (_, i) => ({ prefix: [], content: [], date: i, shortTime: '', formattedTime: '', buffer: '0x200', tags: [], highlight: false, displayed: true, prefixtext: '', text: `line${i}`, showHiddenBrackets: false }) as any),
+                lines: Array.from({ length: 100 }, (_, i) => ({ prefix: [], content: [], date: i, shortTime: '', buffer: '0x200', tags: [], highlight: false, displayed: true, prefixtext: '', text: `line${i}`, showHiddenBrackets: false }) as any),
                 lastSeen: 80,
                 unread: 15,
                 notification: 4,
@@ -283,7 +283,7 @@ describe('Readmarker behavior', () => {
 
         it('keeps the boundary unknown when unread exceeds the loaded message count', () => {
             const buf = makeBuffer('0x200', {
-                lines: Array.from({ length: 3 }, (_, i) => ({ prefix: [], content: [], date: i, shortTime: '', formattedTime: '', buffer: '0x200', tags: [], highlight: false, displayed: true, prefixtext: '', text: `line${i}`, showHiddenBrackets: false }) as any),
+                lines: Array.from({ length: 3 }, (_, i) => ({ prefix: [], content: [], date: i, shortTime: '', buffer: '0x200', tags: [], highlight: false, displayed: true, prefixtext: '', text: `line${i}`, showHiddenBrackets: false }) as any),
                 lastSeen: -1,
                 unread: 10,
                 notification: 5,
@@ -327,7 +327,7 @@ describe('Readmarker behavior', () => {
         });
 
         it('prunes lines above 2 screenfuls and adjusts lastSeen', () => {
-            const manyLines = Array.from({ length: 250 }, (_, i) => ({ prefix: [], content: [], date: i, shortTime: '', formattedTime: '', buffer: '0x300', tags: [], highlight: false, displayed: true, prefixtext: '', text: `line${i}`, showHiddenBrackets: false }) as any);
+            const manyLines = Array.from({ length: 250 }, (_, i) => ({ prefix: [], content: [], date: i, shortTime: '', buffer: '0x300', tags: [], highlight: false, displayed: true, prefixtext: '', text: `line${i}`, showHiddenBrackets: false }) as any);
             const buf = makeBuffer('0x300', {
                 lines: manyLines,
                 lastSeen: 200,
@@ -358,7 +358,7 @@ describe('Readmarker behavior', () => {
         it('readmarker stays correct through line additions and buffer switch', () => {
             // Buffer B: 100 lines, user was viewing it (lastSeen = 99)
             const bufB = makeBuffer('0x200', {
-                lines: Array.from({ length: 100 }, (_, i) => ({ prefix: [], content: [], date: i, shortTime: '', formattedTime: '', buffer: '0x200', tags: [], highlight: false, displayed: true, prefixtext: '', text: `line${i}`, showHiddenBrackets: false }) as any),
+                lines: Array.from({ length: 100 }, (_, i) => ({ prefix: [], content: [], date: i, shortTime: '', buffer: '0x200', tags: [], highlight: false, displayed: true, prefixtext: '', text: `line${i}`, showHiddenBrackets: false }) as any),
                 lastSeen: 99,
                 unread: 0,
                 notification: 0,
@@ -366,7 +366,7 @@ describe('Readmarker behavior', () => {
             });
             // Buffer A: exists for switching purposes
             const bufA = makeBuffer('0x100', {
-                lines: [{ prefix: [], content: [], date: 0, shortTime: '', formattedTime: '', buffer: '0x100', tags: [], highlight: false, displayed: true, prefixtext: '', text: 'hello', showHiddenBrackets: false }] as any,
+                lines: [{ prefix: [], content: [], date: 0, shortTime: '', buffer: '0x100', tags: [], highlight: false, displayed: true, prefixtext: '', text: 'hello', showHiddenBrackets: false }] as any,
                 lastSeen: 0,
                 active: false
             });
@@ -400,7 +400,7 @@ describe('Readmarker behavior', () => {
         it('does NOT restore stale WeeChat counts during rapid A→B→C switching', () => {
             // Buffer A (glowing-bear): 100 lines, user was viewing it
             const bufA = makeBuffer('0x100', {
-                lines: Array.from({ length: 100 }, (_, i) => ({ prefix: [], content: [], date: i, shortTime: '', formattedTime: '', buffer: '0x100', tags: [], highlight: false, displayed: true, prefixtext: '', text: `line${i}`, showHiddenBrackets: false }) as any),
+                lines: Array.from({ length: 100 }, (_, i) => ({ prefix: [], content: [], date: i, shortTime: '', buffer: '0x100', tags: [], highlight: false, displayed: true, prefixtext: '', text: `line${i}`, showHiddenBrackets: false }) as any),
                 lastSeen: 99,
                 unread: 0,
                 notification: 0,
@@ -408,7 +408,7 @@ describe('Readmarker behavior', () => {
             });
             // Buffer B (gbtest): exists for switching purposes
             const bufB = makeBuffer('0x200', {
-                lines: [{ prefix: [], content: [], date: 0, shortTime: '', formattedTime: '', buffer: '0x200', tags: [], highlight: false, displayed: true, prefixtext: '', text: 'hello', showHiddenBrackets: false }] as any,
+                lines: [{ prefix: [], content: [], date: 0, shortTime: '', buffer: '0x200', tags: [], highlight: false, displayed: true, prefixtext: '', text: 'hello', showHiddenBrackets: false }] as any,
                 lastSeen: 0,
                 unread: 0,
                 notification: 0,
@@ -416,7 +416,7 @@ describe('Readmarker behavior', () => {
             });
             // Buffer C (weechat): exists for switching purposes
             const bufC = makeBuffer('0x300', {
-                lines: [{ prefix: [], content: [], date: 0, shortTime: '', formattedTime: '', buffer: '0x300', tags: [], highlight: false, displayed: true, prefixtext: '', text: 'hello', showHiddenBrackets: false }] as any,
+                lines: [{ prefix: [], content: [], date: 0, shortTime: '', buffer: '0x300', tags: [], highlight: false, displayed: true, prefixtext: '', text: 'hello', showHiddenBrackets: false }] as any,
                 lastSeen: 0,
                 unread: 0,
                 notification: 0,

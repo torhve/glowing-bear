@@ -482,7 +482,6 @@ export function createBufferLine(message: {
         content,
         date: time,
         shortTime: formatShortTime(date, time),
-        formattedTime: date.toLocaleTimeString(),
         buffer: message.buffer,
         tags,
         highlight: !!message.highlight,
