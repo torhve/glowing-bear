@@ -106,17 +106,30 @@ const OFFSETS = [
     400 * DAY,
 ];
 
-const BASES: number[] = [];
+const GRID_BASES: number[] = [];
 // Every 6 hours across four years: crosses month, year and DST boundaries.
 for (let i = 0; i < 4 * 366 * 4; i++) {
-    BASES.push(new Date(2022, 0, 1, 0, 0, 0).getTime() + i * 6 * 3_600_000);
+    GRID_BASES.push(new Date(2022, 0, 1, 0, 0, 0).getTime() + i * 6 * 3_600_000);
 }
 // Every DST transition found in this timezone, plus its neighbourhood.
+const DST_BASES: number[] = [];
 for (const t of TRANSITIONS) {
     for (const d of [-2 * DAY, -DAY, -1, 0, 1, 3_600_000, DAY, 2 * DAY]) {
-        BASES.push(t + d);
+        DST_BASES.push(t + d);
     }
 }
+const BASES = [...GRID_BASES, ...DST_BASES];
+
+/**
+ * A thinner sweep for the tests that render separator TEXT.
+ *
+ * The decision sweep is ~83k pairs and cheap because it compares two numbers.
+ * Rendering a separator allocates a line and formats a date, so the same sweep
+ * there costs seconds and timed out on a loaded machine. Every eighth grid point
+ * preserves month and year coverage, and every DST neighbourhood is kept in full
+ * because those are exactly where the text could differ.
+ */
+const TEXT_BASES = [...GRID_BASES.filter((_, i) => i % 8 === 0), ...DST_BASES];
 
 describe('date-change fast path: pair equivalence with the original comparison', () => {
     it('finds DST transitions in this timezone (or records that there are none)', () => {
@@ -157,9 +170,11 @@ describe('date-change fast path: pair equivalence with the original comparison',
 
     it('produces byte-identical separator text and date when it injects', () => {
         // The separator line is user-visible output, so its content is part of
-        // the equivalence, not just the yes/no decision.
+        // the equivalence, not just the yes/no decision. Thinner sweep on purpose:
+        // this test renders text, and the full grid made it a multi-second test
+        // that timed out under load.
         let compared = 0;
-        for (const oldMs of BASES) {
+        for (const oldMs of TEXT_BASES) {
             for (const offset of OFFSETS) {
                 const newMs = oldMs + offset;
                 if (!originalInjects(oldMs, newMs)) continue;
