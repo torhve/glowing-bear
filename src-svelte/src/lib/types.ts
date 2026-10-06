@@ -99,6 +99,17 @@ export interface CompletionResult {
 
 // ---- Domain Models ----
 
+/**
+ * A rendered chat line.
+ *
+ * This shape is deliberately not a superset of `BufferLineMessage`: it carries
+ * only what the app actually reads. `formattedTime` used to live here as
+ * `date.toLocaleTimeString()`, computed for every line and read by nothing —
+ * no component, route, serialisation or send path touched it. It was removed
+ * (commit ff174e48) rather than optimised, because building it cost ~13% of the
+ * whole line-construction stage. `formatted-time-removal.test.ts` pins the key
+ * set, so re-adding a field here is a visible decision rather than a quiet one.
+ */
 export interface BufferLine {
     prefix: RichTextPart[];
     content: RichTextPart[];
