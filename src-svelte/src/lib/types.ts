@@ -193,6 +193,13 @@ export interface BufferData {
     localDayStart?: number;
     localDayEnd?: number;
     /**
+     * Line ids the API transport has inserted into `lines`. A superset: trimmed
+     * ids stay behind. It exists so a live line can answer "is this line already
+     * on screen?" in O(1) instead of scanning every retained line; see
+     * `noteLineId` in api-store-reducers.ts for the error direction this trades.
+     */
+    lineIdsSeen?: Set<string>;
+    /**
      * WeeChat's own read marker as reported by the API transport
      * (`buffer.last_read_line_id`): >= 0 is a line id, -1 means WeeChat has no
      * marker, undefined means the transport never reported one (legacy protocol).

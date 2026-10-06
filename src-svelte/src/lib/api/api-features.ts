@@ -14,7 +14,7 @@ import { get } from 'svelte/store';
 import type { ApiSession, ApiSessionResponse } from '#lib/api/api-session.ts';
 import { validateCompletionResponse, validateLineArray } from '#lib/api/api-validation.ts';
 import { mapLine, isServerHiddenLine } from '#lib/api/api-mapping.ts';
-import { storeKeyForBufferId, trimBufferLines, flushApiLineBatch } from '#lib/api/api-store-reducers.ts';
+import { storeKeyForBufferId, trimBufferLines, flushApiLineBatch, noteLineId } from '#lib/api/api-store-reducers.ts';
 import { buffers, maxBufferLines, resolveReadBoundaryAfterHistory } from '#lib/stores/models.ts';
 import type { CompletionResponse } from '#lib/weechat-rest-types.ts';
 import type { LineSnapshot } from '#lib/api/api-contracts.ts';
@@ -162,6 +162,9 @@ function applyHistory(buffer: BufferData, lines: LineSnapshot[]): void {
     for (const l of unseen) if (isServerHiddenLine(l)) hiddenSeen.add(l.id);
     if (!fresh.length) return;
     buffer.lines = [...fresh, ...buffer.lines];
+    // History rows are live-line candidates for the idempotence check in
+    // applyLineAdded, so they must be in the buffer's id superset.
+    for (const l of fresh) noteLineId(buffer, l.lineId);
     // A capped buffer trims the oldest prepended lines right away, exactly
     // like the legacy history pass (trimmed lines still count in
     // requestedLines so scroll-up paging knows it is exhausted).

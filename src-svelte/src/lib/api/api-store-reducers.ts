@@ -86,21 +86,28 @@ function scheduleLineFlush(): void {
  */
 function applyLineAdded(target: BufferData, line: LineSnapshot, activeId: string): void {
     const lineId = `weechat:${line.id}`;
-    const existingIndex = target.lines.findIndex((l) => l.lineId === lineId);
-    if (existingIndex >= 0) {
-        target.lines[existingIndex] = createBufferLine({
-            buffer: target.id,
-            date: line.epochMs,
-            prefix: line.prefix,
-            message: line.message,
-            tags_array: line.tags,
-            displayed: line.displayed ? 1 : 0,
-            notify_level: line.notifyLevel,
-            highlight: line.highlight ? 1 : 0,
-            id: line.id,
-            bufferType: target.type,
-        });
-        return;
+    // The id scan is the expensive half of a live line: it walks every retained
+    // line to answer "has history already inserted this one?". The answer is
+    // almost always no, and lineIdsSeen answers that in O(1) — the scan measured
+    // as ~60% of the API flood's store time. A stale id in the set only costs one
+    // scan that finds nothing and appends, which is the safe direction.
+    if (target.lineIdsSeen?.has(lineId)) {
+        const existingIndex = target.lines.findIndex((l) => l.lineId === lineId);
+        if (existingIndex >= 0) {
+            target.lines[existingIndex] = createBufferLine({
+                buffer: target.id,
+                date: line.epochMs,
+                prefix: line.prefix,
+                message: line.message,
+                tags_array: line.tags,
+                displayed: line.displayed ? 1 : 0,
+                notify_level: line.notifyLevel,
+                highlight: line.highlight ? 1 : 0,
+                id: line.id,
+                bufferType: target.type,
+            });
+            return;
+        }
     }
     appendLines(target, [line]);
     trimToLimit(target);
@@ -220,11 +227,35 @@ function upsertBuffer(map: Record<string, BufferData>, snap: BufferSnapshot): Bu
     return existing;
 }
 
+/**
+ * Remember that a line id has been inserted into `buffer.lines`.
+ *
+ * `lineIdsSeen` is a deliberate SUPERSET: ids are added on insert and are not
+ * removed by a trim, so it can hold ids no longer on screen. That is the safe
+ * direction of error — a stale id costs one scan that finds nothing and then
+ * appends, while a missing id would render a duplicate row. It is rebuilt from
+ * the visible lines when it drifts far past the memory cap.
+ */
+export function noteLineId(buffer: BufferData, lineId: string | undefined): void {
+    if (!lineId) return;
+    let seen = buffer.lineIdsSeen;
+    if (!seen) {
+        seen = new Set();
+        buffer.lineIdsSeen = seen;
+    }
+    seen.add(lineId);
+    const bound = 4 * get(maxBufferLines);
+    if (seen.size > bound) {
+        seen.clear();
+        for (const l of buffer.lines) if (l.lineId) seen.add(l.lineId);
+    }
+}
+
 function appendLines(buffer: BufferData, lines: LineSnapshot[]): void {
     for (const line of lines) {
         if (isServerHiddenLine(line)) continue; // smart-filtered: WeeChat hides it
         injectDateChangeMessageIfNeeded(buffer, false, new Date(buffer.lines.length ? buffer.lines[buffer.lines.length - 1]!.date : line.epochMs), new Date(line.epochMs));
-        buffer.lines.push(createBufferLine({
+        const created = createBufferLine({
             buffer: buffer.id,
             date: line.epochMs,
             prefix: line.prefix,
@@ -235,7 +266,9 @@ function appendLines(buffer: BufferData, lines: LineSnapshot[]): void {
             highlight: line.highlight ? 1 : 0,
             id: line.id, // → lineId `weechat:<id>`
             bufferType: buffer.type,
-        }));
+        });
+        buffer.lines.push(created);
+        noteLineId(buffer, created.lineId);
     }
 }
 
@@ -560,6 +593,8 @@ export function createApiStoreReducers(): ApiReducers {
                 const target = copy[key]!;
                 target.clearEpoch = (target.clearEpoch ?? 0) + 1;
                 target.requestedLines = 0;
+                // No lines remain, so the id superset has nothing left to protect.
+                target.lineIdsSeen = undefined;
                 target.allLinesFetched = false;
                 target.localUnread = 0;
                 target.readBoundaryKnown = true;
