@@ -285,12 +285,12 @@ export function resolveReadBoundaryAfterHistory(buffer: BufferData): boolean {
  *
  * `first_line_not_read` (WeeChat >= 5.0.0) is deliberately not consulted. It only
  * disambiguates `-1`: true means the marker sits before the first line (nothing
- * read), false means it was removed because everything was read. "Everything was
- * read" is already what a zero hotlist count establishes
- * (`inferReadBoundaryFromHotlist`), and honouring "nothing read" would put the
- * boundary before the first line, making every retained line unread — the phantom
- * unread this file exists to prevent, since replayed backlog lines arrive with
- * `notify_level = -1` and create no unread. Measured rationale:
+ * read), false means it was removed because everything was read. The boundary is
+ * derived from the hotlist instead, which is an unread-policy choice, not a claim
+ * that the two signals mean the same thing. Honouring "nothing read" would put
+ * the boundary before the first line and make every retained line unread — the
+ * phantom unread this file exists to prevent, since replayed backlog lines
+ * arrive with `notify_level = -1` and create no unread. Measured rationale:
  * `test/fixtures/api-dossier/README.md`, "New 5.0 buffer fields".
  *
  * Re-anchoring is limited to an unresolved boundary for the same reason

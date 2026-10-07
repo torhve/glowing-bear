@@ -362,23 +362,25 @@ weechat-headless -d /tmp/gb-wc5 --daemon \
   - `first_line_not_read` — **do not act on it.** Upstream defines it only as the
     disambiguation of `last_read_line_id = -1` (`relay-api-msg.c`): true means the
     marker sits before the first line (nothing read), false means the marker was
-    removed because every line has been read. Both directions are already handled
-    better by state the app has: `false` is exactly what
-    `inferReadBoundaryFromHotlist(buffer, 0)` already returns (`lines.length - 1`),
-    and acting on `true` would put the boundary before the first line, making
-    every retained line unread — manufacturing the phantom unread the app
-    deliberately avoids, since replayed backlog lines arrive with
-    `notify_level = -1` and create no unread. Recorded so it is not adopted later
-    as an obvious win.
+    removed because every line has been read. The app derives the boundary from
+    the hotlist instead, and that is an unread-policy choice, not a claim that
+    the two signals mean the same thing — a zero hotlist count can also be a
+    filtered notification rather than proof that every line was read. Honouring
+    `true` would put the boundary before the first line and make every retained
+    line unread: the phantom unread the read-boundary code exists to prevent,
+    since replayed backlog lines arrive with `notify_level = -1` and create no
+    unread. Recorded so it is not adopted later as an obvious win.
   - `prefix_displayed` — **do not act on it.** It is the API name for the
     gui-buffer flag `prefix_for_each_line` (`relay-api-msg.c` maps it from that
     hdata field), and WeeChat sets it from buffer type: formatted → 1, free → 0
-    (`gui-buffer.c`). Measured on both fixtures: the free buffers
-    (`relay.relay.list`, `python.grep`) carry **zero** non-empty line prefixes,
-    and every formatted buffer reports `prefix_displayed=true`. The prefixes it
-    would hide are already empty. The only case it would change is a user who
-    explicitly runs `/buffer set prefix_for_each_line 0` on a formatted buffer —
-    and the wire keeps sending the prefix regardless.
+    (`gui-buffer.c`). On the two fixtures' free buffers (`relay.relay.list`,
+    `python.grep`) every line prefix is empty, and every formatted buffer
+    reports `prefix_displayed=true` — so on every buffer these relays expose the
+    prefixes it would hide are already empty. That is a claim about these
+    fixtures, not about every free buffer in every plugin. The only case it
+    would change is a user who explicitly runs `/buffer set
+    prefix_for_each_line 0` on a formatted buffer, and the wire keeps sending
+    the prefix regardless.
   - `day_change` — **not adopted, and it is not what makes separators work.**
     WeeChat's day-change separator is drawn by the curses GUI at render time
     (`gui_chat_display_day_changed`, gated by `weechat.look.day_change &&
