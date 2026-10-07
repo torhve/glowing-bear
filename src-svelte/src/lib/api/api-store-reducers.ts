@@ -84,7 +84,7 @@ function scheduleLineFlush(): void {
  * idempotent: a live line that raced with a concurrent history response updates
  * the existing row in place instead of duplicating it, and is not tallied twice.
  */
-function applyLineAdded(target: BufferData, line: LineSnapshot, activeId: string): void {
+function applyLineAdded(target: BufferData, line: LineSnapshot, activeId: string, limit: number): void {
     const lineId = `weechat:${line.id}`;
     // The id scan is the expensive half of a live line: it walks every retained
     // line to answer "has history already inserted this one?". The answer is
@@ -109,8 +109,8 @@ function applyLineAdded(target: BufferData, line: LineSnapshot, activeId: string
             return;
         }
     }
-    appendLines(target, [line]);
-    trimToLimit(target);
+    appendLines(target, [line], limit);
+    trimToLimit(target, limit);
     if (line.displayed) {
         tallyLine(target, line, activeId);
         alertForLine(target, line, activeId);
@@ -128,6 +128,10 @@ export function flushApiLineBatch(): void {
     }
 
     // One map copy + one lines-array copy per affected buffer, not per line.
+    // Read the memory cap once per batch. `get()` on a Svelte store subscribes
+    // and unsubscribes, and doing it twice per line measured 26% of the API
+    // flood's store time — the cap cannot move inside one synchronous flush.
+    const lineLimit = get(maxBufferLines);
     const byBuffer = new Map<string, { items: { line: LineSnapshot; activeId: string }[] }>();
     for (const item of batch) {
         const key = storeKeyForBufferId(item.bufferId);
@@ -142,7 +146,7 @@ export function flushApiLineBatch(): void {
             if (!buffer) return current; // buffer not synced yet; history fetch covers it
             const copy = { ...current, [key]: { ...buffer, lines: [...buffer.lines] } };
             const target = copy[key]!;
-            for (const item of group.items) applyLineAdded(target, item.line, item.activeId);
+            for (const item of group.items) applyLineAdded(target, item.line, item.activeId, lineLimit);
             return copy;
         });
     }
@@ -236,7 +240,7 @@ function upsertBuffer(map: Record<string, BufferData>, snap: BufferSnapshot): Bu
  * appends, while a missing id would render a duplicate row. It is rebuilt from
  * the visible lines when it drifts far past the memory cap.
  */
-export function noteLineId(buffer: BufferData, lineId: string | undefined): void {
+export function noteLineId(buffer: BufferData, lineId: string | undefined, limit: number): void {
     if (!lineId) return;
     let seen = buffer.lineIdsSeen;
     if (!seen) {
@@ -244,14 +248,14 @@ export function noteLineId(buffer: BufferData, lineId: string | undefined): void
         buffer.lineIdsSeen = seen;
     }
     seen.add(lineId);
-    const bound = 4 * get(maxBufferLines);
+    const bound = 4 * limit;
     if (seen.size > bound) {
         seen.clear();
         for (const l of buffer.lines) if (l.lineId) seen.add(l.lineId);
     }
 }
 
-function appendLines(buffer: BufferData, lines: LineSnapshot[]): void {
+function appendLines(buffer: BufferData, lines: LineSnapshot[], limit: number): void {
     for (const line of lines) {
         if (isServerHiddenLine(line)) continue; // smart-filtered: WeeChat hides it
         // Timestamps, not Dates: this runs per line and the cached local-day
@@ -270,7 +274,7 @@ function appendLines(buffer: BufferData, lines: LineSnapshot[]): void {
             bufferType: buffer.type,
         });
         buffer.lines.push(created);
-        noteLineId(buffer, created.lineId);
+        noteLineId(buffer, created.lineId, limit);
     }
 }
 
@@ -310,8 +314,8 @@ export function trimBufferLines(buffer: BufferData, limit: number): void {
 }
 
 /** Apply the memory-limit trim after any append (history, live, opened). */
-function trimToLimit(buffer: BufferData): void {
-    trimBufferLines(buffer, get(maxBufferLines));
+function trimToLimit(buffer: BufferData, limit: number): void {
+    trimBufferLines(buffer, limit);
 }
 
 // Prefix display rank for nick sorting: '@' op, '%' halfop, '+' voice,
@@ -475,8 +479,9 @@ export function createApiStoreReducers(): ApiReducers {
             const copy: Record<string, BufferData> = { ...current };
             const buffer = upsertBuffer(copy, snap);
             if (lines && lines.length) {
-                appendLines(buffer, lines);
-                trimToLimit(buffer);
+                const lineLimit = get(maxBufferLines);
+                appendLines(buffer, lines, lineLimit);
+                trimToLimit(buffer, lineLimit);
             }
             if (groups && groups.length) buildNicklist(buffer, groups, nicks ?? []);
             if (lines && lines.length) applyServerReadMarker(buffer, snap.lastReadLineId);

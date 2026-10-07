@@ -164,11 +164,12 @@ function applyHistory(buffer: BufferData, lines: LineSnapshot[]): void {
     buffer.lines = [...fresh, ...buffer.lines];
     // History rows are live-line candidates for the idempotence check in
     // applyLineAdded, so they must be in the buffer's id superset.
-    for (const l of fresh) noteLineId(buffer, l.lineId);
+    const lineLimit = get(maxBufferLines);
+    for (const l of fresh) noteLineId(buffer, l.lineId, lineLimit);
     // A capped buffer trims the oldest prepended lines right away, exactly
     // like the legacy history pass (trimmed lines still count in
     // requestedLines so scroll-up paging knows it is exhausted).
-    trimBufferLines(buffer, get(maxBufferLines));
+    trimBufferLines(buffer, lineLimit);
     // Bootstrap snapshots carry no lines, so WeeChat's read marker was almost
     // always outside the retained window when the buffer first appeared and the
     // boundary stayed unresolved. This is the moment it can be resolved: from the
