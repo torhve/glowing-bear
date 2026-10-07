@@ -51,7 +51,12 @@ async function connectAndWatch(browser: import('@playwright/test').Browser): Pro
         beforeConnect: (p) => {
             p.on('console', (msg) => {
                 const text = msg.text();
-                if (/\[api\] invalid|validation/i.test(text)) captured.warnings.push(text);
+                // Match the warning the app actually emits for a rejected line:
+                // `[api-store] unhandled payload: <event> invalid: <issues>`. An earlier
+                // version of this filter looked for `[api] invalid`, which matches nothing
+                // the app ever prints — the spec would then have certified 5.0 rendering
+                // while every line was silently dropped.
+                if (/\[api-store\] unhandled payload: .*invalid|expected string, got/.test(text)) captured.warnings.push(text);
             });
             p.on('websocket', (ws) => {
                 if (!ws.url().includes(`:${WEECHAT5_RELAY_PORT}`)) return;
