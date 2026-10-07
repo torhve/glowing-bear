@@ -388,14 +388,18 @@ weechat-headless -d /tmp/gb-wc5 --daemon \
     `day_changed` handler only rotates log filenames. No relay version has ever
     sent a separator, which is why the app injects its own. The flag would only
     let the app honor "this buffer has separators off".
-  - `day_changed` / `buffer_day_change_changed` — **unrouted, and still
-    unobserved.** `day_changed` is a timer signal (`config_day_change_timer_cb`)
-    meaning "the local day rolled over, re-render": the app injects separators
-    only in its three line-append paths, so a buffer idle across midnight shows
-    nothing until its next message. `buffer_day_change_changed` fires when
-    `/buffer set day_change` flips the flag. Neither was ever seen live —
+  - `day_changed` / `buffer_day_change_changed` — **unrouted, still unobserved,
+    and the gap they would close is intended behavior.** `day_changed` is a timer
+    signal (`config_day_change_timer_cb`) meaning "the local day rolled over,
+    re-render": the app injects separators only in its three line-append paths,
+    so a buffer idle across midnight shows nothing until its next message. That
+    is the product decision — a separator marks where a new day's messages
+    begin, so a day with no messages needs no separator. Do not "fix" it. If it
+    is ever revisited, prove it with a fake-clock component test rather than a
+    system clock or the shared dev server. `buffer_day_change_changed` fires when
+    `/buffer set day_change` flips the flag. Neither event was ever seen live —
     `/buffer set day_change on|off` returned 204 with no event, and `day_changed`
-    needs a real local midnight. Unverified, so unimplemented.
+    needs a real local midnight.
 
 - **Input is `POST /api/input` with `buffer_id`.** `POST /api/buffers/<id>/input`
   returns 405 Method Not Allowed on 5.0. The app already used the correct form.
