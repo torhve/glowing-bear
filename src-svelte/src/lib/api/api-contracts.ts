@@ -71,7 +71,8 @@ export interface LineSnapshot {
     id: ApiLineId;
     y: number; // wire position hint; -1 when not meaningful
     date: string; // raw ISO
-    datePrinted: string; // raw ISO
+    /** Only present when the relay sends it: WeeChat 4.10.x does, 5.0 does not. */
+    datePrinted?: string; // raw ISO
     epochMs: number; // derived from date, display-only
     displayed: boolean;
     highlight: boolean;

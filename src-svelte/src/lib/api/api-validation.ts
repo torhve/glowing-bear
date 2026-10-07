@@ -91,6 +91,17 @@ function isoDate(o: Record<string, unknown>, key: string, issues: string[]): str
     return v;
 }
 
+/**
+ * An ISO timestamp a relay may omit entirely.
+ *
+ * Absent is fine; present-but-malformed is still an error, because a garbage
+ * timestamp renders as an invalid date instead of failing loudly.
+ */
+function optIsoDate(o: Record<string, unknown>, key: string, issues: string[]): string | undefined {
+    if (o[key] === undefined) return undefined;
+    return isoDate(o, key, issues);
+}
+
 const BODY_TYPES = new Set<string>([
     'buffers', 'buffer', 'lines', 'line', 'nick_group', 'nick',
     'hotlist', 'completion', 'scripts', 'json',
@@ -295,10 +306,14 @@ export function validateLine(raw: unknown): Validated<RestLine> {
         return fail(issues);
     }
     const date = isoDate(raw, 'date', issues);
-    const datePrinted = isoDate(raw, 'date_printed', issues);
+    // WeeChat 4.10.1 serialised `date_printed`; WeeChat 5.0 removed it from the
+    // API relay's line object. Requiring it made a 5.0 relay's EVERY line —
+    // history and live `buffer_line_added` alike — fail validation and get
+    // dropped, i.e. an empty chat with no error the user can see.
+    const datePrinted = optIsoDate(raw, 'date_printed', issues);
     const prefix = reqString(raw, 'prefix', issues);
     const message = reqString(raw, 'message', issues);
-    if (date === undefined || datePrinted === undefined || prefix === undefined || message === undefined) {
+    if (date === undefined || prefix === undefined || message === undefined) {
         return fail(issues);
     }
     if (typeof raw.y !== 'number' || !Number.isInteger(raw.y)) {
@@ -322,7 +337,7 @@ export function validateLine(raw: unknown): Validated<RestLine> {
         id,
         y: typeof raw.y === 'number' ? raw.y : -1,
         date,
-        date_printed: datePrinted,
+        ...(datePrinted !== undefined ? { date_printed: datePrinted } : {}),
         displayed: typeof raw.displayed === 'boolean' ? raw.displayed : true,
         highlight: typeof raw.highlight === 'boolean' ? raw.highlight : false,
         notify_level: typeof raw.notify_level === 'number' ? raw.notify_level : 0,

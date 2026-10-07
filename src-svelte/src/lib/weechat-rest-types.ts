@@ -69,7 +69,8 @@ export interface RestLine {
     id: number;
     y: number;
     date: string;
-    date_printed: string;
+    // Present on WeeChat 4.10.x, removed from the API relay in 5.0.
+    date_printed?: string;
     displayed: boolean;
     highlight: boolean;
     notify_level: number;

@@ -307,6 +307,50 @@ routed or tolerated via the open `ApiEventName` union.
 - `GET /api/buffers/{id}/nicks` is the authoritative full state; the client
   applies it as a replace (clear then upsert), matching the legacy
   `_nicklist` fresh-fetch semantics.
+## WeeChat 5.0.0-dev / relay API 0.7.0 (probed 2026-10-07)
+
+Everything above was captured against 4.10.1 / API 0.6.0. A second live relay —
+built from WeeChat `main` (5.0.0-dev, reports `relay_api_version` **0.7.0**) — was
+probed with `probes/probe-weechat5-line-fields.mjs` to find where the two contract
+versions disagree. Start it the same way as gbtest, but with the built plugins in
+`<home>/plugins/` (a custom `-d` home finds no plugins otherwise, so the relay
+plugin never loads and no port opens):
+
+```bash
+weechat-headless -d /tmp/gb-wc5 --daemon \
+  -r "/set relay.network.password testpassword123" \
+  -r "/relay add api 9011" \
+  -r "/buffer add wc5probe"
+```
+
+- **The line object lost `date_printed` (and `date_usec_printed`).** A live
+  `buffer_line_added` body from 5.0 carries exactly
+  `id, y, date, displayed, highlight, notify_level, prefix, message, tags` —
+  `date_printed` is absent. 4.10.1 sent both. The app's `validateLine` required
+  `date_printed`, so **every** line a 5.0 relay delivered — fetched history and
+  live events alike — failed validation and was dropped: the app connected,
+  buffers appeared, and the chat stayed empty, with only
+  `[api] invalid history payload: lines[0] date_printed: expected string, got
+  undefined` in the console.
+  Evidence: `probe-weechat5-line-fields.mjs` (`line-keys` step), and an app-level
+  A/B against the same live 5.0 relay — before the fix 0 rendered rows and 4
+  `invalid history payload` warnings, after it 29 rendered rows and 0 warnings.
+  Regression: `test/unit/api-validation.test.ts` fixtures `liveLine` (4.10.1) and
+  `liveLine50` (5.0).
+- **`notify` is a buffer field now, and it is a string.** 5.0 buffers carry
+  `notify: "all" | "message" | "highlight" | "none"` plus `buffer_notify_changed`.
+  The validator already accepted it as optional; 4.10.1 buffers omit it.
+- **New 5.0 buffer fields the app ignores:** `prefix_displayed`, `day_change`,
+  `first_line_not_read`. `first_line_not_read` is the relay's own answer to the
+  read-boundary question the app currently derives itself — unexploited.
+- **Input is `POST /api/input` with `buffer_id`.** `POST /api/buffers/<id>/input`
+  returns 405 Method Not Allowed on 5.0. The app already used the correct form.
+- **WebSocket auth follows `relay.network.password_hash_algo`.** When it is pinned
+  to `pbkdf2+sha256`, a `plain:` credential is rejected and the socket just closes
+  (1006, no reason) — the WS subprotocol must carry the same PBKDF2 hash the REST
+  probe uses. A probe that only works with `plain:` is a fixture bug waiting to
+  happen.
+
 ## Coverage limitations (2026-10-06 audit pass)
 
 Recorded here so the gaps survive in tracked history, not only in local notes:

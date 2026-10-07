@@ -44,6 +44,16 @@ const liveLine = {
     tags: ['irc_join', 'irc_smart_filter', 'nick_gbbot2', 'log4'],
 };
 
+// Captured live from a WeeChat 5.0.0-dev relay (API 0.7.0) by
+// probes/probe-weechat5-line-fields.mjs. It differs from the 4.10.1 line
+// above in exactly one way that mattered: `date_printed` is gone.
+const liveLine50 = {
+    id: 1791361635309291, y: -1, date: '2026-10-07T08:27:15.309291Z',
+    displayed: true, highlight: false, notify_level: 0,
+    prefix: '\u001b[0m\u001b[38;5;11m\u001b[49m=!=', message: 'relay: probe line',
+    tags: ['relay_client'],
+};
+
 const liveHotlistEntry = {
     priority: 0, date: '2026-10-04T15:09:53.808755Z',
     buffer_id: 1791126593803023, count: [9, 0, 0, 0],
@@ -140,6 +150,28 @@ describe('validateLine', () => {
         expect(value?.id).toBe(10);
         expect(value?.y).toBe(-1);
         expect(value?.tags).toContain('irc_join');
+    });
+
+    it('accepts a WeeChat 5.0 line, which omits date_printed entirely', () => {
+        // A 5.0 relay sends no date_printed at all. When the field was required
+        // every one of its lines failed validation and was dropped, so the chat
+        // came up empty with nothing on screen to explain it.
+        const { value, issues } = validateLine(liveLine50);
+        expect(issues).toEqual([]);
+        expect(value?.id).toBe(1791361635309291);
+        expect(value?.date).toBe('2026-10-07T08:27:15.309291Z');
+        expect(value && 'date_printed' in value).toBe(false);
+    });
+
+    it('still rejects a date_printed that is present but not a timestamp', () => {
+        // Optional must not become unvalidated: a malformed one would render as
+        // an invalid date rather than failing here.
+        const { value } = validateLine({ ...liveLine50, date_printed: 'yesterday' });
+        expect(value).toBeNull();
+    });
+
+    it('keeps a 4.10.1 date_printed when the relay does send it', () => {
+        expect(validateLine(liveLine).value?.date_printed).toBe('2026-10-04T15:34:09.153069Z');
     });
 
     it('rejects invalid dates', () => {
