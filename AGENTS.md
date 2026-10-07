@@ -59,10 +59,21 @@ npm run test:e2e               # Full E2E: serial channel specs, then parallel U
 npm run test:e2e:serial -- --grep "X" # Targeted E2E (channel-dependent specs)
 npm run test:e2e:ui -- --grep "X"     # Targeted E2E (UI-only specs)
 npm run irc:start / irc:stop   # Manual gbtest IRC server
+npm run wc5:start / wc5:stop  # Optional WeeChat 5 relay (newer API contract)
+npm run wc5:probe            # Endpoint matrix against the WeeChat 5 relay
 npm run tauri                 # Tauri CLI (uses @tauri-apps/cli)
 npm run tauri:dev             # Tauri desktop dev mode
 npm run tauri:build           # Tauri desktop production build
 ```
+
+gbtest is pinned to WeeChat 4.10.1 / relay API 0.6.0 — the contract the app was
+written against — so it cannot reveal a relay-side change. `wc5:start` runs a
+second WeeChat 5 relay on port 9011 sharing gbtest's IRC server under the nick
+`testuser5`; `Weechat5Relay.test.ts` asserts the newer line shape against it. It
+is optional: with no WeeChat 5 binary (`GB_WEECHAT5_BIN`, or `weechat5-headless`
+on PATH) the fixture exits 2, global-setup logs it, and those specs skip — never
+fail. Never let a 4.10.1 binary satisfy this fixture; the start script refuses a
+binary that does not report 5.x for exactly that reason.
 
 Kit 3 writes generated tsconfig shims to `node_modules/$app/` (`tsconfig.json`,
 `tsconfig/service-worker.json`, `types/`), and the root `tsconfig.json` plus

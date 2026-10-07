@@ -8,6 +8,8 @@ import type { FullConfig } from '@playwright/test';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const API_RELAY_PORT = 9010;
+// Second, version-pinned relay (WeeChat 5). Optional — see startWeechat5Fixture.
+const WEECHAT5_PORT = 9011;
 const IRC_PORT = 6667;
 const CONTROL_PORT = 16667;
 const GBTEST_PASSWORD = 'testpassword123';
@@ -90,6 +92,37 @@ function pruneTestChannelHistory(): void {
     }
 }
 
+/**
+ * Optionally start the second, version-pinned relay (WeeChat 5 / newer relay API).
+ *
+ * gbtest alone only ever exercises the contract the app was written against, so a
+ * relay-side change stays invisible to the suite until a user reports it. This
+ * fixture is opportunistic: no WeeChat 5 build means the specs that need it skip,
+ * and a fixture that fails to start must never fail an unrelated E2E run.
+ */
+async function startWeechat5Fixture(): Promise<void> {
+    const startScript = path.join(__dirname, '..', '..', 'test', 'fixtures', 'gbtest5', 'start.sh');
+    const code = await new Promise<number>((resolve) => {
+        execFile('bash', [startScript], { timeout: 120000 }, (error, _stdout, stderr) => {
+            if (!error) { resolve(0); return; }
+            // The script signals "no 5.x binary here" with exit 2; anything else is
+            // a real failure worth printing.
+            const status = (error as Error & { code?: number | string }).code;
+            const numeric = typeof status === 'number' ? status : 1;
+            if (numeric !== 2) {
+                console.log(`[global-setup] weechat5 fixture: ${String(stderr || error.message).trim()}`);
+            }
+            resolve(numeric);
+        });
+    });
+    if (code === 0) {
+        console.log(`[global-setup] WeeChat 5 relay ready on ${WEECHAT5_PORT} (newer-contract specs enabled)`);
+    } else if (code === 2) {
+        console.log('[global-setup] no WeeChat 5 binary found — newer-contract specs will skip');
+    }
+}
+
+
 export default async function globalSetup(_config: FullConfig) {
     // Check if gbtest environment is already running
     if (await verifyGbtest()) {
@@ -115,6 +148,8 @@ export default async function globalSetup(_config: FullConfig) {
     }
 
     // Start every run from a small, deterministic channel history
+    await startWeechat5Fixture();
+
     pruneTestChannelHistory();
 
     console.log('[global-setup] gbtest environment ready');
