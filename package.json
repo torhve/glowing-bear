@@ -49,7 +49,8 @@
     "tauri": "npx tauri",
     "tauri:dev": "npx tauri dev",
     "tauri:build": "npx tauri build",
-    "oracle:weechat-format": "npm run oracle --workspace @glowingbear/weechat-format"
+    "oracle:weechat-format": "npm run oracle --workspace @glowingbear/weechat-format",
+    "audit:deps": "node scripts/audit-deps.mjs --upstream"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

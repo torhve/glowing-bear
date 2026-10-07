@@ -55,6 +55,7 @@ npm run check:weechat-format   # Formatter package typecheck
 npm run bench:weechat-format   # Formatter throughput benchmark + linear-scaling guard
 npm run smoke:weechat-format   # Build + consumer/packaging smoke test
 npm run oracle:weechat-format  # Regenerate the local WeeChat consumption oracle from the vendored scanner (needs cc; re-vendor the scanner by hand if it is missing; artifacts untracked)
+npm run audit:deps             # RustSec + npm advisory report over both lockfiles; reachability is decided by a dry-run `cargo update` in a copy. Exits 1 only on a fix the package manager could actually take, 2 if the audit could not complete
 npm run test:e2e               # Full E2E: serial channel specs, then parallel UI-only specs
 npm run test:e2e:serial -- --grep "X" # Targeted E2E (channel-dependent specs)
 npm run test:e2e:ui -- --grep "X"     # Targeted E2E (UI-only specs)

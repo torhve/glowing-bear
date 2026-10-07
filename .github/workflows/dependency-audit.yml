@@ -1,0 +1,82 @@
+name: Dependency audit
+
+# Reports advisory exposure in both lockfiles this project ships. It never edits a
+# dependency: the point is to notice, not to act.
+#
+# Triggers:
+#   - weekly, so drift is caught even when nobody touches a lockfile;
+#   - on push/PR that changes a manifest or lockfile, which is when an audit can
+#     actually catch something *this change* introduced.
+#
+# Exit semantics come from scripts/audit-deps.mjs: the job goes red only when the package
+# manager could actually apply a fix. For cargo that is decided by asking cargo — a dry-run
+# `cargo update` in a throwaway copy of the manifest and lock — rather than guessed from
+# caret ranges; for npm it is npm's own `fixAvailable` answer, excluding fixes that need a
+# major bump. Findings that are real but pinned by an upstream (glib 0.18.5,
+# proc-macro-error 1.0.4 today) are reported in the summary and do not fail the run — a job
+# that is permanently red gets ignored, and then it stops protecting anything. An audit that
+# could not read the advisory database or npm's answer exits 2, never 0.
+#
+# Scheduling notes: GitHub only runs a scheduled workflow from the default branch, so the
+# weekly cron cannot fire until this file exists on main. GitHub also disables scheduled
+# workflows in a public repository after 60 days without activity — if this job stops
+# appearing in Actions, check Actions → Enable workflow before assuming the cron is broken.
+
+on:
+    push:
+        branches: [main]
+        paths:
+            - package.json
+            - package-lock.json
+            - src-tauri/Cargo.toml
+            - src-tauri/Cargo.lock
+            - scripts/audit-deps.mjs
+    pull_request:
+        branches: [main]
+        paths:
+            - package.json
+            - package-lock.json
+            - src-tauri/Cargo.toml
+            - src-tauri/Cargo.lock
+            - scripts/audit-deps.mjs
+    schedule:
+        # Mondays 05:43 UTC — deliberately offset from the WeeChat 5 contract job (04:17)
+        # so the two weekly runs do not queue against the same window.
+        - cron: "43 5 * * 1"
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+concurrency:
+    group: dependency-audit-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    audit:
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        steps:
+            - uses: actions/checkout@v7
+
+            - uses: actions/setup-node@v6
+              with:
+                  node-version: lts/*
+
+            # `npm audit` builds its tree from package-lock.json, so this job installs
+            # nothing — no npm ci, no dependency cache, a few seconds of runner time.
+            - name: Fetch the RustSec advisory database
+              run: git clone --depth 1 https://github.com/RustSec/advisory-db "$RUNNER_TEMP/advisory-db"
+
+            # Reachability is decided by asking cargo. This step only records what the runner
+            # has; a missing toolchain is reported by the audit itself (exit 2, cargo is not
+            # installed) rather than by a step that fails first and hides that message.
+            - name: Show toolchain
+              run: cargo --version || echo 'no cargo on this runner - the audit will report itself incomplete'
+
+            - name: Audit Cargo.lock and package-lock.json
+              run: |
+                  node scripts/audit-deps.mjs \
+                      --advisory-db "$RUNNER_TEMP/advisory-db/crates" \
+                      --summary "$GITHUB_STEP_SUMMARY" \
+                      --upstream
