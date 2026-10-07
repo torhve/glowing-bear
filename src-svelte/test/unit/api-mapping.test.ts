@@ -61,6 +61,21 @@ describe('mappings', () => {
         expect(line?.epochMs).toBe(Date.parse(LINE.date));
         expect(mapLine({ ...LINE, date: 'garbage' })?.epochMs).toBe(0);
     });
+    it('maps a WeeChat 5.0 line with no date_printed into a complete snapshot', () => {
+        // Nothing downstream reads datePrinted — ordering, rendering and date
+        // separators all work from epochMs, which comes from `date`. This is what
+        // has to stay true for the field to be optional at all.
+        const wire50 = { ...LINE };
+        delete (wire50 as { date_printed?: string }).date_printed;
+        const snap = mapLine(wire50 as never);
+        expect(snap).not.toBeNull();
+        expect(snap?.datePrinted).toBeUndefined();
+        expect(snap?.epochMs).toBe(Date.parse(LINE.date));
+        expect(snap?.highlight).toBe(true);
+        expect(snap?.notifyLevel).toBe(3);
+        expect(snap?.tags).toEqual(['notify_highlight']);
+        expect(mapLine(LINE)?.datePrinted).toBe(LINE.date_printed);
+    });
 
     it('maps hotlist counts to named slots in wire order [low, message, private, highlight]', () => {
         const snap = mapHotlistEntry({ priority: 3, date: 'd', buffer_id: 1, count: [1, 2, 3, 4] });

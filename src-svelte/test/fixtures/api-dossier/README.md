@@ -351,11 +351,18 @@ weechat-headless -d /tmp/gb-wc5 --daemon \
   probe uses. A probe that only works with `plain:` is a fixture bug waiting to
   happen.
 
-- **Endpoint matrix.** `probes/probe-endpoint-matrix.mjs` hits every endpoint the
-  transport uses and prints each response's key set; run it against both relays
-  and diff. On 2026-10-07 the only divergence across version, hotlist, scripts,
-  completion, nicks, ping and lines was `date_printed` on lines — which is the
-  bug above, not a remaining gap.
+- **Endpoint matrix.** `probes/probe-endpoint-matrix.mjs` hits each endpoint the
+  transport uses and prints the sampled response's top-level key set; run it
+  against both relays and diff. Sampled 2026-10-07, version, hotlist, scripts,
+  completion, nicks and ping answered the same on both, and the only divergence
+  in those samples was `date_printed` on lines — the bug above, not a remaining
+  gap. Key-set equality is a smoke signal, not proof: it checks neither field
+  types nor nested structure, and the 5.0.0-dev build has the script plugin
+  disabled, so its empty `scripts` array says nothing about script item shape.
+
+> The relay probed here is a **5.0.0-dev build from upstream main**, which reports
+> `relay_api_version` 0.7.0. A released 5.0.0 was not probed; the version pair is
+> the same one a user reported, which is why the drift was worth chasing.
 
 ## Coverage limitations (2026-10-06 audit pass)
 
