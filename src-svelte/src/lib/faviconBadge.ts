@@ -71,25 +71,65 @@ let lastPaint: {
 } | null = null;
 
 /**
+ * Resolved theme palette for the badge.
+ *
+ * getComputedStyle(...).getPropertyValue() is not a cheap read: it forces the
+ * browser to flush pending style resolution. The badge resolved the palette on
+ * every call — once per line batch — which during a flood means a forced style
+ * recalculation interleaved with continuous DOM mutations, even when the badge
+ * then decides the picture is unchanged and draws nothing.
+ *
+ * The palette depends on exactly two things the app itself controls: the
+ * data-theme attribute on <html> (every palette in app.css is keyed by that
+ * selector) and the text of the custom-CSS <style> tag. Both are plain attribute
+ * and text reads, so the resolved colors are reused until one of them changes.
+ * A palette edited by any other route — devtools, or a stylesheet the app does
+ * not know about — is not detected until one of those two changes.
+ */
+let paletteCache: {
+    theme: string;
+    customCss: string;
+    danger: string;
+    success: string;
+    failed: boolean;
+} | null = null;
+
+function resolveBadgePalette(type: 'notification' | 'unread'): { bgColor: string; textColor: string } {
+    const theme = document.documentElement.getAttribute('data-theme') ?? '';
+    const customCss = document.getElementById('custom-css-tag')?.textContent ?? '';
+
+    let cached = paletteCache;
+    if (!cached || cached.theme !== theme || cached.customCss !== customCss) {
+        try {
+            const computedStyle = getComputedStyle(document.documentElement || document.body);
+            cached = {
+                theme,
+                customCss,
+                danger: computedStyle.getPropertyValue('--gb-danger').trim(),
+                success: computedStyle.getPropertyValue('--gb-success').trim(),
+                failed: false,
+            };
+        } catch {
+            cached = { theme, customCss, danger: '', success: '', failed: true };
+        }
+        paletteCache = cached;
+    }
+
+    const fallback = type === 'notification' ? '#e06c75' : '#7fd88f';
+    const rawBg = type === 'notification' ? cached.danger : cached.success;
+    const bgColor = rawBg || fallback;
+    // Style resolution that threw used to fall back to plain white text rather
+    // than a lightened palette colour; that output is preserved verbatim.
+    return { bgColor, textColor: cached.failed ? '#ffffff' : lightenColor(bgColor, 0.2) };
+}
+
+/**
  * Draw a colored badge circle with count text on the favicon canvas
  */
 function drawOnCanvas(count: number, type: 'notification' | 'unread'): void {
     const formatted = formatCount(count);
 
-    // Get colors from CSS variables
-    let bgColor: string;
-    let textColor: string;
-    try {
-        const computedStyle = getComputedStyle(document.documentElement || document.body);
-        const rawBg = type === 'notification'
-            ? computedStyle.getPropertyValue('--gb-danger').trim()
-            : computedStyle.getPropertyValue('--gb-success').trim();
-        bgColor = rawBg || (type === 'notification' ? '#e06c75' : '#7fd88f');
-        textColor = lightenColor(bgColor, 0.2);
-    } catch {
-        bgColor = type === 'notification' ? '#e06c75' : '#7fd88f';
-        textColor = '#ffffff';
-    }
+    const { bgColor, textColor } = resolveBadgePalette(type);
 
     // The palette is resolved before this check on purpose: it is what makes the
     // comparison exact. A theme switch or a custom-CSS edit changes `bgColor` and
@@ -215,20 +255,7 @@ export async function createOverlayBadgePNG(
     // Transparent background — Win32 composites over the taskbar icon
     ctx.clearRect(0, 0, 32, 32);
 
-    // Get colors from CSS variables
-    let bgColor: string;
-    let textColor: string;
-    try {
-        const computedStyle = getComputedStyle(document.documentElement || document.body);
-        const rawBg = type === 'notification'
-            ? computedStyle.getPropertyValue('--gb-danger').trim()
-            : computedStyle.getPropertyValue('--gb-success').trim();
-        bgColor = rawBg || (type === 'notification' ? '#e06c75' : '#7fd88f');
-        textColor = lightenColor(bgColor, 0.2);
-    } catch {
-        bgColor = type === 'notification' ? '#e06c75' : '#7fd88f';
-        textColor = '#ffffff';
-    }
+    const { bgColor, textColor } = resolveBadgePalette(type);
 
     // Draw badge circle — centered on canvas for overlay positioning
     const radius = 9;
