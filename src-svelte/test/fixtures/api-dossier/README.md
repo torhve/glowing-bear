@@ -87,6 +87,28 @@ The gbtest fixture in `test/fixtures/gbtest/start.sh` adds the unencrypted pair 
   TOTP-protected relay with an explicit error instead of half-connecting, so gate G3
   in `TODO.md` §5 stays open.
 
+## Fixture hygiene: clearing the hotlist (measured 2026-10-07)
+
+The favicon badge counts *global* notifications, so a hotlist entry left behind by an
+earlier run or probe keeps a badge painted no matter what the next test does. The same
+command behaves differently depending on how it reaches the 4.10.1 fixture:
+
+- `POST /api/input` → `hotlist clear` on `irc.gbtest.#glowing-bear`: 204, and it removed
+  a `relay.relay.list` entry but left the channel's own entry (same date, count 5)
+  through four attempts.
+- `POST /api/input` → `hotlist -clear` on the same buffer: 204, nothing removed.
+- FIFO `core.weechat */hotlist clear`: hotlist empty, and it stayed empty.
+
+`/api/input` runs the command in that buffer's context, and a core buffer refuses it
+outright — 204, then "You cannot write text in this buffer" written into core.weechat,
+which is itself unread state that then lands in the hotlist (count 4 measured). Global
+commands therefore go through the FIFO, which is what gbtest's own warm-instance hygiene
+already does and what `src-svelte/e2e/helpers/relay-admin.ts` now uses.
+
+Not explained: why the channel's own entry survives an API-context clear while a
+`relay.list` entry does not. The reliable operation is recorded above; the mechanism is
+not.
+
 ## Verified facts (with evidence pointers)
 
 ### Transport and envelope

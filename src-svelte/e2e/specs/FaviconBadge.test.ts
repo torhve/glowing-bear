@@ -4,6 +4,7 @@ import { waitForBuffer, switchToBuffer } from "../helpers/buffers";
 import { irc } from "../helpers/irc-control";
 import { createConnectedPage } from "../fixtures/auth";
 import { absorbAllUnread, waitForUnreadAtLeast } from "../helpers/waits";
+import { clearServerHotlist } from "../helpers/relay-admin";
 
 let page: import("@playwright/test").Page;
 
@@ -34,6 +35,10 @@ async function getFaviconHref(
 }
 
 test("favicon badge updates when unread messages arrive on inactive buffer", async () => {
+    // Server-side first: the badge counts global notifications, and a hotlist entry this
+    // spec cannot absorb (a buffer no longer in its list) would keep a badge painted
+    // through the whole run. reconnect() then re-reads a hotlist we know is empty.
+    await clearServerHotlist();
     await reconnect(page, { extraSettings: { useFavico: true } });
     await waitForBuffer(page, "#glowing-bear", 10000);
     // The badge is global and notifications outrank unread in it, so the empty baseline has
@@ -61,6 +66,7 @@ test("favicon badge updates when unread messages arrive on inactive buffer", asy
 });
 
 test("favicon badge resets when switching to buffer with unread", async () => {
+    await clearServerHotlist();
     await reconnect(page, { extraSettings: { useFavico: true } });
     await waitForBuffer(page, "#glowing-bear", 10000);
     await absorbAllUnread(page);
