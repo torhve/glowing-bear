@@ -521,7 +521,12 @@ export async function switchBuffer(bufferId: string): Promise<boolean> {
     // so lastSeen calculation uses the correct localUnread before it's zeroed.
     requestAnimationFrame(() => {
         void deliverInput('/buffer set hotlist -1', bufferId);
-        void deliverInput('/input set_unread_current_buffer', bufferId);
+        // `/buffer set unread` with no argument puts the read marker on the buffer's
+        // last line, so `last_read_line_id` is a real line id that other clients and
+        // our own re-anchoring can act on; `/buffer set unread 0` removes the marker
+        // and leaves -1. The `/input set_unread_current_buffer` we used to send is a
+        // WeeChat 3.8 alias for exactly this command (core-command.c).
+        void deliverInput('/buffer set unread', bufferId);
         scheduleHotlistQuery();
     });
     return true;

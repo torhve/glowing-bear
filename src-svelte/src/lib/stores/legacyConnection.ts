@@ -1028,7 +1028,9 @@ export async function switchBuffer(bufferId: string): Promise<boolean> {
     // so that lastSeen calculation uses the correct localUnread value before it's zeroed out.
     requestAnimationFrame(() => {
         sendWeeChatCommand('/buffer set hotlist -1', bufferId);
-        sendWeeChatCommand('/input set_unread_current_buffer', bufferId);
+        // See apiConnection.switchBuffer: `/buffer set unread` (no argument) leaves a real
+        // marker id; the `/input set_unread_current_buffer` alias is deprecated since 3.8.
+        sendWeeChatCommand('/buffer set unread', bufferId);
         scheduleHotlistQuery(bufferId);
     });
     // Nicklist backfill is handled by $effect in +page.svelte (guarded: only fetches if empty).
