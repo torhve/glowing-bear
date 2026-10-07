@@ -1,5 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { irc } from './irc-control';
+import { switchToBuffer } from './buffers';
 
 /**
  * Condition-driven waits shared by the E2E specs.
@@ -85,6 +86,46 @@ export async function waitForUnreadAtLeast(page: Page, bufferName: string, count
  */
 export async function waitForNoUnread(page: Page, bufferName: string, timeout = 15000): Promise<void> {
     await expect.poll(() => readUnreadBadge(page, bufferName), { timeout }).toBe(0);
+}
+
+/**
+ * The app's global unread total, read back from the document title's "(N) " prefix.
+ *
+ * That prefix and the favicon badge are built from the same sum (unread plus
+ * notifications, across every buffer), so it is the observable that says whether a badge
+ * should be on screen at all.
+ */
+export async function globalUnreadTotal(page: Page): Promise<number> {
+    const match = /^\((\d+)\)/.exec(await page.title());
+    return match ? Number(match[1]) : 0;
+}
+
+/**
+ * Clear unread on every buffer the sidebar shows, by switching to each one in turn.
+ *
+ * The badge is global, and notifications outrank unread in it, so a single leftover
+ * notification anywhere in the shared gbtest session keeps a badge painted no matter what
+ * the spec does next — an "absent badge" assertion then passes or fails on whatever the
+ * previous spec left behind rather than on this spec's own actions.
+ *
+ * Switching is the only thing that reliably clears a buffer's hotlist entry: the IRC
+ * plugin regenerates the entry for a buffer that is still unread, so a `/hotlist -clear`
+ * is undone as soon as it lands (measured: the entry survives it, date and all).
+ */
+export async function absorbAllUnread(page: Page, timeout = 15000): Promise<void> {
+    for (let pass = 0; pass < 8; pass++) {
+        const names = await page.evaluate(() =>
+            [...document.querySelectorAll('[data-testid="buffer-item"]')]
+                .filter((row) => row.querySelector('[data-testid="unread-badge"]'))
+                .map((row) => (row.querySelector('.buffer-name')?.textContent ?? '').trim())
+                .filter((name) => name.length > 0),
+        );
+        if (names.length === 0) break;
+        for (const name of names) {
+            await switchToBuffer(page, name);
+        }
+    }
+    await expect.poll(() => globalUnreadTotal(page), { timeout, intervals: [200] }).toBe(0);
 }
 
 /**
