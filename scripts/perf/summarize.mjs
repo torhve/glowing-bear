@@ -36,7 +36,7 @@ function parseResults(text) {
     const out = new Map();
     if (!text) return out;
     for (const line of text.split('\n')) {
-        const m = line.match(/^(A inactive|B active|H history|C api-inactive|D api-active)\b.*?median\s+([\d.]+)ms/);
+        const m = line.match(/^(A inactive|B active|H history|C api-inactive|D api-active|E api-unread)\b.*?median\s+([\d.]+)ms/);
         if (m) { out.set(m[1], { median: Number(m[2]), raw: line }); continue; }
         // E2E arms report the median of several in-page floods per run.
         const e2e = line.match(/\[prodflood\] renderMedian=(\d+)ms/)

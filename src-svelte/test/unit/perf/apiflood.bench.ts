@@ -23,6 +23,8 @@ import {
     buffers,
     activeBufferId,
     recalculateLinesPerScreen,
+    localUnreadBuffers,
+    servers,
 } from '#lib/stores/models.ts';
 import type { BufferData, BufferLine } from '#lib/types.ts';
 import type { BufferSnapshot, LineSnapshot } from '#lib/api/api-contracts.ts';
@@ -88,6 +90,10 @@ const REPS = Number(process.env.GB_PERF_REPS ?? 5);
 
 const API_BUFFER_ID = 1_700_000_000_000_001 as ApiBufferId;
 const BUFFER_KEY = String(API_BUFFER_ID);
+const CORE_KEY = '1000000000000001';
+// Sidebar size for the 'unread' scenario — the size of the local-unread id Set
+// each coalesced store write would otherwise have copied.
+const SIDE_BUFFERS = 24;
 
 const NICKS = ['alice', 'gbbot', 'carol', 'dave'];
 const COLORS = ['01', '02', '03', '04', '05', '06', '07'];
@@ -162,6 +168,33 @@ function bufferSnapshot(): BufferSnapshot {
     };
 }
 
+function coreSnapshot(): BufferSnapshot {
+    return {
+        ...bufferSnapshot(),
+        id: 1000000000000001 as ApiBufferId,
+        name: 'core.weechat',
+        shortName: 'weechat',
+        number: 0,
+        semanticType: 'free',
+        localVariables: {},
+    };
+}
+
+/**
+ * Extra sidebar buffers for the 'unread' scenario. Coalescing the local-unread
+ * id Set and the servers map only costs anything when they hold more than one
+ * entry — a real client has dozens of buffers and several of them unread.
+ */
+function sideSnapshots(count: number): BufferSnapshot[] {
+    return Array.from({ length: count }, (_, i) => ({
+        ...bufferSnapshot(),
+        id: (2000000000000001 + i) as ApiBufferId,
+        name: `irc.bench.#side${i}`,
+        shortName: `#side${i}`,
+        number: i + 2,
+    }));
+}
+
 /** Canonical snapshot of buffer state; same field set as flood.bench.ts. */
 function snapshotBuffer(buf: BufferData): string {
     const lines = buf.lines.map((l: BufferLine) => ({
@@ -200,7 +233,7 @@ describe('perf: API reducer flood benchmark', () => {
     });
 
     async function runScenario(
-        scenario: 'inactive' | 'active',
+        scenario: 'inactive' | 'active' | 'unread',
         seed: number,
     ): Promise<{ median: number; min: number; max: number; reps: number[] }> {
         const reps: number[] = [];
@@ -209,12 +242,28 @@ describe('perf: API reducer flood benchmark', () => {
         for (let rep = 0; rep < REPS; rep++) {
             buffers.set({});
             activeBufferId.set('');
+            localUnreadBuffers.set(new Set());
+            servers.set({ 'irc.bench': { id: 'irc.bench', unread: 0 } });
             recalculateLinesPerScreen(500); // maxBufferLines = 1000 → no trimming in bench
 
             const rng = makeRng(seed);
             const reducers = createApiStoreReducers();
-            reducers.buffers([bufferSnapshot()]);
-            if (scenario === 'active') activeBufferId.set(BUFFER_KEY);
+            // core.weechat exists so the 'inactive' scenario has a buffer the user
+            // IS looking at. Without one the snapshot reducer auto-activates the
+            // flooded buffer, every line lands in the active buffer, and nothing
+            // tallies — the scenario measured an inactive buffer that was not one.
+            reducers.buffers([coreSnapshot(), bufferSnapshot()]);
+            activeBufferId.set(scenario === 'active' ? BUFFER_KEY : CORE_KEY);
+            if (scenario === 'unread') {
+                const sides = sideSnapshots(SIDE_BUFFERS);
+                reducers.buffers(sides);
+                activeBufferId.set(CORE_KEY);
+                localUnreadBuffers.update((current) => {
+                    const next = new Set(current);
+                    for (const snap of sides) next.add(String(snap.id));
+                    return next;
+                });
+            }
 
             // Seed existing lines through the same code path (not timed).
             // `lineAdded` queues; the frame-aligned flush applies the queue, so the
@@ -255,9 +304,9 @@ describe('perf: API reducer flood benchmark', () => {
         };
     }
 
-    function report(scenario: 'inactive' | 'active', r: { median: number; min: number; max: number; reps: number[] }): void {
+    function report(scenario: 'inactive' | 'active' | 'unread', r: { median: number; min: number; max: number; reps: number[] }): void {
         const perLine = r.median / FLOODED_LINES;
-        const letter = scenario === 'inactive' ? 'C' : 'D';
+        const letter = scenario === 'inactive' ? 'C' : scenario === 'active' ? 'D' : 'E';
         const line =
             `${letter} api-${scenario} median ${r.median.toFixed(1)}ms min ${r.min.toFixed(1)} max ${r.max.toFixed(1)} ` +
             `${perLine.toFixed(3)}ms/line reps=${r.reps.map((v) => v.toFixed(1)).join(',')}`;
@@ -271,5 +320,9 @@ describe('perf: API reducer flood benchmark', () => {
 
     it('API flood B: active buffer', async () => {
         report('active', await runScenario('active', 4321));
+    }, 120000);
+
+    it('API flood E: inactive buffer with a sidebar of unread buffers', async () => {
+        report('unread', await runScenario('unread', 9091));
     }, 120000);
 });
