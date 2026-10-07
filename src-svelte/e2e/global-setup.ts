@@ -96,29 +96,42 @@ function pruneTestChannelHistory(): void {
  * Optionally start the second, version-pinned relay (WeeChat 5 / newer relay API).
  *
  * gbtest alone only ever exercises the contract the app was written against, so a
- * relay-side change stays invisible to the suite until a user reports it. This
- * fixture is opportunistic: no WeeChat 5 build means the specs that need it skip,
- * and a fixture that fails to start must never fail an unrelated E2E run.
+ * relay-side change stays invisible to the suite until a user reports it.
+ *
+ * Three outcomes, deliberately different:
+ *   no 5.x binary on this machine -> exit 2, log it, the specs skip;
+ *   a 5.x binary exists but the relay will not start -> hard failure, because a
+ *     broken fixture must not quietly become permanently missing coverage;
+ *   GB_WEECHAT5=off -> skip on purpose, with no binary search at all.
  */
 async function startWeechat5Fixture(): Promise<void> {
+    if (process.env.GB_WEECHAT5 === 'off') {
+        console.log('[global-setup] WeeChat 5 relay disabled by GB_WEECHAT5=off — newer-contract specs will skip');
+        return;
+    }
     const startScript = path.join(__dirname, '..', '..', 'test', 'fixtures', 'gbtest5', 'start.sh');
     const code = await new Promise<number>((resolve) => {
         execFile('bash', [startScript], { timeout: 120000 }, (error, _stdout, stderr) => {
             if (!error) { resolve(0); return; }
-            // The script signals "no 5.x binary here" with exit 2; anything else is
-            // a real failure worth printing.
+            // Exit 2 is how the script reports having no 5.x binary; anything
+            // else is a real failure and its stderr is worth seeing.
             const status = (error as Error & { code?: number | string }).code;
             const numeric = typeof status === 'number' ? status : 1;
             if (numeric !== 2) {
-                console.log(`[global-setup] weechat5 fixture: ${String(stderr || error.message).trim()}`);
+                console.error('[global-setup] weechat5 fixture failed:', String(stderr || error.message).trim());
             }
             resolve(numeric);
         });
     });
     if (code === 0) {
-        console.log(`[global-setup] WeeChat 5 relay ready on ${WEECHAT5_PORT} (newer-contract specs enabled)`);
+        console.log('[global-setup] WeeChat 5 relay ready on ' + WEECHAT5_PORT + ' (newer-contract specs enabled)');
     } else if (code === 2) {
         console.log('[global-setup] no WeeChat 5 binary found — newer-contract specs will skip');
+    } else {
+        throw new Error(
+            `[global-setup] a WeeChat 5 binary was found but the relay did not start (exit ${code}). `
+            + 'Fix the fixture, or set GB_WEECHAT5=off to skip the newer-contract specs deliberately.',
+        );
     }
 }
 

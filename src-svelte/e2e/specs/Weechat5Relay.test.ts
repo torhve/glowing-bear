@@ -68,14 +68,27 @@ test('the 5.0 relay sends line objects with no date_printed, fetched history inc
     await expect.poll(async () =>
         page.locator('[data-testid="bufferline-row"]').count(), { timeout: 20000 }).toBeGreaterThan(0);
 
-    const lineFrames = frames.filter((f) => f.includes('"body_type":"lines"') || f.includes('"body_type":"line"'));
-    expect(lineFrames.length, 'the app should have received line payloads from the 5.0 relay').toBeGreaterThan(0);
+    // Parse rather than substring-match, and require real line objects: a frame
+    // whose body is an empty array would satisfy a `toContain`-free assertion
+    // while proving nothing was ever received.
+    type LineFrame = { body_type?: string; body?: unknown };
+    const linePayloads: Record<string, unknown>[] = [];
+    for (const frame of frames) {
+        let parsed: LineFrame;
+        try { parsed = JSON.parse(frame) as LineFrame; } catch { continue; }
+        if (parsed.body_type === 'line' && parsed.body && typeof parsed.body === 'object') {
+            linePayloads.push(parsed.body as Record<string, unknown>);
+        } else if (parsed.body_type === 'lines' && Array.isArray(parsed.body)) {
+            linePayloads.push(...(parsed.body as Record<string, unknown>[]));
+        }
+    }
+    expect(linePayloads.length, 'the app should have received line payloads from the 5.0 relay').toBeGreaterThan(0);
 
     // The premise of the whole test: this relay does not send the field. If a
     // 4.10.1 relay ever answered this port, this assertion fails instead of the
     // test quietly certifying 5.0 behaviour against the wrong server.
-    for (const frame of lineFrames) {
-        expect(frame, `line payload still carries date_printed: ${frame.slice(0, 200)}`)
+    for (const payload of linePayloads) {
+        expect(Object.keys(payload), `line payload still carries date_printed: ${JSON.stringify(payload).slice(0, 200)}`)
             .not.toContain('date_printed');
     }
 });
