@@ -60,6 +60,7 @@ npm run test:e2e:serial -- --grep "X" # Targeted E2E (channel-dependent specs)
 npm run test:e2e:ui -- --grep "X"     # Targeted E2E (UI-only specs)
 npm run irc:start / irc:stop   # Manual gbtest IRC server
 npm run wc5:start / wc5:stop  # Optional WeeChat 5 relay (newer API contract)
+npm run wc5:build            # Build a pinned WeeChat 5 headless relay from upstream source
 npm run wc5:probe            # Endpoint matrix against the WeeChat 5 relay
 npm run tauri                 # Tauri CLI (uses @tauri-apps/cli)
 npm run tauri:dev             # Tauri desktop dev mode
@@ -74,6 +75,14 @@ is optional: with no WeeChat 5 binary (`GB_WEECHAT5_BIN`, or `weechat5-headless`
 on PATH) the fixture exits 2, global-setup logs it, and those specs skip — never
 fail. Never let a 4.10.1 binary satisfy this fixture; the start script refuses a
 binary that does not report 5.x for exactly that reason.
+
+`wc5:build` produces that binary from a pinned upstream commit (upstream has no
+v5.0.0 tag; the 5.0 line is `main` at 5.0.0-dev). `.github/workflows/weechat5-
+contract.yml` runs that build plus the two relay probes on a schedule and on
+push/PR: it guards the wire shape the API transport reads, not how the app
+renders it (that E2E needs both fixture relays at once and is local-only), and a
+pinned ref cannot detect new upstream changes — dispatch it with an explicit ref
+before moving the pin.
 
 Kit 3 writes generated tsconfig shims to `node_modules/$app/` (`tsconfig.json`,
 `tsconfig/service-worker.json`, `types/`), and the root `tsconfig.json` plus

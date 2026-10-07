@@ -1,0 +1,131 @@
+name: WeeChat 5 relay contract
+
+# What this guards: the wire shape the app's API transport reads. When the 5.0
+# line object dropped `date_printed` the validator rejected every line a 5.0
+# relay sent — history and live events alike — and nothing in this repository's
+# CI could see it: the fixture relay is pinned to 4.10.1 and CI runs no E2E.
+# This job builds a pinned WeeChat 5, points the optional fixture at it, and
+# measures the responses instead of assuming them.
+#
+# What it does NOT guard:
+#   - How the app renders those payloads. That is
+#     src-svelte/e2e/specs/Weechat5Relay.test.ts, which needs the 4.10.1 fixture
+#     relay alongside the 5.0 one and is run locally (`npm run test:e2e`). The
+#     app-side validators are covered by unit tests in the main CI job.
+#   - New upstream changes. The pin is fixed, so a green weekly run says our
+#     build/fixture/probe path still holds against that commit — not that
+#     upstream has not moved. To probe a newer upstream state, dispatch this
+#     workflow with an explicit ref and read what it prints before moving the pin.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # A pinned build cannot detect upstream drift, but it does detect this
+    # repository's own path to it rotting — a broken fixture, a probe that no
+    # longer compiles against the app's expectations, a dependency change that
+    # stops the build. Weekly is cheap and catches that.
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+    inputs:
+      weechat_ref:
+        description: 'Upstream WeeChat ref to build (commit, tag, or branch). Empty uses the pinned commit.'
+        required: false
+        default: ''
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Upstream has no v5.0.0 tag — the newest tag is v4.10.1 and the 5.0 line
+  # lives on main as 5.0.0-dev — so the pin is a commit, and it is moved
+  # deliberately. See test/fixtures/gbtest5/build.sh, which carries the same pin
+  # for local runs.
+  WEECHAT5_PIN: 44e149b12830c8ffa98a5b2a4aafaf97e06e4477
+  WEECHAT5_SRC: /tmp/weechat5-src
+  WEECHAT5_BUILD: /tmp/weechat5-build
+
+jobs:
+  relay-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      # libgcrypt, GnuTLS, zlib and libcurl are REQUIRED by WeeChat 5's
+      # CMakeLists.txt (pkg_check_modules ... REQUIRED), not optional extras.
+      - name: Install WeeChat build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake pkgconf \
+            libgcrypt20-dev libgnutls28-dev zlib1g-dev libcurl4-openssl-dev \
+            libncurses-dev
+
+      - name: Restore the WeeChat 5 build
+        id: weechat5-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.WEECHAT5_BUILD }}
+          # OS + arch + ref + the build recipe: a commit-only key can restore a
+          # binary built for a different runner or with different CMake options.
+          key: ${{ runner.os }}-${{ runner.arch }}-weechat5-${{ github.event.inputs.weechat_ref || env.WEECHAT5_PIN }}-${{ hashFiles('test/fixtures/gbtest5/build.sh') }}
+
+      - name: Build WeeChat 5
+        if: steps.weechat5-cache.outputs.cache-hit != 'true'
+        env:
+          GB_WEECHAT5_REF: ${{ github.event.inputs.weechat_ref || env.WEECHAT5_PIN }}
+        run: bash test/fixtures/gbtest5/build.sh
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Install app dependencies
+        run: npm ci
+
+      # The fixture's WeeChat joins the mock IRC server gbtest uses; without a
+      # channel buffer there is no writable buffer to produce a line in.
+      - name: Start the mock IRC server
+        run: |
+          npx tsx src-svelte/test/irc-server/index.ts \
+            --daemon --port=6667 --control-port=16667 --pidfile=/tmp/gbtest-irc.pid
+          # /dev/tcp rather than nc: the wait must not depend on which netcat
+          # flavour the runner image happens to carry.
+          for i in $(seq 1 40); do
+            if (exec 3<>/dev/tcp/127.0.0.1/6667) 2>/dev/null; then exec 3>&-; exec 3<&-; break; fi
+            sleep 0.5
+          done
+          (exec 3<>/dev/tcp/127.0.0.1/6667) 2>/dev/null || { echo 'mock IRC server never listened on 6667'; exit 1; }
+
+      - name: Start the WeeChat 5 relay fixture
+        run: |
+          GB_WEECHAT5_BIN="$WEECHAT5_BUILD/src/gui/curses/headless/weechat-headless" \
+          GB_WEECHAT5_PLUGIN_DIR="$WEECHAT5_BUILD" \
+          bash test/fixtures/gbtest5/start.sh
+
+      - name: Endpoint matrix against the 5.0 relay
+        run: node src-svelte/test/fixtures/api-dossier/probes/probe-endpoint-matrix.mjs 9011
+
+      - name: Line payload contract against the 5.0 relay
+        run: node src-svelte/test/fixtures/api-dossier/probes/probe-weechat5-line-fields.mjs 9011
+
+      # Startup failures can produce no probe output at all, so the build and
+      # fixture logs travel too.
+      - name: Upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weechat5-contract-evidence
+          path: |
+            /tmp/weechat5-build.log
+            /tmp/gbtest5-weechat/logs/weechat.log
+            /tmp/gb-wc5-probe.jsonl
+          if-no-files-found: ignore

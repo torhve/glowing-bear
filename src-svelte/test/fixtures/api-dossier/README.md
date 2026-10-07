@@ -40,7 +40,8 @@ form; this directory keeps the reproducible evidence.
                                           # diff 4.10.1 vs 5.0 (also 9011)
    node probes/probe-weechat5-schema.mjs 9011  # buffer/line key sets, id type +
                                           # safety, live event shape
-   node probes/probe-weechat5-line-fields.mjs  # 5.0 history + live line payloads
+   node probes/probe-weechat5-line-fields.mjs 9011  # the same stamped line on both paths;
+                                          # exits 1 when the 5.0 contract drifts
    ```
 
 3. Raw frames land in `frames/probe-session.jsonl` and `frames/probe-lifecycle.jsonl`
@@ -338,16 +339,39 @@ routed or tolerated via the open `ApiEventName` union.
 Everything above was captured against 4.10.1 / API 0.6.0. A second live relay —
 built from WeeChat `main` (5.0.0-dev, reports `relay_api_version` **0.7.0**) — was
 probed with `probes/probe-weechat5-line-fields.mjs` to find where the two contract
-versions disagree. Start it the same way as gbtest, but with the built plugins in
-`<home>/plugins/` (a custom `-d` home finds no plugins otherwise, so the relay
-plugin never loads and no port opens):
+versions disagree. The supported way to reproduce it is the pinned build script plus
+the optional fixture, which starts that build against the same mock IRC server and
+opens the API relay on 9011:
 
 ```bash
-weechat-headless -d /tmp/gb-wc5 --daemon \
-  -r "/set relay.network.password testpassword123" \
-  -r "/relay add api 9011" \
-  -r "/buffer add wc5probe"
+bash test/fixtures/gbtest5/build.sh          # -> /tmp/weechat5-build/.../weechat-headless
+GB_WEECHAT5_BIN=/tmp/weechat5-build/src/gui/curses/headless/weechat-headless \
+GB_WEECHAT5_PLUGIN_DIR=/tmp/weechat5-build bash test/fixtures/gbtest5/start.sh
+node probes/probe-weechat5-line-fields.mjs 9011
 ```
+
+The pin is a commit (`44e149b12830…`): upstream has no v5.0.0 tag — the newest tag is
+v4.10.1 and the 5.0 line lives on `main` as 5.0.0-dev — so a pin can only be a commit,
+and it is moved deliberately rather than tracking `main`.
+
+The probe is self-contained: it opens the sync window, prints a line stamped with a
+unique token, and accepts only samples carrying that token from either path, so a stale
+line already sitting in the buffer cannot stand in for the one it was asked to produce.
+It cannot use `core.weechat` — `POST /api/input` there answers `204` and WeeChat then
+writes "You cannot write text in this buffer" into the buffer (measured) — so the
+command goes to a channel buffer. Starting a relay by hand still works, but a custom
+`-d` home finds no plugins unless they are copied in, so the relay plugin never loads
+and no port opens.
+
+Negative control, measured 2026-10-07: the same probe against the 4.10.1 fixture relay
+exits 1 and names `date_printed` on both paths, so a pass means it really reached a
+5.0-shaped line object rather than an old one.
+
+`.github/workflows/weechat5-contract.yml` runs both probes against the pinned build
+(weekly, and on push/PR). It measures the wire only — the app-side E2E against a 5.0
+relay needs both fixture relays at once and is run locally — and because the ref is
+pinned, a green run says this repository's path to that commit still holds, not that
+upstream has not moved.
 
 - **The line object lost `date_printed` (and `date_usec_printed`).** A live
   `buffer_line_added` body from 5.0 carries exactly

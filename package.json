@@ -42,6 +42,7 @@
     "irc:server": "npx tsx test/irc-server/index.ts",
     "irc:start": "bash test/fixtures/gbtest/start.sh",
     "irc:stop": "bash test/fixtures/gbtest/stop.sh",
+    "wc5:build": "bash test/fixtures/gbtest5/build.sh",
     "wc5:start": "bash test/fixtures/gbtest5/start.sh",
     "wc5:stop": "bash test/fixtures/gbtest5/stop.sh",
     "wc5:probe": "node src-svelte/test/fixtures/api-dossier/probes/probe-endpoint-matrix.mjs 9011",
