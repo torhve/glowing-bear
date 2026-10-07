@@ -346,9 +346,55 @@ weechat-headless -d /tmp/gb-wc5 --daemon \
 - **`notify` is a buffer field now, and it is a string.** 5.0 buffers carry
   `notify: "all" | "message" | "highlight" | "none"` plus `buffer_notify_changed`.
   The validator already accepted it as optional; 4.10.1 buffers omit it.
-- **New 5.0 buffer fields the app ignores:** `prefix_displayed`, `day_change`,
-  `first_line_not_read`. `first_line_not_read` is the relay's own answer to the
-  read-boundary question the app currently derives itself — unexploited.
+- **New 5.0 buffer fields: each one measured, and each one deliberately left
+  unread.** On a freshly started 5.0 fixture all three buffers report
+  `notify=all`, `prefix_displayed=true`, `day_change=true`,
+  `first_line_not_read=false`, `last_read_line_id=-1`.
+  - `notify` — **adopted**: mapped, `buffer_notify_changed` routed, and read by
+    the line tally. 4.10.1 omits it and cannot be made to report it: asking for
+    it explicitly (`columns=…notify`) returns no such field, and infolist is
+    unsupported. The app defaults it to 3, which is WeeChat's own default —
+    live-verified on 5.0 with
+    `GET /api/options/weechat.look.buffer_notify_default` →
+    `{"value":"all","default_value":"all"}`. A user who lowers a buffer's notify
+    is mis-modelled on 4.10.1 API and correctly modelled on 5.0; the hotlist
+    baseline is what actually corrects the counts on 4.10.1.
+  - `first_line_not_read` — **do not act on it.** Upstream defines it only as the
+    disambiguation of `last_read_line_id = -1` (`relay-api-msg.c`): true means the
+    marker sits before the first line (nothing read), false means the marker was
+    removed because every line has been read. Both directions are already handled
+    better by state the app has: `false` is exactly what
+    `inferReadBoundaryFromHotlist(buffer, 0)` already returns (`lines.length - 1`),
+    and acting on `true` would put the boundary before the first line, making
+    every retained line unread — manufacturing the phantom unread the app
+    deliberately avoids, since replayed backlog lines arrive with
+    `notify_level = -1` and create no unread. Recorded so it is not adopted later
+    as an obvious win.
+  - `prefix_displayed` — **do not act on it.** It is the API name for the
+    gui-buffer flag `prefix_for_each_line` (`relay-api-msg.c` maps it from that
+    hdata field), and WeeChat sets it from buffer type: formatted → 1, free → 0
+    (`gui-buffer.c`). Measured on both fixtures: the free buffers
+    (`relay.relay.list`, `python.grep`) carry **zero** non-empty line prefixes,
+    and every formatted buffer reports `prefix_displayed=true`. The prefixes it
+    would hide are already empty. The only case it would change is a user who
+    explicitly runs `/buffer set prefix_for_each_line 0` on a formatted buffer —
+    and the wire keeps sending the prefix regardless.
+  - `day_change` — **not adopted, and it is not what makes separators work.**
+    WeeChat's day-change separator is drawn by the curses GUI at render time
+    (`gui_chat_display_day_changed`, gated by `weechat.look.day_change &&
+    buffer->day_change`); it is never a buffer line, and the logger's
+    `day_changed` handler only rotates log filenames. No relay version has ever
+    sent a separator, which is why the app injects its own. The flag would only
+    let the app honor "this buffer has separators off".
+  - `day_changed` / `buffer_day_change_changed` — **unrouted, and still
+    unobserved.** `day_changed` is a timer signal (`config_day_change_timer_cb`)
+    meaning "the local day rolled over, re-render": the app injects separators
+    only in its three line-append paths, so a buffer idle across midnight shows
+    nothing until its next message. `buffer_day_change_changed` fires when
+    `/buffer set day_change` flips the flag. Neither was ever seen live —
+    `/buffer set day_change on|off` returned 204 with no event, and `day_changed`
+    needs a real local midnight. Unverified, so unimplemented.
+
 - **Input is `POST /api/input` with `buffer_id`.** `POST /api/buffers/<id>/input`
   returns 405 Method Not Allowed on 5.0. The app already used the correct form.
 - **WebSocket auth follows `relay.network.password_hash_algo`.** When it is pinned
@@ -356,6 +402,13 @@ weechat-headless -d /tmp/gb-wc5 --daemon \
   (1006, no reason) — the WS subprotocol must carry the same PBKDF2 hash the REST
   probe uses. A probe that only works with `plain:` is a fixture bug waiting to
   happen.
+- **A probed fixture is not a clean fixture.** After a probing session the 5.0
+  channel buffer read `notify=highlight` and `title="probe-title"`, and
+  `core.weechat` had logged `Notify changed for "irc.gbtest5.#glowing-bear":
+  "all" to "message" … to "highlight"` — all residue from earlier probes. Reading
+  those values as WeeChat defaults is exactly how a probe artifact gets written
+  into a document as a fact. Restart before recording field values:
+  `test/fixtures/gbtest5/stop.sh && test/fixtures/gbtest5/start.sh`.
 
 - **Line identifiers are timestamps now, and they are no longer dense.** 4.10.1
   numbered a buffer's lines 0, 1, 2, …; 5.0 assigns
