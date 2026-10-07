@@ -215,11 +215,31 @@ No PUT/DELETE resources exist despite the CORS Allow header.
   do NOT exist in WeeChat source — they were fake names in the client's type
   union/mapper and have been removed.
 
-### Read markers / hotlist control (source-verified)
+### Read markers / hotlist control (live, `probes/probe-read-marker-commands.mjs`)
 
-- `/buffer set unread` (`""` mark read; `-N`/`+N` move; `N` mark N latest unread),
-  `/input set_unread_current_buffer` (runs `/buffer set unread` in the command's
-  buffer context), `/buffer set hotlist -1` (removes hotlist entry).
+- `/buffer set unread` (no argument: mark everything read; `-N`/`+N` move the marker;
+  `N` mark the N latest lines unread), `/buffer set hotlist -1` (removes hotlist entry).
+- `/input set_unread_current_buffer` is a deprecated alias, not a separate command:
+  `core-command.c` implements it by running `/buffer set unread` in that buffer's
+  context, and `config_weechat_update_cb` rewrites saved old forms to the new one. The
+  app sent the alias until `1104e187`; both transports now send the real command.
+- The argument decides whether a marker survives, and the two `-1` states are not
+  interchangeable. Measured on both fixtures (4.10.1/API 0.6.0, 5.0.0-dev/API 0.7.0):
+
+  | command | 4.10.1 `last_read_line_id` | 5.0 `last_read_line_id` | 5.0 `first_line_not_read` |
+  |---|---|---|---|
+  | `/buffer set unread -100000` | `-1` | `-1` | `true` |
+  | `/buffer set unread` | a real id | a real id | `false` |
+  | `/buffer set unread 0` | `-1` | `-1` | `false` |
+
+  4.10.1 buffers do not report `first_line_not_read` at all, so `-1` there is
+  permanently ambiguous.
+- Switching sends `/buffer set unread` with no argument deliberately: it leaves a real
+  line id that other clients and `reanchorReadBoundaryFromServer` can anchor to.
+  `unread 0` erases that anchor and lands in the `-1` ambiguity above.
+- Guarded by `src-svelte/e2e/specs/ReadMarkerServerState.test.ts`, which reads the marker
+  and the hotlist back over the API after an app-driven switch; mutating the command to
+  `unread 0` makes it fail.
 - GUI window switching auto-removes hotlist entries; headless/API sessions never do.
 
 ### Operational traps
@@ -365,11 +385,31 @@ weechat-headless -d /tmp/gb-wc5 --daemon \
     removed because every line has been read. The app derives the boundary from
     the hotlist instead, and that is an unread-policy choice, not a claim that
     the two signals mean the same thing — a zero hotlist count can also be a
-    filtered notification rather than proof that every line was read. Honouring
-    `true` would put the boundary before the first line and make every retained
-    line unread: the phantom unread the read-boundary code exists to prevent,
-    since replayed backlog lines arrive with `notify_level = -1` and create no
-    unread. Recorded so it is not adopted later as an obvious win.
+    filtered notification rather than proof that every line was read. Honouring `true`
+    would put the boundary before the first line and make every retained line unread: the
+    phantom unread the read-boundary code exists to prevent, since replayed backlog lines
+    arrive with `notify_level = -1` and create no unread.
+    Provenance, from upstream history (full clone, `git log -Sfirst_line_not_read`):
+    - The flag is old. It entered in `323290c83` (2009-02-02, Fix crash when read marker
+      is moved before first line displayed) as `int first_line_not_read` in the gui
+      buffer struct, so the code freeing the marker's own line had a state to move it
+      into instead of leaving `last_read_line = NULL`. `gui_buffer_set_unread`
+      (`gui-buffer.c`) still writes it out of that same overload: `unread 0` →
+      `last_read_line = NULL`, flag 0; marker moved past the first line →
+      `last_read_line = NULL`, flag 1.
+    - Only its exposure over the API is new: `f15a1a675` (2026-08-17, API 0.7.0), and its
+      stated reason is the relay **remote**, not web clients — a remote displaying a
+      buffer has no marker, so the receiving WeeChat read `-1` as nothing-read and, in
+      flashcode's words, the whole backlog of buffers entirely read on the remote was
+      added in the local hotlist, and the highlights were triggered again locally. Same
+      class of bug as ours; the direction that fix serves is the `false` one, which the
+      app already gets from the hotlist baseline.
+    - `false` is not a reliable signal that the user has read everything: upstream issue
+      #2029, open since 2023-10-08 and reported against 4.0.5, is titled
+      `first_line_not_read` is 0 for new buffer with a message — a buffer created,
+      printed to and never viewed reports 0. The field's friendly direction has a known
+      rough edge of its own.
+    Recorded so it is not adopted later as an obvious win.
   - `prefix_displayed` — **do not act on it.** It is the API name for the
     gui-buffer flag `prefix_for_each_line` (`relay-api-msg.c` maps it from that
     hdata field), and WeeChat sets it from buffer type: formatted → 1, free → 0
