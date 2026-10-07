@@ -20,9 +20,11 @@ test.afterAll(async () => {
     await page.close();
 });
 
-// The toolbar and the color picker are {#if}-rendered, so "closed" means the
-// node is gone — toBeHidden() covers both detached and hidden.
-const toolbar = () => page.locator('[role="toolbar"]');
+// The toolbar and the color picker are {#if}-rendered, so "closed" means the node is
+// gone — toBeHidden() covers both detached and hidden. Both carry role="toolbar" (an
+// interactive role is what lets them keep the mousedown that holds focus in the input),
+// so the format toolbar is picked out by its accessible name.
+const toolbar = () => page.locator('[role="toolbar"][aria-label="Text formatting"]');
 const colorPicker = () => page.locator('.color-picker-popover');
 
 // Bold button tests
@@ -317,6 +319,79 @@ test('Format button click hides toolbar', async () => {
     // Click bold -> toolbar hides
     await page.getByTestId('format-bold').click();
     await expect(toolbar()).toBeHidden();
+});
+
+test('Color inserted at the caret when the picker is opened by mouse', async () => {
+    const input = page.getByTestId('message-input');
+    await input.focus();
+    await expectInputFocused(page);
+    await resetInputState(page);
+
+    await input.fill('abcd');
+    await input.evaluate((el) => el.setSelectionRange(2, 2));
+    await waitForInputCaret(page, 2);
+
+    // Opening the picker hands focus to the first swatch, so the insertion has to come from
+    // the caret recorded when the input lost focus, not from wherever focus ended up.
+    await page.getByTestId('format-toggle').click();
+    await expect(toolbar()).toBeVisible();
+    await page.getByTestId('format-color').click();
+    await expect(colorPicker()).toBeVisible();
+    await page.getByTestId('color-04').click();
+
+    await waitForInputValue(page, 'ab\u000304cd');
+    await waitForInputCaret(page, 5);
+    await expectInputFocused(page);
+    await expect(colorPicker()).toBeHidden();
+});
+
+test('Color picker opens by keyboard from the format toolbar', async () => {
+    const input = page.getByTestId('message-input');
+    await input.focus();
+    await expectInputFocused(page);
+    await resetInputState(page);
+
+    await page.getByTestId('format-toggle').press('Enter');
+    await expect(toolbar()).toBeVisible();
+
+    // Activating the color button hides the toolbar, which detaches the button that held
+    // focus. Without the hand-off focus drops to the page and the swatches are unreachable.
+    await page.getByTestId('format-color').press('Enter');
+    await expect(colorPicker()).toBeVisible();
+    await expect(page.getByTestId('color-00')).toBeFocused();
+
+    await page.keyboard.press('Escape');
+    await expect(colorPicker()).toBeHidden();
+    await expectInputFocused(page);
+});
+
+test('Color picker is reachable and operable by keyboard alone', async () => {
+    const input = page.getByTestId('message-input');
+    await input.focus();
+    await expectInputFocused(page);
+    await resetInputState(page);
+
+    // Ctrl+K opens the picker and moves focus into it. Opening it hides the format
+    // toolbar, which detaches the button that held focus, so without that hand-off Tab
+    // restarts at the top of the page and the swatches are never reachable.
+    await input.press('Control+k');
+    await expect(colorPicker()).toBeVisible();
+    await expect(page.getByTestId('color-00')).toBeFocused();
+
+    // Tab walks the swatches, Enter activates one, and the code lands in the input.
+    await page.keyboard.press('Tab');
+    await expect(page.getByTestId('color-01')).toBeFocused();
+    await page.keyboard.press('Enter');
+    await waitForInputValue(page, '\u000301');
+    await expect(colorPicker()).toBeHidden();
+    await expectInputFocused(page);
+
+    // Escape closes the picker and hands focus back to the input.
+    await input.press('Control+k');
+    await expect(colorPicker()).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(colorPicker()).toBeHidden();
+    await expectInputFocused(page);
 });
 
 // Settings toggle test

@@ -70,6 +70,7 @@ export async function resetInputState(page: Page): Promise<void> {
         }
     });
     await waitForInputValue(page, '');
-    await expect(page.locator('[role="toolbar"]')).toBeHidden();
+    // Scoped by accessible name: the color picker popover carries role="toolbar" too.
+    await expect(page.locator('[role="toolbar"][aria-label="Text formatting"]')).toBeHidden();
     await expect(page.locator('.color-picker-popover')).toBeHidden();
 }

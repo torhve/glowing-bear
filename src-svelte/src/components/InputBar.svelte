@@ -40,6 +40,7 @@
   function log(...args: unknown[]) { if (DEBUG_INPUT) console.log('[paste]', ...args); }
 
   let inputRef = $state<HTMLTextAreaElement>();
+  let colorPickerRef = $state<HTMLDivElement | undefined>();
   let fileInputRef = $state<HTMLInputElement>();
   // Seeded from the module-level draft so a disconnect (which unmounts this component)
   // does not discard a message the user was still typing.
@@ -288,6 +289,22 @@
     inputRef?.focus();
   }
 
+  // Keyboard path into the color picker. Opening it hides the format toolbar, which
+  // detaches the button that held focus, so Tab would restart at the top of the page
+  // and the swatches would never be reached. Focus the first swatch instead.
+  async function focusFirstColorSwatch(): Promise<void> {
+    if (!showColorPicker) return;
+    await tick();
+    colorPickerRef?.querySelector<HTMLButtonElement>('button')?.focus();
+  }
+
+  // Escape leaves the picker and hands focus back to the input it came from.
+  function closeColorPickerFromKeyboard(): void {
+    showColorPicker = false;
+    showFormatToolbar = false;
+    inputRef?.focus();
+  }
+
   // Insert the mIRC reset code (\x0f) at the cursor position to clear formatting.
   function insertReset(): void {
     if (!$settings.enableFormatting) return;
@@ -344,6 +361,7 @@
       if (code === 75 && !e.shiftKey) {
         e.preventDefault();
         showColorPicker = !showColorPicker;
+        void focusFirstColorSwatch();
         return true;
       }
     }
@@ -868,6 +886,7 @@
         class="format-toolbar"
         role="toolbar"
         aria-label="Text formatting"
+        tabindex="-1"
         onmousedown={keepFocusOnInput}
       >
         <div class="flex items-center gap-1 px-1">
@@ -902,7 +921,7 @@
           <button
             type="button"
             data-testid="format-color"
-            onclick={() => { showColorPicker = !showColorPicker; showFormatToolbar = false; }}
+            onclick={() => { showColorPicker = !showColorPicker; showFormatToolbar = false; void focusFirstColorSwatch(); }}
             class="format-btn px-2 py-0.5 text-xs font-bold rounded border transition-colors bg-input-bg border-border text-text-secondary hover:text-text hover:border-text-secondary"
             title="Color (Ctrl+K)"
           >C</button>
@@ -988,9 +1007,9 @@
   {#if showColorPicker}
     <div
       class="color-picker-popover fixed bottom-20 left-4 p-2 bg-surface border border-border rounded shadow-lg z-50"
-      role="listbox"
+      role="group"
       aria-label="Text color"
-      onmousedown={keepFocusOnInput}
+      bind:this={colorPickerRef}
     >
       <div class="grid grid-cols-8 gap-1">
         {#each IRC_COLORS as color (color.code)}
@@ -998,6 +1017,17 @@
             type="button"
             data-testid="color-{color.code}"
             onclick={() => applyColor(color.code)}
+            onmousedown={keepFocusOnInput}
+            onkeydown={(e) => {
+              if (e.key !== 'Escape') return;
+              // stopPropagation, not just preventDefault: +page.svelte listens for Escape on
+              // the document, blurs whatever is focused, and treats a second Escape within
+              // 500 ms as a disconnect. Handing focus back to the input and then letting that
+              // handler see the same keypress would blur it straight back out.
+              e.preventDefault();
+              e.stopPropagation();
+              closeColorPickerFromKeyboard();
+            }}
             class="color-swatch w-7 h-7 rounded border border-border flex items-center justify-center text-xs font-mono hover:scale-110 transition-transform"
             style="background-color: {color.css}; color: {color.css === '#FFFFFF' || color.css === '#FFFF00' ? '#000000' : '#FFFFFF'};"
             title="{color.name} ({color.code})"
