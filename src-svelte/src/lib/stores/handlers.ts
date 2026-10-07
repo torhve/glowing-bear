@@ -28,6 +28,7 @@ import {
     resolvePendingReadBoundary,
     markHotlistBaselineApplied,
     isRelayStatusBuffer,
+    injectDateChangeMessageIfNeeded,
 } from "#lib/stores/models.ts";
 import { shouldResume, getLastBuffer, recordLastBuffer } from "#lib/stores/bufferResume.ts";
 import {
@@ -898,130 +899,11 @@ export function handleUpgradeEnded() {
 
 // ---- Date change injection ----
 
-/**
- * Inject a "day changed" separator when the new line falls on a different local
- * day than the buffer's last line.
- *
- * Timestamps may be passed as plain numbers as well as Dates. The hot path has
- * millisecond timestamps already, and building two Date objects plus two
- * `setHours` calls per line measured 343 ns — about 5% of the flood workload —
- * to answer a question that is four number comparisons once the local day
- * window is known.
- *
- * `localDayStart`/`localDayEnd` cache the half-open window
- * [start of day, start of next day) computed from a timestamp with the same
- * `setHours(0, 0, 0, 0)` rounding the exact comparison below uses. Any two
- * timestamps inside one such window are on the same local day, so the cache can
- * only ever prove a true "same day"; a stale or partial window just falls
- * through to the exact comparison. DST days (23 or 25 hours, or a day whose
- * local midnight does not exist) stay correct for the same reason: they can
- * make the fast path miss, never guess wrong.
- */
-export function injectDateChangeMessageIfNeeded(
-    buffer: BufferData,
-    manually: boolean,
-    oldDate: Date | number,
-    newDate: Date | number,
-) {
-    if (buffer.bufferType === 1) return; // Free buffers
-
-    const oldMs = typeof oldDate === "number" ? oldDate : oldDate.getTime();
-    const newMs = typeof newDate === "number" ? newDate : newDate.getTime();
-
-    const cachedStart = buffer.localDayStart;
-    const cachedEnd = buffer.localDayEnd;
-    if (
-        cachedStart !== undefined &&
-        cachedEnd !== undefined &&
-        oldMs >= cachedStart &&
-        oldMs < cachedEnd &&
-        newMs >= cachedStart &&
-        newMs < cachedEnd
-    ) {
-        return; // Both timestamps lie in one cached local-day window.
-    }
-
-    // Rebuild the window around the older timestamp and retry. A real day
-    // change happens a couple of times a day, so this is not the common path.
-    const window = new Date(oldMs);
-    window.setHours(0, 0, 0, 0);
-    const dayStart = window.getTime();
-    window.setDate(window.getDate() + 1);
-    window.setHours(0, 0, 0, 0);
-    const dayEnd = window.getTime();
-    buffer.localDayStart = dayStart;
-    buffer.localDayEnd = dayEnd;
-    if (newMs >= dayStart && newMs < dayEnd) return;
-
-    // Exact path: identical to the original comparison, on fresh Dates so the
-    // caller's values are left alone.
-    const oldDay = typeof oldDate === "number" ? new Date(oldDate) : oldDate;
-    const newDay = typeof newDate === "number" ? new Date(newDate) : newDate;
-    oldDay.setHours(0, 0, 0, 0);
-    newDay.setHours(0, 0, 0, 0);
-
-    if (oldDay.valueOf() === newDay.valueOf()) return;
-
-    // Legacy callers without boundary metadata still receive the old index update;
-    // production buffers use stable line identities instead.
-    if (manually && buffer.readBoundaryKnown === undefined) buffer.lastSeen++;
-    const datePlusOne = new Date(oldDay.getTime());
-    datePlusOne.setDate(datePlusOne.getDate() + 1);
-    datePlusOne.setHours(0, 0, 0, 0);
-
-    let content = `\u001943\u2500`; // Day change color (code 43 = chat_day_change) + box drawing
-
-    // Add day of week
-    const weekdays = [
-        "Sunday",
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-    ];
-    content += weekdays[newDay.getDay()] + " (";
-    content += newDay.toLocaleDateString(undefined, {
-        month: "long",
-        day: "numeric",
-    });
-
-    if (newDay.getFullYear() !== oldDay.getFullYear()) {
-        content += `, ${newDay.getFullYear()}`;
-    }
-
-    if (datePlusOne.valueOf() !== newDay.valueOf()) {
-        const diff =
-          Math.round(
-              (newDay.getTime() - oldDay.getTime()) / (24 * 60 * 60 * 1000),
-          ) + 1;
-        if (diff < 0) {
-            content += `, ${Math.abs(diff)} days before`;
-        } else {
-            content += `, ${diff} days later`;
-        }
-    }
-
-    content += ")";
-
-    const dateLine = createBufferLine({
-        buffer: buffer.id,
-        date: newDay.getTime(),
-        date_long: 0,
-        prefix: "\u001943\u2500",
-        message: content,
-        tags_array: [],
-        displayed: 1,
-        notify_level: 0,
-        highlight: 0,
-    });
-    dateLine.lineId = `date:${buffer.id}:${newDay.getTime()}`;
-    dateLine.isDateSeparator = true;
-    dateLine.isUserMessage = false;
-
-    buffer.lines.push(dateLine);
-}
+// The one implementation lives in models.ts, which both transports build lines
+// through. It is re-exported here because the legacy handlers have always
+// exposed it, and the two copies drifting apart is exactly how the API path
+// ended up still building two Date objects per line.
+export { injectDateChangeMessageIfNeeded };
 
 // ---- Buffer opened handler ----
 export function handleBufferOpened(message: ProtocolMessage) {

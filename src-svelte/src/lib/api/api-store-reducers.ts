@@ -254,7 +254,9 @@ export function noteLineId(buffer: BufferData, lineId: string | undefined): void
 function appendLines(buffer: BufferData, lines: LineSnapshot[]): void {
     for (const line of lines) {
         if (isServerHiddenLine(line)) continue; // smart-filtered: WeeChat hides it
-        injectDateChangeMessageIfNeeded(buffer, false, new Date(buffer.lines.length ? buffer.lines[buffer.lines.length - 1]!.date : line.epochMs), new Date(line.epochMs));
+        // Timestamps, not Dates: this runs per line and the cached local-day
+        // window answers it with number comparisons.
+        injectDateChangeMessageIfNeeded(buffer, false, buffer.lines.length ? buffer.lines[buffer.lines.length - 1]!.date : line.epochMs, line.epochMs);
         const created = createBufferLine({
             buffer: buffer.id,
             date: line.epochMs,
