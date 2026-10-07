@@ -351,6 +351,12 @@ weechat-headless -d /tmp/gb-wc5 --daemon \
   probe uses. A probe that only works with `plain:` is a fixture bug waiting to
   happen.
 
+- **Endpoint matrix.** `probes/probe-endpoint-matrix.mjs` hits every endpoint the
+  transport uses and prints each response's key set; run it against both relays
+  and diff. On 2026-10-07 the only divergence across version, hotlist, scripts,
+  completion, nicks, ping and lines was `date_printed` on lines — which is the
+  bug above, not a remaining gap.
+
 ## Coverage limitations (2026-10-06 audit pass)
 
 Recorded here so the gaps survive in tracked history, not only in local notes:
