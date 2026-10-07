@@ -36,24 +36,33 @@ const INSTRUMENT = `(() => {
     const obs = new MutationObserver((muts) => {
         const pb = window.__pb;
         for (const m of muts) {
-            if (m.type === 'attributes' && isFavicon(m.target)) {
-                pb.faviconWrites++;
-                // Count distinct href values, not just writes: if a redraw
-                // produces the same bytes the browser records nothing, so the
-                // distinct count is what tells us how many draws were actually
-                // different pictures rather than how many times we asked.
-                const href = String(m.target.getAttribute('href') || '');
-                if (!pb.distinct[href]) pb.distinct[href] = 0;
-                pb.distinct[href]++;
-                if (pb.hrefs.length < 4) pb.hrefs.push(href.slice(0, 40));
+            // Setting document.title or link.href is an attribute mutation on a
+            // node that already exists, so a childList-only branch sees neither.
+            if (m.type === 'attributes') {
+                if (isFavicon(m.target) && m.attributeName === 'href') {
+                    pb.faviconWrites++;
+                    // Count distinct href values, not just writes: if a redraw
+                    // produces the same bytes the browser records nothing, so the
+                    // distinct count is what tells us how many draws were actually
+                    // different pictures rather than how many times we asked.
+                    const href = String(m.target.getAttribute('href') || '');
+                    if (!pb.distinct[href]) pb.distinct[href] = 0;
+                    pb.distinct[href]++;
+                    if (pb.hrefs.length < 4) pb.hrefs.push(href.slice(0, 40));
+                } else if (isTitle(m.target) && m.attributeName === 'title') {
+                    pb.titleWrites++;
+                }
             }
             else if (m.type === 'childList') {
-                for (const n of m.addedNodes) if (isTitle(n)) pb.titleWrites++;
+                for (const n of m.addedNodes) {
+                    if (isTitle(n)) pb.titleWrites++;
+                    else if (isFavicon(n)) pb.faviconWrites++;
+                }
             }
         }
     });
     obs.observe(document.documentElement || document, {
-        subtree: true, childList: true, attributes: true, attributeFilter: ['href'],
+        subtree: true, childList: true, attributes: true, attributeFilter: ['href', 'title'],
     });
 
     try {
@@ -95,7 +104,15 @@ test('prodbadge: unread badge redraw cost of a 2000-message flood to another buf
     const layoutMetrics = async (): Promise<{ count: number; durationMs: number }> => {
         const { metrics } = await cdp.send('Performance.getMetrics');
         const pick = (name: string) => metrics.find((m: { name: string }) => m.name === name)?.value ?? 0;
-        return { count: pick('LayoutCount'), durationMs: pick('LayoutDuration') * 1000 };
+        return {
+            count: pick('LayoutCount'),
+            durationMs: pick('LayoutDuration') * 1000,
+            // ScriptDuration is the browser's own tally of main-thread JavaScript
+            // time. Wall time here is dominated by the flood's own rendering, so
+            // the badge cost shows up in script time long before it shows up in
+            // elapsed time.
+            scriptMs: pick('ScriptDuration') * 1000,
+        };
     };
 
     try {
@@ -108,6 +125,7 @@ test('prodbadge: unread badge redraw cost of a 2000-message flood to another buf
 
         const REPEATS = Number(process.env.GB_E2E_REPEATS ?? 3);
         const elapsed: number[] = [];
+        const scriptTimes: number[] = [];
         const sends: number[] = [];
         let last: any = {};
 
@@ -128,6 +146,9 @@ test('prodbadge: unread badge redraw cost of a 2000-message flood to another buf
                 pb.titleWrites = 0;
                 pb.hrefs = [];
                 pb.longtasks = [];
+                // Distinct pictures must be per round too: a stale map from an
+                // earlier round reports pictures this round never drew.
+                pb.distinct = {};
             });
 
             if (profiling) {
@@ -181,10 +202,12 @@ test('prodbadge: unread badge redraw cost of a 2000-message flood to another buf
             last = { ...pb, seen };
 
             elapsed.push(ms);
+            scriptTimes.push(layoutsAfter.scriptMs - layoutsBefore.scriptMs);
             console.log(
                 `[prodbadge][round ${round}] elapsed=${ms}ms send=${sends[round]}ms unreadBefore=${before} unread=${seen} ` +
                 `faviconWrites=${pb.faviconWrites} distinctHrefs=${pb.distinctHrefs} titleWrites=${pb.titleWrites} ` +
                 `layouts=${layoutsAfter.count - layoutsBefore.count} layoutMs=${(layoutsAfter.durationMs - layoutsBefore.durationMs).toFixed(0)} ` +
+                `scriptMs=${(layoutsAfter.scriptMs - layoutsBefore.scriptMs).toFixed(0)} ` +
                 `longtasks=${pb.longtaskCount}(sum=${pb.longtaskTotalMs}ms)`,
             );
         }
@@ -192,7 +215,8 @@ test('prodbadge: unread badge redraw cost of a 2000-message flood to another buf
         const med = median(elapsed);
         console.log(
             `[prodbadge] elapsedMedian=${med}ms elapsedMin=${Math.min(...elapsed)}ms elapsedMax=${Math.max(...elapsed)}ms ` +
-            `rounds=${elapsed.join(',')} sendMedian=${median(sends)}ms faviconWrites=${last.faviconWrites} ` +
+            `rounds=${elapsed.join(',')} sendMedian=${median(sends)}ms scriptMedian=${median(scriptTimes.map((v) => Math.round(v)))}ms ` +
+            `faviconWrites=${last.faviconWrites} ` +
             `href=${JSON.stringify(last.hrefs[0] ?? '')}`,
         );
 

@@ -45,7 +45,7 @@ function parseResults(text) {
             out.set('E2E production flood', { median: Number(e2e[1]), raw: line });
             // ScriptDuration is the browser's own main-thread JavaScript tally:
             // the metric that can see store-pipeline work wall time cannot.
-            const script = line.match(/scriptMs=(\d+)/);
+            const script = line.match(/scriptMs=(\d+)/) ?? line.match(/scriptMedian=(\d+)ms/);
             if (script) out.set('E2E main-thread JS', { median: Number(script[1]), raw: line });
         }
     }
