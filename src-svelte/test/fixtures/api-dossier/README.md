@@ -34,7 +34,13 @@ form; this directory keeps the reproducible evidence.
                                         # gbtest grep shim autoloaded; isolated profile, port 9012)
    node probes/probe-auth-algorithms.mjs # all five auth algorithms, HTTP + WS (needs a
                                           # dedicated instance on 9011 with
-                                          # password_hash_algo=*; see that file's header)
+                                          # password_hash_algo=* — stop the gbtest5
+                                          # fixture first, it owns that port)
+   node probes/probe-endpoint-matrix.mjs 9010   # every endpoint the transport uses,
+                                          # diff 4.10.1 vs 5.0 (also 9011)
+   node probes/probe-weechat5-schema.mjs 9011  # buffer/line key sets, id type +
+                                          # safety, live event shape
+   node probes/probe-weechat5-line-fields.mjs  # 5.0 history + live line payloads
    ```
 
 3. Raw frames land in `frames/probe-session.jsonl` and `frames/probe-lifecycle.jsonl`
@@ -351,6 +357,47 @@ weechat-headless -d /tmp/gb-wc5 --daemon \
   probe uses. A probe that only works with `plain:` is a fixture bug waiting to
   happen.
 
+- **Line identifiers are timestamps now, and they are no longer dense.** 4.10.1
+  numbered a buffer's lines 0, 1, 2, …; 5.0 assigns
+  `epoch_seconds × 1_000_000 + microseconds`, e.g. line id `1791365101063294` with
+  `date: "2026-10-07T09:25:01.063294Z"`. Consequences measured, not inferred:
+  - ids stay safe JS integers (`Number.isSafeInteger` true for every id sampled;
+    the encoding overflows `Number.MAX_SAFE_INTEGER` around the year 2254), so
+    `asLineId` and the `lineIdsSeen` index keep working;
+  - ids are **sparse and globally unique**, so anything that assumed dense
+    per-buffer numbering (id arithmetic, using an id as an offset, or assuming two
+    buffers could share an id) is wrong on 5.0. The app normalizes ids to
+    `weechat:<digits>` strings and never does id arithmetic, which is why this did
+    not bite;
+  - `last_read_line_id` is a timestamp id on 5.0 (`1791365636514441`) where 4.10.1
+    gave a small counter (`302281`), and `-1` when nothing is read — the validator
+    already accepts `>= -1`.
+  Evidence: `probes/probe-weechat5-schema.mjs` (buffer keys, line keys, id typeof
+  and safety) against both relays.
+- **Buffer key sets, live diff.** 4.10.1:
+  `id, name, short_name, number, type, hidden, title, modes, input*, nicklist*,
+  time_displayed, local_variables, keys, last_read_line_id`.
+  5.0 adds `notify`, `prefix_displayed`, `day_change`, `first_line_not_read`.
+  The validator allows unknown additive fields on purpose, so the extra fields
+  pass; none of them are consumed.
+- **Freshness events require `POST /api/sync`; fetching buffers does not subscribe.**
+  A probe that authenticated and called `GET /api/buffers` (even
+  `GET /api/buffers/<id>`) received **zero** events on both relays. After the
+  app's own `POST /api/sync {sync,nicks,input,colors}` the same probe received
+  `buffer_line_added`. A probe that reports "the relay sends no events" has almost
+  certainly skipped this step.
+- **Event envelope is `body`, not `event_body`.** Live 5.0 frame:
+  `{code:0, message:"Event", event_name, buffer_id, body_type, body}`. A probe that
+  reads `event_body` silently sees nothing.
+- **Buffer-mutation commands all answer 204 on 5.0 and which events they produce**
+  (`probes/` mutation sweep on the channel buffer): `/me` → `buffer_line_added`;
+  `/buffer notify highlight` → `buffer_notify_changed` whose body is a **full
+  buffer object** (not a bare level); `/buffer set title` → `buffer_title_changed`
+  (also a full buffer object). `/buffer set day_change on|off` was accepted but
+  produced no `buffer_day_change_changed`, and no `day_changed` was observed
+  outside a real local midnight — so those two new events remain **unprobed**.
+  The app routes `buffer_notify_changed` and `buffer_title_changed`; `day_changed`
+  and `buffer_day_change_changed` fall to `unrouted event:` warnings.
 - **Endpoint matrix.** `probes/probe-endpoint-matrix.mjs` hits each endpoint the
   transport uses and prints the sampled response's top-level key set; run it
   against both relays and diff. Sampled 2026-10-07, version, hotlist, scripts,
