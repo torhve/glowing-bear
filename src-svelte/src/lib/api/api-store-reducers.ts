@@ -84,7 +84,7 @@ function scheduleLineFlush(): void {
  * idempotent: a live line that raced with a concurrent history response updates
  * the existing row in place instead of duplicating it, and is not tallied twice.
  */
-function applyLineAdded(target: BufferData, line: LineSnapshot, activeId: string, limit: number): void {
+function applyLineAdded(target: BufferData, line: LineSnapshot, activeId: string, limit: number, effects: LineBatchEffects): void {
     const lineId = `weechat:${line.id}`;
     // The id scan is the expensive half of a live line: it walks every retained
     // line to answer "has history already inserted this one?". The answer is
@@ -112,8 +112,8 @@ function applyLineAdded(target: BufferData, line: LineSnapshot, activeId: string
     appendLines(target, [line], limit);
     trimToLimit(target, limit);
     if (line.displayed) {
-        tallyLine(target, line, activeId);
-        alertForLine(target, line, activeId);
+        tallyLine(target, line, activeId, effects);
+        alertForLine(target, line, activeId, effects);
     }
 }
 
@@ -132,6 +132,9 @@ export function flushApiLineBatch(): void {
     // and unsubscribes, and doing it twice per line measured 26% of the API
     // flood's store time — the cap cannot move inside one synchronous flush.
     const lineLimit = get(maxBufferLines);
+    // One accumulator for the whole flush, not per buffer: several buffers can
+    // be flooded in one frame and the Set and servers map are global.
+    const effects: LineBatchEffects = { localUnreadIds: new Set(), serverDeltas: {}, alertIndicators: false };
     const byBuffer = new Map<string, { items: { line: LineSnapshot; activeId: string }[] }>();
     for (const item of batch) {
         const key = storeKeyForBufferId(item.bufferId);
@@ -146,10 +149,12 @@ export function flushApiLineBatch(): void {
             if (!buffer) return current; // buffer not synced yet; history fetch covers it
             const copy = { ...current, [key]: { ...buffer, lines: [...buffer.lines] } };
             const target = copy[key]!;
-            for (const item of group.items) applyLineAdded(target, item.line, item.activeId, lineLimit);
+            for (const item of group.items) applyLineAdded(target, item.line, item.activeId, lineLimit, effects);
             return copy;
         });
     }
+
+    applyLineBatchEffects(effects);
 }
 
 // Group display keys follow the legacy contract: group name, root group is
@@ -171,14 +176,56 @@ function serverKey(buffer: BufferData): string {
     return `${buffer.plugin}.${buffer.server}`;
 }
 
-function addServerUnread(serverKey: string, delta: number): void {
-    servers.update((current) => {
-        const copy = { ...current };
-        const entry = copy[serverKey];
-        if (entry) copy[serverKey] = { ...entry, unread: entry.unread + delta };
-        else copy[serverKey] = { id: serverKey, unread: delta };
-        return copy;
-    });
+/**
+ * Store writes a line batch can coalesce.
+ *
+ * Every one of these used to run per line: a full Set copy for the local
+ * unread ids, a full servers-map copy for the unread delta, and a title and
+ * favicon pass per alerting line. None of the stores they write is read inside
+ * the batch loop, so accumulating and applying once leaves the final state
+ * identical. The legacy transport already batches this way (flushLineBatch);
+ * this is the same contract on the API path.
+ */
+interface LineBatchEffects {
+    localUnreadIds: Set<string>;
+    serverDeltas: Record<string, number>;
+    alertIndicators: boolean;
+}
+
+function noteServerUnread(effects: LineBatchEffects, key: string, delta: number): void {
+    effects.serverDeltas[key] = (effects.serverDeltas[key] || 0) + delta;
+}
+
+/**
+ * Apply the accumulated effects once. Order matters: the title and the favicon
+ * badge are computed from the unread stores, so both stores must be published
+ * before the indicators run.
+ */
+function applyLineBatchEffects(effects: LineBatchEffects): void {
+    if (effects.localUnreadIds.size > 0) {
+        localUnreadBuffers.update((current) => {
+            const next = new Set(current);
+            for (const id of effects.localUnreadIds) next.add(id);
+            return next;
+        });
+    }
+    const keys = Object.keys(effects.serverDeltas);
+    if (keys.length > 0) {
+        servers.update((current) => {
+            const copy = { ...current };
+            for (const key of keys) {
+                const delta = effects.serverDeltas[key]!;
+                const entry = copy[key];
+                if (entry) copy[key] = { ...entry, unread: entry.unread + delta };
+                else copy[key] = { id: key, unread: delta };
+            }
+            return copy;
+        });
+    }
+    if (effects.alertIndicators) {
+        updateTitle();
+        updateFavico();
+    }
 }
 
 function snapshotToBuffer(snap: BufferSnapshot): BufferData {
@@ -396,13 +443,13 @@ function findNickLocation(buffer: BufferData, nickId: number): { group: NickGrou
  * notify level in buffers and buffer_notify_changed events, which sets it; on
  * 4.10.1 it stays 'all' and hotlist baselines correct the counts.
  */
-function tallyLine(buffer: BufferData, line: LineSnapshot, activeId: string): void {
+function tallyLine(buffer: BufferData, line: LineSnapshot, activeId: string, effects: LineBatchEffects): void {
     if (isRelayStatusBuffer(buffer)) return;
     if (buffer.id === activeId) return;
 
     if (line.notifyLevel >= 1) {
         buffer.localUnread = (buffer.localUnread || 0) + 1;
-        localUnreadBuffers.update((s) => new Set(s).add(buffer.id));
+        effects.localUnreadIds.add(buffer.id);
     }
 
     // Boundary-resolution counters stay deferred to the hotlist baseline
@@ -411,20 +458,20 @@ function tallyLine(buffer: BufferData, line: LineSnapshot, activeId: string): vo
 
     if (buffer.notify > 1 && line.notifyLevel === 1) {
         buffer.unread++;
-        addServerUnread(serverKey(buffer), 1);
+        noteServerUnread(effects, serverKey(buffer), 1);
     }
     if (line.notifyLevel >= 2) {
         const isPrivate = buffer.type === 'private' || buffer.type === 'query';
         if (buffer.notify !== 0 && (line.highlight || isPrivate)) {
             buffer.notification++;
-            addServerUnread(serverKey(buffer), 1);
+            noteServerUnread(effects, serverKey(buffer), 1);
         }
     }
 }
 
 /** User-facing alert path — deliberately independent of sync/boundary state
  *  (a real-time PM must ring even in a boundary-unknown buffer). */
-function alertForLine(buffer: BufferData, line: LineSnapshot, activeId: string): void {
+function alertForLine(buffer: BufferData, line: LineSnapshot, activeId: string, effects: LineBatchEffects): void {
     if (isRelayStatusBuffer(buffer)) return;
     // WeeChat hotlist policy maps line priority to a minimum buffer notify
     // level: message (1) requires 'message' (2); private/highlight (2-3)
@@ -434,8 +481,10 @@ function alertForLine(buffer: BufferData, line: LineSnapshot, activeId: string):
     if (line.notifyLevel < 1) return;
     if (buffer.notify < (line.notifyLevel === 1 ? 2 : 1)) return;
     if (buffer.id === activeId) return;
-    updateTitle();
-    updateFavico();
+    // Passive indicators are derived from store state this batch has not
+    // published yet, so every alerting line would compute the identical title
+    // and badge. One pass at the end is the same result.
+    effects.alertIndicators = true;
     const isPrivateMessage = line.tags.includes('notify_private');
     const isPrivate = buffer.type === 'private' || buffer.type === 'query';
     if (buffer.notify !== 0 && (line.highlight || isPrivateMessage || isPrivate)) {
