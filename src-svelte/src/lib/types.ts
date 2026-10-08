@@ -156,7 +156,45 @@ export interface ServerInfo {
     unread: number;
 }
 
-export interface BufferData {
+/**
+ * The fields presentation reads: names, ordering keys, counts, and tooltip
+ * metadata. `BufferData` is exactly this plus message history, nicklists, and
+ * the line-bookkeeping that makes them correct.
+ *
+ * Sidebar projections publish `BufferPresentation` rather than `BufferData` so
+ * that a new message — by far the most frequent change in the app — cannot
+ * invalidate the object a sidebar row is rendering. Keeping the two types
+ * structurally related (one extends the other) is what stops the sidebar and
+ * the transport from drifting into two different ideas of what a buffer is.
+ */
+export interface BufferPresentation {
+    id: string;
+    fullName: string;
+    shortName: string;
+    trimmedName: string | null;
+    nameClasses: string[];
+    prefix: string;
+    number: number;
+    title: RichTextPart[];
+    rtitle: string;
+    hidden: boolean;
+    localUnread: number;
+    unread: number;
+    notification: number;
+    notify: number;
+    serverSortKey: string;
+    indent: boolean;
+    bufferType: number;
+    type: BufferType;
+    plugin: string;
+    server: string;
+    hideBufferLineTimes: boolean;
+    pinned: boolean;
+    active: boolean;
+    localVariables?: Record<string, string>;
+}
+
+export interface BufferData extends BufferPresentation {
     id: string;
     /** Branded numeric Relay API id; authoritative for API calls. Store key
      *  `id` is always `String(apiBufferId)` — set only by api-store-reducers. */
@@ -164,15 +202,6 @@ export interface BufferData {
     /** Increments on every buffer clear; delayed history responses captured
      *  under an older epoch must be rejected. */
     clearEpoch?: number;
-    fullName: string;
-    shortName: string;
-    hidden: boolean;
-    trimmedName: string | null;
-    nameClasses: string[];
-    prefix: string;
-    number: number;
-    title: RichTextPart[];
-    rtitle: string;
     lines: BufferLine[];
     requestedLines: number;
     allLinesFetched: boolean;
@@ -208,10 +237,6 @@ export interface BufferData {
      * reaches it.
      */
     serverReadLineId?: number;
-    localUnread: number;
-    unread: number;
-    notification: number;
-    notify: number;
     nicklist: Record<string, NickGroup>;
     /** An authoritative nicklist snapshot was applied (explicit fetch or a
      *  buffer_opened carrying the tree). Nick deltas alone only build a
@@ -219,15 +244,6 @@ export interface BufferData {
      *  presence of a 'root' group. */
     nicklistFetched?: boolean;
     localVariables?: Record<string, string>;
-    serverSortKey: string;
-    indent: boolean;
-    bufferType: number;
-    type: BufferType;
-    plugin: string;
-    server: string;
-    hideBufferLineTimes: boolean;
-    pinned: boolean;
-    active: boolean;
 }
 
 // ---- Pending navigation ----

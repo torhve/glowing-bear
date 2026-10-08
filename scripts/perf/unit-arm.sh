@@ -17,7 +17,7 @@ REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO"
 
 mkdir -p "$RUNDIR"
-rm -f /tmp/gb-perf/unit-results.txt
+rm -f /tmp/gb-perf/unit-results.txt /tmp/gb-perf/unit-counts.txt
 mkdir -p /tmp/gb-perf
 
 load() { uptime | sed 's/.*load averages\{0,1\}:*//'; }
@@ -59,6 +59,12 @@ echo "load_after: $(load)" >> "$RUNDIR/meta.txt"
   exit 1
 }
 cp /tmp/gb-perf/unit-results.txt "$RUNDIR/unit-results.txt"
+# Work counts (selector publications, mocked title/favicon call counts) are a
+# second, deterministic evidence stream: a regression guard can assert on them
+# even when wall time is too noisy to show the difference.
+if [ -s /tmp/gb-perf/unit-counts.txt ]; then
+  cp /tmp/gb-perf/unit-counts.txt "$RUNDIR/unit-counts.txt"
+fi
 ( cd /tmp/gb-perf && shasum -a 256 ./*.json ) > "$RUNDIR/hashes.txt"
 
 echo "arm: $ARM" >> "$RUNDIR/meta.txt"

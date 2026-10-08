@@ -2,25 +2,14 @@
 // Ported from notifications.js
 
 import { settings, updateSettings } from './stores/settings';
-import { buffers, currentBuffer, setActiveBuffer } from './stores/models';
+import { setActiveBuffer } from './stores/models';
+import { badgeState, documentTitle, type BadgeState } from './stores/indicatorState';
 import { get } from 'svelte/store';
 import type { BufferData } from './types';
-import { initFavicon, drawBadge, resetBadge } from './faviconBadge';
+import { initFavicon, drawBadge, resetBadge, invalidateFaviconBadge } from './faviconBadge';
 import { isTauri, setBadgeCount } from './tauriWindow';
 import { initWindowFocusTracking } from './windowFocus';
 import { DEBUG_NOTIFICATIONS } from '#lib/debug.ts';
-
-// Calculate total unread and notification counts across all buffers.
-function getTotalUnread(): { unread: number; notifications: number } {
-    const allBuffers = get(buffers);
-    let unread = 0;
-    let notifications = 0;
-    for (const buf of Object.values(allBuffers) as BufferData[]) {
-        unread += buf.unread;
-        notifications += buf.notification;
-    }
-    return { unread, notifications };
-}
 
 // Notification permission state
 let notificationPermission: 'granted' | 'denied' | 'default' = 'default';
@@ -189,53 +178,96 @@ export function cancelAll(): void {
 }
 
 /**
- * Update the document title with total unread count across all buffers
+ * Apply a title the indicator store has already decided on.
+ *
+ * The store suppresses unchanged values, so an assignment here means the tab
+ * text genuinely changed — but the comparison is repeated against the DOM
+ * because `document.title = x` still costs a text-node mutation and a style
+ * recalculation on the <title> element, and something outside this module
+ * (a browser extension, a test, the disconnect path) can have written it too.
  */
-export function updateTitle(): void {
-    const activeBuf = get(currentBuffer);
-    const bufferName = activeBuf?.shortName || activeBuf?.fullName || '';
-    const topic = activeBuf?.rtitle || '';
+let appliedTitle: string | null = null;
 
-    // Get total unread count
-    const { unread, notifications } = getTotalUnread();
-    const totalUnread = unread + notifications;
-
-    let prefix = '';
-    if (totalUnread > 0) {
-        prefix = `(${totalUnread}) `;
-    }
-
-    if (typeof document !== 'undefined') {
-        document.title = `${prefix}Glowing Bear - ${bufferName}${topic ? ` - ${topic}` : ''}`;
-    }
+export function applyDocumentTitle(title: string): void {
+    if (typeof document === 'undefined') return;
+    if (appliedTitle === title && document.title === title) return;
+    appliedTitle = title;
+    document.title = title;
 }
 
 /**
- * Update the favicon badge.
- * drawBadge is async (waits for base image), so we fire-and-forget here
- * to avoid making all callers async.
+ * Apply a badge state the indicator store has already decided on.
+ *
+ * `null` means "no badge": clearing is an action, not an absence of one, and
+ * skipping it is how a stale count survives a mark-read.
  */
-export function updateFavico(): void {
-    const s = get(settings);
-    if (!s.useFavico) {
-        return;
-    }
+export function applyBadge(state: BadgeState | null): void {
+    if (typeof document === 'undefined') return;
 
-    const { unread: totalUnread, notifications: totalNotifications } = getTotalUnread();
-
-    if (totalNotifications > 0) {
-        void drawBadge(totalNotifications, 'notification');
-        try { navigator.setAppBadge(totalNotifications); } catch { /* not supported */ }
-        void setBadgeCount({ count: totalNotifications, type: 'notification' });
-    } else if (totalUnread > 0) {
-        void drawBadge(totalUnread, 'unread');
-        try { navigator.setAppBadge(totalUnread); } catch { /* not supported */ }
-        void setBadgeCount({ count: totalUnread, type: 'unread' });
-    } else {
+    if (state === null) {
         resetBadge();
         try { navigator.clearAppBadge(); } catch { /* not supported */ }
         void setBadgeCount({ count: 0, type: 'unread' });
+        return;
     }
+
+    void drawBadge(state.count, state.kind);
+    try { navigator.setAppBadge(state.count); } catch { /* not supported */ }
+    void setBadgeCount({ count: state.count, type: state.kind });
+}
+
+/**
+ * Start the single owner of the title and the badge.
+ *
+ * Transports publish state; nothing in a handler writes an indicator. The owner
+ * subscribes to the three indicator stores and applies whatever actually
+ * changed, so an unchanged hotlist poll that re-references every background
+ * buffer produces no title write and no badge draw.
+ *
+ * Returns the stop function; the caller owns the lifecycle (the page effect) and
+ * must call it on teardown, or a reconnect leaves a second owner subscribed and
+ * the "one owner" property is gone.
+ */
+export function startIndicatorOwner(): () => void {
+    const unsubs = [
+        documentTitle.subscribe((title) => applyDocumentTitle(title)),
+        badgeState.subscribe((state) => applyBadge(state)),
+    ];
+    return () => {
+        for (const unsub of unsubs) unsub();
+    };
+}
+
+/**
+ * Force both indicators to be re-applied from current state.
+ *
+ * Appearance changes are explicit invalidations: a theme change can alter the
+ * badge palette without changing any count, and a projection that compares
+ * values cannot see that the picture it produced is now different.
+ */
+export function refreshIndicators(): void {
+    applyDocumentTitle(get(documentTitle));
+    invalidateFaviconBadge();
+    applyBadge(get(badgeState));
+}
+
+/**
+ * Update the document title from current state.
+ *
+ * Kept for explicit invalidation only (appearance changes). Ordinary traffic
+ * reaches the title through the indicator owner, not through a handler.
+ */
+export function updateTitle(): void {
+    applyDocumentTitle(get(documentTitle));
+}
+
+/**
+ * Update the favicon badge from current state.
+ *
+ * Kept for explicit invalidation only; see `updateTitle`.
+ */
+export function updateFavico(): void {
+    applyBadge(get(badgeState));
 }
 
 /**
@@ -291,9 +323,10 @@ export async function initNotifications(): Promise<void> {
  */
 export function onDisconnect(): void {
     cancelAll();
-    resetBadge();
-    void setBadgeCount({ count: 0, type: 'unread' });
-    if (typeof document !== 'undefined') {
-        document.title = 'Glowing Bear';
-    }
+    // Routed through the same appliers the owner uses, so the cached "title
+    // currently on the tab" and the badge paint identity stay truthful. A direct
+    // write here would leave both caches describing a value the DOM no longer
+    // has, and a later no-op publication would then skip a write it owes.
+    applyBadge(null);
+    applyDocumentTitle('Glowing Bear');
 }

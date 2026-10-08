@@ -1,24 +1,15 @@
 <script lang="ts">
-  import { activeBufferId, visibleBuffers } from '#lib/stores/models.ts';
+  import { hotlistEntries } from '#lib/stores/bufferProjections.ts';
   import { switchBuffer } from '#lib/stores/connectionManager.ts';
-  import type { BufferData } from '#lib/types.ts';
+  import type { BufferPresentation } from '#lib/types.ts';
 
   let { onBufferSelect = () => {} } = $props();
 
-  // Buffers with unread activity, sorted by highlight → unread → number.
-  let entries = $derived(
-    $visibleBuffers
-      .filter((b: BufferData) => b.id !== $activeBufferId && (b.notification > 0 || b.unread > 0))
-      .sort((a, b) => {
-        const aHighlight = a.notification > 0 ? 2 : 0;
-        const bHighlight = b.notification > 0 ? 2 : 0;
-        if (aHighlight !== bHighlight) return bHighlight - aHighlight;
-        const aUnread = a.unread > 0 ? 1 : 0;
-        const bUnread = b.unread > 0 ? 1 : 0;
-        if (aUnread !== bUnread) return bUnread - aUnread;
-        return a.number - b.number;
-      })
-  );
+  // Buffers with unread activity, sorted by highlight → unread → number. The
+  // projection publishes only when an entry actually changed, so a hotlist poll
+  // that re-references every background buffer without changing a count no
+  // longer re-renders this strip.
+  let entries = $derived($hotlistEntries);
 
   // Truncate long buffer names to max 18 chars with ellipsis.
   function truncateName(name: string): string {
@@ -26,7 +17,7 @@
   }
 
   // Switch to the clicked buffer and notify parent.
-  function handleItemClick(buffer: BufferData) {
+  function handleItemClick(buffer: BufferPresentation) {
     switchBuffer(buffer.id);
     onBufferSelect();
   }

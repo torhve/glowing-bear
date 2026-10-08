@@ -24,6 +24,8 @@ vi.mock('#lib/notifications.ts', () => ({
     updateTitle: vi.fn(),
     updateFavico: vi.fn(),
     onDisconnect: vi.fn(),
+    startIndicatorOwner: () => () => {},
+    refreshIndicators: vi.fn(),
 }));
 
 vi.mock('#lib/tauriWindow.ts', async (importOriginal) => {

@@ -36,7 +36,11 @@ function parseResults(text) {
     const out = new Map();
     if (!text) return out;
     for (const line of text.split('\n')) {
-        const m = line.match(/^(A inactive|B active|H history|C api-inactive|D api-active|E api-unread)\b.*?median\s+([\d.]+)ms/);
+        // Stage keys are the first token of a bench result line: `A inactive`,
+        // `H history 5000 lines`, `S100-bg`, `P500-sort`, `R-bg` … Any line whose
+        // key starts with an uppercase letter and carries `median <n>ms` is a
+        // stage, so a new bench adds stages without editing this parser.
+        const m = line.match(/^([A-Z][A-Za-z0-9-]*(?: [a-z][A-Za-z0-9-]*)?)\b.*?median\s+([\d.]+)ms/);
         if (m) { out.set(m[1], { median: Number(m[2]), raw: line }); continue; }
         // E2E arms report the median of several in-page floods per run.
         const e2e = line.match(/\[prodflood\] renderMedian=(\d+)ms/)

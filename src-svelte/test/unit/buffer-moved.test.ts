@@ -30,6 +30,8 @@ vi.mock('#lib/notifications.ts', () => ({
     playNotificationSound: vi.fn(),
     updateTitle: vi.fn(),
     updateFavico: vi.fn(),
+    startIndicatorOwner: () => () => {},
+    refreshIndicators: vi.fn(),
 }));
 
 const { handleBufferMoved } = await import('#lib/stores/handlers.ts');

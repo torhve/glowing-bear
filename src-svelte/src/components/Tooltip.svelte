@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { BufferData } from '#lib/types.ts';
+  import type { BufferPresentation } from '#lib/types.ts';
 
-  let { buffer, x = 0, y = 0 }: { buffer: BufferData; x: number; y: number } = $props();
+  let { buffer, x = 0, y = 0 }: { buffer: BufferPresentation; x: number; y: number } = $props();
 </script>
 
 <div role="tooltip" style="position: fixed; left: {x}px; top: {y}px" class="buffer-tooltip bg-surface-raised border border-border rounded-lg shadow-xl px-3 py-2 text-xs text-text whitespace-nowrap pointer-events-none z-[9999]">

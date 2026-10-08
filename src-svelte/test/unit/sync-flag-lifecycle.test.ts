@@ -52,6 +52,8 @@ vi.mock('#lib/notifications.ts', () => ({
     onDisconnect: vi.fn(),
     updateTitle: vi.fn(),
     updateFavico: vi.fn(),
+    startIndicatorOwner: () => () => {},
+    refreshIndicators: vi.fn(),
 }));
 
 // jsdom in this setup exposes no localStorage; last-buffer resume is unrelated to the

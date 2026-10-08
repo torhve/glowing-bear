@@ -1,11 +1,11 @@
 import { mount, unmount } from 'svelte';
 import type { Attachment } from 'svelte/attachments';
 import Tooltip from '#components/Tooltip.svelte';
-import type { BufferData } from '#lib/types.ts';
+import type { BufferPresentation } from '#lib/types.ts';
 
 // Creates an attachment that mounts a Tooltip component to document.body
 // positioned next to the hovered buffer item, escaping overflow clipping.
-export function tooltipAttachment(buffer: BufferData): Attachment<HTMLDivElement> {
+export function tooltipAttachment(buffer: BufferPresentation): Attachment<HTMLDivElement> {
     return (element) => {
         let instance: object | null = null;
 

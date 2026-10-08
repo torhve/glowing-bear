@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { BufferData } from '#lib/types.ts';
+  import type { BufferPresentation } from '#lib/types.ts';
   import { visibleBuffers, sortBuffers } from '#lib/stores/models.ts';
   import { switchBuffer } from '#lib/stores/connectionManager.ts';
 
@@ -10,7 +10,7 @@
 
   interface BufferGroup {
     number: number;
-    buffers: BufferData[];
+    buffers: BufferPresentation[];
   }
 
   let { onBufferSelect = () => {} } = $props();
@@ -21,7 +21,7 @@
   let isOpen = $state(false);
 
   let filteredBuffers = $derived(
-    $visibleBuffers.filter((buf: BufferData) => {
+    $visibleBuffers.filter((buf: BufferPresentation) => {
       if (!bufferSearchQuery) return true;
       const query = bufferSearchQuery.toLowerCase();
       return buf.shortName.toLowerCase().includes(query) ||
@@ -55,7 +55,7 @@
     return Math.min(Math.max(selectedIndex, 0), count - 1);
   });
 
-  async function handleBufferClick(buffer: BufferData) {
+  async function handleBufferClick(buffer: BufferPresentation) {
     const switched = await switchBuffer(buffer.id);
     if (!switched) return;
     bufferSearchQuery = '';

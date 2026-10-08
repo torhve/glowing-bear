@@ -42,6 +42,8 @@ vi.mock('#lib/notifications.ts', () => ({
     playNotificationSound: mockPlayNotificationSound,
     updateTitle: mockUpdateTitle,
     updateFavico: mockUpdateFavico,
+    startIndicatorOwner: () => () => {},
+    refreshIndicators: vi.fn(),
 }));
 
 vi.mock('#lib/windowFocus.ts', () => ({

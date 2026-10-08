@@ -6,6 +6,7 @@ import { settings } from "#lib/stores/settings.ts";
 import type {
     BufferData,
     BufferLine,
+    BufferPresentation,
     BufferType,
     Nick,
     NickGroup,
@@ -97,7 +98,7 @@ export function parseRichText(text: string | undefined | null): RichTextPart[] {
  * AND localUnread for inactive buffers, so we must avoid summing all three.
  * Returns the maximum of (weechat counts + excess local unreads) vs just local.
  */
-export function getEffectiveUnread(buffer: BufferData): number {
+export function getEffectiveUnread(buffer: BufferPresentation): number {
     const weechatUnread = (buffer.unread || 0) + (buffer.notification || 0);
     const localUnread = buffer.localUnread || 0;
     return Math.max(
@@ -115,7 +116,7 @@ export function getEffectiveUnread(buffer: BufferData): number {
  * same criterion WeeChat applies internally (relay_buffer_is_relay); the type check
  * is a fallback for buffers that report a relay type without the plugin variable.
  */
-export function isRelayStatusBuffer(buffer: BufferData): boolean {
+export function isRelayStatusBuffer(buffer: BufferPresentation): boolean {
     return buffer.plugin === 'relay' || buffer.type === 'relay';
 }
 
@@ -304,10 +305,10 @@ export function applyServerReadMarker(buffer: BufferData, lastReadLineId: number
 }
 
 // Sort buffers: pinned first, then by number. Optionally groups by server when orderByServer is true.
-export function sortBuffers(
-    buffersList: BufferData[],
+export function sortBuffers<T extends BufferPresentation>(
+    buffersList: T[],
     orderByServer: boolean,
-): BufferData[] {
+): T[] {
     const sorted = [...buffersList];
     sorted.sort((a, b) => {
         if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
@@ -873,10 +874,86 @@ export function isSyncing(): boolean {
     return baselinePending;
 }
 
-export const currentBuffer = derived(
+/**
+ * Revision numbers for published buffer objects.
+ *
+ * Svelte's own equality never suppresses an object notification:
+ * `safe_not_equal` returns true for any non-null object, including the identical
+ * reference (verified against the svelte source and by test). A selector
+ * therefore cannot become selective by "returning the same object" — it has to
+ * compare something Svelte can compare, and an integer is the cheapest one.
+ *
+ * Every published BufferData object gets a stable revision the first time it is
+ * looked at. A writer that replaces the buffer hands out a new object and gets a
+ * new revision; a writer that leaves it alone keeps the old one. That turns "did
+ * the buffer I am looking at change?" into a number comparison. It relies on the
+ * publication invariant pinned in buffer-identity-contracts.test.ts: a preserved
+ * reference must mean preserved content.
+ */
+const bufferRevisions = new WeakMap<object, number>();
+let bufferRevisionSeq = 0;
+
+/** Stable revision of a published buffer object; 0 for "no buffer". */
+function revisionOf(buffer: BufferData | null): number {
+    if (!buffer) return 0;
+    let revision = bufferRevisions.get(buffer);
+    if (revision === undefined) {
+        revision = ++bufferRevisionSeq;
+        bufferRevisions.set(buffer, revision);
+    }
+    return revision;
+}
+
+/**
+ * Change signal for the buffer the user is looking at.
+ *
+ * Depends on `buffers` — the only store whose publication can replace the active
+ * buffer's object — and reads `activeBufferId` imperatively. Reading the id
+ * rather than depending on it is deliberate: `setActiveBuffer` publishes the id
+ * before the buffer map, so a derived that depended on both would recompute in
+ * between and publish the target while its `active` flag and read boundary were
+ * still the previous ones. Depending on `buffers` alone means the single
+ * recompute happens after both are consistent.
+ *
+ * Its value is a number, so Svelte's own equality does the suppression: a line
+ * arriving in a background buffer, a hotlist poll that clones background
+ * buffers, or a nick diff elsewhere all recompute this to the same integer and
+ * notify nobody.
+ */
+const currentBufferRevision = derived(
     buffers,
-    ($buffers: Record<string, BufferData>, set: (value: BufferData | null) => void) => {
-        set($buffers[get(activeBufferId)] ?? null);
+    ($buffers: Record<string, BufferData>) => revisionOf($buffers[get(activeBufferId)] ?? null),
+);
+
+export const currentBuffer = derived(
+    currentBufferRevision,
+    () => get(buffers)[get(activeBufferId)] ?? null,
+);
+
+/**
+ * The nick WeeChat reports for the server connection the current buffer belongs
+ * to — the fallback ChatView shows as "my nick".
+ *
+ * It lives on a *different* buffer (the `type: 'server'` buffer), so it cannot
+ * ride on currentBuffer: once currentBuffer is selective it deliberately stops
+ * publishing when some other buffer changes, and a `/nick` is exactly such a
+ * change. Making the dependency explicit is the cheap fix — the value is a
+ * string, so Svelte's own equality suppresses every publication where the nick
+ * did not actually change, which is all of them except `/nick` and reconnect.
+ */
+export const serverNick = derived(
+    buffers,
+    ($buffers: Record<string, BufferData>) => {
+        const current = $buffers[get(activeBufferId)];
+        if (!current) return '';
+        for (const key in $buffers) {
+            const candidate = $buffers[key];
+            if (!candidate || candidate.type !== 'server') continue;
+            if (candidate.plugin === current.plugin && candidate.server === current.server) {
+                return candidate.localVariables?.nick ?? '';
+            }
+        }
+        return '';
     },
 );
 

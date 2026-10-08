@@ -14,9 +14,10 @@
   import { initTheme } from '#lib/stores/theme.ts';
   import { get } from 'svelte/store';
   import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig, sortedVisibleBuffers, checkAndNavigatePendingNotificationBuffer } from '#lib/stores/models.ts';
+  import { sidebarOrder } from '#lib/stores/bufferProjections.ts';
   import { connectionState, setReconnectAttempts, setNextReconnectAt, setErrors } from '#lib/stores/connectionStore.ts';
   import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer, listScripts, getSession, getWs, initFocusReconnect, cleanupFocusReconnect, setHotlistPollInterval } from '#lib/stores/connectionManager.ts';
-  import { initNotifications, updateTitle, updateFavico, onDisconnect } from '#lib/notifications.ts';
+  import { initNotifications, onDisconnect, refreshIndicators, startIndicatorOwner } from '#lib/notifications.ts';
   import { parseRelayUrl, isPopoverOpen, bufferHasNicklist, modifyTextareaValue, captureBufferAppearance, waitForFreshBuffer, scriptInstalled } from '#lib/utils.ts';
   import { addToast, toastStore } from '#lib/toast.ts';
   import { showWindow } from '#lib/tauriWindow.ts';
@@ -103,16 +104,28 @@
     };
   });
 
+  // One lifecycle-owned owner for the title and the badge. Transports publish
+  // state and never touch an indicator, so an unchanged hotlist poll that
+  // re-references every background buffer writes neither.
   $effect(() => {
-    void $buffers;
-    updateTitle();
-    updateFavico();
+    const stop = startIndicatorOwner();
+    return stop;
   });
 
   $effect(() => {
     document.documentElement.style.setProperty('--font-mono', $settings.fontfamily || 'Fira Mono, Consolas, Monaco, Courier New, monospace');
     document.documentElement.style.setProperty('--font-size', $settings.fontsize || '14px');
     document.body.style.fontSize = $settings.fontsize || '14px';
+  });
+
+  // Appearance is an explicit invalidation: a theme or custom-CSS change can
+  // alter the badge palette without changing any count, and a store that
+  // compares values cannot see that the picture it produced is now different.
+  $effect(() => {
+    void $settings.theme;
+    void $settings.customCSS;
+    void $settings.useFavico;
+    refreshIndicators();
   });
 
   $effect(() => {
@@ -651,17 +664,22 @@
       if (chatContainer && touchStartTarget && chatContainer.contains(touchStartTarget)) {
         return;
       }
-      const sortedBuffs = $sortedVisibleBuffers;
-      const currentBuf = $currentBuffer;
-      const currentIndex = sortedBuffs.findIndex(b => b.id === currentBuf?.id);
+      // `sidebarOrder` is the same ordering `sortedVisibleBuffers` produced, but
+      // memoized on structure: reading it here used to keep a component-lifetime
+      // subscription to a full filter+sort that re-ran on every buffer
+      // publication, including message-only traffic that cannot reorder
+      // anything. Reading with get() inside a swipe handler adds no dependency.
+      const order = get(sidebarOrder);
+      const currentBuf = get(currentBuffer);
+      const currentIndex = currentBuf ? order.indexOf(currentBuf.id) : -1;
 
       if (currentIndex !== -1) {
-        if (deltaY < 0 && currentIndex < sortedBuffs.length - 1) {
-          const prev = sortedBuffs[currentIndex - 1];
-          if (prev) switchBuffer(prev.id);
+        if (deltaY < 0 && currentIndex < order.length - 1) {
+          const prevId = order[currentIndex - 1];
+          if (prevId) switchBuffer(prevId);
         } else if (deltaY > 0 && currentIndex > 0) {
-          const next = sortedBuffs[currentIndex + 1];
-          if (next) switchBuffer(next.id);
+          const nextId = order[currentIndex + 1];
+          if (nextId) switchBuffer(nextId);
         }
       }
     }

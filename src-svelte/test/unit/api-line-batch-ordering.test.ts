@@ -16,6 +16,7 @@ import { get } from 'svelte/store';
 import { buffers, servers, activeBufferId, localUnreadBuffers, recalculateLinesPerScreen } from '#lib/stores/models.ts';
 import { createApiStoreReducers, flushApiLineBatch } from '#lib/api/api-store-reducers.ts';
 import { updateTitle, updateFavico, playNotificationSound } from '#lib/notifications.ts';
+import { badgeState, documentTitle } from '#lib/stores/indicatorState.ts';
 import type { ApiReducers, BufferSnapshot, LineSnapshot } from '#lib/api/api-contracts.ts';
 import type { ApiBufferId, ApiLineId } from '#lib/api/api-ids.ts';
 
@@ -24,6 +25,8 @@ vi.mock('#lib/notifications.ts', () => ({
     playNotificationSound: vi.fn(),
     updateTitle: vi.fn(),
     updateFavico: vi.fn(),
+    startIndicatorOwner: () => () => {},
+    refreshIndicators: vi.fn(),
 }));
 vi.mock('#lib/windowFocus.ts', () => ({ isWindowFocused: () => true }));
 
@@ -81,8 +84,27 @@ function lineSnap(id: number, overrides: Partial<LineSnapshot> = {}): LineSnapsh
 
 let reducers: ApiReducers;
 
+/**
+ * Indicator publications observed since the counter was armed.
+ *
+ * `subscribe()` delivers the current value immediately, so the baseline skips
+ * that first delivery and only counts what the run itself published.
+ */
+function armIndicatorCounter() {
+    let titles = 0;
+    let badges = 0;
+    const unsubTitle = documentTitle.subscribe(() => { titles += 1; });
+    const unsubBadge = badgeState.subscribe(() => { badges += 1; });
+    const baseTitle = titles;
+    const baseBadge = badges;
+    return {
+        count: () => ({ titles: titles - baseTitle, badges: badges - baseBadge }),
+        stop: () => { unsubTitle(); unsubBadge(); },
+    };
+}
+
 /** Observable state that a mis-ordered batch would change. */
-function stateSnapshot() {
+function stateSnapshot(indicators: { count(): { titles: number; badges: number } }) {
     const b = get(buffers);
     return {
         chanLines: (b[CHAN]?.lines ?? []).map((l) => `${l.lineId}|${l.prefixtext}|${l.text}`),
@@ -92,11 +114,14 @@ function stateSnapshot() {
         chanLocalUnread: b[CHAN]?.localUnread ?? 0,
         serverUnread: get(servers)[SERVER_KEY]?.unread ?? 0,
         localUnreadIds: [...get(localUnreadBuffers)].sort(),
-        titleCalls: vi.mocked(updateTitle).mock.calls.length,
-        badgeCalls: vi.mocked(updateFavico).mock.calls.length,
+        titleWrites: indicators.count().titles,
+        badgeWrites: indicators.count().badges,
         soundCalls: vi.mocked(playNotificationSound).mock.calls.length,
     };
 }
+
+/** Counter used by snapshots that do not care about the counts themselves. */
+const ambientIndicators = armIndicatorCounter();
 
 function seedBuffers(): void {
     // core.weechat first so it becomes the active buffer: the flood then lands
@@ -127,8 +152,8 @@ describe('API line batch ordering', () => {
         }
         flushApiLineBatch();
 
-        expect(stateSnapshot().chanLines).toEqual(['weechat:1|alice|msg 1', 'weechat:2|alice|msg 2', 'weechat:3|alice|msg 3', 'weechat:4|alice|msg 4']);
-        expect(stateSnapshot().otherLines).toEqual(['weechat:101|alice|msg 101', 'weechat:102|alice|msg 102', 'weechat:103|alice|msg 103', 'weechat:104|alice|msg 104']);
+        expect(stateSnapshot(ambientIndicators).chanLines).toEqual(['weechat:1|alice|msg 1', 'weechat:2|alice|msg 2', 'weechat:3|alice|msg 3', 'weechat:4|alice|msg 4']);
+        expect(stateSnapshot(ambientIndicators).otherLines).toEqual(['weechat:101|alice|msg 101', 'weechat:102|alice|msg 102', 'weechat:103|alice|msg 103', 'weechat:104|alice|msg 104']);
     });
 
     it('drains queued lines before a buffer_cleared wipes the buffer', () => {
@@ -139,7 +164,7 @@ describe('API line batch ordering', () => {
         reducers.bufferCleared(CHAN_ID);
         flushApiLineBatch();
 
-        expect(stateSnapshot().chanLines).toEqual([]);
+        expect(stateSnapshot(ambientIndicators).chanLines).toEqual([]);
     });
 
     it('drains queued lines before a buffer_closed removes the buffer', () => {
@@ -155,7 +180,7 @@ describe('API line batch ordering', () => {
         flushApiLineBatch();
 
         expect(get(buffers)[CHAN]).toBeDefined();
-        expect(stateSnapshot().chanLines).toEqual([]);
+        expect(stateSnapshot(ambientIndicators).chanLines).toEqual([]);
     });
 
     it('applies a queued line before line_data_changed rewrites it', () => {
@@ -165,7 +190,7 @@ describe('API line batch ordering', () => {
 
         // The edit must land on the queued line rather than being dropped
         // because the line did not exist yet.
-        expect(stateSnapshot().chanLines).toEqual(['weechat:7|bob|edited']);
+        expect(stateSnapshot(ambientIndicators).chanLines).toEqual(['weechat:7|bob|edited']);
     });
 
     it('produces the same state as applying the same events one line at a time', () => {
@@ -177,10 +202,12 @@ describe('API line batch ordering', () => {
             { buffer: OTHER_ID, id: 52, notifyLevel: 1 },
         ];
 
+        const batchCounters = armIndicatorCounter();
         // Reference: the pre-batching behaviour, one store write per event.
         for (const e of events) reducers.lineAdded(e.buffer, lineSnap(e.id, e));
         flushApiLineBatch();
-        const batched = stateSnapshot();
+        const batched = stateSnapshot(batchCounters);
+        batchCounters.stop();
 
         buffers.set({});
         servers.set({ [SERVER_KEY]: { id: SERVER_KEY, unread: 0 } });
@@ -189,20 +216,25 @@ describe('API line batch ordering', () => {
         vi.clearAllMocks();
         reducers = createApiStoreReducers();
         seedBuffers();
+        const lineCounters = armIndicatorCounter();
         for (const e of events) {
             reducers.lineAdded(e.buffer, lineSnap(e.id, e));
             flushApiLineBatch();
         }
-        const perLine = stateSnapshot();
+        const perLine = stateSnapshot(lineCounters);
+        lineCounters.stop();
 
         // Everything except the number of indicator WRITES must agree: fewer
         // writes is the whole point of batching, different state is not.
-        const { titleCalls: batchTitles, badgeCalls: batchBadges, ...batchRest } = batched;
-        const { titleCalls: lineTitles, badgeCalls: lineBadges, ...lineRest } = perLine;
+        const { titleWrites: batchTitles, badgeWrites: batchBadges, ...batchRest } = batched;
+        const { titleWrites: lineTitles, badgeWrites: lineBadges, ...lineRest } = perLine;
         expect(batchRest).toEqual(lineRest);
         // The batched run must not have lost any per-line sound decision.
         expect(batched.soundCalls).toEqual(perLine.soundCalls);
         // …and it must have collapsed the indicator work it is meant to collapse.
+        // Counted on the indicator stores themselves: the reducers no longer
+        // touch the title or the badge at all, so a publication here
+        // means the value genuinely changed, and batching must not multiply it.
         expect(batchTitles).toBeLessThan(lineTitles);
         expect(batchBadges).toBeLessThan(lineBadges);
     });
@@ -222,10 +254,10 @@ describe('API line batch liveness', () => {
             reducers.lineAdded(CHAN_ID, lineSnap(1));
             reducers.lineAdded(CHAN_ID, lineSnap(2));
 
-            expect(stateSnapshot().chanLines).toEqual([]);
+            expect(stateSnapshot(ambientIndicators).chanLines).toEqual([]);
             vi.advanceTimersByTime(100);
 
-            expect(stateSnapshot().chanLines).toEqual(['weechat:1|alice|msg 1', 'weechat:2|alice|msg 2']);
+            expect(stateSnapshot(ambientIndicators).chanLines).toEqual(['weechat:1|alice|msg 1', 'weechat:2|alice|msg 2']);
         } finally {
             // afterEach() restores real timers, which restores the real rAF.
             vi.useRealTimers();
@@ -237,13 +269,13 @@ describe('API line batch liveness', () => {
         try {
             reducers.lineAdded(CHAN_ID, lineSnap(1));
             flushApiLineBatch();
-            expect(stateSnapshot().chanLines).toEqual(['weechat:1|alice|msg 1']);
+            expect(stateSnapshot(ambientIndicators).chanLines).toEqual(['weechat:1|alice|msg 1']);
 
             // A disconnect wipes buffer state; a stale timer firing afterwards
             // must not resurrect anything.
             buffers.set({});
             vi.advanceTimersByTime(100);
-            expect(stateSnapshot().chanLines).toEqual([]);
+            expect(stateSnapshot(ambientIndicators).chanLines).toEqual([]);
         } finally {
             vi.useRealTimers();
         }

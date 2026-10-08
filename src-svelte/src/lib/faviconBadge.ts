@@ -71,6 +71,28 @@ let lastPaint: {
 } | null = null;
 
 /**
+ * Bumped by every draw request and by every invalidation.
+ *
+ * `drawBadge` is async because the base favicon loads asynchronously, so a
+ * request can outlive the state that produced it. The generation a call claimed
+ * at entry is what decides whether it may still paint.
+ */
+let drawGeneration = 0;
+
+/**
+ * Drop the cached paint identity and supersede in-flight draws.
+ *
+ * An appearance change (theme, custom CSS) can change the palette the badge is
+ * drawn with while the count stays identical. The identity guard below compares
+ * the resolved palette, so it would catch this eventually — but only by doing
+ * the full canvas work, and an explicit invalidation is cheaper and clearer.
+ */
+export function invalidateFaviconBadge(): void {
+    drawGeneration += 1;
+    lastPaint = null;
+}
+
+/**
  * Resolved theme palette for the badge.
  *
  * getComputedStyle(...).getPropertyValue() is not a cheap read: it forces the
@@ -207,6 +229,13 @@ function drawOnCanvas(count: number, type: 'notification' | 'unread'): void {
 export async function drawBadge(count: number, type: 'notification' | 'unread'): Promise<void> {
     if (typeof document === 'undefined') return;
 
+    // Claim a generation before awaiting. drawBadge waits for the base image, so
+    // it can return long after the state that asked for it has been replaced —
+    // after a disconnect, or after a newer count arrived. Only the newest call
+    // is allowed to paint; an older one resuming here would put a stale badge
+    // back on the tab.
+    const generation = ++drawGeneration;
+
     // Wait for base image to be ready — initFavicon loads asynchronously
     if (!isReady) {
         await new Promise<void>(resolve => {
@@ -218,6 +247,7 @@ export async function drawBadge(count: number, type: 'notification' | 'unread'):
         });
     }
 
+    if (generation !== drawGeneration) return;
     drawOnCanvas(count, type);
 }
 
@@ -226,6 +256,8 @@ export async function drawBadge(count: number, type: 'notification' | 'unread'):
  */
 export function resetBadge(): void {
     if (typeof document === 'undefined') return;
+    // Also supersedes any draw still waiting for the base image.
+    drawGeneration += 1;
     // The href is about to go back to the plain file, so the next identical
     // badge must actually draw even if this same picture was drawn before.
     lastPaint = null;

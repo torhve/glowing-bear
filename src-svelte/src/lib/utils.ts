@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
-import { buffers, activeBufferId, wconfig, sortBuffers } from '#lib/stores/models.ts';
-import type { BufferData, Nick } from '#lib/types.ts';
+import { buffers, activeBufferId, wconfig } from '#lib/stores/models.ts';
+import type { BufferData, BufferPresentation, Nick } from '#lib/types.ts';
 
 export interface NickCompletionResult {
     text: string;
@@ -174,26 +174,13 @@ function getNicklistByTime(buffer: BufferData): Nick[] {
 
 
 // Check if buffer matches search
-export function bufferMatchesSearch(buffer: BufferData, search: string): boolean {
+export function bufferMatchesSearch(buffer: BufferPresentation, search: string): boolean {
     if (!search) return true;
     const searchLower = search.toLowerCase();
     return (
         (buffer.fullName || '').toLowerCase().includes(searchLower) ||
         (buffer.shortName || '').toLowerCase().includes(searchLower) ||
         (buffer.trimmedName || '').toLowerCase().includes(searchLower)
-    );
-}
-
-// Get filtered buffers
-export function getFilteredBuffers(search: string, onlyUnread: boolean, orderByServer: boolean, activeBufferId: string): BufferData[] {
-    const allBuffers = get(buffers);
-
-    return sortBuffers(
-        Object.values(allBuffers)
-            .filter((b: BufferData) => !b.hidden)
-            .filter((b: BufferData) => bufferMatchesSearch(b, search))
-            .filter((b: BufferData) => !onlyUnread || b.unread > 0 || b.notification > 0 || b.id === activeBufferId || b.pinned),
-        orderByServer
     );
 }
 
@@ -295,7 +282,7 @@ export function isFreeBuffer(buffer: BufferData): boolean {
  * AngularJS CSS class approach (channel → prefix, private → no icon).
  * Svelte adds icons as a visual enhancement over the original CSS-only approach.
  */
-export function getBufferIconName(buffer: BufferData): 'hash' | 'user' | 'server' | 'monitor' | 'square' | null {
+export function getBufferIconName(buffer: BufferPresentation): 'hash' | 'user' | 'server' | 'monitor' | 'square' | null {
     if (buffer.type === 'channel') return 'hash';
     if (buffer.type === 'private' || buffer.type === 'query') return 'user';
     if (buffer.type === 'server') return 'server';
@@ -316,7 +303,7 @@ export function getChannelPrefix(shortName: string): string {
  * Get the display name for a buffer (short name without prefix).
  * Mirrors AngularJS trimmedName logic, used for display in buffer list.
  */
-export function getDisplayName(buffer: BufferData): string {
+export function getDisplayName(buffer: BufferPresentation): string {
     return buffer.trimmedName || buffer.fullName || buffer.shortName;
 }
 

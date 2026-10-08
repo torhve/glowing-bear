@@ -34,8 +34,6 @@ import { shouldResume, getLastBuffer, recordLastBuffer } from "#lib/stores/buffe
 import {
     createHighlight,
     playNotificationSound,
-    updateTitle,
-    updateFavico,
 } from "#lib/notifications.ts";
 import { isWindowFocused } from "#lib/windowFocus.ts";
 import { DEBUG_NICKLIST, DEBUG_HANDLERS, DEBUG_HOTLIST } from "#lib/debug.ts";
@@ -479,7 +477,6 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
     // and applying once keeps the final state identical while turning N store
     // writes (each a full Set copy) and N favicon redraws into one.
     const pendingLocalUnreadIds = new Set<string>();
-    let alertIndicatorsPending = false;
 
     // First pass: identify all affected buffer IDs
     const affectedIds = new Set<string>();
@@ -646,11 +643,6 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                 buffer.notify >= (lineMsg.notify_level === 1 ? 2 : 1) &&
                 buffer.id !== activeId
             ) {
-                // Always update passive indicators regardless of window focus —
-                // title and favicon badge are useful even when tab is visible.
-                // Applied once for the whole batch; see pendingLocalUnreadIds above.
-                alertIndicatorsPending = true;
-
                 // Desktop notifications (popup) fire only when window is not focused,
                 // to avoid spamming the user when they're already looking at the tab.
                 // Sound plays regardless of focus — it's a local audio cue.
@@ -686,11 +678,6 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
             return next;
         });
     }
-    if (alertIndicatorsPending) {
-        updateTitle();
-        updateFavico();
-    }
-
     // Update spokeAt timestamps for tab completion on the immutable copies
     handleNickMessageForSpeakOnBuffers(createdLines, updatedBuffers);
 

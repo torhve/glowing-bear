@@ -36,11 +36,27 @@ vi.mock('#lib/stores/settings.ts', () => ({
     updatePartialSettings: vi.fn(),
 }));
 
-const bufferStore = writable<Record<string, unknown>>({});
+// Hoisted because indicatorState.ts subscribes to these stores while the module
+// graph is still loading — a plain `const` below would not exist yet.
+const bufferStore = vi.hoisted(() => {
+    let value: Record<string, unknown> = {};
+    const subs = new Set<(v: Record<string, unknown>) => void>();
+    return {
+        subscribe: (fn: (v: Record<string, unknown>) => void) => {
+            subs.add(fn);
+            fn(value);
+            return () => { subs.delete(fn); };
+        },
+        set: (next: Record<string, unknown>) => {
+            value = next;
+            for (const fn of [...subs]) fn(value);
+        },
+    };
+});
 
 vi.mock('#lib/stores/models.ts', () => ({
     buffers: { subscribe: (fn: (v: any) => void) => bufferStore.subscribe(fn) },
-    currentBuffer: { subscribe: (fn: (v: any) => void) => fn(null) },
+    currentBuffer: { subscribe: (fn: (v: any) => void) => { fn(null); return () => {}; } },
     setActiveBuffer: vi.fn(),
     servers: { subscribe: (fn: (v: any) => void) => fn({}) },
 }));

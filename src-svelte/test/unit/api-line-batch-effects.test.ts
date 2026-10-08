@@ -13,6 +13,7 @@ import { get } from 'svelte/store';
 import { buffers, servers, activeBufferId, localUnreadBuffers, recalculateLinesPerScreen } from '#lib/stores/models.ts';
 import { createApiStoreReducers, flushApiLineBatch } from '#lib/api/api-store-reducers.ts';
 import { updateTitle, updateFavico, playNotificationSound, createHighlight } from '#lib/notifications.ts';
+import { badgeState, documentTitle, type BadgeState } from '#lib/stores/indicatorState.ts';
 import type { ApiReducers, BufferSnapshot, LineSnapshot } from '#lib/api/api-contracts.ts';
 import type { ApiBufferId, ApiLineId } from '#lib/api/api-ids.ts';
 
@@ -21,6 +22,8 @@ vi.mock('#lib/notifications.ts', () => ({
     playNotificationSound: vi.fn(),
     updateTitle: vi.fn(),
     updateFavico: vi.fn(),
+    startIndicatorOwner: () => () => {},
+    refreshIndicators: vi.fn(),
 }));
 vi.mock('#lib/windowFocus.ts', () => ({ isWindowFocused: () => true }));
 
@@ -91,15 +94,49 @@ beforeEach(() => {
     reducers.buffers([coreSnap(), bufferSnap()]);
 });
 
-describe('API line batch effects', () => {
-    it('draws the title and favicon badge once for a batch of alerting lines', () => {
-        addLines(8);
 
-        expect(updateTitle).toHaveBeenCalledTimes(1);
-        expect(updateFavico).toHaveBeenCalledTimes(1);
-        // The tallies themselves are still per line.
-        expect(buffer().localUnread).toBe(8);
-        expect(buffer().unread).toBe(8);
+/**
+ * Count indicator publications during a batch.
+ *
+ * `subscribe()` delivers the current value immediately, so the counts ignore
+ * that first delivery — only what the batch itself published matters.
+ */
+function trackIndicators() {
+    const titles: string[] = [];
+    const badges: (BadgeState | null)[] = [];
+    const unsubTitle = documentTitle.subscribe((t) => titles.push(t));
+    const unsubBadge = badgeState.subscribe((b) => badges.push(b));
+    const baseTitles = titles.length;
+    const baseBadges = badges.length;
+    return {
+        titles: () => titles.length - baseTitles,
+        badges: () => badges.length - baseBadges,
+        lastTitle: () => titles[titles.length - 1],
+        lastBadge: () => badges[badges.length - 1],
+        stop: () => { unsubTitle(); unsubBadge(); },
+    };
+}
+
+describe('API line batch effects', () => {
+    it('publishes the title and badge state once for a batch of alerting lines', () => {
+        // The reducers no longer call updateTitle/updateFavico — the indicator
+        // stores are the only path to the DOM. The batch-level claim
+        // this test makes is now about those stores: one publication per batch,
+        // not one per line.
+        const seen = trackIndicators();
+        try {
+            addLines(8);
+
+            expect(seen.titles()).toBe(1);
+            expect(seen.badges()).toBe(1);
+            expect(seen.lastTitle()).toContain('(8) ');
+            expect(seen.lastBadge()).toEqual({ count: 8, kind: 'unread' });
+            // The tallies themselves are still per line.
+            expect(buffer().localUnread).toBe(8);
+            expect(buffer().unread).toBe(8);
+        } finally {
+            seen.stop();
+        }
     });
 
     it('publishes the local unread id once, with the count intact', () => {
@@ -125,14 +162,20 @@ describe('API line batch effects', () => {
         expect(get(servers)[SERVER_KEY]!.unread).toBe(0);
     });
 
-    it('rings per highlight line but still badges once', () => {
-        addLines(4, { notifyLevel: 3, highlight: true, tags: ['irc_privmsg', 'notify_private'] });
+    it('rings per highlight line but still publishes the badge once', () => {
+        const seen = trackIndicators();
+        try {
+            addLines(4, { notifyLevel: 3, highlight: true, tags: ['irc_privmsg', 'notify_private'] });
 
-        expect(playNotificationSound).toHaveBeenCalledTimes(4);
-        expect(updateTitle).toHaveBeenCalledTimes(1);
-        expect(updateFavico).toHaveBeenCalledTimes(1);
-        expect(buffer().notification).toBe(4);
-        expect(get(servers)[SERVER_KEY]!.unread).toBe(4);
+            expect(playNotificationSound).toHaveBeenCalledTimes(4);
+            expect(seen.titles()).toBe(1);
+            expect(seen.badges()).toBe(1);
+            expect(seen.lastBadge()).toEqual({ count: 4, kind: 'notification' });
+            expect(buffer().notification).toBe(4);
+            expect(get(servers)[SERVER_KEY]!.unread).toBe(4);
+        } finally {
+            seen.stop();
+        }
     });
 
     it('does not badge a line that lands in the buffer being looked at', () => {

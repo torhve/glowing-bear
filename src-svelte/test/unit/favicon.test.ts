@@ -41,22 +41,53 @@ vi.mock('#lib/faviconBadge.ts', async () => {
     };
 });
 
-const modelsMock = {
+// indicatorState.ts subscribes to these while the module graph is still loading,
+// so they must exist before the test body runs — and they must be *live*: a
+// mock whose subscribe() is merely re-implemented per test never notifies the
+// derived stores, which then read the value they captured at import forever.
+const buffersMock = vi.hoisted(() => {
+    let value: Record<string, unknown> = {};
+    const subs = new Set<(v: Record<string, unknown>) => void>();
+    return {
+        subscribe: (fn: (v: Record<string, unknown>) => void) => {
+            subs.add(fn);
+            fn(value);
+            return () => { subs.delete(fn); };
+        },
+        set: (next: Record<string, unknown>) => {
+            value = next;
+            for (const fn of [...subs]) fn(value);
+        },
+    };
+});
+
+const currentBufferMock = {
     subscribe: vi.fn((fn: (val: unknown) => void) => {
-        fn({});
+        fn(null);
         return () => {};
     }),
 };
 
-const settingsMock = {
-    subscribe: vi.fn((fn: (val: Record<string, unknown>) => void) => {
-        fn({ useFavico: true });
-        return () => {};
-    }),
-};
+const settingsMock = vi.hoisted(() => {
+    let value: Record<string, unknown> = { useFavico: true };
+    const subs = new Set<(v: Record<string, unknown>) => void>();
+    return {
+        subscribe: (fn: (v: Record<string, unknown>) => void) => {
+            subs.add(fn);
+            fn(value);
+            return () => { subs.delete(fn); };
+        },
+        set: (next: Record<string, unknown>) => {
+            value = next;
+            for (const fn of [...subs]) fn(value);
+        },
+    };
+});
 
 vi.mock('#lib/stores/models.ts', () => ({
-    buffers: modelsMock,
+    buffers: buffersMock,
+    currentBuffer: currentBufferMock,
+    setActiveBuffer: vi.fn(),
 }));
 
 vi.mock('#lib/stores/settings.ts', () => ({
@@ -68,6 +99,8 @@ describe('favicon badge integration', () => {
 
     beforeEach(async () => {
         vi.clearAllMocks();
+        buffersMock.set({});
+        settingsMock.set({ useFavico: true });
         notifications = await import('#lib/notifications.ts');
     });
 
@@ -80,10 +113,7 @@ describe('favicon badge integration', () => {
         const mockBuffs: Record<string, import('#lib/types.ts').BufferData> = {
             buf1: { unread: 0, notification: 3 } as import('#lib/types.ts').BufferData,
         };
-        modelsMock.subscribe.mockImplementation((fn) => {
-            fn(mockBuffs);
-            return () => {};
-        });
+        buffersMock.set(mockBuffs);
 
         notifications.updateFavico();
 
@@ -94,10 +124,7 @@ describe('favicon badge integration', () => {
         const mockBuffs: Record<string, import('#lib/types.ts').BufferData> = {
             buf1: { unread: 5, notification: 0 } as import('#lib/types.ts').BufferData,
         };
-        modelsMock.subscribe.mockImplementation((fn) => {
-            fn(mockBuffs);
-            return () => {};
-        });
+        buffersMock.set(mockBuffs);
 
         notifications.updateFavico();
 
@@ -108,10 +135,7 @@ describe('favicon badge integration', () => {
         const mockBuffs: Record<string, import('#lib/types.ts').BufferData> = {
             buf1: { unread: 0, notification: 0 } as import('#lib/types.ts').BufferData,
         };
-        modelsMock.subscribe.mockImplementation((fn) => {
-            fn(mockBuffs);
-            return () => {};
-        });
+        buffersMock.set(mockBuffs);
 
         notifications.updateFavico();
 
@@ -123,10 +147,7 @@ describe('favicon badge integration', () => {
         const mockBuffs: Record<string, import('#lib/types.ts').BufferData> = {
             buf1: { unread: 10, notification: 2 } as import('#lib/types.ts').BufferData,
         };
-        modelsMock.subscribe.mockImplementation((fn) => {
-            fn(mockBuffs);
-            return () => {};
-        });
+        buffersMock.set(mockBuffs);
 
         notifications.updateFavico();
 
@@ -134,10 +155,7 @@ describe('favicon badge integration', () => {
     });
 
     it('respects useFavico setting', async () => {
-        settingsMock.subscribe.mockImplementation((fn) => {
-            fn({ useFavico: false });
-            return () => {};
-        });
+        settingsMock.set({ useFavico: false });
 
         notifications.updateFavico();
 

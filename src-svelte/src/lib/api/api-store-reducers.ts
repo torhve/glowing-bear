@@ -22,7 +22,7 @@ import {
     injectDateChangeMessageIfNeeded, pendingBufferSwitch, setActiveBuffer, matchesPendingSwitch,
 } from '#lib/stores/models.ts';
 import { shouldResume } from '#lib/stores/bufferResume.ts';
-import { createHighlight, playNotificationSound, updateTitle, updateFavico } from '#lib/notifications.ts';
+import { createHighlight, playNotificationSound } from '#lib/notifications.ts';
 import { toPlainText } from '#lib/weechat-colors.ts';
 import { isWindowFocused } from '#lib/windowFocus.ts';
 import type { BufferData, BufferType, Nick, NickGroup } from '#lib/types.ts';
@@ -113,7 +113,7 @@ function applyLineAdded(target: BufferData, line: LineSnapshot, activeId: string
     trimToLimit(target, limit);
     if (line.displayed) {
         tallyLine(target, line, activeId, effects);
-        alertForLine(target, line, activeId, effects);
+        alertForLine(target, line, activeId);
     }
 }
 
@@ -134,7 +134,7 @@ export function flushApiLineBatch(): void {
     const lineLimit = get(maxBufferLines);
     // One accumulator for the whole flush, not per buffer: several buffers can
     // be flooded in one frame and the Set and servers map are global.
-    const effects: LineBatchEffects = { localUnreadIds: new Set(), serverDeltas: {}, alertIndicators: false };
+    const effects: LineBatchEffects = { localUnreadIds: new Set(), serverDeltas: {} };
     const byBuffer = new Map<string, { items: { line: LineSnapshot; activeId: string }[] }>();
     for (const item of batch) {
         const key = storeKeyForBufferId(item.bufferId);
@@ -189,7 +189,7 @@ function serverKey(buffer: BufferData): string {
 interface LineBatchEffects {
     localUnreadIds: Set<string>;
     serverDeltas: Record<string, number>;
-    alertIndicators: boolean;
+
 }
 
 function noteServerUnread(effects: LineBatchEffects, key: string, delta: number): void {
@@ -222,10 +222,6 @@ function applyLineBatchEffects(effects: LineBatchEffects): void {
             return copy;
         });
     }
-    if (effects.alertIndicators) {
-        updateTitle();
-        updateFavico();
-    }
 }
 
 function snapshotToBuffer(snap: BufferSnapshot): BufferData {
@@ -256,26 +252,32 @@ function upsertBuffer(map: Record<string, BufferData>, snap: BufferSnapshot): Bu
         map[key] = created;
         return created;
     }
-    // Update in place on the (already copied) object; identity and lines are
-    // preserved, metadata is refreshed from the authoritative snapshot.
-    existing.fullName = snap.name;
-    existing.shortName = snap.shortName;
-    existing.hidden = snap.hidden;
-    existing.number = snap.number;
-    existing.title = parseRichText(snap.title);
-    existing.rtitle = existing.title.map((t) => t.text).join('');
-    existing.localVariables = Object.keys(snap.localVariables).length ? { ...snap.localVariables } : undefined;
-    existing.pinned = snap.localVariables.pinned === 'true';
+    // Publish a fresh object rather than mutating the one already handed to
+    // subscribers. A selective current-buffer selector decides "did the buffer I
+    // am looking at change?" by reference, and same-reference-changed-content is
+    // indistinguishable from nothing-happened: the topic would visibly change in
+    // WeeChat while every subscriber was told the buffer was untouched.
+    // Pinned by buffer-identity-contracts.test.ts (publication invariant).
+    const updated: BufferData = { ...existing };
+    updated.fullName = snap.name;
+    updated.shortName = snap.shortName;
+    updated.hidden = snap.hidden;
+    updated.number = snap.number;
+    updated.title = parseRichText(snap.title);
+    updated.rtitle = updated.title.map((t) => t.text).join('');
+    updated.localVariables = Object.keys(snap.localVariables).length ? { ...snap.localVariables } : undefined;
+    updated.pinned = snap.localVariables.pinned === 'true';
     // Content type (formatted/free) is the legacy numeric bufferType; the
     // semantic BufferType ('channel'…) lives in local_variables, exactly as
     // the legacy buffer handlers derive it.
-    existing.bufferType = snap.contentType === 'free' ? 1 : 0;
-    existing.hideBufferLineTimes = snap.contentType === 'free';
-    if (snap.localVariables.type) existing.type = snap.localVariables.type as BufferType;
-    if (snap.localVariables.plugin) existing.plugin = snap.localVariables.plugin;
-    if (snap.localVariables.server) existing.server = snap.localVariables.server;
-    if (snap.notify !== undefined) existing.notify = snap.notify;
-    return existing;
+    updated.bufferType = snap.contentType === 'free' ? 1 : 0;
+    updated.hideBufferLineTimes = snap.contentType === 'free';
+    if (snap.localVariables.type) updated.type = snap.localVariables.type as BufferType;
+    if (snap.localVariables.plugin) updated.plugin = snap.localVariables.plugin;
+    if (snap.localVariables.server) updated.server = snap.localVariables.server;
+    if (snap.notify !== undefined) updated.notify = snap.notify;
+    map[key] = updated;
+    return updated;
 }
 
 /**
@@ -471,7 +473,7 @@ function tallyLine(buffer: BufferData, line: LineSnapshot, activeId: string, eff
 
 /** User-facing alert path — deliberately independent of sync/boundary state
  *  (a real-time PM must ring even in a boundary-unknown buffer). */
-function alertForLine(buffer: BufferData, line: LineSnapshot, activeId: string, effects: LineBatchEffects): void {
+function alertForLine(buffer: BufferData, line: LineSnapshot, activeId: string): void {
     if (isRelayStatusBuffer(buffer)) return;
     // WeeChat hotlist policy maps line priority to a minimum buffer notify
     // level: message (1) requires 'message' (2); private/highlight (2-3)
@@ -481,10 +483,6 @@ function alertForLine(buffer: BufferData, line: LineSnapshot, activeId: string, 
     if (line.notifyLevel < 1) return;
     if (buffer.notify < (line.notifyLevel === 1 ? 2 : 1)) return;
     if (buffer.id === activeId) return;
-    // Passive indicators are derived from store state this batch has not
-    // published yet, so every alerting line would compute the identical title
-    // and badge. One pass at the end is the same result.
-    effects.alertIndicators = true;
     const isPrivateMessage = line.tags.includes('notify_private');
     const isPrivate = buffer.type === 'private' || buffer.type === 'query';
     if (buffer.notify !== 0 && (line.highlight || isPrivateMessage || isPrivate)) {

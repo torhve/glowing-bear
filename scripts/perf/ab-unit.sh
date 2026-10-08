@@ -25,9 +25,12 @@ cd "$REPO"
 # Which harness runs a single arm. Unit by default; ab-e2e.sh overrides it.
 ARM_SCRIPT="${GB_PERF_ARM_SCRIPT:-scripts/perf/unit-arm.sh}"
 
-MANIFEST="artifacts/perf/swap-manifest.txt"
-BASE_DIR="artifacts/perf/baseline-src"
-CAND_DIR="artifacts/perf/cand-src"
+# Manifest and snapshot directories are overridable so one campaign's baseline
+# never overwrites another's: GB_PERF_MANIFEST / GB_PERF_BASE_DIR / GB_PERF_CAND_DIR
+# point at a per-campaign evidence directory while the defaults stay untouched.
+MANIFEST="${GB_PERF_MANIFEST:-artifacts/perf/swap-manifest.txt}"
+BASE_DIR="${GB_PERF_BASE_DIR:-artifacts/perf/baseline-src}"
+CAND_DIR="${GB_PERF_CAND_DIR:-artifacts/perf/cand-src}"
 RUNDIR="artifacts/perf/runs/$LABEL"
 
 [ -f "$MANIFEST" ] || { echo "missing $MANIFEST — list the files this experiment swaps"; exit 1; }

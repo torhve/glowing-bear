@@ -9,6 +9,7 @@ import {
     isSyncing,
 } from '#lib/stores/models.ts';
 import type { BufferData, ProtocolMessage } from '#lib/types.ts';
+import { badgeState, documentTitle, type BadgeState } from '#lib/stores/indicatorState.ts';
 
 // Mock settings store to avoid localStorage access at module load time
 vi.mock('#lib/stores/settings.ts', () => ({
@@ -20,7 +21,7 @@ vi.mock('#lib/stores/settings.ts', () => ({
                 theme: 'dark', fontfamily: '', fontsize: '', customCSS: '',
                 iToken: '', iAlb: '', onlyUnread: false, noembed: false,
                 alwaysnicklist: false, orderbyserver: false,
-                readlineBindings: false, useFavico: false, soundnotification: true,
+                readlineBindings: false, useFavico: true, soundnotification: true,
                 enableMathjax: false, enableQuickKeys: false, showNicklist: true,
                 showQuickKeys: false, showJumpKeys: false, highlightWords: '', hotlistsync: true
             });
@@ -41,6 +42,8 @@ vi.mock('#lib/notifications.ts', () => ({
     playNotificationSound: mockPlayNotificationSound,
     updateTitle: mockUpdateTitle,
     updateFavico: mockUpdateFavico,
+    startIndicatorOwner: () => () => {},
+    refreshIndicators: vi.fn(),
 }));
 
 // Focus is driven by document.hidden so tests can flip it explicitly.
@@ -126,6 +129,24 @@ function setWindowFocused(focused: boolean) {
     });
 }
 
+/**
+ * Indicator publications observed since arming (subscribe() delivers the
+ * current value immediately, so that first delivery is not counted).
+ */
+function trackIndicators() {
+    const titles: string[] = [];
+    const badges: (BadgeState | null)[] = [];
+    const unsubTitle = documentTitle.subscribe((t) => titles.push(t));
+    const unsubBadge = badgeState.subscribe((b) => badges.push(b));
+    return {
+        titles: () => titles.length - 1,
+        badges: () => badges.length - 1,
+        lastTitle: () => titles[titles.length - 1],
+        lastBadge: () => badges[badges.length - 1],
+        stop: () => { unsubTitle(); unsubBadge(); },
+    };
+}
+
 describe('Notification gate vs. read-boundary gate', () => {
     beforeEach(() => {
         vi.useFakeTimers();
@@ -160,6 +181,7 @@ describe('Notification gate vs. read-boundary gate', () => {
         });
         beginSyncPhase();
 
+        const seen = trackIndicators();
         handleBufferLineAdded(lineMessage('0x200', ['notify_private'], 2));
 
         expect(isSyncing()).toBe(true);
@@ -173,8 +195,17 @@ describe('Notification gate vs. read-boundary gate', () => {
         // User-facing alert does not depend on sync/boundary state.
         expect(mockPlayNotificationSound).toHaveBeenCalledTimes(1);
         expect(mockCreateHighlight).toHaveBeenCalledTimes(1);
-        expect(mockUpdateTitle).toHaveBeenCalledTimes(1);
-        expect(mockUpdateFavico).toHaveBeenCalledTimes(1);
+        // The passive indicators are reached through the indicator stores, not
+        // through a handler call. The gate stopped the server count, so the
+        // global total is unchanged and nothing is republished — the old code
+        // re-wrote the identical title here, which is the redundancy this guards.
+        // What must still be true is that the indicator reflects the state that
+        // is authoritative: the hotlist count of 5, not the local tally.
+        expect(seen.titles()).toBe(0);
+        expect(seen.badges()).toBe(0);
+        expect(seen.lastTitle()).toContain('(5) ');
+        expect(seen.lastBadge()).toEqual({ count: 5, kind: 'unread' });
+        seen.stop();
     });
 
     it('still updates passive indicators for a plain message while syncing, without ringing or server counting', () => {
@@ -187,12 +218,20 @@ describe('Notification gate vs. read-boundary gate', () => {
         });
         beginSyncPhase();
 
+        const seen = trackIndicators();
         handleBufferLineAdded(lineMessage('0x100', ['notify_message'], 1));
 
         const buf = get(buffers)['0x100']!;
         expect(buf.unread).toBe(2);
         expect(buf.localUnread).toBe(1); // badge tally is never gated
-        expect(mockUpdateTitle).toHaveBeenCalledTimes(1);
+        // Gating the alert must not gate the badge tally on the buffer itself,
+        // and the indicator must still depict the authoritative count. The
+        // global total did not change, so no redundant publication happens.
+        expect(seen.titles()).toBe(0);
+        expect(seen.badges()).toBe(0);
+        expect(seen.lastTitle()).toContain('(2) ');
+        expect(seen.lastBadge()).toEqual({ count: 2, kind: 'unread' });
+        seen.stop();
         expect(mockPlayNotificationSound).not.toHaveBeenCalled();
         expect(mockCreateHighlight).not.toHaveBeenCalled();
     });

@@ -28,6 +28,8 @@ vi.mock('#lib/notifications.ts', () => ({
     playNotificationSound: vi.fn(),
     updateTitle: vi.fn(),
     updateFavico: vi.fn(),
+    startIndicatorOwner: () => () => {},
+    refreshIndicators: vi.fn(),
 }));
 
 // Mock windowFocus so handlers module loads without runtime errors

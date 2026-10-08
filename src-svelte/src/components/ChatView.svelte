@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { BufferLine } from '#lib/types.ts';
   import { get } from 'svelte/store';
-  import { currentBuffer, activeBufferId, bufferBottom, buffers, maxBufferLines, recalculateLinesPerScreen, getReadBoundaryIndex, isUserMessageLine } from '#lib/stores/models.ts';
+  import { currentBuffer, activeBufferId, bufferBottom, buffers, maxBufferLines, recalculateLinesPerScreen, getReadBoundaryIndex, isUserMessageLine, serverNick } from '#lib/stores/models.ts';
   import { settings } from '#lib/stores/settings.ts';
   import { fetchMoreLines, closeBufferOnWeeChat, pinBuffer, unpinBuffer } from '#lib/stores/connectionManager.ts';
   import { buildMentionText, isFreeBuffer, modifyTextareaValue } from '#lib/utils.ts';
@@ -54,16 +54,13 @@
     ) : ''
   );
 
-  // My nick: prefer buffer's own localVariables.nick; fall back to matching server buffer's nick.
+  // My nick: prefer the buffer's own localVariables.nick; fall back to the matching
+  // server buffer's nick. The fallback is an explicit store dependency rather than a
+  // get(buffers) scan: the nick lives on the server buffer, and a selective
+  // currentBuffer deliberately stops publishing when a *different* buffer changes —
+  // which is exactly what a /nick is.
   let myNick = $derived(
-    $currentBuffer?.localVariables?.nick ??
-    ($currentBuffer ? (
-      Object.values(get(buffers)).find(b =>
-        b.type === 'server' &&
-          b.plugin === $currentBuffer.plugin &&
-          b.server === $currentBuffer.server
-      )?.localVariables?.nick ?? ''
-    ) : '')
+    $currentBuffer?.localVariables?.nick ?? $serverNick
   );
 
   let isLoadingMore = $state(false);

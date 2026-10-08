@@ -1,6 +1,7 @@
 <script lang="ts">
-  import type { BufferData } from '#lib/types.ts';
-  import { buffers, activeBufferId, sortedVisibleBuffers, getEffectiveUnread } from '#lib/stores/models.ts';
+  import type { BufferPresentation } from '#lib/types.ts';
+  import { buffers, activeBufferId, getEffectiveUnread } from '#lib/stores/models.ts';
+  import { sidebarOrder, sidebarRows } from '#lib/stores/bufferProjections.ts';
   import { switchBuffer } from '#lib/stores/connectionManager.ts';
   import { settings, updateSettings } from '#lib/stores/settings.ts';
   import { getBufferIconName, getDisplayName } from '#lib/utils.ts';
@@ -18,10 +19,10 @@
 
   let { altKeyPressed = false, onBufferSelect = () => {} } = $props();
 
-  let sortedBuffers = $derived(
-    $sortedVisibleBuffers.filter(buf => !$settings.onlyUnread || getEffectiveUnread(buf) > 0 || buf.id === $activeBufferId || buf.pinned)
-  );
-
+  // Rows come pre-filtered and pre-sorted from the projection: membership under
+  // onlyUnread is part of what the list *is*, and the projection can suppress a
+  // publication the component could not.
+  let sortedBuffers = $derived($sidebarRows);
   let groupedBuffers = $derived(
     $settings.orderbyserver
       ? groupByServer(sortedBuffers)
@@ -34,8 +35,8 @@
   let longPressMenuY = $state(0);
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
 
-  function groupByServer(bufs: BufferData[]) {
-    const groups: Record<string, BufferData[]> = {};
+  function groupByServer(bufs: BufferPresentation[]) {
+    const groups: Record<string, BufferPresentation[]> = {};
     for (const buf of bufs) {
       const server = buf.server || 'General';
       if (!groups[server]) {
@@ -87,7 +88,7 @@
 
   // Text color follows Tailwind nav pattern: active = full brightness,
     // inactive = muted, hover brightens. Notifications still use accent.
-  function getNotifyClass(buffer: BufferData): string {
+  function getNotifyClass(buffer: BufferPresentation): string {
     if (buffer.id === $activeBufferId) return 'text-text font-semibold';
     const eff = getEffectiveUnread(buffer);
     if (buffer.notification >= 3) return 'text-accent font-bold';
@@ -97,21 +98,24 @@
 
   // Return icon color class — follows active/hover state for visual cohesion
     // Active icons use full opacity; inactive icons are slightly muted
-  function getIconClass(buffer: BufferData): string {
+  function getIconClass(buffer: BufferPresentation): string {
     if (buffer.id === $activeBufferId) return 'text-accent opacity-100';
     return 'text-text-muted opacity-75 group-hover:opacity-100 transition-colors';
   }
 
 
-  function getQuickKeyIndex(buffer: BufferData): number | null {
+  function getQuickKeyIndex(buffer: BufferPresentation): number | null {
     if (!altKeyPressed && (!$settings.showQuickKeys || !$settings.enableQuickKeys)) return null;
-    const sorted = get(sortedVisibleBuffers) as BufferData[];
-    const idx = sorted.findIndex(b => b.id === buffer.id);
+    // Quick keys are positions in the sorted buffer list, not positions in the
+    // filtered list the sidebar happens to show, so they do not move when
+    // onlyUnread hides rows.
+    const order = get(sidebarOrder);
+    const idx = order.indexOf(buffer.id);
     if (idx === -1 || idx >= 9) return null;
     return idx + 1;
   }
 
-  function getBufferIcon(buffer: BufferData) {
+  function getBufferIcon(buffer: BufferPresentation) {
     const iconName = getBufferIconName(buffer);
     if (iconName === 'hash') return Hash;
     if (iconName === 'user') return User;

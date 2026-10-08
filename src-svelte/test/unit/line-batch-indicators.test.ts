@@ -8,6 +8,7 @@ import {
     localUnreadBuffers,
 } from '#lib/stores/models.ts';
 import type { BufferData, ProtocolMessage } from '#lib/types.ts';
+import { badgeState, documentTitle, type BadgeState } from '#lib/stores/indicatorState.ts';
 
 /**
  * Batch-level behaviour of the passive indicators and the local-unread tally.
@@ -29,7 +30,7 @@ vi.mock('#lib/stores/settings.ts', () => ({
                 theme: 'dark', fontfamily: '', fontsize: '', customCSS: '',
                 iToken: '', iAlb: '', onlyUnread: false, noembed: false,
                 alwaysnicklist: false, orderbyserver: false,
-                readlineBindings: false, useFavico: false, soundnotification: true,
+                readlineBindings: false, useFavico: true, soundnotification: true,
                 enableMathjax: false, enableQuickKeys: false, showNicklist: true,
                 showQuickKeys: false, showJumpKeys: false, highlightWords: '', hotlistsync: true
             });
@@ -50,6 +51,8 @@ vi.mock('#lib/notifications.ts', () => ({
     playNotificationSound: mockPlayNotificationSound,
     updateTitle: mockUpdateTitle,
     updateFavico: mockUpdateFavico,
+    startIndicatorOwner: () => () => {},
+    refreshIndicators: vi.fn(),
 }));
 
 vi.mock('#lib/windowFocus.ts', () => ({
@@ -146,20 +149,38 @@ describe('per-batch indicators and local-unread tally', () => {
         vi.useRealTimers();
     });
 
-    it('updates title and favicon once for a batch of alert-eligible lines, while still alerting per line', () => {
+    it('alerts per line but publishes the indicator state once for a batch of alert-eligible lines', () => {
         buffers.set({
             '0x100': makeBuffer('0x100', { notify: 3 }),
         });
 
-        handleBufferLineAdded(batchMessage('0x100', 5, ['irc_privmsg', 'notify_private'], 2, 1));
+        // The indicator stores are the only path to the title and the badge now,
+        // so this is the batch-level claim the old "one title/favicon call" test
+        // was really making: the batch publishes its totals once, not once per
+        // line, and the alert path is untouched.
+        // subscribe() delivers the current value immediately, so the first entry
+        // in each list is the state before the batch, not a publication by it.
+        const titles: string[] = [];
+        const badges: (BadgeState | null)[] = [];
+        const unsubTitle = documentTitle.subscribe((title) => titles.push(title));
+        const unsubBadge = badgeState.subscribe((state) => badges.push(state));
+        const titlesBefore = titles.length;
+        const badgesBefore = badges.length;
+        try {
+            handleBufferLineAdded(batchMessage('0x100', 5, ['irc_privmsg', 'notify_private'], 2, 1));
 
-        // User-facing alert: one per message, unchanged.
-        expect(mockPlayNotificationSound).toHaveBeenCalledTimes(5);
-        expect(mockCreateHighlight).toHaveBeenCalledTimes(5);
-        // Passive indicators: derived from store state the batch has not written
-        // yet, so five calls produced five identical values. Now one.
-        expect(mockUpdateTitle).toHaveBeenCalledTimes(1);
-        expect(mockUpdateFavico).toHaveBeenCalledTimes(1);
+            // User-facing alert: one per message, unchanged.
+            expect(mockPlayNotificationSound).toHaveBeenCalledTimes(5);
+            expect(mockCreateHighlight).toHaveBeenCalledTimes(5);
+
+            expect(titles.length - titlesBefore).toBe(1);
+            expect(titles[titles.length - 1]).toContain('(5) ');
+            expect(badges.length - badgesBefore).toBe(1);
+            expect(badges[badges.length - 1]).toEqual({ count: 5, kind: 'notification' });
+        } finally {
+            unsubTitle();
+            unsubBadge();
+        }
 
         const buf = get(buffers)['0x100']!;
         expect(buf.lines.length).toBe(5);

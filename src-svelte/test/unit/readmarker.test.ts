@@ -34,6 +34,8 @@ vi.mock('#lib/notifications.ts', () => ({
     playNotificationSound: mockPlayNotificationSound,
     updateTitle: mockUpdateTitle,
     updateFavico: mockUpdateFavico,
+    startIndicatorOwner: () => () => {},
+    refreshIndicators: vi.fn(),
 }));
 
 // Mock windowFocus so tests can control focus via document.hidden
