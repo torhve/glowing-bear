@@ -21,6 +21,14 @@
   import { parseRelayUrl, isPopoverOpen, bufferHasNicklist, modifyTextareaValue, captureBufferAppearance, waitForFreshBuffer, scriptInstalled } from '#lib/utils.ts';
   import { addToast, toastStore } from '#lib/toast.ts';
   import { showWindow } from '#lib/tauriWindow.ts';
+  import { setChatScrollCommands } from '#lib/chatScrollContext.ts';
+  import type { ChatScrollCommands, ChatScrollCommandsHolder } from '#lib/chatViewport.ts';
+
+  // One holder for this page instance, shared with the composer through context.
+  // ChatView fills it while mounted and clears it on unmount. Plain object on
+  // purpose: mounting and unmounting the chat view must not re-run page effects.
+  const chatScrollCommands: ChatScrollCommandsHolder = { current: null };
+  setChatScrollCommands(chatScrollCommands);
 
   /* eslint-disable @typescript-eslint/no-explicit-any -- dev-time debug globals on window */
   if (typeof window !== 'undefined' && import.meta.env.DEV) {
@@ -310,12 +318,9 @@
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if ((activeEl as HTMLElement)?.isContentEditable) return;
       e.preventDefault();
-      const chatContainer = document.querySelector<HTMLDivElement>('[data-testid="chat-messages"]');
-      if (chatContainer) {
-        chatContainer.scrollTop += code === 33
-          ? -chatContainer.clientHeight * 0.8
-          : chatContainer.clientHeight * 0.8;
-      }
+      // The chat view decides the step and owns the write; a reader who just
+      // navigated by wheel or touch keeps the position they chose.
+      chatScrollCommands.current?.pageScroll(code === 33 ? -1 : 1);
       return;
     }
 
@@ -700,7 +705,7 @@
         <BufferList altKeyPressed={_altKeyPressed} onBufferSelect={hideBufferListOnMobile} />
       {/if}
       <div class="chat-area flex-1 flex flex-col min-w-0">
-        <ChatView />
+        <ChatView onCommands={(commands: ChatScrollCommands | null) => { chatScrollCommands.current = commands; }} />
         <InputBar />
       </div>
       {#if $settings.showNicklist && !isMobileState && hasCurrentBufferNicklist}

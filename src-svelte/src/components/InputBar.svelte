@@ -17,7 +17,11 @@
   import { DEBUG_INPUT } from '#lib/debug.ts';
   import { addToast } from '#lib/toast.ts';
   import { readInputDraft, writeInputDraft } from '#lib/stores/inputDraft.ts';
+  import { readChatScrollCommands } from '#lib/chatScrollContext.ts';
 
+  // The chat viewport of this page, reached through context rather than a
+  // document query: the composer expresses intent, the view moves the viewport.
+  const chatScrollCommands = readChatScrollCommands();
   interface PreviewItem {
     id: number;
     name: string;
@@ -502,23 +506,17 @@
       return false;
     }
 
-    // Page up -> scroll up
+    // Page up -> ask the chat view to scroll up one screen
     if (e.type === 'keydown' && code === 33 && document.activeElement === inputRef && !e.ctrlKey && !e.altKey && !e.shiftKey) {
       e.preventDefault();
-      const chatContainer = document.querySelector<HTMLDivElement>('[data-testid="chat-messages"]');
-      if (chatContainer) {
-        chatContainer.scrollTop -= chatContainer.clientHeight * 0.8;
-      }
+      chatScrollCommands.current?.pageScroll(-1);
       return true;
     }
 
-    // Page down -> scroll down
+    // Page down -> ask the chat view to scroll down one screen
     if (e.type === 'keydown' && code === 34 && document.activeElement === inputRef && !e.ctrlKey && !e.altKey && !e.shiftKey) {
       e.preventDefault();
-      const chatContainer = document.querySelector<HTMLDivElement>('[data-testid="chat-messages"]');
-      if (chatContainer) {
-        chatContainer.scrollTop += chatContainer.clientHeight * 0.8;
-      }
+      chatScrollCommands.current?.pageScroll(1);
       return true;
     }
   }
