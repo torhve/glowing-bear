@@ -5,6 +5,8 @@
   import { settings } from '#lib/stores/settings.ts';
   import { fetchMoreLines, closeBufferOnWeeChat, pinBuffer, unpinBuffer } from '#lib/stores/connectionManager.ts';
   import { buildMentionText, isFreeBuffer, modifyTextareaValue } from '#lib/utils.ts';
+  import { ChatViewport, createChatDomAdapter } from '#lib/chatViewport.ts';
+  import type { ChatViewportState, ChatScrollCommands } from '#lib/chatViewport.ts';
   import BufferLineRow from '#components/BufferLineRow.svelte';
   import TopicModal from '#components/TopicModal.svelte';
   import LinkifiedText from '#components/LinkifiedText.svelte';
@@ -33,6 +35,10 @@
     });
   });
   let noembed = $derived($settings.noembed);
+  // Optional bridge for siblings that express scroll intent (the global key
+  // handler and the message composer). The view publishes commands while it is
+  // mounted and retracts them on unmount; the caller never touches the DOM.
+  let { onCommands = undefined }: { onCommands?: (commands: ChatScrollCommands | null) => void } = $props();
   let topicText = $derived($currentBuffer?.title?.map(t => t.text).join('') || '');
   // Bubble mode: enabled when setting is on AND buffer is a private chat type.
   // Only 'private' type buffers (DCC chats and IRC PMs) get bubbles;
@@ -65,51 +71,6 @@
 
   let isLoadingMore = $state(false);
   let viewBufferId = $derived($currentBuffer?.id);
-  let viewGeneration = 0;
-  // A fetch that prepends nothing new (server history already fully displayed
-  // under the client line cap) must not re-pulse the fetch row on every
-  // scroll-to-top: the row height change shifts the viewport and UA scroll
-  // anchoring drags the user away from where they parked. Remember the
-  // buffer whose top is exhausted; the explicit button still forces a fetch.
-  let exhaustedTopBufferId: string | null = null;
-  // Non-reactive bookkeeping: pending frames belong to one visit to a buffer.
-  // eslint-disable-next-line svelte/prefer-svelte-reactivity
-  const viewFrames = new Set<number>();
-  // Distance from the bottom (in px) within which we consider the chat "at bottom".
-  // Shared by handleScroll and the auto-scroll effect so tolerances never diverge.
-  const SCROLL_BOTTOM_TOLERANCE = 10;
-  // Tracks whether the chat is scrolled to the bottom (AngularJS bufferBottom equivalent).
-  // Used to avoid unnecessary scroll operations when already at bottom.
-  let isAtBottom = $state(true);
-  // Timestamp (performance.now()) of the last time we actively pinned the scroll to the
-  // bottom while following. While within FOLLOW_SETTLE_MS of this, handleScroll will not
-  // allow a stray/mid-layout scroll event to flip isAtBottom back to false. WebKit
-  // reflows wrapping lines across several frames and fires scroll events against
-  // transient layouts, which otherwise poisons isAtBottom and strands the view above
-  // the true bottom (see Tauri repro: FAIL-echo-not-at-bottom).
-  const FOLLOW_SETTLE_MS = 250;
-  let lastFollowPinAt = 0;
-  // True while the per-frame follow-pin loop is still re-anchoring the viewport.
-  // Read imperatively by the __chatFollowState test hook below so E2E specs can
-  // wait for a follow to finish instead of sleeping a guessed duration.
-  let followPinning = false;
-  // ---- Tail revision tracking ----
-  // Every store update rebuilds buffer.lines and clones each line, so object
-  // identity is only stable within one snapshot. Comparing the tail line object
-  // with the one seen on the previous run tells us whether the tail changed,
-  // which a plain length comparison cannot do once the buffer reaches
-  // maxBufferLines (see linesAdded below). The counter exists only to give that
-  // a cheap token for the dedup key; tracking one reference rather than a map
-  // keyed by line objects keeps this allocation-free.
-  let lastLineSeqCounter = 0;
-
-  let prevActiveBufferId = $state<string>('');
-  let prevLinesLength = $state(0);
-  // Tail line object and revision seen by the previous effect run (0 = none).
-  let prevLastLine: BufferLine | undefined = undefined;
-  let prevLastLineSeq = 0;
-  let prevScrollKey = $state<string>('');
-  let readmarkerFailures = $state(0);
   // A null index means the reconnect/snapshot did not provide a trustworthy boundary.
   let readEndIndex = $derived($currentBuffer ? getReadBoundaryIndex($currentBuffer) : null);
   let hasUnreadDisplayed = $derived(
@@ -126,33 +87,6 @@
     readEndIndex !== null && messages.length > 0 && !hasUnreadDisplayed
   );
   let readStartIndex = $derived((readEndIndex ?? -1) + 1);
-
-  // Invalidate work on buffer changes and unmount, including A -> B -> A visits.
-  $effect(() => {
-    void viewBufferId;
-    isLoadingMore = false;
-    exhaustedTopBufferId = null;
-    return () => {
-      viewGeneration++;
-      for (const frame of viewFrames) cancelAnimationFrame(frame);
-      viewFrames.clear();
-    };
-  });
-
-  // A scheduled layout operation must never act on a different buffer or DOM node.
-  function scheduleViewFrame(callback: () => void) {
-    const generation = viewGeneration;
-    const bufferId = get(activeBufferId);
-    const container = containerRef;
-    if (!container) return;
-    const frame = requestAnimationFrame(() => {
-      viewFrames.delete(frame);
-      if (generation === viewGeneration && bufferId === get(activeBufferId) && container === containerRef) {
-        callback();
-      }
-    });
-    viewFrames.add(frame);
-  }
 
   // Toggle pin/unpin for the currently active buffer via WeeChat localvar_set.
   function handleTogglePin() {
@@ -182,62 +116,73 @@
     closeBufferOnWeeChat(bufId);
   }
 
-  // Track manual scrolling and request history when the user reaches the top.
+  // ---- Viewport ownership ----
+  // Every application-driven scroll of the chat container is decided by one
+  // controller per mounted view. The decision tree, the follow-pin loop, the
+  // read-separator placement and the WebKit layout safeguards all live in
+  // lib/chatViewport.ts; this component renders, projects the model, and owns
+  // the controller's lifecycle.
+  const viewport = new ChatViewport({
+    onFollowIntent: (atBottom) => bufferBottom.set(atBottom),
+    onVisibleLinesEstimate: (numLines) => recalculateLinesPerScreen(numLines),
+    onHistoryBusy: (busy) => {
+      isLoadingMore = busy;
+    },
+    onReachTop: (force) => {
+      void loadMoreHistory(force);
+    },
+  });
+
+  // Bind the controller to this mounted view. A buffer change, a replaced
+  // container, or unmount ends the previous visit: its queued frames, its pin
+  // loop, and its in-flight history operation are cancelled rather than left to
+  // act on a view they no longer belong to.
+  $effect(() => {
+    const bufferId = viewBufferId;
+    const container = containerRef;
+    if (!container) {
+      viewport.detach();
+      return;
+    }
+    viewport.attach(bufferId, createChatDomAdapter(container));
+    return () => viewport.detach();
+  });
+
+  // Report what was rendered; the controller decides whether that means
+  // re-placing the viewport, pinning a live tail, or doing nothing at all.
+  $effect(() => {
+    viewport.contentChanged({
+      bufferId: viewBufferId,
+      lineCount: messages.length,
+      tailRef: messages.length > 0 ? messages[messages.length - 1] : undefined,
+      hasUnread: hasUnreadDisplayed,
+      readBoundaryKnown: readEndIndex !== null,
+    });
+  });
+
+  // Publish this view's scroll commands. Both the global PageUp/PageDown handler
+  // and the composer go through them, so no caller computes a scroll offset and
+  // no caller can move a viewport the reader is not looking at.
+  $effect(() => {
+    onCommands?.({
+      pageScroll: (direction: -1 | 1) => viewport.requestPageScroll(direction),
+    });
+    return () => onCommands?.(null);
+  });
+
+  // Track manual scrolling and request history when the reader reaches the top.
   function handleScroll() {
-    if (!containerRef) return;
-    const { scrollTop, scrollHeight, clientHeight } = containerRef;
-
-    // Update isAtBottom tracking (AngularJS bufferBottom equivalent).
-    // Tolerance accounts for sub-pixel scroll lag when new lines grow scrollHeight.
-    // Sticky during the follow-settle window: a stray/mid-layout scroll event fired
-    // while we are actively pinning to the bottom must not flip isAtBottom to false,
-    // or the next effect run will stop following and strand the view above the bottom.
-    const atBottomNow = scrollTop >= scrollHeight - clientHeight - SCROLL_BOTTOM_TOLERANCE;
-    const inSettleWindow = performance.now() - lastFollowPinAt < FOLLOW_SETTLE_MS;
-    if (atBottomNow || (inSettleWindow && isAtBottom)) {
-      isAtBottom = true;
-    } else {
-      isAtBottom = false;
-    }
-
-    if (scrollTop < 50) void loadMoreHistory(true);
+    viewport.handleScroll();
   }
 
-  $effect(() => {
-    // Sync local isAtBottom state to shared bufferBottom store
-    bufferBottom.set(isAtBottom);
-  });
-
-  // Measure visible lines from actual DOM dimensions, matching AngularJS's calculateNumLines.
-  // Samples line height from rendered .bufferline elements and divides container height by it.
-  function measureLinesPerScreen() {
-    if (!containerRef) return;
-    const areaHeight = containerRef.clientHeight;
-    const sampleLine = containerRef.querySelector('.bufferline');
-    // Fallback line height of 16px when no rendered lines exist yet
-    const lineHeight = sampleLine?.clientHeight ?? 16;
-    if (lineHeight === 0) return;
-    // Fetch 10 lines more than theoretically needed so scrolling up triggers loading of more lines
-    const numLines = Math.ceil(areaHeight / lineHeight + 10);
-    recalculateLinesPerScreen(numLines);
-  }
-
-  // Measure after first render with content — before this, handlers use default (210)
-  $effect(() => {
-    if (containerRef && messages.length > 0) {
-      // Defer to rAF so DOM has fully rendered
-      scheduleViewFrame(() => measureLinesPerScreen());
-    }
-  });
-
-  // Recalculate on window resize (debounced)
+  // Recalculate the visible-row estimate on window resize (debounced).
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
   $effect(() => {
     const onResize = () => {
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
         resizeTimer = null;
-        measureLinesPerScreen();
+        viewport.notifyLayoutChanged();
       }, 150);
     };
     window.addEventListener('resize', onResize);
@@ -250,221 +195,12 @@
     };
   });
 
-  // Recalculate when font size setting changes
+  // A font change alters every row's height: re-estimate rows and keep a
+  // following view pinned. Reading views are left where the reader put them.
   $effect(() => {
-    /*
-         * Scroll decision tree:
-         *
-         * +------------------------------------------------------+
-         * |  bufferChanged?                                     |
-         * |                                                      |
-         * |  YES ==>  +------------------------------------+     |
-         * |           | linesAdded?                          |     |
-         * |           |                                      |     |
-         * |           | YES ==> rAF: check hasUnread        |     |
-         * |           |          +- no unread               |     |
-         * |           |          |  ==> scroll to bottom       |     |
-         * |           |          +- has unread, fail>=2      |     |
-         * |           |          |  ==> fallback to bottom     |     |
-         * |           |          +- has unread               |     |
-         * |           |             ==> position readmarker    |     |
-         * |           +-+------------------------------------+     |
-         * |              |                                        |
-         * |  NO  ==>  +--+----------------------------------+     |
-         * |           | linesAdded?                          |     |
-         * |           |                                      |     |
-         * |           | YES ==> wasFollowing?                |     |
-         * |           |          +- true  ==> scroll to bottom |     |
-         * |           |          |         keep marker fixed    |     |
-         * |           |          +- false ==> do nothing (stop) |     |
-         * |           |            (user manually scrolled)     |     |
-         * |           |                                      |     |
-         * |           | NO ==> skip                          |     |
-         * |           +--------------------------------------+     |
-         * +------------------------------------------------------+
-         *
-         * Key insight: same-buffer auto-scroll is governed entirely by wasFollowing.
-         * Buffer-switch logic uses readmarker positioning. No ownMessage detection.
-         */
-
-    // Skip if no buffer, loading more lines, or empty buffer
-    if (!$currentBuffer || isLoadingMore || messages.length === 0 || !containerRef) {
-      prevActiveBufferId = get(activeBufferId);
-      prevLinesLength = messages.length;
-      // prevLastLine/prevLastLineSeq are deliberately NOT reset here: a transient
-      // skip (loading more history, buffer not mounted yet) must not manufacture a
-      // fresh revision for a tail that never changed, which would defeat the dedup
-      // guard below.
-      return;
-    }
-
-    // Read reactive values synchronously before any await to avoid stale snapshots.
-    // $derived values do NOT re-evaluate after await in async functions (Svelte 5 limitation).
-    const currentBufferId = get(activeBufferId);
-    const curLinesLength = messages.length;
-    const curLastLine = curLinesLength > 0 ? messages[curLinesLength - 1] : undefined;
-    // A new revision only when the tail object itself changes - an append, a
-    // clone or an edit - not when the same tail is re-read after an unrelated
-    // store change.
-    const curLastLineSeq = curLastLine === prevLastLine ? prevLastLineSeq : ++lastLineSeqCounter;
-    const bufferChanged = prevActiveBufferId !== currentBufferId;
-    // A line arrived when the list grew, OR when it stayed the same size but the
-    // tail changed. The second case is the maxBufferLines cap: handlers append the
-    // incoming line and trim one off the front in the same update, so the length
-    // never changes. Detecting only growth silently disables auto-follow in every
-    // buffer that has reached the cap - the view stays put and the newest line
-    // ends up below the fold whenever the trimmed line and the new line differ in
-    // height (e.g. a wrapped line arriving).
-    // Updates that rebuild the array without appending (a plugin editing a line,
-    // updateBufferDeep) also read as a tail change. Those extra pins only fire when
-    // wasFollowing/isAtBottom is already true, so they never move a reader who has
-    // scrolled away - but they do re-arm the follow-settle window, which keeps a
-    // following view pinned during a fast message flood (same as below the cap).
-    const linesAdded = curLinesLength > prevLinesLength || (curLinesLength === prevLinesLength && curLastLineSeq !== prevLastLineSeq);
-
-    // Trust the scroll handler's authoritative state. handleScroll already captured
-    // the user's last deliberate scroll position, so isAtBottom is accurate for
-    // genuinely-following users. The re-check below only runs when !wasFollowing, and
-    // uses the shared tolerance, so there is no risk of a false negative for users
-    // who are actually at the bottom.
-    let wasFollowing = isAtBottom;
-    if (containerRef && linesAdded && !wasFollowing) {
-      wasFollowing = containerRef.scrollTop >= containerRef.scrollHeight - containerRef.clientHeight - SCROLL_BOTTOM_TOLERANCE;
-      if (isAtBottom !== wasFollowing) {
-        isAtBottom = wasFollowing;
-        bufferBottom.set(wasFollowing);
-      }
-    }
-
-    // If nothing changed, skip scroll operations entirely
-    if (!bufferChanged && !linesAdded) return;
-
-    // Dedup guard: run synchronously to prevent cascading effect re-runs.
-    // Bypass when readmarker lookup previously failed, allowing retry.
-    const scrollKey = `${currentBufferId}-${curLinesLength}-${curLastLineSeq}`;
-    if (prevScrollKey === scrollKey && readmarkerFailures === 0) return;
-
-    // Update tracking state SYNCHRONOUSLY (not inside async IIFE) so that
-    // when the effect re-runs from other reactive changes, the dedup guard catches it.
-    prevScrollKey = scrollKey;
-    prevActiveBufferId = currentBufferId;
-    prevLinesLength = curLinesLength;
-    prevLastLine = curLastLine;
-    prevLastLineSeq = curLastLineSeq;
-
-    // Same buffer + lines added: defer to rAF for layout, but decision is simple.
-    // wasFollowing is authoritative - captured synchronously before render.
-    if (!bufferChanged && linesAdded) {
-      scheduleViewFrame(() => {
-        // Auto-scroll if the pre-capture check (wasFollowing) OR the continuous
-        // scroll handler (isAtBottom) says we're following. Both use the same
-        // SCROLL_BOTTOM_TOLERANCE, so OR simply covers the case where the handler
-        // hasn't fired since the last user scroll.
-        if (wasFollowing || isAtBottom) {
-          readmarkerFailures = 0;
-          isAtBottom = true;
-          // Pin to the bottom until layout settles. WebKit reflows a wrapping line
-          // across several frames (scrollHeight bounces), so a single double-rAF can
-          // land on a transient layout and strand the view above the true bottom.
-          // Keep pinning each frame until scrollHeight is stable for a couple of
-          // frames OR a short hard cap elapses, whichever comes first.
-          lastFollowPinAt = performance.now();
-          const pinStart = lastFollowPinAt;
-          const PIN_CAP_MS = 400;
-          const PIN_SETTLE_FRAMES = 2;
-          let lastScrollHeight = -1;
-          let stableFrames = 0;
-          const pinToBottom = () => {
-            if (!containerRef) {
-              followPinning = false;
-              return;
-            }
-            containerRef.scrollTop = containerRef.scrollHeight - containerRef.clientHeight;
-            lastFollowPinAt = performance.now();
-            const sh = containerRef.scrollHeight;
-            if (sh === lastScrollHeight) stableFrames++;
-            else stableFrames = 0;
-            lastScrollHeight = sh;
-            const settled = stableFrames >= PIN_SETTLE_FRAMES || performance.now() - pinStart > PIN_CAP_MS;
-            if (!settled) {
-              scheduleViewFrame(pinToBottom);
-            } else {
-              followPinning = false;
-            }
-          };
-          // Auto-follow changes only the viewport. The session's new-message
-          // separator remains anchored until setActiveBuffer commits it on exit.
-          followPinning = true;
-          scheduleViewFrame(pinToBottom);
-        } else {
-        // User manually scrolled away from bottom - do nothing.
-        // Preserve their reading position; unread accumulates behind readmarker.
-        }
-      });
-      return;
-    }
-
-    // Buffer changed (with or without line changes) - defer to rAF so that
-    // Svelte has time to render the new buffer's content (including readmarker)
-    // before we check for unread messages or try to position the scroll.
-    scheduleViewFrame(() => {
-      // Re-compute readmarker state from live reactive values inside rAF.
-      // $derived does NOT re-evaluate after async boundaries in Svelte 5,
-      // so we read $currentBuffer directly (reactive access works inside rAF).
-      const freshReadEndIndex = $currentBuffer ? getReadBoundaryIndex($currentBuffer) : null;
-      const freshMessages = $currentBuffer?.lines ?? [];
-      const freshHasUnread = freshReadEndIndex !== null && freshReadEndIndex < freshMessages.length - 1;
-      if (!freshHasUnread) {
-        // No unread messages - scroll to the bottom.
-        readmarkerFailures = 0;
-        containerRef!.scrollTop = containerRef!.scrollHeight - containerRef!.clientHeight;
-        isAtBottom = true;
-      } else if (readmarkerFailures >= 2) {
-        // Readmarker fallback - scroll to bottom after repeated failures.
-        readmarkerFailures = 0;
-        containerRef!.scrollTop = containerRef!.scrollHeight - containerRef!.clientHeight;
-        isAtBottom = true;
-      } else {
-        // Unread messages present - scroll to readmarker.
-        // Second rAF ensures layout is computed after Svelte's DOM insert.
-        scheduleViewFrame(() => {
-          const rmRow = document.querySelector('.readmarker');
-          if (!rmRow || !rmRow.parentElement) {
-            readmarkerFailures++;
-            prevScrollKey = '';
-            isAtBottom = false;
-            return;
-          }
-
-          readmarkerFailures = 0;
-          // Use getBoundingClientRect for accurate viewport-relative positioning.
-          // offsetTop is unreliable inside collapsed tables (relative to td, not container).
-          const rmRect = rmRow.getBoundingClientRect();
-          const containerRect = containerRef!.getBoundingClientRect();
-
-          const remainingScroll = containerRef!.scrollHeight - containerRef!.scrollTop;
-          if (rmRect.bottom <= containerRect.bottom && remainingScroll <= containerRef!.clientHeight) {
-            // Readmarker + unread fit in viewport and everything below fits - scroll to bottom.
-            containerRef!.scrollTop = containerRef!.scrollHeight - containerRef!.clientHeight;
-            isAtBottom = true;
-          } else if (rmRect.bottom <= containerRect.bottom) {
-            // Readmarker visible but many unread below - position readmarker at ~45%.
-            const targetY = containerRect.top + containerRef!.clientHeight * 0.45;
-            const diff = rmRect.top - targetY;
-            containerRef!.scrollTop = containerRef!.scrollTop + diff;
-            isAtBottom = false;
-          } else {
-            // Readmarker not fully visible - position it at ~45% of viewport.
-            const targetY = containerRect.top + containerRef!.clientHeight * 0.45;
-            const diff = rmRect.top - targetY;
-            containerRef!.scrollTop = containerRef!.scrollTop + diff;
-            isAtBottom = false;
-          }
-        });
-      }
-    });
+    void $settings.fontsize;
+    viewport.notifyLayoutChanged();
   });
-
 
   // Handle mention click: extract nick from message prefix, insert into input at cursor.
   function handleMention(message: BufferLine) {
@@ -479,73 +215,50 @@
     });
   }
 
-  // Share the loading guard between scroll and button requests, scoped to this view.
-  // `force` (the explicit button) bypasses the exhausted-top memo.
-  async function loadMoreHistory(preserveScroll: boolean, force = false) {
+  // A history request is claimed and finished through the controller, which owns
+  // the loading guard, the exhausted-top memo, and the position restore. `force`
+  // (the explicit button) bypasses the memo and restores no position.
+  async function loadMoreHistory(force: boolean) {
     const buffer = get(currentBuffer);
-    const container = containerRef;
-    if (isLoadingMore || !buffer || buffer.allLinesFetched || !container) return;
-    if (!force && exhaustedTopBufferId === buffer.id) return;
-    const generation = viewGeneration;
-    const maxScrollBeforeFetch = container.scrollHeight - container.clientHeight;
+    if (!buffer || buffer.allLinesFetched) return;
+    const token = viewport.beginHistory(force);
+    if (!token) return;
     const topLineBefore = buffer.lines[0]?.lineId;
-    isLoadingMore = true;
     try {
       await fetchMoreLines(0, buffer.id);
       const after = get(buffers)[buffer.id];
       const topAfter = after?.lines[0]?.lineId;
-      if (after && topAfter !== undefined && topAfter === topLineBefore && after.lines.length >= get(maxBufferLines)) {
-        // Nothing was prepended while the buffer is at its line cap: the
-        // displayed window already covers the server history. Stop
-        // auto-fetching for this buffer (the button still forces one).
-        exhaustedTopBufferId = buffer.id;
-      } else {
-        exhaustedTopBufferId = null;
-      }
+      // Nothing was prepended while the buffer sits at its line cap: the
+      // displayed window already covers the server history.
+      const prependedNothing = !!after
+        && topAfter !== undefined
+        && topAfter === topLineBefore
+        && after.lines.length >= get(maxBufferLines);
+      viewport.finishHistory(token, { preserveScroll: !force, prependedNothing });
     } catch (err) {
       console.warn('[fetchMoreLines] fetch failed:', err);
-    } finally {
-      // An old request must not move the new view or unlock its pending request.
-      if (generation === viewGeneration && buffer.id === get(activeBufferId) && container === containerRef) {
-        if (preserveScroll) {
-          scheduleViewFrame(() => {
-            // Restore position after rendering history, before allowing auto-follow.
-            container.scrollTop = container.scrollHeight - container.clientHeight - maxScrollBeforeFetch;
-            isAtBottom = false;
-            isLoadingMore = false;
-          });
-        } else {
-          isLoadingMore = false;
-        }
-      }
+      viewport.finishHistory(token, { preserveScroll: !force, prependedNothing: false });
     }
   }
 
   function handleFetchMore() {
-    void loadMoreHistory(false, true);
+    viewport.requestHistoryNow();
   }
 
-  // Read-only view of the follow/pin state, exposed for E2E specs.
-  // 'Settled' means: the pin loop is not running, no scheduled layout frame is
-  // still pending for this view, and the sticky FOLLOW_SETTLE_MS window has
-  // expired. A spec that scrolls on purpose must wait for all three, otherwise
-  // an in-flight pin overwrites it or handleScroll swallows it as noise.
-  // This reports existing state only - it adds no timer and changes no behavior.
+  // Read-only view of the viewport controller, exposed for E2E specs.
+  // 'Settled' means: the pin loop is not running, no layout frame is still queued
+  // for this view, and the sticky follow-settle window has expired. A spec that
+  // scrolls on purpose must wait for all three, otherwise an in-flight pin
+  // overwrites it. This reports existing state only - it adds no timer and
+  // changes no behavior.
   $effect(() => {
-    const win = window as typeof window & {
-      __chatFollowState?: () => { pinning: boolean; pendingFrames: number; settlingUntil: number };
-    };
-    win.__chatFollowState = () => ({
-      pinning: followPinning,
-      pendingFrames: viewFrames.size,
-      settlingUntil: lastFollowPinAt + FOLLOW_SETTLE_MS,
-    });
+    const win = window as typeof window & { __chatFollowState?: () => ChatViewportState };
+    win.__chatFollowState = () => viewport.snapshot();
     return () => {
       delete win.__chatFollowState;
     };
   });
 </script>
-
 <div class="chat-view-container flex-1 flex flex-col overflow-hidden">
   {#if $currentBuffer}
     <div class="h-[var(--spacing-topicbar-height,32px)] bg-input-bg border-b border-border flex items-center px-3 w-full" data-testid="topic-bar-container">
