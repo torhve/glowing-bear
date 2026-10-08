@@ -474,8 +474,9 @@ upstream has not moved.
     `day_changed` handler only rotates log filenames. No relay version has ever
     sent a separator, which is why the app injects its own. The flag would only
     let the app honor "this buffer has separators off".
-  - `day_changed` / `buffer_day_change_changed` — **unrouted, still unobserved,
-    and the gap they would close is intended behavior.** `day_changed` is a timer
+  - `day_changed` / `buffer_day_change_changed` — **routed as known-and-ignored
+    in `api-mapping.ts`, still uncaptured by any probe here, and the gap they
+    would close is intended behavior.** `day_changed` is a timer
     signal (`config_day_change_timer_cb`) meaning "the local day rolled over,
     re-render": the app injects separators only in its three line-append paths,
     so a buffer idle across midnight shows nothing until its next message. That
@@ -483,9 +484,9 @@ upstream has not moved.
     begin, so a day with no messages needs no separator. Do not "fix" it. If it
     is ever revisited, prove it with a fake-clock component test rather than a
     system clock or the shared dev server. `buffer_day_change_changed` fires when
-    `/buffer set day_change` flips the flag. Neither event was ever seen live —
-    `/buffer set day_change on|off` returned 204 with no event, and `day_changed`
-    needs a real local midnight.
+    `/buffer set day_change` flips the flag. Neither event was ever seen live by
+    these probes — `/buffer set day_change on|off` returned 204 with no event,
+    and `day_changed` needs a real local midnight.
 
 - **Input is `POST /api/input` with `buffer_id`.** `POST /api/buffers/<id>/input`
   returns 405 Method Not Allowed on 5.0. The app already used the correct form.
@@ -541,8 +542,14 @@ upstream has not moved.
   (also a full buffer object). `/buffer set day_change on|off` was accepted but
   produced no `buffer_day_change_changed`, and no `day_changed` was observed
   outside a real local midnight — so those two new events remain **unprobed**.
-  The app routes `buffer_notify_changed` and `buffer_title_changed`; `day_changed`
-  and `buffer_day_change_changed` fall to `unrouted event:` warnings.
+  The app routes `buffer_notify_changed`, `buffer_title_changed` and
+  `buffer_day_change_changed` — the last is an ordinary buffer_* change signal
+  (full buffer snapshot), so it lands in the same `bufferUpdated` group as the
+  others. `day_changed` is routed to `ignoredEvent()`: core-level, `buffer_id`
+  -1, body null, and the relay discards the signal's date string, so the frame
+  carries nothing to apply. Neither reaches an `unrouted event:` warning.
+  `unrouted event:` now means only "an event name this client has not looked
+  at" — which is what surfaced a newer relay in the first place.
 - **Endpoint matrix.** `probes/probe-endpoint-matrix.mjs` hits each endpoint the
   transport uses and prints the sampled response's top-level key set; run it
   against both relays and diff. Sampled 2026-10-07, version, hotlist, scripts,
