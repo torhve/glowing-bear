@@ -235,6 +235,11 @@ export function dispatchEvent(event: ApiSessionEvent, reducers: ApiReducers): vo
     // all buffer_* signals; verified live in the dossier). localvar removal
     // does NOT name the removed variable — WeeChat's own relay receiver diffs
     // the remaining local_variables map, and so do we via bufferUpdated.
+    // buffer_day_change_changed is the same shape but only exists on WeeChat
+    // >= 5.0: 4.10.1's buffer signal list omits it (5.x source:
+    // relay-api-protocol.c buffer-signal branch). Routing it keeps the snapshot
+    // fresh when a user flips `/buffer set day_change`; the flag itself is not
+    // consumed — separators are injected by the app, not by the server.
     case 'buffer_title_changed':
     case 'buffer_localvar_added':
     case 'buffer_localvar_changed':
@@ -247,7 +252,8 @@ export function dispatchEvent(event: ApiSessionEvent, reducers: ApiReducers): vo
     case 'buffer_moved':
     case 'buffer_merged':
     case 'buffer_unmerged':
-    case 'buffer_time_for_each_line_changed': {
+    case 'buffer_time_for_each_line_changed':
+    case 'buffer_day_change_changed': {
         if (bufferId === null) { reducers.unhandled(`${event.event_name} with invalid buffer_id`); return; }
         const v = validateBuffer(event.body);
         if (!v.value) { reducers.unhandled(`${event.event_name} invalid: ${v.issues.join('; ')}`); return; }
@@ -270,6 +276,18 @@ export function dispatchEvent(event: ApiSessionEvent, reducers: ApiReducers): vo
         reducers.relayLifecycle(event.event_name as RelayLifecycleEvent);
         return;
     }
+    // Core-level day-change timer (buffer_id -1, body null). WeeChat checks the
+    // local day each minute and sends the 'day_changed' signal when it rolls
+    // over; the API relay hooks that signal only from 5.0 onward and discards
+    // its "YYYY-MM-DD" payload (5.x source: relay-api.c hooks the signal,
+    // relay-api-protocol.c sends -1/NULL/NULL), so the frame carries nothing
+    // this app could apply. Day separators are injected in the app's
+    // line-append paths on purpose — a day with no messages needs no
+    // separator, so an idle buffer staying blank across midnight is intended.
+    // Routed explicitly to keep unhandled() reserved for the unexpected.
+    case 'day_changed':
+        reducers.ignoredEvent(event.event_name);
+        return;
     case 'input_text_changed':
     case 'input_text_cursor_moved':
     case 'input_prompt_changed': {
@@ -350,9 +368,12 @@ export function dispatchEvent(event: ApiSessionEvent, reducers: ApiReducers): vo
         return;
     }
     default:
-        // input_changed / input_prompt_changed and any future events: full
-        // snapshots are fetched on demand; no state damage from ignoring them.
+        // Anything not routed above: full snapshots are re-fetched on demand,
+        // so ignoring is safe — but this is the one place that reports 'the
+        // server sent an event name we have not looked at', which is why it
+        // warns rather than falls silent.
         reducers.unhandled(`unrouted event: ${event.event_name}`);
+        return;
     }
 }
 

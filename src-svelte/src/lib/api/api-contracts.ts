@@ -146,6 +146,10 @@ export interface ApiReducers {
      *  upgrading, finished upgrading, or quitting (manual event table;
      *  upgrade/upgrade_ended only reach plain-text connections). */
     relayLifecycle(event: RelayLifecycleEvent): void;
+    /** Known WeeChat event that carries no state this app consumes: routed
+     *  on purpose rather than left unrouted, so unhandled() keeps meaning
+     *  'the server sent something we have not looked at'. */
+    ignoredEvent(name: string): void;
     /** Unknown event name or invalid payload: reducers must not crash; the
      *  session reports here so callers can log/ignore without state damage. */
     unhandled(reason: string): void;

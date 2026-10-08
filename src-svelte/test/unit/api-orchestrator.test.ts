@@ -46,6 +46,7 @@ function testReducers() {
         lineDataChanged: vi.fn(), bufferCleared: vi.fn(), nickGroupChanged: vi.fn(),
         nickGroupRemoved: vi.fn(), nickChanged: vi.fn(), nickRemoved: vi.fn(),
         hotlist: vi.fn(), completion: vi.fn(), inputRejected: vi.fn(), relayLifecycle: vi.fn(), unhandled: vi.fn(),
+        ignoredEvent: vi.fn(),
     } satisfies ApiReducers;
 }
 

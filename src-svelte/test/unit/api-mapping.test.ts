@@ -13,6 +13,7 @@ function reducers(): ApiReducers {
         lineDataChanged: vi.fn(), bufferCleared: vi.fn(), nickGroupChanged: vi.fn(),
         nickGroupRemoved: vi.fn(), nickChanged: vi.fn(), nickRemoved: vi.fn(),
         hotlist: vi.fn(), completion: vi.fn(), inputRejected: vi.fn(), relayLifecycle: vi.fn(), unhandled: vi.fn(),
+        ignoredEvent: vi.fn(),
     };
 }
 
@@ -307,6 +308,27 @@ describe('dispatchEvent', () => {
         expect(r.relayLifecycle).toHaveBeenCalledWith('upgrade');
         expect(r.relayLifecycle).toHaveBeenCalledWith('upgrade_ended');
         expect(r.relayLifecycle).toHaveBeenCalledWith('quit');
+        expect(r.unhandled).not.toHaveBeenCalled();
+    });
+
+    // WeeChat >= 5.0 turns the core day-change timer into an event (buffer_id -1,
+    // body null; the signal's "YYYY-MM-DD" payload is discarded by the relay).
+    // Routed as known-and-ignored: no warning, no state change. 4.10.1 never
+    // sends it — its API relay does not hook the signal at all.
+    it('routes day_changed as a known-ignored event, not an unrouted warning', () => {
+        const r = reducers();
+        dispatchEvent(event('day_changed', -1, null), r);
+        expect(r.ignoredEvent).toHaveBeenCalledWith('day_changed');
+        expect(r.unhandled).not.toHaveBeenCalled();
+        expect(r.bufferUpdated).not.toHaveBeenCalled();
+    });
+
+    // buffer_day_change_changed is an ordinary buffer_* change signal on
+    // WeeChat >= 5.0: full buffer snapshot, applied like every other change.
+    it('applies buffer_day_change_changed as a buffer snapshot', () => {
+        const r = reducers();
+        dispatchEvent(event('buffer_day_change_changed', 1759000000000001, { ...BUFFER, day_change: false }, 'buffer'), r);
+        expect(r.bufferUpdated).toHaveBeenCalledTimes(1);
         expect(r.unhandled).not.toHaveBeenCalled();
     });
 

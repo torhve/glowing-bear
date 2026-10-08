@@ -774,6 +774,12 @@ export function createApiStoreReducers(): ApiReducers {
             else console.info('[api-store] WeeChat upgrade finished');
         },
 
+        ignoredEvent(): void {
+            // Deliberately silent: the mapping layer has already decided this
+            // event carries nothing to apply (see dispatchEvent). Logging it
+            // would re-create the noise the routing exists to remove.
+        },
+
         unhandled(detail): void {
             console.warn(`[api-store] unhandled payload: ${detail}`);
         },
