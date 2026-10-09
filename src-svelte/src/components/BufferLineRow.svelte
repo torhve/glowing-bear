@@ -285,7 +285,7 @@
   {:else}
     <tr class={['bufferline', { highlight: isHighlight }]} data-testid="bufferline-row">
       <td class="time text-right align-top font-mono">
-        <span class="date inline-flex items-center compact-time" class:repeated-time={isRepeatedTime}>
+        <span class="date compact-time" class:repeated-time={isRepeatedTime}>
           {#if message.shortTime.includes(':')}
             {@const parts = message.shortTime.split(':')}
             {parts[0]}<!----><span class="time-delimiter text-amber-400">:</span><!-- -->{parts.slice(1).join(':')}<!---->
@@ -294,10 +294,9 @@
           {/if}</span>
       </td>
       <td class="prefix max-w-[130px] align-top whitespace-nowrap text-right overflow-hidden font-mono">
-        <span class="compact-prefix flex justify-end items-center" class:repeated-prefix={isRepeatedPrefix}>
+        <span class="compact-prefix" class:repeated-prefix={isRepeatedPrefix}>
           <span onclick={handleMention} role="button" tabindex="0" title={extractNick(message.prefixtext)} class="mention-link" onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleMention(); } }}>
-            {#if message.showHiddenBrackets}<span class="hidden-bracket">&lt;</span>{/if}<!---->
-            {#each message.prefix as part, pi (pi)}
+            {#if message.showHiddenBrackets}<span class="hidden-bracket">&lt;</span>{/if}{#each message.prefix as part, pi (pi)}
               {@const iconType = getIconType(part)}
               {#if iconType}
                 {#if iconType === 'arrow-right'}
@@ -314,8 +313,7 @@
               {:else}
                 <span class="prefix-part {(part.classes || []).join(' ')}">{part.text}</span>
               {/if}<!---->
-            {/each}<!---->
-            {#if message.showHiddenBrackets}<span class="hidden-bracket">&gt;</span>{/if}<!----></span>
+            {/each}{#if message.showHiddenBrackets}<span class="hidden-bracket">&gt;</span>{/if}<!----></span>
         </span>
       </td>
       <td class="message align-middle font-mono" data-message={message.text}>
@@ -399,6 +397,10 @@
       overflow: visible;
       text-overflow: clip;
       white-space: normal;
+      /* Inert today: the desktop .mention-link rule below has the same
+         specificity and comes later, so it wins at every width. Kept so a
+         future ordering fix does not inherit the desktop vertical-align. */
+      vertical-align: baseline;
     }
 
     .message {
@@ -406,13 +408,20 @@
       padding: 0;
       width: auto;
       max-width: none;
+      /* The cell carries align-middle for the table layout. Once the cell is
+         inline that value applies to the text itself and drops the message
+         below the time and nick it shares a line with. */
+      vertical-align: baseline;
     }
   }
 
   /* ===== Table layout structural rules (not expressible as Tailwind utilities) ===== */
+  /* Text selection breaks at every block-level box, and a flex item is one:
+     as flex containers these two spans split a chat row into one copied line
+     per fragment. Inline keeps a row one copied line, and each cell's own
+     text-align does the right-alignment justify-content used to. */
   .time .compact-time {
-    display: inline-flex;
-    align-items: center;
+    display: inline;
   }
 
   .date .time-delimiter {
@@ -420,9 +429,7 @@
   }
 
   .prefix .compact-prefix {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
+    display: inline;
   }
 
   /* Long nicks: clip with ellipsis inside the capped column. The ellipsis must live on an
@@ -434,6 +441,11 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    /* An inline-block with overflow:hidden takes its baseline from its bottom
+       margin edge, not from its text. Hung from that baseline the nick box is
+       pulled above the message text and the row stretches from one line-height
+       to two. Top-aligning it puts the nick back on the message's line. */
+    vertical-align: top;
   }
 
   /* ===== Theme-aware colors — fallbacks are dark-theme values ===== */
@@ -630,11 +642,4 @@
     background-color: transparent !important;
   }
 
-      /* Mobile: override desktop flex containers so time+prefix flow inline with message */
-      @media (max-width: 640px) {
-        .time .compact-time,
-        .prefix .compact-prefix {
-          display: inline;
-        }
-      }
     </style>

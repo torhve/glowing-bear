@@ -307,6 +307,19 @@
     });
   }
 
+  // Copying a table selection is serialized per cell: the browser puts a tab
+  // between the cells of one row and a newline between rows. A chat line reads
+  // "12:34 <nick> text", so the cell tabs become single spaces and the row
+  // newlines stay. A selection that never crossed a cell boundary carries no
+  // tab and is left to the browser — that is the reader who pulled a URL out
+  // of a message and wants only the URL.
+  function handleCopy(event: ClipboardEvent) {
+    const text = window.getSelection()?.toString();
+    if (!text || !text.includes('\t')) return;
+    event.preventDefault();
+    event.clipboardData?.setData('text/plain', text.replace(/\t/g, ' '));
+  }
+
   // A history request is claimed and finished through the controller, which owns
   // the loading guard, the exhausted-top memo, and the position restore. `force`
   // (the explicit button) bypasses the memo and restores no position.
@@ -406,6 +419,7 @@
   <div
     bind:this={containerRef}
     onscroll={handleScroll}
+    oncopy={handleCopy}
     data-testid="chat-messages"
     class="chat-messages flex-1 overflow-y-auto overflow-x-hidden bg-bg"
     class:favorite-font={!$currentBuffer || !isFreeBuffer($currentBuffer)}

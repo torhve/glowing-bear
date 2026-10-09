@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator } from '@playwright/test';
 import { createConnectedPage } from '../fixtures/auth';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
@@ -21,6 +21,56 @@ test.afterAll(async () => {
 test.beforeEach(async () => {
     setupEffectOrphanFilter(page)
 });
+
+/**
+ * Where a row's text actually lands. The cells' computed vertical-align did not
+ * change when the row broke — the glyphs moved — so measure the text itself and
+ * the height the row ended up with.
+ */
+async function rowLineGeometry(row: Locator) {
+    return row.evaluate((tr) => {
+        const glyphTop = (sel: string) => {
+            const el = tr.querySelector(sel) as HTMLElement | null;
+            if (!el) return null;
+            const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+            for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+                if (!(n as Text).data.trim()) continue;
+                const range = document.createRange();
+                range.selectNodeContents(n);
+                const rect = range.getClientRects()[0];
+                if (rect) return rect.top;
+            }
+            return null;
+        };
+        const cs = getComputedStyle(tr.querySelector('td.message') as HTMLElement);
+        return {
+            rowH: tr.getBoundingClientRect().height,
+            // A row carrying one line of text may be no taller than that line plus
+            // the cell's own vertical padding — theme-driven, so derived here.
+            oneLine: parseFloat(cs.lineHeight) + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom),
+            timeTop: glyphTop('td.time'),
+            nickTop: glyphTop('.prefix-part'),
+            msgTop: glyphTop('td.message'),
+        };
+    });
+}
+
+/**
+ * A one-line message must render as one line: all three columns on the same
+ * baseline, and no invented leading.
+ */
+function expectOneLineRow(m: Awaited<ReturnType<typeof rowLineGeometry>>, label: string): void {
+    expect(m.timeTop, `${label}: no time glyphs to measure`).not.toBeNull();
+    expect(m.nickTop, `${label}: no nick glyphs to measure`).not.toBeNull();
+    expect(m.msgTop, `${label}: no message glyphs to measure`).not.toBeNull();
+    // The three columns read as one line of text, not three staggered ones.
+    expect(m.nickTop!, `${label}: nick vs message`).toBeCloseTo(m.msgTop!, 0);
+    expect(m.timeTop!, `${label}: time vs message`).toBeCloseTo(m.msgTop!, 0);
+    expect(
+        m.rowH,
+        `${label}: a single-line row is ${m.rowH.toFixed(1)}px but one line is ${m.oneLine.toFixed(1)}px`,
+    ).toBeLessThanOrEqual(m.oneLine + 1);
+}
 
 // ---- BufferLineRow rendering tests ----
 
@@ -347,6 +397,47 @@ test.describe('vertical alignment', () => {
         expect(timeStyle).toBe('top');
         expect(prefixStyle).toBe('top');
     });
+
+    test('time, nick and message glyphs sit on one line and the row stays one line tall', async () => {
+        const msg = 'glyph-align-' + Date.now();
+        await irc.sendMessage('#glowing-bear', msg);
+        const row = page.locator('[data-testid="bufferline-row"]').filter({ hasText: msg }).first();
+        await expect(row).toBeVisible({ timeout: 10000 });
+
+        expectOneLineRow(await rowLineGeometry(row), 'plain nick');
+    });
+
+    test('at a phone viewport the three columns still share one baseline', async () => {
+        // Below 641px the row leaves the table layout: the cells become inline
+        // boxes, and a vertical-align that is harmless on a table cell now moves
+        // the text itself. The message cell keeps align-middle for the table.
+        //
+        // 600 and not 400: resizing a desktop page down leaves the buffer list
+        // open, which squeezes the chat to 176px while the row still wants 274px,
+        // so the message wraps for reasons that have nothing to do with
+        // alignment. 600 is still inside the media query and leaves the row room
+        // to stay on one line (chat 376px, row 372px). The message is short for
+        // the same reason.
+        const msg = 'al' + (Date.now() % 100000);
+        await page.setViewportSize({ width: 600, height: 700 });
+        try {
+            // The bot nick is shared server state and other specs leave it as
+            // gbbot2 or a long name; a wide prefix would push this message onto
+            // a second line. Pin it so the row is deterministically one line.
+            await irc.botNick('gbbot');
+            await irc.sendMessage('#glowing-bear', msg);
+            const row = page.locator('[data-testid="bufferline-row"]').filter({ hasText: msg }).first();
+            await expect(row).toBeVisible({ timeout: 10000 });
+
+            // expectOneLineRow also pins the row to one line tall, so a wider
+            // prefix that pushes the message onto line 2 fails loudly instead of
+            // reporting a 16.8px 'misalignment'.
+            expectOneLineRow(await rowLineGeometry(row), 'phone viewport');
+        } finally {
+            // The rest of this file assumes the desktop viewport.
+            await page.setViewportSize({ width: 1280, height: 720 });
+        }
+    });
 });
 
 // ---- Prefix truncation tests ----
@@ -397,6 +488,10 @@ test.describe('prefix truncation', () => {
         expect(geom).not.toBeNull();
         expect(geom!.prefixWidth).toBeLessThanOrEqual(131);
         expect(geom!.linkLeft).toBeGreaterThanOrEqual(geom!.prefixLeft - 1);
+
+        // A truncated nick is the widest nick box the column can hold; it must
+        // still sit on the message's line without stretching the row.
+        expectOneLineRow(await rowLineGeometry(row.locator('..')), 'truncated nick');
 
         await irc.botNick('gbbot');
     });
