@@ -141,7 +141,10 @@ describe('date-change fast path: pair equivalence with the original comparison',
         }
     });
 
-    it('agrees with the original decision for every (base, offset) pair', () => {
+    // ~89k pairs, each running the shipped function against the original comparison.
+    // Isolated this measured 1.8s; inside the full suite it measured 5.3s and tripped
+    // the 5s default, so the budget is stated here instead of left to the harness.
+    it('agrees with the original decision for every (base, offset) pair', { timeout: 20_000 }, () => {
         let mismatches = 0;
         const first: string[] = [];
         let pairs = 0;
