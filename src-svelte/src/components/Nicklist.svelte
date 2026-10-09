@@ -56,6 +56,12 @@
   function getPrefix(prefix: string): string {
     return prefix || '';
   }
+  function nickNameClasses(classes: string[]): string {
+    // Nick backgrounds are the bar's in WeeChat; only foreground colors and
+    // attributes apply to a nick name, so strip background classes (cob-/cwb-/ceb-)
+    // that would paint a bg-colored band inside the nicklist panel.
+    return classes.filter((c) => !c.startsWith("cob-") && !c.startsWith("cwb-") && !c.startsWith("ceb-")).join(" ");
+  }
 </script>
 
 {#if showNicklist && hasNicklist}
@@ -114,7 +120,7 @@
               <span class="nick-prefix text-xs {getPrefixClass(getPrefix(nick.prefix))} mr-1">
                 {getPrefix(nick.prefix)}
               </span>
-              <span class="nick-name text-sm truncate {nick.nameClasses.join(' ')}">
+              <span class="nick-name text-sm truncate {nickNameClasses(nick.nameClasses)}">
                 {nick.name}
               </span>
             </div>
