@@ -21,3 +21,15 @@ class InertResizeObserver {
 if (typeof globalThis.ResizeObserver === 'undefined') {
     globalThis.ResizeObserver = InertResizeObserver as unknown as typeof ResizeObserver;
 }
+
+/**
+ * The Popover API is not in jsdom. The app opens its dialogs programmatically
+ * (`showPopover()`), so without a stub a component test would throw before it ever
+ * reached the code under test. It stays inert: tests assert on what a dialog renders,
+ * not on whether it popped.
+ */
+if (!('showPopover' in HTMLElement.prototype)) {
+    const inert = function (this: HTMLElement) {};
+    HTMLElement.prototype.showPopover = inert as HTMLElement['showPopover'];
+    HTMLElement.prototype.hidePopover = inert as HTMLElement['hidePopover'];
+}

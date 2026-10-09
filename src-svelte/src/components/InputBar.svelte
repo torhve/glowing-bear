@@ -92,6 +92,12 @@
   let previewDialogRef = $state<{ dialog: HTMLDialogElement | undefined }>();
   // Pending text shown in the multi-line paste confirmation dialog (null = closed)
   let pendingMultiLineText = $state<string | null>(null);
+  // The conversation a pending multi-line paste belongs to. A confirmation answered
+  // after a switch would insert another chat's clipboard text into the one on screen.
+  let pendingMultiLineOwner = $state<DraftRef | null>(null);
+  // The conversation an image preview was collected for, so the links an upload
+  // produces land in the draft they were pasted into.
+  let previewOwner = $state<DraftRef | null>(null);
   // Ref to MultiLinePasteDialog component for programmatic dialog show/hide
   let multiLinePasteDialogRef = $state<{ dialog: HTMLDialogElement | undefined }>();
   let nextImageId = $state(1);
@@ -178,6 +184,14 @@
     const previous = untrack(() => boundRef);
     if (sameOwner(previous, target)) return;
     if (previous) persistDraft(untrack(() => message));
+    // A pending multi-line confirmation is a question asked in the outgoing
+    // conversation. Carrying it across the switch would answer a question the reader
+    // no longer has on screen, so it is cancelled without inserting anything.
+    if (pendingMultiLineText !== null && !sameOwner(target, pendingMultiLineOwner)) {
+      pendingMultiLineText = null;
+      pendingMultiLineOwner = null;
+      multiLinePasteDialogRef?.dialog?.hidePopover();
+    }
     boundRef = target;
     // Completion cycling belongs to one conversation's text; carrying it into another
     // would make Tab continue a list the reader is no longer looking at.
@@ -373,6 +387,30 @@
     }
   }
 
+  /**
+   * Move the caret on the next task, but only while the composer still holds the
+   * conversation the offset was measured in. A deferred offset from another
+   * conversation's text would land somewhere arbitrary in this one.
+   */
+  function restoreCaretIfOwned(ref: DraftRef | null, position: number): void {
+    setTimeout(() => {
+      if (!sameOwner(boundRef, ref)) return;
+      setCaretPos(position);
+    }, 0);
+  }
+
+  /**
+   * Add text to a conversation that is not on screen.
+   *
+   * Appended to whatever that draft says now, never spliced in with an offset
+   * captured before the reader kept editing it.
+   */
+  function appendToDraft(ref: DraftRef, text: string): void {
+    const existing = readDraft(ref);
+    const merged = existing?.text ? `${existing.text} ${text}` : text;
+    writeDraft(ref, merged, merged.length, merged.length);
+  }
+
   // Toolbar and picker buttons must not steal focus from the textarea: mousedown would
   // blur it and collapse its caret, so the control char would land at the wrong place.
   function keepFocusOnInput(e: MouseEvent): void {
@@ -424,6 +462,9 @@
   async function focusFirstColorSwatch(): Promise<void> {
     if (!showColorPicker) return;
     await tick();
+    // The picker can be closed during the flush; focusing a swatch that is gone
+    // would move focus out of a composer the reader is still using.
+    if (!showColorPicker) return;
     colorPickerRef?.querySelector<HTMLButtonElement>('button')?.focus();
   }
 
@@ -511,34 +552,7 @@
     // Tab -> nick completion, then command completion if applicable
     if (code === 9 && !e.altKey && !e.ctrlKey && !e.shiftKey) {
       e.preventDefault();
-      const caretPos = getCaretPos();
-      void (async () => {
-        // The completion is computed from the text this conversation held when Tab was
-        // pressed. Applying it unconditionally would overwrite whatever the reader typed
-        // while the relay was answering, or drop it into a conversation they switched to.
-        const claim = boundRef ? claimDraft(boundRef) : null;
-        const textAtTab = message;
-        const result = await completeInput(message, caretPos);
-        if (!result) {
-          _iterCandidate = null;
-          return;
-        }
-        if (claim) {
-          if (!applyDraftClaim(claim, result.text, result.cursor, result.cursor)) return;
-        } else if (message !== textAtTab) {
-          // No conversation owns this composer, so there is no draft to claim against;
-          // the text itself is the only evidence that the reader has since edited it.
-          return;
-        }
-        // The claim put the completion in the right draft even if the composer has
-        // since moved to another conversation. It may only appear on screen while this
-        // is still the conversation it was requested in.
-        if (sameOwner(boundRef, claim ? claim.ref : null)) {
-          message = result.text;
-          setTimeout(() => setCaretPos(result.cursor), 0);
-        }
-        _iterCandidate = result.iterCandidate;
-      })();
+      void runCompletion();
       return true;
     }
 
@@ -698,6 +712,9 @@
     files: FileList | File[],
     base64Strings?: string[],
   ): void {
+    // The conversation this clipboard content came from, captured before any async
+    // read resolves.
+    const pasteOwner = boundRef;
     const imageFiles = filterImageFiles(Array.from(files));
     if (imageFiles.length === 0 && !(base64Strings?.length)) return;
 
@@ -735,6 +752,7 @@
     }
 
     // Show dialog programmatically — avoids {#if} reactivity issues after async boundaries
+    previewOwner = pasteOwner;
     previewDialogRef?.dialog?.showPopover();
 
     inputRef?.focus();
@@ -742,11 +760,54 @@
 
   // Insert uploaded URLs at cursor position, space-separated
   function handleInsertUrls(urls: string[]) {
-    const caret = getCaretPos();
+    if (urls.length === 0) return;
     const urlsText = urls.join(' ');
-    message = message.slice(0, caret) + urlsText + message.slice(caret);
-    setTimeout(() => setCaretPos(caret + urlsText.length), 0);
+    const owner = previewOwner;
+    if (sameOwner(boundRef, owner)) {
+      const caret = getCaretPos();
+      message = message.slice(0, caret) + urlsText + message.slice(caret);
+      restoreCaretIfOwned(owner, caret + urlsText.length);
+    } else if (owner) {
+      // The reader moved on while the upload ran. The links still belong to that
+      // conversation, so they join its current draft instead of this one.
+      appendToDraft(owner, urlsText);
+    } else {
+      // No conversation owns the composer, so there is no draft to file them under.
+      message += urlsText;
+    }
     onInsertUrls(urls);
+  }
+
+  /**
+   * Run one completion and apply it only if nothing has overtaken it.
+   *
+   * Tab and the clickable completion control both come through here so neither can
+   * apply a stale result. The claim is taken before the await; the result is rejected
+   * if the draft moved, and it is only shown while the composer still belongs to the
+   * conversation the completion was requested in.
+   */
+  async function runCompletion(): Promise<void> {
+    const caretPos = getCaretPos();
+    const ref = boundRef;
+    const claim = ref ? claimDraft(ref) : null;
+    const textAtRequest = message;
+    const result = await completeInput(message, caretPos);
+    if (!result) {
+      _iterCandidate = null;
+      return;
+    }
+    if (claim) {
+      if (!applyDraftClaim(claim, result.text, result.cursor, result.cursor)) return;
+    } else if (message !== textAtRequest) {
+      // No conversation owns this composer, so there is no draft to claim against;
+      // the text itself is the only evidence that the reader has since edited it.
+      return;
+    }
+    if (sameOwner(boundRef, ref)) {
+      message = result.text;
+      restoreCaretIfOwned(ref, result.cursor);
+    }
+    _iterCandidate = result.iterCandidate;
   }
 
   // Close image preview dialog, revoking object URLs to prevent memory leaks
@@ -758,6 +819,7 @@
     }
     previewDialogRef?.dialog?.hidePopover();
     previewImages.splice(0);
+    previewOwner = null;
     inputRef?.focus();
   }
   // True when a paste should trigger the multi-line confirmation dialog (threshold or more lines)
@@ -768,15 +830,21 @@
   // Show the multi-line paste confirmation dialog for the given pasted text
   function showMultiLinePasteDialog(pastedText: string) {
     pendingMultiLineText = pastedText;
+    pendingMultiLineOwner = boundRef;
     multiLinePasteDialogRef?.dialog?.showPopover();
   }
 
   // Handle the user's choice in the multi-line paste dialog, then close it and refocus the input
   function finishMultiLinePaste(action: 'join' | 'separate' | 'cancel') {
     const text = pendingMultiLineText;
+    const owner = pendingMultiLineOwner;
     pendingMultiLineText = null;
+    pendingMultiLineOwner = null;
     multiLinePasteDialogRef?.dialog?.hidePopover();
     if (text === null) return;
+    // The paste belongs to the conversation it was pasted into. Answering the
+    // confirmation after a switch would put someone else's clipboard text here.
+    if (!sameOwner(boundRef, owner)) return;
     if (action === 'join') {
       const joined = joinMultilineToSingle(text);
       if (joined.length > 0) {
@@ -966,6 +1034,7 @@
     win.__resetFormattingState = () => {
       message = '';
       pendingMultiLineText = null;
+      pendingMultiLineOwner = null;
       multiLinePasteDialogRef?.dialog?.hidePopover();
       showColorPicker = false;
       showFormatToolbar = false;
@@ -1133,7 +1202,7 @@
       </button>
 
       <button
-        onclick={() => { if (inputRef) { const caret = getCaretPos(); void (async () => { const result = await completeInput(message, caret); if (result) { message = result.text; _iterCandidate = result.iterCandidate; setTimeout(() => setCaretPos(result.cursor), 0); } })(); } }}
+        onclick={() => void runCompletion()}
         data-testid="nick-complete-button"
         class="input-bar-nickcomplete flex-shrink-0 hidden md:inline-flex px-2 py-2 text-text-secondary hover:text-text hover:bg-border rounded transition-colors"
         title="Complete nick"
