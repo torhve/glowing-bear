@@ -831,3 +831,36 @@ it('still estimates rows when no rendered row is measurable', () => {
 
     expect(h.estimates).toContain(Math.ceil(VIEWPORT_HEIGHT / 16 + VISIBLE_LINES_HEADROOM));
 });
+
+it('keeps a view following when navigation leaves it at the tail', () => {
+    const h = mounted();
+
+    // A reader who wheels to the very end is following again, even though the
+    // navigation itself first put the view in reading mode.
+    h.adapter.scrollTop = h.adapter.scrollHeight - h.adapter.clientHeight;
+    h.viewport.noteNavigation('wheel');
+    expect(h.viewport.snapshot().mode).toBe('reading');
+
+    h.adapter.scrollTop = h.adapter.scrollHeight - h.adapter.clientHeight;
+    h.viewport.handleScroll();
+    expect(h.viewport.snapshot().mode).toBe('following');
+});
+
+it('does not let the settle window hand a parked reader back to the pin', () => {
+    const h = mounted();
+
+    // The exact sequence a wheel produces: the gesture is seen while the container
+    // is still at the tail, and only afterwards does it scroll. The follow-settle
+    // window is wide open from the placement, so a rule that trusted the stale
+    // at-tail state would re-arm a pin straight onto the reader.
+    h.viewport.noteNavigation('wheel');
+    h.adapter.scrollTop = 200; // 400px above the 600px maximum
+    h.viewport.handleScroll();
+
+    expect(h.viewport.snapshot().mode).toBe('reading');
+    expect(h.viewport.snapshot().pinning).toBe(false);
+
+    h.render(content({ lineCount: 40 }));
+    h.frames.settle();
+    expect(h.adapter.writes).toEqual([]);
+});

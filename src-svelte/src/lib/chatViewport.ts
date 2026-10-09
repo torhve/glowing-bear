@@ -149,6 +149,12 @@ export interface ChatViewportState {
      * outside; a count says a pin did happen at some point in this state.
      */
     pinActivations: number;
+    /**
+     * Which kind of deliberate input last moved this viewport, or null when none has.
+     * Provenance belongs in the state a test can read: 'the view is reading' only
+     * means something recorded the reader choosing that position.
+     */
+    lastNavigationSource: ChatNavigationSource | null;
 }
 
 export interface ChatViewportDeps {
@@ -509,13 +515,14 @@ export class ChatViewport {
         this.lastNavigationSource = source;
         this.cancelScheduled();
         this.pinLoop = null;
-        // The reader's own scroll has already moved the container; recompute the
-        // geometric state instead of assuming where they ended up.
-        if (this.isGeometricallyAtBottom()) {
-            this.setFollowIntent(true);
-        } else {
-            this.setFollowIntent(false);
-        }
+        // The gesture has been seen but has not moved the container yet: a wheel
+        // event arrives before the scroll it causes, so reading the geometry here
+        // still reports the position the reader is leaving. Doing that handed the
+        // view straight back to the follow pipeline — the reader's own scroll event
+        // then matched the settle-window rule and re-armed a pin on top of them.
+        // Navigation means the reader has taken the viewport; `handleScroll` decides
+        // from post-gesture geometry whether that leaves them at the tail anyway.
+        this.setFollowIntent(false);
     }
 
     /**
@@ -656,6 +663,7 @@ export class ChatViewport {
             interaction: this.interaction,
             historyPending: this.isHistoryPending(),
             pinActivations: this.pinActivations,
+            lastNavigationSource: this.lastNavigationSource,
         };
     }
 

@@ -27,6 +27,7 @@ build/
 /test-results/
 /playwright-report/
 /playwright-report-ui/
+/playwright-report-webkit/
 
 *.tsbuildinfo
 

@@ -168,15 +168,26 @@ test.describe("PageUp/PageDown Global Scroll", () => {
         // Wait for the last message to render
         await waitForLastMessage(last);
 
-        // Scroll to top first
+        // Park the reader part-way up with real wheel gestures, leaving room above
+        // to page into. Writing scrollTop = 0 would leave nothing above, and the
+        // viewport owner has no reason to move a reader it is not following, so a
+        // PageUp from there cannot reduce the offset: the assertion would then only
+        // pass when something dragged the view back down on its own.
         const chatContainer = page.locator('[data-testid="chat-messages"]');
-        await chatContainer.evaluate((el) => {
-            el.scrollTop = 0;
-        });
-        await waitForScrollStable(page);
+        const box = await chatContainer.boundingBox();
+        expect(box).not.toBeNull();
+        await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+        for (let i = 0; i < 8; i++) {
+            const parked = await getChatScrollState(page);
+            expect(parked).not.toBeNull();
+            if (parked!.scrollHeight - parked!.clientHeight - parked!.scrollTop >= 400) break;
+            await page.mouse.wheel(0, -240);
+            await waitForChatSettled(page);
+        }
 
         const stateBefore = await getChatScrollState(page);
         expect(stateBefore).not.toBeNull();
+        expect(stateBefore!.scrollTop).toBeGreaterThan(0);
 
         // Focus the input and press PageUp
         const input = page.getByTestId("message-input");
