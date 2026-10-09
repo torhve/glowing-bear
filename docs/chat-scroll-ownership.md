@@ -33,7 +33,7 @@ Transitions:
 
 | Event | Effect |
 | --- | --- |
-| Wheel or vertical touch drag that *could* move this viewport in that direction | `reading`, immediately. Cancels the pin and any queued work. No settle wait. |
+| Wheel or vertical touch drag that *could* move this viewport in that direction | `reading`, immediately. Cancels the pin and any queued work. No settle wait, and no geometry read: the gesture has not moved the container yet. |
 | `scroll` event with no gesture behind it | Layout noise while the follow-settle window is open; otherwise `reading`. |
 | Buffer switch | New visit: queued frames, pin loop, and in-flight history are dropped, mode resets to `following`. |
 | Container replaced, or component unmounted | Visit ends. A task carrying a superseded visit or adapter is dropped at drain time, not executed. |
@@ -57,6 +57,16 @@ native anchoring, and the controller's own writes all fire one. So:
 - `handleScroll` remains the fallback for input that produces no gesture event of
   its own (a scrollbar drag), which is why it still ends following outside the
   settle window.
+- A gesture is seen **before** it moves anything: `wheel` fires before the `scroll`
+  it causes. `noteNavigation` therefore must not read the geometry, because the
+  geometry it finds is the position the reader is leaving. It records that the
+  reader has taken the viewport, and the scroll event that follows decides from
+  the new position whether that leaves them at the tail anyway. Reading the stale
+  geometry instead handed the view straight back to the follow pipeline, whose
+  settle-window rule then re-armed a pin on top of the reader who had just moved.
+- `lastNavigationSource` is in the reported state for this reason: "the view is
+  reading" is only a claim about the reader if something recorded the reader
+  choosing it.
 
 ## Operation tokens (history)
 
