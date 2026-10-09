@@ -165,10 +165,13 @@ CDP `Performance` session per run. Means are over the four repetitions.
 
 What the numbers support:
 
-- The controller writes the chat scroll position **3.4× less often** on a capped
-  flood and **7.4× less often** on a wrapping flood. The old code re-anchored on
-  every content change; the controller pins once per tail change and stops when two
-  frames of `scrollHeight` agree.
+- In this four-repetition local run the controller wrote the chat scroll position
+  roughly **3× less often** on a capped flood and roughly **7× less often** on a
+  wrapping flood. The old code re-anchored on every content change; the controller
+  pins once per tail change and stops when two frames of `scrollHeight` agree. The
+  write counts are stable within each arm (46-49 against 116-198), so the multiples
+  are the real shape of the difference, but they are four samples on one machine —
+  treat them as an order of magnitude, not a benchmark.
 - Layout time, style time, script time, and time-to-idle are **unchanged** in every
   scenario. That is the honest reading: the win is the write count and the single
   owner, not measured frame cost. Anyone claiming a frame-time improvement from this

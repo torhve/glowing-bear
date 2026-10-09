@@ -522,6 +522,10 @@ export class ChatViewport {
         // then matched the settle-window rule and re-armed a pin on top of them.
         // Navigation means the reader has taken the viewport; `handleScroll` decides
         // from post-gesture geometry whether that leaves them at the tail anyway.
+        // One consequence is deliberate: a downward gesture at the absolute tail
+        // cannot move anything, so no scroll event follows it and the view stays
+        // reading until the next read of the geometry. Recording the reader's intent
+        // first, and letting geometry correct it, is the cheaper half of the rule.
         this.setFollowIntent(false);
     }
 

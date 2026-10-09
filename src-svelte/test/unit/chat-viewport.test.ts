@@ -864,3 +864,65 @@ it('does not let the settle window hand a parked reader back to the pin', () => 
     h.frames.settle();
     expect(h.adapter.writes).toEqual([]);
 });
+
+it('restores the reader offset when a live line arrives during a history request', () => {
+    const h = mounted();
+    h.clock.advance(FOLLOW_SETTLE_MS + 1);
+    h.adapter.readerScrollTo(0);
+    h.viewport.handleScroll();
+
+    const token = h.viewport.beginHistory(false)!;
+
+    // A live line lands while the older page is still in flight. The reader is
+    // still looking at the same row, so the arrival is not a reason to follow the
+    // new tail, and the pending restore must still be the one that moves them.
+    h.render(content({ lineCount: 21 }));
+    expect(h.adapter.writes).toEqual([]);
+
+    h.adapter.scrollHeight = 2000;
+    h.viewport.finishHistory(token, { preserveScroll: true, prependedNothing: false });
+    h.frames.settle();
+
+    expect(h.adapter.scrollTop).toBe(2000 - VIEWPORT_HEIGHT - 600);
+    expect(h.viewport.snapshot().mode).toBe('reading');
+});
+
+it('does not re-anchor on a content report whose tail has not changed', () => {
+    const h = harness();
+    h.viewport.attach('channel-a', h.adapter);
+    const snapshot = content();
+    h.render(snapshot);
+    h.frames.settle();
+    h.clock.advance(FOLLOW_SETTLE_MS + 1);
+    h.adapter.readerScrollTo(0);
+    h.viewport.handleScroll();
+    h.adapter.writes.length = 0;
+
+    // Same tail identity, fewer retained rows: the cap trimmed the front. The
+    // buffer gained no newest line, so a re-render of the same tail must not be
+    // read as an arrival and pull a reading view to the bottom.
+    h.render({ ...snapshot, lineCount: 12 });
+    h.frames.settle();
+
+    expect(h.adapter.writes).toEqual([]);
+    expect(h.viewport.snapshot().mode).toBe('reading');
+});
+
+it('resumes following when a clamped navigation fires no scroll event', () => {
+    const h = mounted();
+    h.clock.advance(FOLLOW_SETTLE_MS + 1);
+    h.adapter.readerScrollTo(h.adapter.maxScroll);
+    h.viewport.handleScroll();
+    expect(h.viewport.snapshot().mode).toBe('following');
+
+    // A downward gesture at the absolute tail cannot move anything, so no scroll
+    // event follows it. Navigation still records the reader taking the viewport —
+    // the view is left reading until something reports where it actually is.
+    h.viewport.noteNavigation('wheel');
+    expect(h.viewport.snapshot().mode).toBe('reading');
+
+    // Any later read of the geometry — a scroll event from a compositor flush, a
+    // layout notification's measure — puts the view back where the reader is.
+    h.viewport.handleScroll();
+    expect(h.viewport.snapshot().mode).toBe('following');
+});
