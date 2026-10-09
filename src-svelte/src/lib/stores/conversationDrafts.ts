@@ -1,0 +1,157 @@
+// Per-conversation composer drafts.
+//
+// The composer used to hold one module-level string for the whole application,
+// which meant the text you were typing followed you into every other
+// conversation and into the next relay you connected to. This store keys a
+// draft by (profile, conversation) so a draft belongs to exactly one chat.
+//
+// Two rules the rest of the plan depends on:
+//
+//   - A draft is never keyed on a runtime buffer id. `BufferData.id` is
+//     `String(apiBufferId)` and is reused across connections, so it identifies a
+//     slot in one relay's live table, not a conversation.
+//   - Writes carry a revision. An asynchronous operation captures the revision
+//     it was computed from and refuses to apply once it has moved. A timestamp
+//     cannot decide which of two writes is stale; a counter the writer must
+//     acknowledge can.
+//
+// Nothing here is persisted yet, and nothing here migrates `inputHistory`'s
+// keys — that map is keyed by runtime id and is not a draft store.
+
+import type { BufferPresentation } from '#lib/types.ts';
+
+/** Which conversation a draft belongs to. Both halves are required: two relays
+ *  can each carry a buffer named `irc.libera.#foo`, and one relay can carry the
+ *  same short name on two servers. */
+export interface DraftRef {
+    profileKey: string;
+    conversationKey: string;
+}
+
+export interface ConversationDraft {
+    text: string;
+    selectionStart: number;
+    selectionEnd: number;
+    /** Monotonic per-entry counter, bumped by every accepted write. */
+    revision: number;
+}
+
+/** A captured claim on a draft. An async operation holds one of these instead of
+ *  holding `message`, and only the entry still matching it may be written. */
+export interface DraftClaim {
+    ref: DraftRef;
+    revision: number;
+    text: string;
+}
+
+/**
+ * Stable conversation identity for a buffer.
+ *
+ * `fullName` is documented as stable across connections and is the primary key.
+ * When a buffer exposes no usable `fullName`, the server plus short name is the
+ * next thing that survives a reconnect. When neither is usable the buffer has no
+ * conversation identity at all and the caller must leave its draft unkeyed —
+ * inventing a key from a runtime id is exactly the collision this module exists
+ * to prevent.
+ */
+export function conversationKeyFor(
+    buffer: Pick<BufferPresentation, 'fullName' | 'server' | 'shortName'> | null | undefined,
+): string | null {
+    if (!buffer) return null;
+    const fullName = buffer.fullName?.trim();
+    if (fullName) return fullName;
+    const server = buffer.server?.trim();
+    const shortName = buffer.shortName?.trim();
+    if (server && shortName) return `${server}/${shortName}`;
+    return null;
+}
+
+/** profileKey -> conversationKey -> draft. */
+const drafts = new Map<string, Map<string, ConversationDraft>>();
+
+function clampCaret(value: string, raw: number | undefined, fallback: number): number {
+    const candidate = Number.isFinite(raw) ? Math.trunc(raw as number) : fallback;
+    return Math.min(Math.max(candidate, 0), value.length);
+}
+
+/** Read one conversation's draft, or null when it has none. */
+export function readDraft(ref: DraftRef): ConversationDraft | null {
+    return drafts.get(ref.profileKey)?.get(ref.conversationKey) ?? null;
+}
+
+/**
+ * Record what the composer currently holds for one conversation.
+ *
+ * Text is stored verbatim: whitespace-only input is a draft the user typed, not
+ * noise to trim. An empty draft is dropped instead, so a later mount restores
+ * nothing rather than restoring a phantom empty entry.
+ *
+ * Returns the stored entry (with its new revision) or null when there is nothing
+ * to store.
+ */
+export function writeDraft(
+    ref: DraftRef,
+    text: string,
+    selectionStart?: number,
+    selectionEnd?: number,
+): ConversationDraft | null {
+    if (text.length === 0) {
+        clearDraft(ref);
+        return null;
+    }
+    const byConversation = drafts.get(ref.profileKey) ?? new Map<string, ConversationDraft>();
+    const previous = byConversation.get(ref.conversationKey);
+    const entry: ConversationDraft = {
+        text,
+        selectionStart: clampCaret(text, selectionStart, text.length),
+        selectionEnd: clampCaret(text, selectionEnd, text.length),
+        revision: (previous?.revision ?? 0) + 1,
+    };
+    byConversation.set(ref.conversationKey, entry);
+    drafts.set(ref.profileKey, byConversation);
+    return entry;
+}
+
+/** Capture a claim on the current entry so an async result can be rejected later. */
+export function claimDraft(ref: DraftRef): DraftClaim | null {
+    const entry = readDraft(ref);
+    if (!entry) return null;
+    return { ref, revision: entry.revision, text: entry.text };
+}
+
+/**
+ * Apply a claim, but only if the draft has not moved since it was captured.
+ *
+ * This is the whole race rule: a completion computed from an older draft cannot
+ * overwrite text the user typed in the meantime, and a completion computed for
+ * one conversation cannot land in another.
+ */
+export function applyDraftClaim(claim: DraftClaim, text: string, selectionStart?: number, selectionEnd?: number): ConversationDraft | null {
+    const entry = readDraft(claim.ref);
+    if (!entry || entry.revision !== claim.revision || entry.text !== claim.text) return null;
+    return writeDraft(claim.ref, text, selectionStart, selectionEnd);
+}
+
+export function clearDraft(ref: DraftRef): void {
+    const byConversation = drafts.get(ref.profileKey);
+    if (!byConversation) return;
+    byConversation.delete(ref.conversationKey);
+    if (byConversation.size === 0) drafts.delete(ref.profileKey);
+}
+
+/** Drop every draft belonging to one relay — used when a profile is gone. */
+export function clearProfileDrafts(profileKey: string): void {
+    drafts.delete(profileKey);
+}
+
+/** Test-only reset so a suite cannot leak drafts into the next file. */
+export function resetConversationDrafts(): void {
+    drafts.clear();
+}
+
+/** Diagnostic count of stored drafts across all profiles. */
+export function draftEntryCount(): number {
+    let total = 0;
+    for (const byConversation of drafts.values()) total += byConversation.size;
+    return total;
+}

@@ -22,6 +22,7 @@ import { resolveApiEndpoint } from '#lib/api/api-endpoint.ts';
 import * as api from '#lib/stores/apiConnection.ts';
 import * as legacy from '#lib/stores/legacyConnection.ts';
 import type { ApiSession } from '#lib/api/api-session.ts';
+import { clearActiveConnectionProfile, setActiveConnectionProfile } from '#lib/connectionProfile.ts';
 
 export type RelayTransport = 'api' | 'legacy';
 
@@ -71,6 +72,11 @@ async function probeApiRelay(host: string, port: number, path: string, tls: bool
 // Transport chosen per relay profile (host:port:tls). Reconnects to the same
 // relay reuse it without re-probing; an explicit disconnect clears it so a
 // re-connect sees any relay configuration change.
+//
+// This key is deliberately narrower than the draft identity in
+// `lib/connectionProfile.ts`: it caches which protocol answers on an address and
+// ignores the reverse-proxy path. Drafts must not share it — two proxy paths on
+// one address are two relays.
 const transportByProfile = new Map<string, RelayTransport>();
 
 function profileKey(host: string, port: number, tls: boolean): string {
@@ -80,6 +86,10 @@ function profileKey(host: string, port: number, tls: boolean): string {
 export async function connect(host: string, port: number, path: string, password: string, tls: boolean, noCompression: boolean): Promise<void> {
     const preference = get(settings).protocol ?? 'auto';
     const profile = profileKey(host, port, tls);
+    // Capture the endpoint this attempt targets. Per-conversation state keys on
+    // it, so it comes from the arguments of the attempt rather than from settings,
+    // which stay editable while disconnected.
+    setActiveConnectionProfile(host, port, path, tls);
     if (preference === 'auto') {
         transport = transportByProfile.get(profile)
             ?? (await probeApiRelay(host, port, path, tls) ? 'api' : 'legacy');
@@ -104,6 +114,7 @@ export function disconnect(): void {
     transport = null;
     activeTransport.set(null);
     transportByProfile.clear();
+    clearActiveConnectionProfile();
 }
 
 export function setHotlistPollInterval(ms: number): void {
