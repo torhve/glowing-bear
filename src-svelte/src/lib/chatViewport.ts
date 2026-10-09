@@ -52,6 +52,9 @@ export const TOP_FETCH_SCROLL_THRESHOLD = 50;
 export const DEFAULT_SAMPLE_LINE_HEIGHT = 16;
 /** Extra lines requested beyond one screenful when estimating visible rows. */
 export const VISIBLE_LINES_HEADROOM = 10;
+/** Vertical drag distance that counts as the reader choosing a position rather
+ * than a tap or a horizontal panel swipe. */
+export const TOUCH_NAVIGATION_THRESHOLD_PX = 8;
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -252,6 +255,12 @@ export class ChatViewport {
 
     private mode: ChatViewportMode = 'following';
     private atBottom = true;
+    // Whether this visit has reported rendered content yet. Layout notifications
+    // only mean something once there is content to reason about.
+    private hasContent = false;
+    // Last row estimate handed to the model. Publishing re-derives the retained
+    // row cap, so an unchanged estimate would re-render rows for no reason.
+    private lastVisibleLinesEstimate = 0;
     private lastFollowPinAt = 0;
     private pinLoop: PinLoop | null = null;
 
@@ -300,6 +309,13 @@ export class ChatViewport {
         this.adapter = adapter;
         this.exhaustedTopBufferId = null;
         this.pinLoop = null;
+        // A new visit starts with no content and no reader position. Without these,
+        // a ResizeObserver's initial size report — which fires the moment it is
+        // attached — would act on the previous buffer's geometry, and a stale
+        // 'following' would pin a viewport that has not been placed yet.
+        this.hasContent = false;
+        this.mode = 'following';
+        this.atBottom = false;
         if (this.history) {
             this.history = null;
             this.publishHistoryBusy();
@@ -347,6 +363,7 @@ export class ChatViewport {
     contentChanged(snapshot: ChatContentSnapshot): void {
         if (this.disposed) return;
         this.latest = snapshot;
+        this.hasContent = true;
 
         if (!this.adapter || !snapshot.bufferId || snapshot.lineCount === 0) {
             this.prevBufferId = snapshot.bufferId ?? '';
@@ -433,6 +450,21 @@ export class ChatViewport {
     }
 
     /**
+     * Whether a gesture in this direction could actually move this viewport.
+     *
+     * Wheeling over a buffer that cannot scroll in that direction is not a
+     * reader choosing a reading position, and must not end following.
+     */
+    canScrollToward(direction: -1 | 1): boolean {
+        const adapter = this.adapter;
+        if (this.disposed || !adapter) return false;
+        if (direction < 0) {
+            return adapter.getScrollTop() > SCROLL_BOTTOM_TOLERANCE;
+        }
+        return adapter.getScrollTop() < adapter.getScrollHeight() - adapter.getClientHeight() - SCROLL_BOTTOM_TOLERANCE;
+    }
+
+    /**
      * Deliberate reader navigation (wheel, touch drag, PageUp/PageDown, scrollbar).
      *
      * It is authoritative: pending automatic work is cancelled the moment it is
@@ -481,7 +513,30 @@ export class ChatViewport {
      * an existing loop is not a second loop.
      */
     notifyLayoutChanged(): void {
-        if (this.disposed || !this.adapter) return;
+        if (this.disposed || !this.adapter || !this.hasContent) return;
+        this.schedule('measure', () => this.measureVisibleLines());
+        // A running pin loop re-reads geometry on every frame already, so arming a
+        // second one is redundant — and the pin's own writes can themselves produce
+        // a resize notification, which is how an observer becomes a loop that never
+        // goes idle.
+        if (this.mode === 'following' && !this.pinLoop) {
+            this.armPin();
+        }
+    }
+
+    /**
+     * The view became visible again after animation frames were paused.
+     *
+     * Frames do not run in a hidden view, so a pin loop or a queued restore that
+     * was mid-flight has been sitting on geometry from before the view went away.
+     * On return that work is dropped rather than allowed to move the viewport,
+     * the estimate is taken again, and only a view that was genuinely following
+     * is re-anchored.
+     */
+    notifyVisibilityRestored(): void {
+        if (this.disposed || !this.adapter || !this.hasContent) return;
+        this.cancelScheduled();
+        this.pinLoop = null;
         this.schedule('measure', () => this.measureVisibleLines());
         if (this.mode === 'following') {
             this.armPin();
@@ -645,6 +700,7 @@ export class ChatViewport {
                 this.readMarkerFailures = 0;
                 this.scrollToBottom();
                 this.setFollowIntent(true);
+                this.markFollowSettle();
                 return;
             }
             if (this.readMarkerFailures >= READMARKER_MAX_FAILURES) {
@@ -653,6 +709,7 @@ export class ChatViewport {
                 this.readMarkerFailures = 0;
                 this.scrollToBottom();
                 this.setFollowIntent(true);
+                this.markFollowSettle();
                 return;
             }
             this.schedule('entry-placement', () => {
@@ -671,6 +728,7 @@ export class ChatViewport {
                     // is the better place to be.
                     this.scrollToBottom();
                     this.setFollowIntent(true);
+                    this.markFollowSettle();
                     return;
                 }
                 // Aim the separator at ~45% of the viewport so the reader sees the
@@ -706,6 +764,14 @@ export class ChatViewport {
     }
 
     private stepPin(): void {
+        // A pin loop only makes sense for a view that is still following. Entry
+        // placement or a reader navigation can end following between arming the
+        // loop and its next frame, and a loop that outlives its own reason would
+        // move a viewport the reader is looking at.
+        if (this.mode !== 'following') {
+            this.pinLoop = null;
+            return;
+        }
         const adapter = this.adapter;
         const loop = this.pinLoop;
         if (!adapter || !loop) {
@@ -731,6 +797,18 @@ export class ChatViewport {
         adapter.setScrollTop(adapter.getScrollHeight() - adapter.getClientHeight());
     }
 
+    /**
+     * Open the follow-settle window without starting a pin loop.
+     *
+     * Entry placement moves the viewport itself, so the scroll events that follow
+     * are generated by that write and the layout it triggers. Without a fresh
+     * timestamp they would be read as the reader choosing to leave, and the view
+     * would strand just above the bottom.
+     */
+    private markFollowSettle(): void {
+        this.lastFollowPinAt = this.now();
+    }
+
     /** Visible-row estimate; the retention formula itself stays in the model. */
     private measureVisibleLines(): void {
         const adapter = this.adapter;
@@ -739,7 +817,13 @@ export class ChatViewport {
         const lineHeight = adapter.getSampleLineHeight() ?? DEFAULT_SAMPLE_LINE_HEIGHT;
         if (lineHeight === 0) return;
         // Headroom beyond one screenful so scrolling up already has rows to show.
-        this.onVisibleLinesEstimate(Math.ceil(areaHeight / lineHeight + VISIBLE_LINES_HEADROOM));
+        const numLines = Math.ceil(areaHeight / lineHeight + VISIBLE_LINES_HEADROOM);
+        // The estimate feeds the retained row cap, which decides how many rows are
+        // rendered, which changes the content root's size, which an observer would
+        // report back. Only a changed estimate is worth publishing.
+        if (numLines === this.lastVisibleLinesEstimate) return;
+        this.lastVisibleLinesEstimate = numLines;
+        this.onVisibleLinesEstimate(numLines);
     }
 
     /** Ask the view for older lines, subject to this visit's own guards. */

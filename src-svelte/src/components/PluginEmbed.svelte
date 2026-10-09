@@ -43,9 +43,12 @@
     img.className = 'embed';
     img.src = url;
     img.alt = 'Image preview';
+    // No scrollIntoView on load. An image that grows after it loads is a layout
+    // change, and the chat view's viewport owner decides what a layout change
+    // means for the reader — see lib/chatViewport.ts. A row scrolling itself into
+    // view would seize the viewport from a reader who had scrolled away.
     img.onload = () => {
       if (DEBUG_PLUGIN) console.log('[PluginEmbed] injectImage: image loaded successfully, url:', url);
-      img.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     };
     img.onerror = () => {
       console.warn('[PluginEmbed] injectImage: image failed to load, url:', url);

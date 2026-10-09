@@ -5,7 +5,7 @@
   import { settings } from '#lib/stores/settings.ts';
   import { fetchMoreLines, closeBufferOnWeeChat, pinBuffer, unpinBuffer } from '#lib/stores/connectionManager.ts';
   import { buildMentionText, isFreeBuffer, modifyTextareaValue } from '#lib/utils.ts';
-  import { ChatViewport, createChatDomAdapter } from '#lib/chatViewport.ts';
+  import { ChatViewport, createChatDomAdapter, TOUCH_NAVIGATION_THRESHOLD_PX } from '#lib/chatViewport.ts';
   import type { ChatViewportState, ChatScrollCommands } from '#lib/chatViewport.ts';
   import BufferLineRow from '#components/BufferLineRow.svelte';
   import TopicModal from '#components/TopicModal.svelte';
@@ -175,6 +175,59 @@
     viewport.handleScroll();
   }
 
+  // A wheel or a vertical drag is deliberate navigation and is authoritative
+  // immediately. A `scroll` event on its own is not: media growth, wrapping
+  // reflow, native scroll anchoring and the pin loop all fire one, so treating
+  // every scroll event as intent would end following on ordinary layout work.
+  // Pinch-zoom, horizontal trackpad gestures, taps and horizontal sidebar swipes
+  // are excluded, and a gesture that could not move this viewport in that
+  // direction is not a reader choosing a position.
+  $effect(() => {
+    const container = containerRef;
+    if (!container) return;
+
+    const onWheel = (event: WheelEvent) => {
+      if (event.ctrlKey) return;
+      if (Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
+      if (!viewport.canScrollToward(event.deltaY > 0 ? 1 : -1)) return;
+      viewport.noteNavigation('wheel');
+    };
+
+    // One intent per drag: the first vertical movement, not every touchmove.
+    let anchorY: number | null = null;
+    let noted = false;
+    const onTouchStart = (event: TouchEvent) => {
+      anchorY = event.touches[0]?.clientY ?? null;
+      noted = false;
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      const y = event.touches[0]?.clientY;
+      if (anchorY === null || y === undefined || noted) return;
+      const delta = anchorY - y;
+      if (Math.abs(delta) < TOUCH_NAVIGATION_THRESHOLD_PX) return;
+      if (!viewport.canScrollToward(delta > 0 ? 1 : -1)) return;
+      noted = true;
+      viewport.noteNavigation('touch');
+    };
+    const onTouchEnd = () => {
+      anchorY = null;
+      noted = false;
+    };
+
+    container.addEventListener('wheel', onWheel, { passive: true });
+    container.addEventListener('touchstart', onTouchStart, { passive: true });
+    container.addEventListener('touchmove', onTouchMove, { passive: true });
+    container.addEventListener('touchend', onTouchEnd);
+    return () => {
+      container.removeEventListener('wheel', onWheel);
+      container.removeEventListener('touchstart', onTouchStart);
+      container.removeEventListener('touchmove', onTouchMove);
+      container.removeEventListener('touchend', onTouchEnd);
+      anchorY = null;
+      noted = false;
+    };
+  });
+
   // Recalculate the visible-row estimate on window resize (debounced).
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
   $effect(() => {
@@ -200,6 +253,45 @@
   $effect(() => {
     void $settings.fontsize;
     viewport.notifyLayoutChanged();
+  });
+
+  // Layout observation. The scroll container's own box is the viewport: it does
+  // not grow when a row re-wraps or an image finishes loading. The content root
+  // inside it does, so both are watched — two observers for the whole view rather
+  // than one per message. The controller then decides what a size change means:
+  // a following view re-anchors, a reading view stays where the reader left it.
+  //
+  // Re-running on layout mode and buffer rebinds the observer to the content root
+  // that is actually mounted instead of leaving it attached to a node Svelte has
+  // already discarded.
+  $effect(() => {
+    const container = containerRef;
+    if (!container) return;
+    // Dependencies here must be values that only change when the observation
+    // really has to be rebound. Reading $currentBuffer would re-run this effect on
+    // every message to the current buffer, and each re-run builds a new observer
+    // that immediately reports its initial size — which the controller reads as a
+    // layout change and answers with a pin, forever.
+    void viewBufferId;
+    void bubbleMode;
+
+    const contentRoot = container.querySelector('.chat-table, .chat-bubble-container');
+    const observer = new ResizeObserver(() => viewport.notifyLayoutChanged());
+    observer.observe(container);
+    if (contentRoot) observer.observe(contentRoot);
+    return () => observer.disconnect();
+  });
+
+  // Animation frames do not run while the view is hidden, so a pin loop or a
+  // queued restore has been holding geometry from before it went away. Returning
+  // is not a resume: the stale work is dropped and only a genuinely following
+  // view is re-anchored.
+  $effect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') viewport.notifyVisibilityRestored();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
   });
 
   // Handle mention click: extract nick from message prefix, insert into input at cursor.
