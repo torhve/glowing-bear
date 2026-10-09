@@ -34,6 +34,25 @@ const UI_ONLY_SPECS = [
     'SettingsModal-themes',
     'Toast',
 ].map((name) => `**/${name}.test.ts`);
+
+// The specs whose behaviour depends on engine reflow timing: multi-frame re-wrap,
+// delayed media growth, and a pin sequence that has to settle instead of chasing
+// the scrollbar. WebKit is the engine those safeguards were written for, so it
+// gets its own narrow pass over exactly this set rather than the whole suite.
+// It is opt-in because these specs mutate the shared gbtest channel: running
+// them in the same pass as the serial chromium project would let two engines
+// write the same #glowing-bear state.
+const SCROLL_REGRESSION_SPECS = [
+    'ChatView-scroll',
+    'ChatView-cappedBufferFollow',
+    'ChatView-long-line-scroll',
+    'ChatView-long-line-type-scroll',
+    'ChatView-scrollFetch',
+    'KeyboardShortcuts-pageup-pagedown',
+    'ReadMarker-scrollOnPost',
+    'PluginEmbed',
+].map((name) => `**/${name}.test.ts`);
+
 export default defineConfig({
     testDir: './specs',
     fullyParallel: false,
@@ -74,6 +93,16 @@ export default defineConfig({
             fullyParallel: true,
             use: { ...devices['Desktop Chrome'] },
         },
+        ...(process.env.GB_WEBKIT
+            ? [{
+                // Opt-in only (npm run test:e2e:webkit). Serial, because these
+                // specs share the live gbtest channel just like the chromium pass.
+                name: 'webkit',
+                testMatch: SCROLL_REGRESSION_SPECS,
+                fullyParallel: false,
+                use: { ...devices['Desktop Safari'] },
+            }]
+            : []),
     ],
     webServer: {
         command: 'npm run dev',

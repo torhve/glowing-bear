@@ -50,6 +50,9 @@ export const PAGE_SCROLL_RATIO = 0.8;
 export const TOP_FETCH_SCROLL_THRESHOLD = 50;
 /** Line height assumed before any row has rendered. */
 export const DEFAULT_SAMPLE_LINE_HEIGHT = 16;
+
+/** How many rendered rows one line-height measurement is allowed to inspect. */
+const SAMPLE_ROW_LIMIT = 12;
 /** Extra lines requested beyond one screenful when estimating visible rows. */
 export const VISIBLE_LINES_HEADROOM = 10;
 /** Vertical drag distance that counts as the reader choosing a position rather
@@ -202,7 +205,9 @@ interface PinLoop {
  */
 export function createChatDomAdapter(
     container: HTMLElement,
-    rowSelector = '.bufferline',
+    // Date separators carry the row class but are not chat lines: their height is
+    // their label, not a line of text, so they must not set the line height.
+    rowSelector = '.bufferline:not(.date-change-row)',
     markerSelector = '.readmarker',
 ): ChatViewportAdapter {
     const rectOf = (el: Element): ChatRect => {
@@ -222,8 +227,25 @@ export function createChatDomAdapter(
             return marker ? rectOf(marker) : null;
         },
         getSampleLineHeight: () => {
-            const sample = container.querySelector(rowSelector);
-            return sample ? sample.clientHeight : null;
+            // The shortest sampled row is the one that stands for a single line of
+            // text. Measuring the first row instead made the estimate depend on
+            // which row happened to be on top: a wrapped message there reads as a
+            // much taller line, which shrinks the retained row cap, which changes
+            // which rows are rendered, which changes the sample again. The cap
+            // crept between one message and the next.
+            //
+            // Samples are spread over the rendered range rather than taken from
+            // one end, so a run of long messages at either end cannot stand in for
+            // every line.
+            const rows = container.querySelectorAll(rowSelector);
+            if (rows.length === 0) return null;
+            const step = Math.max(1, Math.floor(rows.length / SAMPLE_ROW_LIMIT));
+            let shortest: number | null = null;
+            for (let i = 0; i < rows.length; i += step) {
+                const height = (rows[i] as HTMLElement).clientHeight;
+                if (height > 0 && (shortest === null || height < shortest)) shortest = height;
+            }
+            return shortest;
         },
     };
 }
