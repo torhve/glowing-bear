@@ -62,6 +62,15 @@ function testSync() {
 }
 
 // ---- fake fetch ----
+/**
+ * The handshake fixture asks for a cheap PBKDF2 round count on purpose.
+ * jsdom has no crypto.subtle, so these tests run the app's pure-JS PBKDF2
+ * fallback: ~17ms for 1,000 rounds against ~955ms for WeeChat's real 100,000,
+ * paid once per connection attempt. These tests are about connection
+ * lifecycle, and the credential itself is checked against Node's pbkdf2Sync at
+ * the real count in api-auth.test.ts.
+ */
+const HANDSHAKE_ITERATIONS = 1000;
 const VALID_BUFFER = {
     id: 1759000000000001, name: 'irc.server.gbtest', short_name: 'gbtest', number: 1,
     type: 'formatted', hidden: false, title: '', modes: '', input_prompt: '',
@@ -84,7 +93,7 @@ function stubFetch(handshakeDelay = false) {
         calls.push(path);
         if (path === '/api/handshake') {
             handshakeCount += 1;
-            const body = { password_hash_algo: 'pbkdf2+sha256', password_hash_iterations: 100000, totp: false };
+            const body = { password_hash_algo: 'pbkdf2+sha256', password_hash_iterations: HANDSHAKE_ITERATIONS, totp: false };
             if (handshakeDelay && handshakeCount === 1) {
                 return await new Promise<Response>((resolve) => { handshakeDeferred = { resolve }; });
             }
@@ -101,7 +110,7 @@ function stubFetch(handshakeDelay = false) {
     return {
         calls,
         releaseHandshake: () => handshakeDeferred?.resolve(jsonResponse({
-            password_hash_algo: 'pbkdf2+sha256', password_hash_iterations: 100000, totp: false,
+            password_hash_algo: 'pbkdf2+sha256', password_hash_iterations: HANDSHAKE_ITERATIONS, totp: false,
         })),
     };
 }
@@ -122,8 +131,20 @@ async function completeBootstrap(sock: FakeSocket): Promise<Record<string, strin
     return ids;
 }
 
+const liveOrchestrators: ApiOrchestrator[] = [];
+
 beforeEach(() => { FakeSocket.instances = []; });
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
+afterEach(() => {
+    // A test that times out never reaches its own dispose(), and an orchestrator
+    // left running keeps retrying into the next test: with that test's fake
+    // timers installed, its backoff timers get advanced by someone else's
+    // assertions, and its late cleanup restores real timers mid-run. Dispose
+    // everything the test created, whatever the test did with it.
+    for (const orch of liveOrchestrators.splice(0)) {
+        orch.dispose();
+    }
+    vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers();
+});
 
 function makeOrchestrator(overrides: Partial<ConstructorParameters<typeof ApiOrchestrator>[0]> = {}) {
     const reducers = testReducers();
@@ -138,6 +159,7 @@ function makeOrchestrator(overrides: Partial<ConstructorParameters<typeof ApiOrc
         onStatus: (s) => statuses.push({ state: s.state, error: s.error }),
         ...overrides,
     });
+    liveOrchestrators.push(orch);
     return { orch, reducers, begins, ends, statuses };
 }
 
@@ -199,7 +221,7 @@ describe('ApiOrchestrator bootstrap', () => {
         vi.stubGlobal('fetch', vi.fn(async (url: string) => {
             const path = new URL(url).pathname;
             if (path === '/api/handshake') {
-                return jsonResponse({ password_hash_algo: 'pbkdf2+sha256', password_hash_iterations: 100000, totp: false });
+                return jsonResponse({ password_hash_algo: 'pbkdf2+sha256', password_hash_iterations: HANDSHAKE_ITERATIONS, totp: false });
             }
             return jsonResponse({
                 weechat_version: '4.5.0', weechat_version_git: '', weechat_version_number: 42598400,
@@ -219,7 +241,7 @@ describe('ApiOrchestrator bootstrap', () => {
         vi.stubGlobal('fetch', vi.fn(async (url: string) => {
             const path = new URL(url).pathname;
             if (path === '/api/handshake') {
-                return jsonResponse({ password_hash_algo: 'pbkdf2+sha256', password_hash_iterations: 100000, totp: true });
+                return jsonResponse({ password_hash_algo: 'pbkdf2+sha256', password_hash_iterations: HANDSHAKE_ITERATIONS, totp: true });
             }
             return new Response(JSON.stringify({ error: 'nope' }), { status: 404 });
         }));
@@ -239,7 +261,7 @@ describe('ApiOrchestrator reconnect lifecycle', () => {
             const path = new URL(url).pathname;
             if (path === '/api/handshake') {
                 if (handshakeFails-- > 0) return new Response(JSON.stringify({ error: 'boom' }), { status: 500 });
-                return jsonResponse({ password_hash_algo: 'pbkdf2+sha256', password_hash_iterations: 100000, totp: false });
+                return jsonResponse({ password_hash_algo: 'pbkdf2+sha256', password_hash_iterations: HANDSHAKE_ITERATIONS, totp: false });
             }
             return jsonResponse({
                 weechat_version: '4.10.1', weechat_version_git: '', weechat_version_number: 67764480,
