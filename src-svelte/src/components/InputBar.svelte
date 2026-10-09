@@ -7,7 +7,7 @@
   import { isPopoverOpen, filterImageFiles, joinMultilineToSingle, MULTILINE_PASTE_THRESHOLD, completeNick } from '#lib/utils.ts';
   import Send from '@lucide/svelte/icons/send';
   import { emojifyInput } from '#lib/emojify.ts';
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import Camera from '@lucide/svelte/icons/camera';
   import Megaphone from '@lucide/svelte/icons/megaphone';
   import Type from '@lucide/svelte/icons/type';
@@ -16,7 +16,15 @@
   import MultiLinePasteDialog from './MultiLinePasteDialog.svelte';
   import { DEBUG_INPUT } from '#lib/debug.ts';
   import { addToast } from '#lib/toast.ts';
-  import { readInputDraft, writeInputDraft } from '#lib/stores/inputDraft.ts';
+  import { activeConnectionProfile } from '#lib/connectionProfile.ts';
+  import {
+    applyDraftClaim,
+    claimDraft,
+    conversationKeyFor,
+    readDraft,
+    writeDraft,
+    type DraftRef,
+  } from '#lib/stores/conversationDrafts.ts';
   import { readChatScrollCommands } from '#lib/chatScrollContext.ts';
 
   // The chat viewport of this page, reached through context rather than a
@@ -46,9 +54,37 @@
   let inputRef = $state<HTMLTextAreaElement>();
   let colorPickerRef = $state<HTMLDivElement | undefined>();
   let fileInputRef = $state<HTMLInputElement>();
-  // Seeded from the module-level draft so a disconnect (which unmounts this component)
-  // does not discard a message the user was still typing.
-  let message = $state(readInputDraft());
+  // Which conversation the text in this composer belongs to. Both halves are
+  // required: no relay means no profile, and no buffer means no conversation, and
+  // without either the composer holds text that cannot be filed anywhere.
+  const profileKey = $derived($activeConnectionProfile?.key ?? null);
+  const conversationKey = $derived(conversationKeyFor($currentBuffer));
+  const ownerRef = $derived<DraftRef | null>(
+    profileKey && conversationKey ? { profileKey, conversationKey } : null,
+  );
+
+  // The same identity read without subscribing to it, for mount and for event
+  // handlers that must not re-run on every buffer publication.
+  function currentOwnerRef(): DraftRef | null {
+    const relay = get(activeConnectionProfile)?.key ?? null;
+    const conversation = conversationKeyFor(get(currentBuffer));
+    return relay && conversation ? { profileKey: relay, conversationKey: conversation } : null;
+  }
+
+  // Seeded from the draft belonging to the conversation this bar mounts onto, so a
+  // disconnect (which unmounts this component) does not discard a message the user
+  // was still typing — and so a different conversation does not inherit it.
+  const mountRef = currentOwnerRef();
+  const mountDraft = mountRef ? readDraft(mountRef) : null;
+
+  let message = $state(mountDraft?.text ?? '');
+  // The conversation `message` belongs to. Text is saved under this key, never
+  // under whatever is selected by the time an effect finally runs.
+  let boundRef = $state<DraftRef | null>(mountRef);
+  // A restored selection is applied once the restored text is in the textarea.
+  let pendingSelection = $state<[number, number] | null>(
+    mountDraft ? [mountDraft.selectionStart, mountDraft.selectionEnd] : null,
+  );
   let _iterCandidate: string | null = $state(null);
   let isDraggingFile = $state(false);
   let previewImages = $state<PreviewItem[]>([]);
@@ -88,14 +124,86 @@
 
   let canSend = $derived($currentBuffer && message.length > 0);
 
-  // Mirror the input into the draft on every change so the next InputBar instance can
-  // start from it. In the current app a disconnect unmounts this component on a later
-  // macrotask (WebSocket close, double-Escape), while the effect flush for the latest
-  // keystroke is a microtask that drains before it — so the draft is already up to date
-  // by the time teardown runs. (Reading $state in an unmount cleanup would see the
-  // pre-flush value, which is why this mirrors on change rather than on destroy.)
+  function sameOwner(a: DraftRef | null, b: DraftRef | null): boolean {
+    if (a === null || b === null) return a === b;
+    return a.profileKey === b.profileKey && a.conversationKey === b.conversationKey;
+  }
+
+  /**
+   * File what the composer holds under the conversation it belongs to.
+   *
+   * Called from the input event, so a keystroke is persisted before any effect gets
+   * a chance to run, and from the mirror below, so programmatic edits — completion,
+   * formatting, history recall, paste, send recovery — are persisted too. A save that
+   * would change nothing is a no-op, so the two paths do not echo each other.
+   */
+  function persistDraft(text: string): void {
+    const ref = boundRef;
+    if (!ref) return;
+    const start = inputRef?.selectionStart ?? lastCaretPos;
+    const end = inputRef?.selectionEnd ?? lastCaretPos;
+    writeDraft(ref, text, start, end);
+  }
+
+  /**
+   * Put text back where it belongs after a send that did not consume it.
+   *
+   * The composer may have moved on while the socket was answering: the reader
+   * switched conversations, or typed. Failed lines go to the conversation they were
+   * typed in, never into whatever is on screen now, and text the reader produced in
+   * the meantime stays below them.
+   */
+  function returnToComposer(ref: DraftRef | null, text: string): void {
+    if (!ref) return;
+    if (sameOwner(boundRef, ref)) {
+      const typedDuringSend = message;
+      message = text + (typedDuringSend ? '\n' + typedDuringSend : '');
+      return;
+    }
+    const existing = readDraft(ref);
+    const merged = existing?.text ? `${text}\n${existing.text}` : text;
+    writeDraft(ref, merged, merged.length, merged.length);
+  }
+
   $effect(() => {
-    writeInputDraft(message);
+    persistDraft(message);
+  });
+
+  // Rebind the composer when the conversation or the relay changes. The outgoing
+  // text is saved under its own owner *before* anything is loaded, so a switch
+  // cannot file one chat's draft under another's — `boundRef`, not the currently
+  // selected buffer, decides where it went.
+  $effect(() => {
+    const target = ownerRef;
+    const previous = untrack(() => boundRef);
+    if (sameOwner(previous, target)) return;
+    if (previous) persistDraft(untrack(() => message));
+    boundRef = target;
+    // Completion cycling belongs to one conversation's text; carrying it into another
+    // would make Tab continue a list the reader is no longer looking at.
+    _iterCandidate = null;
+    const entry = target ? readDraft(target) : null;
+    message = entry?.text ?? '';
+    pendingSelection = entry ? [entry.selectionStart, entry.selectionEnd] : null;
+  });
+
+  // Apply a restored selection once the text it belongs to has reached the textarea.
+  // Waiting for the flush is what makes the ordering hold: when the rebind effect
+  // writes both the text and the selection, this effect runs *before* the render
+  // that puts the text in the DOM, and setting a selection on a textarea that is
+  // about to be rewritten is pointless — writing `value` moves the caret to the end.
+  $effect(() => {
+    const selection = pendingSelection;
+    if (!selection) return;
+    pendingSelection = null;
+    const owner = boundRef;
+    void tick().then(() => {
+      // A switch during the wait means this selection belongs to a conversation the
+      // composer no longer holds; applying it would move the caret in the wrong one.
+      if (!inputRef || !sameOwner(boundRef, owner)) return;
+      inputRef.setSelectionRange(selection[0], selection[1]);
+      syncInputHeight();
+    });
   });
 
   // Clear all messages from a buffer, resetting lines and requestedLines count.
@@ -112,6 +220,13 @@
     if (!canSend) return;
 
     const text = message;
+
+    // Everything this send may write — history, buffer clearing, the draft it came
+    // from — belongs to the conversation Enter was pressed in. Reading the current
+    // buffer after an await lets a switch during delivery land the result elsewhere.
+    const sendRef = boundRef;
+    const sendBuffer = get(currentBuffer);
+    const sendBufferId = sendBuffer?.id ?? null;
 
     // Split the command into multiple commands based on line breaks (matching AngularJS behavior)
     const lines = text.split(/\r?\n/);
@@ -132,8 +247,8 @@
     if (/^\/buffer\s+clear\s*$/i.test(lines[0]!)) {
       // Clear locally only when the socket accepted the command — otherwise the buffer
       // looks emptied while its lines are still on the server.
-      if ($currentBuffer && await sendWeeChatCommand('/buffer clear')) {
-        clearBufferMessages($currentBuffer.id);
+      if (sendBuffer && await sendWeeChatCommand('/buffer clear')) {
+        clearBufferMessages(sendBufferId!);
       }
     }
 
@@ -154,7 +269,7 @@
         const nick = queryMatch[1] ?? '';
         // Only the buffer in the current IRC server context is the intended target
         // — the same nick can be queried on two servers at once.
-        const serverContext = $currentBuffer && $currentBuffer.server ? $currentBuffer.server : null;
+        const serverContext = sendBuffer?.server ? sendBuffer.server : null;
         // Find existing query/private buffer matching the nick (case-insensitive)
         const existingBuf = findBufferByShortName(nick, ['query', 'private'], serverContext);
         if (existingBuf) {
@@ -170,31 +285,36 @@
       // History records only what the socket accepted, so ArrowUp never offers back a
       // line that was not sent.
       if (await sendMessage(line)) {
-        if ($currentBuffer) {
-          addToHistory($currentBuffer.id, line);
-        }
+        if (sendBufferId) addToHistory(sendBufferId, line);
       } else {
         unsent.push(line);
       }
     }
 
+    // The composer was emptied before the round-trip, so anything in it now was
+    // typed during delivery or belongs to a conversation the reader moved to. Both are
+    // the reader's, and a completed send has no claim on either.
     if (unsent.length === 0) {
-      if (text === '/c' && $currentBuffer) {
-        clearBufferMessages($currentBuffer.id);
+      if (text === '/c' && sendBufferId) {
+        clearBufferMessages(sendBufferId);
       }
-      message = '';
     } else {
       // Put back exactly the lines that failed, and say so instead of failing silently.
       // The wording stays generic: the socket can be closing even while `connected` is true.
-      // Text typed while the send was in flight stays intact below the restored lines.
-      message = unsent.join('\n') + (message ? '\n' + message : '');
+      returnToComposer(sendRef, unsent.join('\n'));
       addToast('Message could not be sent — your text was kept', { type: 'warning', duration: 5000 });
     }
 
     if (inputRef) {
-      inputRef.style.height = 'auto';
-      // Keep focus on a failed send so the text can be corrected and retried.
-      if (unsent.length === 0) inputRef.blur();
+      if (unsent.length === 0) {
+        inputRef.style.height = 'auto';
+        // Keep focus off a send that finished; the composer is empty.
+        inputRef.blur();
+      } else {
+        // Keep focus on a failed send so the text can be corrected and retried, and
+        // size the textarea for the text that came back.
+        syncInputHeight();
+      }
     }
   }
 
@@ -264,6 +384,7 @@
   // When forceFocus is true, focuses the textarea before inserting (used by global paste handler).
   async function insertAtCursor(text: string, forceFocus = false): Promise<void> {
     const caret = inputRef === document.activeElement ? getCaretPos() : lastCaretPos;
+    const ownerAtInsert = boundRef;
     message = message.slice(0, caret) + text + message.slice(caret);
     if (forceFocus) {
       inputRef?.focus();
@@ -272,6 +393,10 @@
     // textarea. A setTimeout(0) here left a window where a keystroke landed at the
     // old caret and the deferred restore then split the typed text around it.
     await tick();
+    // The caret belongs to the conversation the insertion was made in. If the reader
+    // switched during the flush, this offset would move a caret through someone
+    // else's text.
+    if (!sameOwner(boundRef, ownerAtInsert)) return;
     setCaretPos(caret + text.length);
   }
 
@@ -388,14 +513,31 @@
       e.preventDefault();
       const caretPos = getCaretPos();
       void (async () => {
+        // The completion is computed from the text this conversation held when Tab was
+        // pressed. Applying it unconditionally would overwrite whatever the reader typed
+        // while the relay was answering, or drop it into a conversation they switched to.
+        const claim = boundRef ? claimDraft(boundRef) : null;
+        const textAtTab = message;
         const result = await completeInput(message, caretPos);
-        if (result) {
-          message = result.text;
-          _iterCandidate = result.iterCandidate;
-          setTimeout(() => setCaretPos(result.cursor), 0);
-        } else {
+        if (!result) {
           _iterCandidate = null;
+          return;
         }
+        if (claim) {
+          if (!applyDraftClaim(claim, result.text, result.cursor, result.cursor)) return;
+        } else if (message !== textAtTab) {
+          // No conversation owns this composer, so there is no draft to claim against;
+          // the text itself is the only evidence that the reader has since edited it.
+          return;
+        }
+        // The claim put the completion in the right draft even if the composer has
+        // since moved to another conversation. It may only appear on screen while this
+        // is still the conversation it was requested in.
+        if (sameOwner(boundRef, claim ? claim.ref : null)) {
+          message = result.text;
+          setTimeout(() => setCaretPos(result.cursor), 0);
+        }
+        _iterCandidate = result.iterCandidate;
       })();
       return true;
     }
@@ -521,14 +663,23 @@
     }
   }
 
+  // Grow the textarea with its content, capped at the height the CSS allows.
+  function syncInputHeight(): void {
+    if (!inputRef) return;
+    inputRef.style.height = 'auto';
+    inputRef.style.height = Math.min(inputRef.scrollHeight, 150) + 'px';
+  }
+
   function handleInput() {
     if (inputRef) {
-      inputRef.style.height = 'auto';
-      inputRef.style.height = Math.min(inputRef.scrollHeight, 150) + 'px';
+      syncInputHeight();
       // Save cursor position so format buttons work after textarea loses focus.
       lastCaretPos = inputRef.selectionStart;
     }
-
+    // Persist from the event itself: the DOM value is the truth at this moment, and
+    // an effect flush must not be the only thing standing between a keystroke and a
+    // teardown.
+    persistDraft(inputRef?.value ?? message);
     // Emojify :shortcode: patterns as user types, matching AngularJS behavior
     if ($settings.enableEmojify) {
       const caret = inputRef?.selectionStart ?? 0;

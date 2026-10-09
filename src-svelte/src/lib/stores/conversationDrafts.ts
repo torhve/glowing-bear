@@ -87,7 +87,10 @@ export function readDraft(ref: DraftRef): ConversationDraft | null {
  * nothing rather than restoring a phantom empty entry.
  *
  * Returns the stored entry (with its new revision) or null when there is nothing
- * to store.
+ * to store. A write that would change nothing returns the existing entry without
+ * bumping its revision: the composer persists from more than one place (the input
+ * event and a mirror effect), and a redundant save must not look like the draft
+ * moved to whoever holds a claim on it.
  */
 export function writeDraft(
     ref: DraftRef,
@@ -101,10 +104,15 @@ export function writeDraft(
     }
     const byConversation = drafts.get(ref.profileKey) ?? new Map<string, ConversationDraft>();
     const previous = byConversation.get(ref.conversationKey);
+    const start = clampCaret(text, selectionStart, text.length);
+    const end = clampCaret(text, selectionEnd, text.length);
+    if (previous && previous.text === text && previous.selectionStart === start && previous.selectionEnd === end) {
+        return previous;
+    }
     const entry: ConversationDraft = {
         text,
-        selectionStart: clampCaret(text, selectionStart, text.length),
-        selectionEnd: clampCaret(text, selectionEnd, text.length),
+        selectionStart: start,
+        selectionEnd: end,
         revision: (previous?.revision ?? 0) + 1,
     };
     byConversation.set(ref.conversationKey, entry);
@@ -112,11 +120,16 @@ export function writeDraft(
     return entry;
 }
 
-/** Capture a claim on the current entry so an async result can be rejected later. */
-export function claimDraft(ref: DraftRef): DraftClaim | null {
+/**
+ * Capture a claim on the current entry so an async result can be rejected later.
+ *
+ * A conversation with nothing stored yet still yields a claim: it started from an
+ * empty draft at revision 0, and that is exactly what must still be true for its
+ * completion to count.
+ */
+export function claimDraft(ref: DraftRef): DraftClaim {
     const entry = readDraft(ref);
-    if (!entry) return null;
-    return { ref, revision: entry.revision, text: entry.text };
+    return { ref, revision: entry?.revision ?? 0, text: entry?.text ?? '' };
 }
 
 /**
@@ -124,11 +137,15 @@ export function claimDraft(ref: DraftRef): DraftClaim | null {
  *
  * This is the whole race rule: a completion computed from an older draft cannot
  * overwrite text the user typed in the meantime, and a completion computed for
- * one conversation cannot land in another.
+ * one conversation cannot land in another. Both the revision and the text must
+ * match — revision alone is not enough, because two writes of the same text share
+ * a revision.
  */
 export function applyDraftClaim(claim: DraftClaim, text: string, selectionStart?: number, selectionEnd?: number): ConversationDraft | null {
     const entry = readDraft(claim.ref);
-    if (!entry || entry.revision !== claim.revision || entry.text !== claim.text) return null;
+    const currentRevision = entry?.revision ?? 0;
+    const currentText = entry?.text ?? '';
+    if (currentRevision !== claim.revision || currentText !== claim.text) return null;
     return writeDraft(claim.ref, text, selectionStart, selectionEnd);
 }
 

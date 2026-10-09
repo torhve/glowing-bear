@@ -68,8 +68,12 @@ export function connectionProfile(
  *
  * Captured from the arguments of the connection attempt by `connectionManager`,
  * never read back out of settings. It changes once per connection, which is how
- * often a composer can legitimately change owner.
+ * often a composer can legitimately change owner — and a reconnect to the same
+ * endpoint does not change it at all.
  */
+// The key is derived by `resolveApiEndpoint` above: if that canonicalization ever
+// changes, every in-memory draft under the old spelling is orphaned. That is a
+// deliberate, visible dependency rather than an accident.
 export const activeConnectionProfile = writable<ConnectionProfile | null>(null);
 
 export function setActiveConnectionProfile(
@@ -79,6 +83,11 @@ export function setActiveConnectionProfile(
     tls: boolean,
 ): ConnectionProfile | null {
     const profile = connectionProfile(host, port, path, tls);
+    // Reconnecting to the same relay must not look like a change of owner. The
+    // identity is rebuilt as a fresh object on every attempt, so compare the key
+    // string and leave the store untouched when the endpoint is the same one —
+    // otherwise a reconnect would re-trigger every consumer that keys on it.
+    if ((get(activeConnectionProfile)?.key ?? null) === (profile?.key ?? null)) return profile;
     activeConnectionProfile.set(profile);
     return profile;
 }

@@ -5,7 +5,8 @@ import InputBar from '#components/InputBar.svelte';
 import { activeBufferId, buffers, createBuffer } from '#lib/stores/models.ts';
 import { sendMessage } from '#lib/stores/connectionManager.ts';
 import { toastStore } from '#lib/toast.ts';
-import { writeInputDraft } from '#lib/stores/inputDraft.ts';
+import { clearActiveConnectionProfile, setActiveConnectionProfile } from '#lib/connectionProfile.ts';
+import { resetConversationDrafts } from '#lib/stores/conversationDrafts.ts';
 import type { BufferData } from '#lib/types.ts';
 
 vi.mock('#lib/stores/connectionManager.ts', () => ({
@@ -93,8 +94,9 @@ beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(sendMessage).mockResolvedValue(true);
     toastStore.set([]);
-    // The draft is module-level, so reset it to keep tests order-independent.
-    writeInputDraft('');
+    // Drafts are keyed by relay and conversation, so a test that reconnects needs a
+    // relay to reconnect to. Without a profile the composer has nothing to file under.
+    setActiveConnectionProfile('relay.example', 443, '', true);
 });
 
 afterEach(async () => {
@@ -102,6 +104,8 @@ afterEach(async () => {
     document.body.replaceChildren();
     activeBufferId.set('');
     buffers.set({});
+    clearActiveConnectionProfile();
+    resetConversationDrafts();
 });
 
 it('keeps a half-typed message when the input bar is torn down and rebuilt by a reconnect', () => {

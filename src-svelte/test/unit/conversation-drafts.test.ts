@@ -200,6 +200,18 @@ describe('per-conversation drafts', () => {
         expect(writeDraft(r, 'second')?.revision).toBe(2);
     });
 
+    it('leaves the revision alone when a write would change nothing', () => {
+        const r = ref(PROFILE_A, 'irc.libera.#dev');
+        const first = writeDraft(r, 'typed', 5, 5);
+        // The composer persists from two places (the input event and a mirror
+        // effect); the second save of the same state must not look like the draft
+        // moved, or every outstanding claim would be voided by a keystroke echo.
+        const again = writeDraft(r, 'typed', 5, 5);
+        expect(again?.revision).toBe(first?.revision);
+        // A different selection is a real change and does bump.
+        expect(writeDraft(r, 'typed', 1, 1)?.revision).toBe((first?.revision ?? 0) + 1);
+    });
+
     it('applies a claim only while the draft still matches it', () => {
         const r = ref(PROFILE_A, 'irc.libera.#dev');
         writeDraft(r, 'hi @li');
