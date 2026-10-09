@@ -18,6 +18,8 @@
 // Nothing here is persisted yet, and nothing here migrates `inputHistory`'s
 // keys — that map is keyed by runtime id and is not a draft store.
 
+import { get } from 'svelte/store';
+import { activeConnectionProfile } from '#lib/connectionProfile.ts';
 import type { BufferPresentation } from '#lib/types.ts';
 
 /** Which conversation a draft belongs to. Both halves are required: two relays
@@ -159,6 +161,36 @@ export function clearDraft(ref: DraftRef): void {
 /** Drop every draft belonging to one relay — used when a profile is gone. */
 export function clearProfileDrafts(profileKey: string): void {
     drafts.delete(profileKey);
+}
+
+export type DraftRenameOutcome = 'moved' | 'conflict' | 'noop';
+
+/**
+ * Move a draft when the relay confirms that the same live buffer changed name.
+ *
+ * Only a confirmed rename of a buffer this connection knows about is migrated, so
+ * a name that changed while nobody was watching is never guessed at: an unmatched
+ * draft stays under the name the reader gave it.
+ *
+ * A collision is never resolved by overwriting or concatenating. Both drafts are
+ * kept and the caller reports the conflict — discarding someone's unfinished
+ * sentence is not a naming detail.
+ */
+export function renameConversationDraft(oldFullName: string, newFullName: string): DraftRenameOutcome {
+    const profileKey = get(activeConnectionProfile)?.key ?? null;
+    if (!profileKey) return 'noop';
+    if (!oldFullName || !newFullName || oldFullName === newFullName) return 'noop';
+
+    const byConversation = drafts.get(profileKey);
+    const source = byConversation?.get(oldFullName);
+    if (!byConversation || !source) return 'noop';
+    if (byConversation.has(newFullName)) return 'conflict';
+
+    // Moved whole, selection included, rather than copied: the old name is no
+    // longer a conversation this connection has.
+    byConversation.delete(oldFullName);
+    byConversation.set(newFullName, source);
+    return 'moved';
 }
 
 /** Test-only reset so a suite cannot leak drafts into the next file. */

@@ -31,6 +31,8 @@ import {
     injectDateChangeMessageIfNeeded,
 } from "#lib/stores/models.ts";
 import { shouldResume, getLastBuffer, recordLastBuffer } from "#lib/stores/bufferResume.ts";
+import { renameConversationDraft } from "#lib/stores/conversationDrafts.ts";
+import { addToast } from "#lib/toast.ts";
 import {
     createHighlight,
     playNotificationSound,
@@ -988,6 +990,11 @@ export function handleBufferRenamed(message: ProtocolMessage) {
     const obj = message.objects[0]?.content[0];
     if (!obj) return;
     const bufferId = obj.pointers[0];
+    // The draft key is the conversation's full name, so a rename has to move the
+    // draft while the old name is still readable. Only this confirmed rename of
+    // this live buffer is migrated — a name that changed while the app was away is
+    // never guessed at.
+    const previousFullName = get(buffers)[bufferId]?.fullName ?? "";
     const updated = updateBuffer(bufferId, {
         fullName: obj.full_name,
         shortName: obj.short_name,
@@ -998,9 +1005,20 @@ export function handleBufferRenamed(message: ProtocolMessage) {
             : "",
     });
     if (!updated) return;
+    reportDraftRename(previousFullName, obj.full_name);
     // Use update() to merge with current store state, preventing overwrites
     // of concurrent changes from other handlers.
     buffers.update((current) => ({ ...current, [bufferId]: updated }));
+}
+
+// A rename that collides with an existing draft keeps both. The reader has to
+// learn about it, because the only way to resolve it is to choose which text wins.
+function reportDraftRename(oldFullName: string, newFullName: string): void {
+    if (renameConversationDraft(oldFullName, newFullName) !== "conflict") return;
+    addToast(
+        `“${newFullName}” already had unfinished text, so the draft from “${oldFullName}” was kept under its old name.`,
+        { type: "warning", duration: 10000 },
+    );
 }
 
 // ---- Buffer hidden/unhidden ----

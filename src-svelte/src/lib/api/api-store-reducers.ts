@@ -22,6 +22,8 @@ import {
     injectDateChangeMessageIfNeeded, pendingBufferSwitch, setActiveBuffer, matchesPendingSwitch,
 } from '#lib/stores/models.ts';
 import { shouldResume } from '#lib/stores/bufferResume.ts';
+import { renameConversationDraft } from '#lib/stores/conversationDrafts.ts';
+import { addToast } from '#lib/toast.ts';
 import { createHighlight, playNotificationSound } from '#lib/notifications.ts';
 import { toPlainText } from '#lib/weechat-colors.ts';
 import { isWindowFocused } from '#lib/windowFocus.ts';
@@ -567,6 +569,18 @@ export function createApiStoreReducers(): ApiReducers {
             // Any buffer_* change event delivers a full authoritative buffer
             // snapshot; merge metadata only (no lines/nicks, no switching).
             const key = storeKeyForBufferId(snap.id);
+            // A rename arrives as just another snapshot, so the old name has to be
+            // read before the merge or the draft's own key is gone. Only this
+            // confirmed rename of this live buffer is migrated.
+            const previousFullName = get(buffers)[key]?.fullName ?? '';
+            if (previousFullName && previousFullName !== snap.name) {
+                if (renameConversationDraft(previousFullName, snap.name) === 'conflict') {
+                    addToast(
+                        `“${snap.name}” already had unfinished text, so the draft from “${previousFullName}” was kept under its old name.`,
+                        { type: 'warning', duration: 10000 },
+                    );
+                }
+            }
             buffers.update((current) => {
                 const buffer = current[key];
                 if (!buffer) return current; // opened buffers get full snapshots anyway
