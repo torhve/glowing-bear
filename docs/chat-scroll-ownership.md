@@ -233,3 +233,21 @@ not a scroll write.
   event outside the settle window, which is correct but slower than a gesture.
 - **In bubble mode the row-identity anchor is the table-mode selector.** Reading
   position across a history prepend is asserted in table mode.
+
+## Where this is proven
+
+- `src-svelte/test/unit/chat-viewport.test.ts` — the policy itself, on injected frames,
+  clocks, and a fake adapter: placement, pin coalescing, navigation provenance, history
+  tokens, layout notifications, teardown. A policy change that has no test here is
+  unproven.
+- `src-svelte/e2e/specs/ChatView-scrollOwnership.test.ts` — the states a browser can
+  actually reach. It counts writes to the chat container's `scrollTop` setter, so the
+  ownership claim is asserted directly rather than inferred from pixel positions, which
+  would also be measuring the browser's own scroll anchoring.
+- `ChatView-scroll`, `ChatView-cappedBufferFollow`, `ChatView-long-line-*`,
+  `ChatView-scrollFetch`, `KeyboardShortcuts-pageup-pagedown`, `ReadMarker-scrollOnPost`,
+  and `PluginEmbed` — the behaviour that existed before the controller and must not move.
+- `npm run test:e2e:webkit` — the same scroll specs on WebKit, opt-in and serial. These
+  are the specs that found the line-height sampling bug and the reflow cap that
+  `PIN_CAP_MS` exists for, so treat a WebKit failure as evidence about the controller,
+  not as engine noise.

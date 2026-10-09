@@ -42,12 +42,7 @@ The app is a **dual-protocol client**. `connectionManager.ts` chooses one transp
 
 ### Chat scroll ownership (single writer — never regress)
 
-`src-svelte/src/lib/chatViewport.ts` is the sole owner of every application chat scroll write. `ChatView.svelte` renders and projects the model; it holds no follow state, no frame scheduling, and no `scrollTop` write. **Read `docs/chat-scroll-ownership.md` before changing chat scroll behaviour** — it records the transition policy, the intent-provenance rules, the measured rationale for each tuned constant, and the deliberate departures from the original code.
-
-- PageUp/PageDown reach the viewport only through the command bridge in `src-svelte/src/lib/chatScrollContext.ts` (a per-page-instance holder, not a module global). Never add a direct `scrollTop` write in `+page.svelte`, `InputBar.svelte`, or `PluginEmbed.svelte` — `img.scrollIntoView()` was removed on purpose.
-- A gesture is seen **before** it moves anything: `wheel` fires before the `scroll` it causes. `noteNavigation` must not read geometry, because the geometry it finds is the position the reader is leaving. `handleScroll` decides from post-gesture geometry.
-- Things that look like oversights and are not: `PIN_CAP_MS = 400` is a WebKit reflow safeguard (Chromium passing is not evidence to remove it); `bufferBottom` is published with no reader; bubble mode has no row-height sampling by design; history restore preserves distance-from-bottom rather than a row anchor.
-- Coverage: `src-svelte/test/unit/chat-viewport.test.ts` (deterministic frames and clock), `src-svelte/e2e/specs/ChatView-scrollOwnership.test.ts` (counts scroll writes to prove ownership), and the opt-in WebKit project via `npm run test:e2e:webkit`.
+`src-svelte/src/lib/chatViewport.ts` is the sole owner of every application chat scroll write — `ChatView.svelte` renders and projects the model, and no component writes `scrollTop` or calls `scrollIntoView` on the chat container. Read `docs/chat-scroll-ownership.md` before changing chat scroll behaviour: it records the transition policy, intent provenance, the measured reason each constant has its value, and the parts that look like oversights but are deliberate.
 
 
 ## Commands
