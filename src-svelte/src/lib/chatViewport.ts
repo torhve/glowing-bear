@@ -143,6 +143,12 @@ export interface ChatViewportState {
     visit: number;
     interaction: number;
     historyPending: boolean;
+    /**
+     * How many follow pins this view has started. `pinning` only says whether one
+     * is running right now, which is a window far too short to observe from
+     * outside; a count says a pin did happen at some point in this state.
+     */
+    pinActivations: number;
 }
 
 export interface ChatViewportDeps {
@@ -285,6 +291,7 @@ export class ChatViewport {
     private lastVisibleLinesEstimate = 0;
     private lastFollowPinAt = 0;
     private pinLoop: PinLoop | null = null;
+    private pinActivations = 0;
 
     private queue: QueuedTask[] = [];
     private drainHandle: number | null = null;
@@ -648,6 +655,7 @@ export class ChatViewport {
             visit: this.visit,
             interaction: this.interaction,
             historyPending: this.isHistoryPending(),
+            pinActivations: this.pinActivations,
         };
     }
 
@@ -775,12 +783,20 @@ export class ChatViewport {
      */
     private armPin(): void {
         const now = this.now();
+        // A container that cannot scroll has nothing to pin: it is already at its
+        // tail whatever the controller does. Running a sequence for it would leave
+        // the view reporting itself busy over an empty buffer.
+        if (this.adapter && this.adapter.getScrollHeight() - this.adapter.getClientHeight() <= 0) {
+            this.setFollowIntent(true);
+            return;
+        }
         if (this.pinLoop) {
             this.pinLoop.deadline = now + PIN_CAP_MS;
             this.pinLoop.stableFrames = 0;
             return;
         }
         this.pinLoop = { deadline: now + PIN_CAP_MS, lastScrollHeight: -1, stableFrames: 0 };
+        this.pinActivations++;
         this.lastFollowPinAt = now;
         this.schedule('follow-pin', () => this.stepPin());
     }

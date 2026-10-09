@@ -107,14 +107,18 @@ async function waitForParked(minDiff = 100, quietMs = 300, timeout = 8000) {
  * whatever the configured cap is, and it is exactly the state where the
  * length-based change detection used to break.
  */
-async function padUntilCapped(maxMessages = 600) {
+async function padUntilCapped(maxMessages = 900) {
     let prevRows = -1;
     let stable = 0;
     for (let i = 0; i < maxMessages; i++) {
         const rows = (await scrollState())?.rows ?? 0;
         if (rows === prevRows) {
             stable++;
-            if (stable >= 2) return rows;
+            // Two stable readings is not the cap: the retained row cap is derived
+            // from a measured row estimate, so it can pause for a message or two
+            // while it is still climbing, and a test that stopped there would send
+            // its own line into a buffer that was never capped at all.
+            if (stable >= 6) return rows;
         } else {
             stable = 0;
         }

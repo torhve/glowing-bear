@@ -785,3 +785,49 @@ it('releases a pin loop when the view stops following', () => {
     expect(h.viewport.snapshot().pinning).toBe(false);
     expect(h.adapter.scrollTop).toBe(300);
 });
+// ---------------------------------------------------------------------------
+// Nothing to place
+// ---------------------------------------------------------------------------
+
+it('does nothing when a visit has no rendered content', () => {
+    const h = harness();
+    // A buffer with no lines renders an empty content root: nothing to scroll.
+    h.adapter.scrollHeight = h.adapter.clientHeight;
+    h.adapter.sampleLineHeight = null;
+    h.viewport.attach('channel-a', h.adapter);
+    h.render(content({ lineCount: 0 }));
+    h.frames.settle();
+
+    expect(h.adapter.scrollTop).toBe(0);
+    expect(h.viewport.snapshot().pinActivations).toBe(0);
+    expect(h.viewport.snapshot().pendingFrames).toBe(0);
+    expect(h.viewport.snapshot().pending).toBe('none');
+});
+
+it('does not invent a scroll for a layout change on a visit with no content', () => {
+    const h = harness();
+    h.adapter.scrollHeight = h.adapter.clientHeight;
+    h.viewport.attach('channel-a', h.adapter);
+    h.render(content({ lineCount: 0 }));
+    h.frames.settle();
+    h.adapter.writes.length = 0;
+
+    h.viewport.notifyLayoutChanged();
+    h.viewport.notifyVisibilityRestored();
+    h.frames.settle();
+
+    expect(h.adapter.writes).toEqual([]);
+    expect(h.viewport.snapshot().pinActivations).toBe(0);
+});
+
+it('still estimates rows when no rendered row is measurable', () => {
+    const h = harness();
+    // A layout with no row of the sampled kind (bubble mode has no table row) falls
+    // back to a nominal line height rather than skipping the estimate entirely.
+    h.adapter.sampleLineHeight = null;
+    h.viewport.attach('channel-a', h.adapter);
+    h.render(content());
+    h.frames.settle();
+
+    expect(h.estimates).toContain(Math.ceil(VIEWPORT_HEIGHT / 16 + VISIBLE_LINES_HEADROOM));
+});

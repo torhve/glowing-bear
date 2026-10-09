@@ -44,6 +44,7 @@ const UI_ONLY_SPECS = [
 // write the same #glowing-bear state.
 const SCROLL_REGRESSION_SPECS = [
     'ChatView-scroll',
+    'ChatView-scrollOwnership',
     'ChatView-cappedBufferFollow',
     'ChatView-long-line-scroll',
     'ChatView-long-line-type-scroll',
