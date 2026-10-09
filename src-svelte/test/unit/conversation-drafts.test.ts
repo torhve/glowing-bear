@@ -14,6 +14,7 @@ import {
     conversationKeyFor,
     draftEntryCount,
     readDraft,
+    renameConversationDraft,
     resetConversationDrafts,
     writeDraft,
     type DraftRef,
@@ -266,3 +267,39 @@ describe('per-conversation drafts', () => {
         expect(readDraft(ref(PROFILE_A, 'irc.libera.#dev'))).toBeNull();
     });
 });
+
+describe('storage and privacy', () => {
+    it('never writes a draft to persistent storage', () => {
+        // Drafts are memory-only by product decision: a draft is unfinished
+        // thinking, not a record to keep. This locks that in so a later convenience
+        // cannot quietly turn it into a stored artifact.
+        //
+        // Asserted on what storage actually contains rather than by spying on
+        // Storage.prototype: a patched prototype outlives this file inside a shared
+        // test worker and has nothing to do with the claim being made.
+        const draftText = 'unfinished sentence that must not be stored';
+        const before = snapshotStorage();
+
+        const a = ref(PROFILE_A, 'irc.libera.#dev');
+        const claim = claimDraft(a);
+        writeDraft(a, draftText, 5, 5);
+        applyDraftClaim(claim, 'completed by an async path', 9, 9);
+        renameConversationDraft('irc.libera.#dev', 'irc.libera.#renamed');
+        clearDraft(ref(PROFILE_A, 'irc.libera.#renamed'));
+
+        expect(snapshotStorage()).toEqual(before);
+    });
+});
+
+/** Every key and value both storages hold, so a new entry anywhere is visible. */
+function snapshotStorage(): { local: Record<string, string | null>; session: Record<string, string | null> } {
+    const grab = (storage: Storage): Record<string, string | null> => {
+        const out: Record<string, string | null> = {};
+        for (let i = 0; i < storage.length; i++) {
+            const key = storage.key(i);
+            if (key !== null) out[key] = storage.getItem(key);
+        }
+        return out;
+    };
+    return { local: grab(localStorage), session: grab(sessionStorage) };
+}

@@ -24,6 +24,7 @@ const UI_ONLY_SPECS = [
     'InputBar-formatting',
     'InputBar-paste',
     'InputBar-typeToFocus',
+    'InputBar-conversationDrafts',
     'KeyboardShortcuts',
     'ModalAutoFocus',
     'Nicklist-mobileSwipe',
@@ -42,6 +43,14 @@ const UI_ONLY_SPECS = [
 // It is opt-in because these specs mutate the shared gbtest channel: running
 // them in the same pass as the serial chromium project would let two engines
 // write the same #glowing-bear state.
+// Caret and selection restoration is engine-sensitive: writing a textarea's value
+// moves its caret to the end, so restoring a selection has to happen after the
+// render that wrote the text. WebKit is the engine where that ordering is worth
+// re-checking. It sends no channel messages, so it is safe beside the scroll set.
+const SELECTION_SENSITIVE_SPECS = [
+    'InputBar-conversationDrafts',
+].map((name) => `**/${name}.test.ts`);
+
 const SCROLL_REGRESSION_SPECS = [
     'ChatView-scroll',
     'ChatView-scrollOwnership',
@@ -99,7 +108,7 @@ export default defineConfig({
                 // Opt-in only (npm run test:e2e:webkit). Serial, because these
                 // specs share the live gbtest channel just like the chromium pass.
                 name: 'webkit',
-                testMatch: SCROLL_REGRESSION_SPECS,
+                testMatch: [...SCROLL_REGRESSION_SPECS, ...SELECTION_SENSITIVE_SPECS],
                 fullyParallel: false,
                 use: { ...devices['Desktop Safari'] },
             }]

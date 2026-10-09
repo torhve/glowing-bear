@@ -28,7 +28,9 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
  * reached the code under test. It stays inert: tests assert on what a dialog renders,
  * not on whether it popped.
  */
-if (!('showPopover' in HTMLElement.prototype)) {
+// Guarded on HTMLElement existing: `hash-params-ssr.test.ts` runs with
+// `@vitest-environment node`, where there is no HTMLElement to patch at all.
+if (typeof HTMLElement !== 'undefined' && !('showPopover' in HTMLElement.prototype)) {
     const inert = function (this: HTMLElement) {};
     HTMLElement.prototype.showPopover = inert as HTMLElement['showPopover'];
     HTMLElement.prototype.hidePopover = inert as HTMLElement['hidePopover'];
