@@ -8,6 +8,7 @@
   import { isWindowsTauri } from '#lib/tauriWindow.ts';
 
   import { parseRelayUrl, makeKeyboardActivatable } from '#lib/utils.ts';
+  import { hasNamedConnectionError } from '#lib/utils/connectionFailure.ts';
   import { asset } from '$app/paths';
   import Zap from '@lucide/svelte/icons/zap';
   import Settings2 from '@lucide/svelte/icons/settings-2';
@@ -155,7 +156,11 @@
       });
     } catch (e) {
       console.error('Connection failed:', e);
-      setErrors({ errorMessage: true });
+      // The transport already named a failure it can explain (a clock that
+      // disagrees with the relay, a wrong password, a WeeChat that is too old).
+      // Stacking a generic "unable to connect" on top of that would show the user
+      // two explanations, one of them false.
+      if (!hasNamedConnectionError($connectionState.errors)) setErrors({ errorMessage: true });
       setConnectionStatus('error');
       addToast('Connection failed. Check settings and try again.', { type: 'error', duration: 10000 });
     }
@@ -317,6 +322,25 @@
           </div>
         {/if}
 
+        {#if $connectionState.errors.clockSkewError}
+          <div data-testid="error-message" data-error-type="clock-skew" class="connection-error bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
+            <p class="font-medium">WeeChat rejected the login timestamp — not the password.</p>
+            <p class="mt-2">
+              So that your password never travels in the clear, Glowing Bear hashes it together with the
+              current time, and WeeChat only accepts that when the two machines agree on what time it is:
+              within <code class="font-mono">relay.network.time_window</code>, 5 seconds by default. A stamp
+              outside that window is indistinguishable from a replayed login, so the relay refuses it — and
+              retrying cannot help, because every attempt stamps the same wrong time.
+            </p>
+            <ul class="mt-2 list-disc pl-5 space-y-1">
+              <li>Check the clock on this device and on the machine running WeeChat. A laptop that slept,
+                a container, or a VM without time sync is usually the one that drifted.</li>
+              <li>If they cannot be brought closer, widen the allowance on the WeeChat side:
+                <code class="font-mono">/set relay.network.time_window 60</code> (up to 256 seconds).</li>
+              <li>A wider window means a captured login stays usable for longer, so prefer fixing the clock.</li>
+            </ul>
+          </div>
+        {/if}
         {#if $connectionState.errors.serverUnreachable}
           <div data-testid="error-message" data-error-type="server-unreachable" class="connection-error bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
             Unable to reach WeeChat relay at {hostField}:{port} — check that it is running and reachable{#if tls} — a TLS toggle that does not match the relay also shows up as "unreachable"{/if}

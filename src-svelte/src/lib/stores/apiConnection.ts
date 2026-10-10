@@ -32,6 +32,7 @@ import { captureRetainedState, consumeCaptureIntent, hasRetainedViewForActivePro
 import type { ApiSession } from '#lib/api/api-session.ts';
 import type { ApiBufferId } from '#lib/api/api-ids.ts';
 import { DEBUG_NICKLIST, DEBUG_WEECHAT_COMMANDS, DEBUG_CONNECTION } from '#lib/debug.ts';
+import { classifyConnectionFailure } from '#lib/utils/connectionFailure.ts';
 
 let orchestrator: ApiOrchestrator | null = null;
 let hotlistInterval: ReturnType<typeof setInterval> | null = null;
@@ -151,11 +152,15 @@ function flushByteStats(): void {
     }
 }
 
-function mapFailureToError(message: string): void {
-    if (/password|401|authenticat/i.test(message)) setErrors({ passwordError: true });
-    else if (/too old|Relay API/i.test(message)) setErrors({ oldWeechatError: true });
-    else if (/TOTP/i.test(message)) setErrors({ errorMessage: true });
-    else setErrors({ serverUnreachable: true });
+/**
+ * Name one connection failure with the flag the UI can explain. The message
+ * table lives in classifyConnectionFailure; `nameTransient` decides what a
+ * transport-level failure becomes — false while a retry loop is live, true once
+ * it has stopped.
+ */
+function mapFailureToError(message: string, nameTransient = true): void {
+    const named = classifyConnectionFailure(message, nameTransient);
+    if (named) setErrors(named);
 }
 
 function startHotlistPolling(): void {
@@ -233,6 +238,11 @@ export async function connect(host: string, port: number, path: string, password
                 break;
             case 'connected':
                 connecting = false;
+                // A live session has no failure left to explain. A flag left over
+                // from an earlier attempt would make the NEXT outage read as the
+                // old one — a clock that was fixed between attempts would go on
+                // being reported as clock skew.
+                clearErrors();
                 setConnectionStatus('connected');
                 connectionState.update((current) => ({ ...current, wasEverConnected: true, userDisconnect: false }));
                 connected.set(true);
@@ -245,6 +255,13 @@ export async function connect(host: string, port: number, path: string, password
                 break;
             case 'reconnecting':
                 connecting = false;
+                // Name a failure the loop cannot fix by trying again (a clock that
+                // disagrees with the server, TOTP): without this, a relay that will
+                // never accept this client retries quietly forever and the only
+                // trace of why is in the console. A transport-level failure stays
+                // unnamed so the banner keeps saying "Connection lost. Retrying…",
+                // which is what a dropped session actually is.
+                mapFailureToError(status.error ?? 'connection failed', false);
                 setConnectionStatus('reconnecting');
                 connected.set(false);
                 setReconnectAttempts(status.attempt);

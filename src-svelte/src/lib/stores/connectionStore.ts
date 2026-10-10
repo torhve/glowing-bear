@@ -31,6 +31,7 @@ const initialState: ConnectionState = {
         securityError: false,
         oldWeechatError: false,
         hashAlgorithmDisagree: false,
+        clockSkewError: false,
         errorMessage: false,
         uploadError: false,
         serverUnreachable: false

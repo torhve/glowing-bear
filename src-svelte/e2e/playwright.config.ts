@@ -15,6 +15,7 @@ const UI_ONLY_SPECS = [
     'AutoconnectSpam',
     'ChatView-mobileSwipe',
     'Connection-form',
+    'ConnectionForm-clockSkew',
     'ConnectionForm-password',
     'DisconnectReconnect',
     'ErrorPage-unmatchedRoute',

@@ -278,6 +278,14 @@ export interface ConnectionError {
     securityError: boolean;
     oldWeechatError: boolean;
     hashAlgorithmDisagree: boolean;
+    /**
+     * The relay rejected the credential's timestamp: the browser's clock and the
+     * WeeChat host's clock are further apart than relay.network.time_window
+     * (default 5 s). Distinct from passwordError — the password may be perfectly
+     * correct and the relay is definitely reachable, so neither the password nor
+     * the 'unreachable' message is true here.
+     */
+    clockSkewError: boolean;
     errorMessage: boolean;
     uploadError: boolean;
     serverUnreachable: boolean;

@@ -61,6 +61,9 @@ export interface ConnectionBannerModel {
 function reasonFor(errors: ConnectionError, status: ConnectionState['status']): string {
     if (errors.passwordError) return 'WeeChat rejected the password.';
     if (errors.hashAlgorithmDisagree) return 'WeeChat and the browser disagree on how to hash the password.';
+    // The long explanation is on the connection form; the banner only has room to
+    // say which of the two clocks to go and fix, and that retrying will not help.
+    if (errors.clockSkewError) return 'WeeChat rejected the login timestamp — this device and the server disagree about the time.';
     if (errors.tlsError) return 'The TLS connection failed.';
     if (errors.securityError) return 'WeeChat refused the connection for security reasons.';
     if (errors.oldWeechatError) return 'This WeeChat is too old for the API transport.';

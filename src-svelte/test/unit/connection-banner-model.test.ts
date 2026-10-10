@@ -100,7 +100,8 @@ beforeEach(() => {
         status: 'disconnected',
         errors: {
             passwordError: false, tlsError: false, securityError: false, oldWeechatError: false,
-            hashAlgorithmDisagree: false, errorMessage: false, uploadError: false, serverUnreachable: false,
+            hashAlgorithmDisagree: false, clockSkewError: false, errorMessage: false,
+            uploadError: false, serverUnreachable: false,
         },
         userDisconnect: false,
         wasEverConnected: false,
@@ -222,6 +223,18 @@ describe('connectionBanner: what the shell and banner show', () => {
 
         const banner = get(connectionBanner);
         expect(banner.reason.toLowerCase()).toContain('password');
+    });
+
+    it('names a rejected login timestamp as a clock problem, not a password problem', () => {
+        profile();
+        openSession();
+        loseSession();
+        setErrors({ clockSkewError: true });
+        setConnectionStatus('reconnecting');
+
+        const banner = get(connectionBanner);
+        expect(banner.reason.toLowerCase()).toContain('timestamp');
+        expect(banner.reason.toLowerCase(), 'the fix is a clock, not a credential').not.toContain('password');
     });
 
     it('reports the countdown only when an attempt is actually waiting', () => {
