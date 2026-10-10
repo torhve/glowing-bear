@@ -29,6 +29,11 @@
   import TauriTitlebar from './TauriTitlebar.svelte';
   import { DEBUG_FORM } from '#lib/debug.ts';
 
+  // Present only when the form was opened over a retained chat — the banner's
+  // Edit connection action. Without it the form is the whole screen and there
+  // is nothing to go back to.
+  let { onBack }: { onBack?: () => void } = $props();
+
   // Populate form fields from saved settings once on mount.
   // Using one-time init (not a reactive $effect) prevents typed values
   // from being overwritten when other form fields trigger updateSettings().
@@ -358,6 +363,17 @@
           {/if}
         </button>
       </form>
+      {#if onBack}
+        <button
+          type="button"
+          data-testid="connection-back-to-chat"
+          onclick={() => onBack()}
+          class="w-full mt-2 px-4 py-2 rounded border border-border text-text-secondary hover:text-text hover:bg-surface-raised transition-colors"
+        >
+          Back to chat
+        </button>
+      {/if}
+
 
       <div class="info-accordion-container space-y-2">
         <details

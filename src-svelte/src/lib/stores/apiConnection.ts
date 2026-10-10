@@ -28,6 +28,7 @@ import { createApiStoreReducers, flushApiLineBatch } from '#lib/api/api-store-re
 import { mapHotlist, applyNicklistRoot } from '#lib/api/api-mapping.ts';
 import { fetchHistory, sendInput, clearHiddenLineIdTracking, type InputOutcome } from '#lib/api/api-features.ts';
 import { validateScript } from '#lib/api/api-validation.ts';
+import { captureRetainedState, consumeCaptureIntent, hasRetainedViewForActiveProfile, markCaptureIntent } from '#lib/stores/retainedChat.ts';
 import type { ApiSession } from '#lib/api/api-session.ts';
 import type { ApiBufferId } from '#lib/api/api-ids.ts';
 import { DEBUG_NICKLIST, DEBUG_WEECHAT_COMMANDS, DEBUG_CONNECTION } from '#lib/debug.ts';
@@ -63,7 +64,40 @@ function currentSession(): ApiSession | null {
 // Comprehensive cleanup for any disconnection path.
 // Does NOT touch connectionData (needed by reconnect) and does NOT set
 // connection status (caller decides based on context).
-function resetAllState() {
+//
+// `retainGeneration` is passed only by unexpected-loss call sites, and only
+// alongside a `markCaptureIntent()`. Explicit `disconnect()` calls this with no
+// argument and no intent, which is what keeps a user-initiated departure from
+// leaving a retained view behind.
+/**
+ * Which orchestrator statuses are the unexpected loss of a session that had
+ * actually reached its bootstrap — the only kind worth retaining.
+ *
+ * 'reconnecting' is not proof of a previous session: the orchestrator labels
+ * every attempt after the first that way, so a failed FIRST connect arrives here
+ * too. 'disconnected' is the status `orchestrator.stop()` produces, i.e. our own
+ * `disconnect()`, so it is never a loss. 'failed' is a loss only when a session
+ * existed — the same gate that branch uses for its disconnect toast.
+ */
+export function shouldRetainOnStatus(
+    state: OrchestratorStatus['state'],
+    wasEverConnected: boolean,
+    hasConnectionData: boolean,
+): boolean {
+    switch (state) {
+    case 'reconnecting': return wasEverConnected;
+    case 'failed': return wasEverConnected && hasConnectionData;
+    default: return false;
+    }
+}
+
+/** Test seam for the wipe itself, so a unit test can assert capture ORDER
+ *  (drain, capture, wipe) against the real function instead of a
+ *  reimplementation. Application code must not call this: loss call sites go
+ *  through the status branches that also declare capture intent. */
+export const __resetAllStateForTest = resetAllState;
+
+function resetAllState(retainGeneration?: number) {
     // No hotlist baseline will arrive for a closed connection: never leave
     // the sync phase open across a disconnect.
     endSyncPhase();
@@ -82,6 +116,11 @@ function resetAllState() {
     // Drain the frame's queued line events before wiping state, so nothing is
     // left pending for the next session to apply against reused buffer ids.
     flushApiLineBatch();
+    // Retain the session this wipe is about to destroy, but only when a loss
+    // call site declared intent (see retainedChat's loss-intent note). The
+    // capture sits after the drain and before the wipe: that is the only moment
+    // the stores hold the complete session.
+    if (consumeCaptureIntent()) captureRetainedState(retainGeneration ?? null);
     buffers.set({});
     // Line ids restart from a low counter in a new session: drop the
     // per-buffer seen-hidden-line tracking so nothing dedupes against stale ids.
@@ -210,8 +249,18 @@ export async function connect(host: string, port: number, path: string, password
                 connected.set(false);
                 setReconnectAttempts(status.attempt);
                 setNextReconnectAt(status.nextRetryAt);
+                // 'reconnecting' also follows a failed FIRST connect (the
+                // orchestrator labels attempt > 0 this way), so a session must
+                // have reached its bootstrap before there is anything to retain.
+                if (shouldRetainOnStatus(status.state, get(connectionState).wasEverConnected, !!connectionData)) {
+                    markCaptureIntent();
+                }
+                resetAllState(status.generation);
+                // After the wipe, not before: the retained view only exists once
+                // the wipe has taken its snapshot, and the toast defers to it.
+                // Safe because showReconnectToast reads `connectionData` and
+                // `settings`, neither of which resetAllState touches.
                 showReconnectToast(status);
-                resetAllState();
                 if (!settled) { settled = true; reject(new Error(status.error ?? 'connection failed')); }
                 break;
             case 'disconnected':
@@ -225,8 +274,15 @@ export async function connect(host: string, port: number, path: string, password
                 setConnectionStatus('error');
                 connected.set(false);
                 mapFailureToError(status.error ?? 'connection failed');
+                // Same gate as the toast below: a session that was lost, not a
+                // first connect that never produced one.
+                if (shouldRetainOnStatus(status.state, get(connectionState).wasEverConnected, !!connectionData)) {
+                    markCaptureIntent();
+                }
+                resetAllState(status.generation);
+                // After the wipe so the toast can see whether the banner will
+                // already be showing this loss.
                 if (get(connectionState).wasEverConnected && connectionData) showDisconnectToast(connectionData);
-                resetAllState();
                 if (!settled) { settled = true; reject(new Error(status.error ?? 'connection failed')); }
                 break;
             }
@@ -239,6 +295,8 @@ export async function connect(host: string, port: number, path: string, password
 // Show a persistent disconnect toast with reconnect button.
 function showDisconnectToast(connInfo: [string, number, string, string, boolean, boolean]) {
     const [host, port] = connInfo;
+    // The banner owns this presentation whenever a retained view is on screen.
+    if (hasRetainedViewForActiveProfile()) return;
     // Prevent stacking multiple disconnect toasts during reconnect cycles
     const existing = get(toastStore);
     if (existing.some(t => t.type === 'warning' && t.message.includes('Disconnected from'))) {
@@ -260,6 +318,8 @@ function showDisconnectToast(connInfo: [string, number, string, string, boolean,
 // Countdown toast while the orchestrator schedules the next attempt.
 function showReconnectToast(status: OrchestratorStatus) {
     if (!connectionData) return;
+    // The banner owns this presentation whenever a retained view is on screen.
+    if (hasRetainedViewForActiveProfile()) return;
     // A 'reconnecting' status without nextRetryAt means an attempt is already
     // in flight (not scheduled) — the existing countdown toast stands until
     // the attempt resolves; stacking another one here is wrong.
@@ -313,6 +373,37 @@ function triggerManualReconnect(resetAttempts = false) {
         const [h, p, path, pw, tls, noComp] = connectionData;
         void connect(h, p, path, pw, tls, noComp).catch(() => undefined);
     }
+}
+
+/**
+ * Manual "Retry now" for the facade's retained shell. Returns false when this
+ * transport has no orchestrator to hand the attempt to — a retry must never
+ * start a connection loop from nothing, because that would reconnect to a
+ * profile the user already left. Delegates to the orchestrator's own takeover,
+ * which cancels any scheduled retry and bumps the generation, so this replaces
+ * the pending attempt rather than adding a parallel one. Keeps the backoff
+ * ladder so a failed immediate retry still escalates.
+ */
+export function retryNow(): boolean {
+    if (!orchestrator || !connectionData) return false;
+    triggerManualReconnect(false);
+    return true;
+}
+
+/** Whether this transport has a live orchestrator and captured profile a retry
+ *  could take over. Split out so the banner's button state comes from the same
+ *  predicate the command checks. */
+export function canRetryNow(): boolean {
+    return orchestrator !== null && connectionData !== null;
+}
+
+/** True while an attempt is in flight, so a second Retry click cannot stack a
+ *  third attempt on top of one already running. False during the backoff wait
+ *  between attempts — that is exactly when a retry is worth taking over. */
+export function isAttemptInProgress(): boolean {
+    if (!orchestrator) return false;
+    const state = orchestrator.currentStatus.state;
+    return state === 'connecting' || state === 'bootstrapping';
 }
 
 // Threshold (ms): only trigger immediate reconnect if remaining delay exceeds this

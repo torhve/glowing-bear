@@ -17,12 +17,13 @@
 import { get } from 'svelte/store';
 import { getBuffer, activeBufferId, hasNoHistoryToFetch, markHistoryComplete } from '#lib/stores/models.ts';
 import { settings } from '#lib/stores/settings.ts';
-import { activeTransport } from '#lib/stores/connectionStore.ts';
+import { activeTransport, connectionState } from '#lib/stores/connectionStore.ts';
 import { resolveApiEndpoint } from '#lib/api/api-endpoint.ts';
 import * as api from '#lib/stores/apiConnection.ts';
 import * as legacy from '#lib/stores/legacyConnection.ts';
 import type { ApiSession } from '#lib/api/api-session.ts';
 import { clearActiveConnectionProfile, setActiveConnectionProfile } from '#lib/connectionProfile.ts';
+import { clearCaptureIntent, releaseIfProfileChanged, releaseRetainedSnapshot } from '#lib/stores/retainedChat.ts';
 
 export type RelayTransport = 'api' | 'legacy';
 
@@ -90,6 +91,11 @@ export async function connect(host: string, port: number, path: string, password
     // it, so it comes from the arguments of the attempt rather than from settings,
     // which stay editable while disconnected.
     setActiveConnectionProfile(host, port, path, tls);
+    // A retained view belongs to the relay it was captured from. Starting an
+    // attempt for a DIFFERENT relay ends it — the plan's "profile change while
+    // offline → form". An attempt for the same relay keeps it, so a retry can
+    // hand the retained window to the new session.
+    releaseIfProfileChanged();
     if (preference === 'auto') {
         transport = transportByProfile.get(profile)
             ?? (await probeApiRelay(host, port, path, tls) ? 'api' : 'legacy');
@@ -107,14 +113,63 @@ export async function connect(host: string, port: number, path: string, password
 }
 
 export function disconnect(): void {
+    // Explicit departure is not a loss. Clear any pending capture intent before
+    // the two transport wipes run, so a stale intent can never make an
+    // intentional Leave capture a session.
+    clearCaptureIntent();
     // Both transports clean up; the inactive one is a no-op except for the
     // shared store resets, which are idempotent.
     api.disconnect();
     legacy.disconnect();
+    // The retained view belongs to the relay the user just left.
+    releaseRetainedSnapshot('explicit-leave');
     transport = null;
     activeTransport.set(null);
     transportByProfile.clear();
     clearActiveConnectionProfile();
+}
+
+export type RetryNowOutcome = 'retried' | 'in-progress' | 'no-retry-loop' | 'needs-credentials';
+/** The same question without performing it, so the banner's button state and a
+ * refused command are one decision made in one place. */
+export type RetryAvailability = 'available' | 'in-progress' | 'no-retry-loop' | 'needs-credentials';
+
+export function retryAvailability(): RetryAvailability {
+    if (!transport) return 'no-retry-loop';
+    // A Leave ends the retry loop and the retained view with it. A retry from
+    // here would reconnect to a profile the user deliberately left.
+    if (get(connectionState).userDisconnect) return 'no-retry-loop';
+    // TOTP codes are single-use and expire. Reusing the captured one produces an
+    // auth error the user cannot interpret, so route them to explicit credential
+    // entry — the same reason the transports refuse to auto-reconnect on TOTP.
+    if (get(settings).useTotp) return 'needs-credentials';
+    const inProgress = transport === 'api' ? api.isAttemptInProgress() : legacy.isAttemptInProgress();
+    if (inProgress) return 'in-progress';
+    const retryable = transport === 'api' ? api.canRetryNow() : legacy.canRetryNow();
+    return retryable ? 'available' : 'no-retry-loop';
+}
+
+/**
+ * Manual "Retry now" for the retained shell.
+ *
+ * Delegates to whichever transport owns the active profile and NEVER to this
+ * module's connect(): connect() re-probes the relay, and a probe that fails
+ * mid-retry would silently move a session onto the other protocol — the
+ * mid-connection fallback the dual-protocol rule forbids. The transports' own
+ * takeover paths cancel any scheduled retry before starting, so a click
+ * replaces the pending attempt instead of adding a second loop.
+ *
+ * Outcomes rather than a boolean: the caller has to distinguish "a click did
+ * nothing" from "this needs a credential the user must type", because only the
+ * latter has to route to the connection form.
+ */
+export function retryNow(): RetryNowOutcome {
+    const availability = retryAvailability();
+    if (availability === 'in-progress') return 'in-progress';
+    if (availability === 'needs-credentials') return 'needs-credentials';
+    if (availability === 'no-retry-loop') return 'no-retry-loop';
+    const started = transport === 'api' ? api.retryNow() : legacy.retryNow();
+    return started ? 'retried' : 'no-retry-loop';
 }
 
 export function setHotlistPollInterval(ms: number): void {

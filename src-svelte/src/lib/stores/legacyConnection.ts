@@ -9,6 +9,7 @@ import { Protocol } from '#lib/weechat.ts';
 import { sha256, pbkdf2 as nativePbkdf2, toHexString } from '#lib/utils/crypto.ts';
 import type { ProtocolMessage } from '#lib/types.ts';
 import { DEBUG_NICKLIST, DEBUG_WEECHAT_COMMANDS, DEBUG_CONNECTION } from '#lib/debug.ts';
+import { captureRetainedState, consumeCaptureIntent, hasRetainedViewForActiveProfile, markCaptureIntent } from '#lib/stores/retainedChat.ts';
 
 // Protocol instance for instance methods (setId, parse)
 // Static methods (formatHandshake, formatInit, etc.) are called on the constructor directly
@@ -53,7 +54,18 @@ export function setHotlistPollInterval(ms: number) {
 // Clears all app state (buffers, servers, unread tracking, timers, callbacks).
 // Does NOT touch connectionData (needed by scheduleReconnect / handleReconnectDecision)
 // and does NOT set connection status (caller decides based on context).
-function resetAllState() {
+//
+// `retainGeneration` is passed only by unexpected-loss call sites, and only
+// alongside a `markCaptureIntent()`. `disconnect()` and the retry-timer wipe pass
+// neither, so a user-initiated departure and a retry of an already-retained
+// session both capture nothing.
+/** Test seam for the wipe itself, so a unit test can assert capture ORDER
+ *  (drain, capture, wipe) against the real function instead of a
+ *  reimplementation. Application code must not call this: the loss call site is
+ *  `ws.onclose`, which also declares capture intent. */
+export const __resetAllStateForTest = resetAllState;
+
+function resetAllState(retainGeneration?: number) {
     // Flush any pending line batches before clearing state to avoid losing data.
     flushLineBatch();
 
@@ -85,6 +97,10 @@ function resetAllState() {
     pendingBufferSwitch.set(null);
     bufferBottom.set(true);
     // Clear all buffer/server state — no stale entries accumulate across reconnects.
+    // Retain the session this wipe is about to destroy, but only when a loss call
+    // site declared intent. After the drain above and before the wipe below: the
+    // only moment the stores hold the complete session.
+    if (consumeCaptureIntent()) captureRetainedState(retainGeneration ?? null);
     buffers.set({});
     servers.set({});
     localUnreadBuffers.update(() => new Set());
@@ -433,7 +449,12 @@ export async function connect(host: string, port: number, path: string, password
             // If connection generation has changed, connect() replaced this WS — ignore
             if (genAtConnect !== connectionGeneration) return;
             if (DEBUG_CONNECTION) console.log('[connect] WebSocket close code=' + evt.code + ' reason=' + evt.reason);
-            resetAllState();
+            // onclose also fires for a first connect that never completed, so a
+            // session must have reached its bootstrap before there is anything to
+            // retain. The retry timer's wipe (scheduleReconnect) deliberately does
+            // NOT mark intent: the loss is already retained.
+            if (get(connectionState).wasEverConnected) markCaptureIntent();
+            resetAllState(connectionGeneration);
             setConnectionStatus('disconnected');
             const shouldReject = detectError(evt);
             handleReconnectDecision(evt);
@@ -539,6 +560,8 @@ async function initializePBKDF2Native(password: string, nonce: Uint8Array, itera
 // Called from both disconnect handlers (restored WS and normal WS).
 function showDisconnectToast(connInfo: [string, number, string, string, boolean, boolean]) {
     const [host, port] = connInfo;
+    // The banner owns this presentation whenever a retained view is on screen.
+    if (hasRetainedViewForActiveProfile()) return;
     // Prevent stacking multiple disconnect toasts during reconnect cycles
     const existing = get(toastStore);
     if (existing.some(t => t.type === 'warning' && t.message.includes('Disconnected from'))) {
@@ -571,6 +594,32 @@ function triggerManualReconnect(resetAttempts = false) {
     manualReconnectRequested = true;
     const [h, p, path, pw, tls, noComp] = connectionData!;
     connect(h, p, path, pw, tls, noComp);
+}
+
+/**
+ * Manual "Retry now" for the facade's retained shell. Returns false when this
+ * transport has no retry loop to take over: a retry must never start one from
+ * nothing, because that would reconnect to a profile the user already left.
+ * Keeps the backoff ladder (resetAttempts=false) so a failed immediate retry
+ * still escalates instead of hammering the relay.
+ */
+export function retryNow(): boolean {
+    if (!connectionData) return false;
+    triggerManualReconnect(false);
+    return true;
+}
+
+/** Whether this transport has a captured profile a retry could use. Split out so
+ *  the banner's button state comes from the same predicate the command checks. */
+export function canRetryNow(): boolean {
+    return connectionData !== null;
+}
+
+/** True while a handshake is in flight, so a second Retry click cannot stack a
+ *  third attempt on top of one already running. False during the backoff wait
+ *  between attempts — that is exactly when a retry is worth taking over. */
+export function isAttemptInProgress(): boolean {
+    return connecting;
 }
 
 // Initial delay before first reconnect attempt (ms)
@@ -607,8 +656,11 @@ function scheduleReconnect() {
 
     const [host, port] = connectionData;
 
-    // Create or update countdown toast
-    const existingToast = findToastForDisconnect(host, port);
+    // Create or update countdown toast — unless the banner is already presenting
+    // this loss, which it is whenever a retained view is on screen.
+    const existingToast = hasRetainedViewForActiveProfile()
+        ? null
+        : findToastForDisconnect(host, port);
     if (existingToast) {
         updateToast(existingToast.id, {
             messageFn: () => {
@@ -616,7 +668,7 @@ function scheduleReconnect() {
                 return `${remaining}s`;
             },
         });
-    } else {
+    } else if (!hasRetainedViewForActiveProfile()) {
         addToast(
             `Disconnected from ${host}:${port}`,
             {
@@ -842,11 +894,21 @@ export function disconnect() {
     // Mark as user-initiated so the onclose handler doesn't auto-reconnect.
     disconnectStore();
     connectionData = null;
-    // Close ALL tracked WebSocket instances (including orphaned ones from previous connections)
+    // Close ALL tracked WebSocket instances (including orphaned ones from previous
+    // connections). Local-only: this deliberately does NOT send /quit, matching
+    // the rule the API transport states explicitly. Quitting WeeChat stays a
+    // command the user types (InputBar gates /quit behind a confirm), never a
+    // side effect of leaving.
+    //
+    // What the removed line actually did: `Protocol.formatQuit()` produced a bare
+    // "quit\n", which is not part of the relay's client->command grammar (a
+    // command reaches WeeChat as `input <buffer> <data>`, which is what
+    // sendWeeChatCommand uses). Live probe: gbtest's WeeChat 4.10.1 logged the
+    // client connect and disconnect with no command executed and no error, and
+    // stayed up — so on 4.10.1 the frame was inert. It is still the wrong thing
+    // to send on a Leave, and it read as if Leave quit WeeChat when it did not.
     if (webSockets.size > 0) {
-        const quitMsg = Protocol.formatQuit();
         for (const w of webSockets) {
-            if (w.readyState === WebSocket.OPEN) sendWs(quitMsg, 'quit');
             w.close(1000, 'user disconnect');
         }
         webSockets.clear();

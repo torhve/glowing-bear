@@ -63,7 +63,11 @@ export function setConnectionStatus(status: ConnectionState['status']) {
     connectionState.update(current => ({ ...current, status }));
     if (status === 'connected') {
         connectionStats.update(s => ({ ...s, connectedSince: Date.now() }));
-    } else if (status === 'disconnected') {
+    } else {
+        // Uptime belongs to a live connection, so every non-connected status
+        // clears it — not just 'disconnected'. Leaving it set through
+        // 'connecting'/'reconnecting' let the popover count up on a socket that
+        // was already gone, which reads as a live session that is not one.
         connectionStats.update(s => ({ ...s, connectedSince: 0 }));
     }
 }

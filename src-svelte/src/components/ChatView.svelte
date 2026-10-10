@@ -1,7 +1,8 @@
 <script lang="ts">
   import type { BufferLine } from '#lib/types.ts';
   import { get } from 'svelte/store';
-  import { currentBuffer, activeBufferId, bufferBottom, buffers, maxBufferLines, recalculateLinesPerScreen, getReadBoundaryIndex, isUserMessageLine, serverNick } from '#lib/stores/models.ts';
+  import { activeBufferId, bufferBottom, buffers, maxBufferLines, recalculateLinesPerScreen, getReadBoundaryIndex, isUserMessageLine, serverNick } from '#lib/stores/models.ts';
+  import { chatDisplay } from '#lib/stores/chatPresentation.ts';
   import { settings } from '#lib/stores/settings.ts';
   import { fetchMoreLines, closeBufferOnWeeChat, pinBuffer, unpinBuffer } from '#lib/stores/connectionManager.ts';
   import { buildMentionText, isFreeBuffer, modifyTextareaValue } from '#lib/utils.ts';
@@ -18,7 +19,12 @@
   import X from '@lucide/svelte/icons/x';
 
   let containerRef = $state<HTMLDivElement>();
-  let messages = $derived($currentBuffer?.lines ?? []);
+  // Live data when there is any; the retained snapshot when the transport has
+  // wiped its stores but the session is still on screen. Every read below goes
+  // through these two, so a retained view cannot be mistaken for live authority.
+  let current = $derived($chatDisplay.buffer);
+  let isLive = $derived($chatDisplay.live);
+  let messages = $derived(current?.lines ?? []);
   // Stable per-row keys: every store update clones the lines, so object identity is
   // useless and index keys let a row's component state (e.g. an injected embed) follow
   // the wrong message when the line cap trims the front. lineId is stable across
@@ -39,24 +45,24 @@
   // handler and the message composer). The view publishes commands while it is
   // mounted and retracts them on unmount; the caller never touches the DOM.
   let { onCommands = undefined }: { onCommands?: (commands: ChatScrollCommands | null) => void } = $props();
-  let topicText = $derived($currentBuffer?.title?.map(t => t.text).join('') || '');
+  let topicText = $derived(current?.title?.map(t => t.text).join('') || '');
   // Bubble mode: enabled when setting is on AND buffer is a private chat type.
   // Only 'private' type buffers (DCC chats and IRC PMs) get bubbles;
   // server, channel, and other system buffers always use table layout.
   let bubbleMode = $derived(
     $settings.stylizePrivateChats &&
-    $currentBuffer &&
-    $currentBuffer.type === 'private'
+    current &&
+    current.type === 'private'
   );
 
   // Other person's nick for self-message detection in bubble mode.
   // Query buffers: shortName IS the other person's nick.
   // Private buffers: fullName is like "server.nicks.other_nick" — extract last segment.
   let otherNick = $derived(
-    $currentBuffer ? (
-      $currentBuffer.type === 'query'
-        ? $currentBuffer.shortName
-        : $currentBuffer.fullName.split('.').pop() ?? ''
+    current ? (
+      current.type === 'query'
+        ? current.shortName
+        : current.fullName.split('.').pop() ?? ''
     ) : ''
   );
 
@@ -66,13 +72,13 @@
   // currentBuffer deliberately stops publishing when a *different* buffer changes —
   // which is exactly what a /nick is.
   let myNick = $derived(
-    $currentBuffer?.localVariables?.nick ?? $serverNick
+    current?.localVariables?.nick ?? $serverNick
   );
 
   let isLoadingMore = $state(false);
-  let viewBufferId = $derived($currentBuffer?.id);
+  let viewBufferId = $derived(current?.id);
   // A null index means the reconnect/snapshot did not provide a trustworthy boundary.
-  let readEndIndex = $derived($currentBuffer ? getReadBoundaryIndex($currentBuffer) : null);
+  let readEndIndex = $derived(current ? getReadBoundaryIndex(current) : null);
   let hasUnreadDisplayed = $derived(
     readEndIndex !== null && messages.length > 0 && readEndIndex < messages.length - 1
   );
@@ -90,6 +96,7 @@
 
   // Toggle pin/unpin for the currently active buffer via WeeChat localvar_set.
   function handleTogglePin() {
+    if (!isLive) return;
     const bufId = get(activeBufferId);
     if (!bufId) return;
     const bufferData = get(buffers)[bufId];
@@ -111,6 +118,7 @@
 
   // Close the currently active buffer via WeeChat /close command.
   function handleCloseBuffer() {
+    if (!isLive) return;
     const bufId = get(activeBufferId);
     if (!bufId) return;
     closeBufferOnWeeChat(bufId);
@@ -268,7 +276,7 @@
     const container = containerRef;
     if (!container) return;
     // Dependencies here must be values that only change when the observation
-    // really has to be rebound. Reading $currentBuffer would re-run this effect on
+    // really has to be rebound. Reading current would re-run this effect on
     // every message to the current buffer, and each re-run builds a new observer
     // that immediately reports its initial size — which the controller reads as a
     // layout change and answers with a pin, forever.
@@ -302,7 +310,7 @@
     const nickName = lastPart?.text?.trim() || message.prefixtext?.trim() || '';
     if (!nickName) return;
     modifyTextareaValue('[data-testid="message-input"]', (value: string, start: number, end: number) => {
-      const result = buildMentionText(value.substring(0, start) + value.substring(end), nickName, $currentBuffer?.nicklist?.root?.nicks);
+      const result = buildMentionText(value.substring(0, start) + value.substring(end), nickName, current?.nicklist?.root?.nicks);
       return { value: result.text, cursor: result.caretPos };
     });
   }
@@ -324,7 +332,10 @@
   // the loading guard, the exhausted-top memo, and the position restore. `force`
   // (the explicit button) bypasses the memo and restores no position.
   async function loadMoreHistory(force: boolean) {
-    const buffer = get(currentBuffer);
+    // A retained buffer is frozen; asking the relay for more history would
+    // write into live stores the retained view is not part of.
+    if (!isLive) return;
+    const buffer = get(chatDisplay).buffer;
     if (!buffer || buffer.allLinesFetched) return;
     const token = viewport.beginHistory(force);
     if (!token) return;
@@ -365,7 +376,7 @@
   });
 </script>
 <div class="chat-view-container flex-1 flex flex-col overflow-hidden">
-  {#if $currentBuffer}
+  {#if current}
     <div class="h-[var(--spacing-topicbar-height,32px)] bg-input-bg border-b border-border flex items-center px-3 w-full" data-testid="topic-bar-container">
       <!-- Left zone: clickable to open topic modal -->
       <button
@@ -376,7 +387,7 @@
         title="Click to view topic"
       >
         <FileText size={14} class="text-text-muted mr-1 flex-shrink-0" />
-        <span class="topic-channel-name text-text flex-shrink-0 whitespace-nowrap">{$currentBuffer.shortName}</span>
+        <span class="topic-channel-name text-text flex-shrink-0 whitespace-nowrap">{current.shortName}</span>
         <span class="topic-separator text-text-muted mx-2 flex-shrink-0">-</span>
         <span class="topic-text text-text-secondary truncate overflow-hidden min-w-0">
           <LinkifiedText text={topicText} />
@@ -385,32 +396,37 @@
 
       <!-- Right zone: action controls (always visible) -->
       <div class="flex items-center gap-0.5 flex-shrink-0 ml-2" data-testid="topic-controls">
-        <!-- Pin/Unpin button -->
-        <button
-          type="button"
-          onclick={handleTogglePin}
-          class="text-text-muted hover:text-text p-1 rounded transition-colors"
-          data-testid="pin-buffer"
-          title={$currentBuffer.pinned ? 'Unpin buffer' : 'Pin buffer'}
-        >
-          {#if $currentBuffer.pinned}
-            <PinOff size={16} />
-          {:else}
-            <Pin size={16} />
-          {/if}
-        </button>
-
-        <!-- Close button — only show if buffer has no activity (no unread/notification) -->
-        {#if $currentBuffer.notification === 0 && $currentBuffer.unread === 0}
+        <!-- Remote controls are absent, not merely disabled: a retained view has
+             no transport to act on, and an inert button invites a click that
+             cannot do anything. -->
+        {#if isLive}
+          <!-- Pin/Unpin button -->
           <button
             type="button"
-            onclick={handleCloseBuffer}
-            class="text-text-muted hover:text-danger p-1 rounded transition-colors"
-            data-testid="close-buffer"
-            title="Close buffer"
+            onclick={handleTogglePin}
+            class="text-text-muted hover:text-text p-1 rounded transition-colors"
+            data-testid="pin-buffer"
+            title={current.pinned ? 'Unpin buffer' : 'Pin buffer'}
           >
-            <X size={16} />
+            {#if current.pinned}
+              <PinOff size={16} />
+            {:else}
+              <Pin size={16} />
+            {/if}
           </button>
+
+          <!-- Close button — only show if buffer has no activity (no unread/notification) -->
+          {#if current.notification === 0 && current.unread === 0}
+            <button
+              type="button"
+              onclick={handleCloseBuffer}
+              class="text-text-muted hover:text-danger p-1 rounded transition-colors"
+              data-testid="close-buffer"
+              title="Close buffer"
+            >
+              <X size={16} />
+            </button>
+          {/if}
         {/if}
       </div>
     </div>
@@ -422,12 +438,12 @@
     oncopy={handleCopy}
     data-testid="chat-messages"
     class="chat-messages flex-1 overflow-y-auto overflow-x-hidden bg-bg"
-    class:favorite-font={!$currentBuffer || !isFreeBuffer($currentBuffer)}
-    class:free-font={$currentBuffer && isFreeBuffer($currentBuffer)}
-    class:hideTime={$currentBuffer?.hideBufferLineTimes}
+    class:favorite-font={!current || !isFreeBuffer(current)}
+    class:free-font={current && isFreeBuffer(current)}
+    class:hideTime={current?.hideBufferLineTimes}
     style="font-size: var(--font-size, 13px);"
   >
-    {#if !$currentBuffer}
+    {#if !current}
       <div class="chat-empty-state flex items-center justify-center h-full text-text-muted">
         <div class="text-center">
           <Inbox size={48} class="mx-auto mb-3 opacity-50" />
@@ -439,7 +455,7 @@
       <!-- Bubble mode layout (private/query buffers with stylizePrivateChats enabled) -->
       <div class="chat-bubble-container">
         <!-- Fetch more lines -->
-        {#if !$currentBuffer.allLinesFetched}
+        {#if !current.allLinesFetched}
           <div class="bubble-fetchmore-row">
             <button type="button" data-testid="fetch-more-lines" class="fetchmorelines flex items-center gap-1 px-3 py-1 rounded text-xs font-medium text-text-secondary hover:text-text hover:bg-surface-raised transition-colors" onclick={handleFetchMore}>
               <ChevronUp size={14} class="text-text-muted" />
@@ -516,7 +532,7 @@
       <table class="chat-table">
         <tbody class="chat-tbody">
           <!-- Fetch more lines row -->
-          {#if !$currentBuffer.allLinesFetched}
+          {#if !current.allLinesFetched}
             <tr class="bufferline fetchmore-row">
               <td class="text-center py-1" colspan=3>
                 <button type="button" data-testid="fetch-more-lines" class="fetchmorelines flex items-center gap-1 px-3 py-1 rounded text-xs font-medium text-text-secondary hover:text-text hover:bg-surface-raised transition-colors" onclick={handleFetchMore}>
@@ -593,8 +609,8 @@
 </div>
 
 <TopicModal
-  topic={$currentBuffer?.title || []}
-  bufferName={$currentBuffer?.shortName || $currentBuffer?.fullName || ''}
+  topic={current?.title || []}
+  bufferName={current?.shortName || current?.fullName || ''}
 />
 
 <style>

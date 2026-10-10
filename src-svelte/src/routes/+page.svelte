@@ -2,6 +2,7 @@
   import '../app.css';
   import type { BufferData } from '#lib/types.ts';
   import ConnectionForm from '#components/ConnectionForm.svelte';
+  import ConnectionBanner from '#components/ConnectionBanner.svelte';
   import TopBar from '#components/TopBar.svelte';
   import ChatView from '#components/ChatView.svelte';
   import InputBar from '#components/InputBar.svelte';
@@ -17,6 +18,7 @@
   import { sidebarOrder } from '#lib/stores/bufferProjections.ts';
   import { connectionState, setReconnectAttempts, setNextReconnectAt, setErrors } from '#lib/stores/connectionStore.ts';
   import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer, listScripts, getSession, getWs, initFocusReconnect, cleanupFocusReconnect, setHotlistPollInterval } from '#lib/stores/connectionManager.ts';
+  import { connectionBanner } from '#lib/stores/connectionPresentation.ts';
   import { initNotifications, onDisconnect, refreshIndicators, startIndicatorOwner } from '#lib/notifications.ts';
   import { parseRelayUrl, isPopoverOpen, bufferHasNicklist, modifyTextareaValue, captureBufferAppearance, waitForFreshBuffer, scriptInstalled } from '#lib/utils.ts';
   import { addToast, toastStore } from '#lib/toast.ts';
@@ -151,10 +153,13 @@
     }
   });
 
-  // Control page scrolling: scrollable on front page, locked when connected.
+  // Control page scrolling: scrollable on the front page, locked whenever the
+  // shell is on screen. Keyed on the shell, not on $connected, so a retained
+  // view keeps the layout it had — a locked, non-scrolling document with an
+  // internally scrolling chat, exactly as when live.
   $effect(() => {
-    void $connected;
-    const overflow = $connected ? 'hidden' : 'auto';
+    void $connectionBanner.shellVisible;
+    const overflow = $connectionBanner.shellVisible ? 'hidden' : 'auto';
     document.documentElement.style.overflow = overflow;
     document.body.style.overflow = overflow;
   });
@@ -528,6 +533,20 @@
     };
   });
 
+  // The banner's Edit connection reveals the form over a retained chat. This is a
+  // presentation mode only: it does not touch transport state, and the retained
+  // snapshot survives it, so backing out restores the same view.
+  let editingConnection = $state(false);
+
+  // The mode ends on either side of it: a released snapshot means there is no
+  // chat to come back to and the form is the whole screen, while a live
+  // connection means the edit achieved its purpose and the form has nothing left
+  // to do. Without the second half, a successful Connect would leave the form
+  // covering the chat it just restored.
+  $effect(() => {
+    if (!$connectionBanner.shellVisible || $connected) editingConnection = false;
+  });
+
   // Hidden by default on mobile — shown via swipe-right or menu button.
   // Always visible on desktop regardless of this flag.
   let showBufferList = $state(false);
@@ -695,8 +714,8 @@
 
 </script>
 
-{#if !$connected}
-  <ConnectionForm />
+{#if !$connectionBanner.shellVisible || editingConnection}
+  <ConnectionForm onBack={editingConnection ? () => { editingConnection = false; } : undefined} />
 {:else}
   <div class="main-layout h-dvh flex flex-col bg-bg" data-testid="chat-view">
     <TopBar bufferListVisible={showBufferList || !isMobileState} onBufferSelect={hideBufferListOnMobile} onSearchOpen={showBufferListOnMobile} onNicklistToggle={() => { if (isMobile()) { nicklistOpenOnMobile = !nicklistOpenOnMobile; if (nicklistOpenOnMobile) showBufferList = false; } else updateSettings({ showNicklist: !$settings.showNicklist }); }} />
@@ -705,6 +724,7 @@
         <BufferList altKeyPressed={_altKeyPressed} onBufferSelect={hideBufferListOnMobile} />
       {/if}
       <div class="chat-area flex-1 flex flex-col min-w-0">
+        <ConnectionBanner onEditConnection={() => { editingConnection = true; }} onLeave={() => { editingConnection = false; disconnect(); }} />
         <ChatView onCommands={(commands: ChatScrollCommands | null) => { chatScrollCommands.current = commands; }} />
         <InputBar />
       </div>

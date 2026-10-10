@@ -182,6 +182,35 @@ test.describe('Dual-protocol transport selection', () => {
         await page.close();
     });
 
+    test('api transport survives a dropped socket and reconnects on api', async ({ browser }) => {
+        test.setTimeout(120_000); // 30s API backoff + reconnect + wire check
+        const page = await freshPage(browser);
+        await connectToWeechat(page, '9010'); // auto → api
+        await setSettings(page, { autoconnect: true });
+        await waitForTransport(page, 'api', 30000);
+        await waitForBuffer(page, '#glowing-bear');
+        await switchToBuffer(page, '#glowing-bear');
+
+        // The API analogue of the legacy drop above: close the live API socket
+        // with a non-normal code so the auto-reconnect path engages. API backoff
+        // starts at 30s (apiConnection.ts backoff.baseMs), so the windows below
+        // must exceed it.
+        await page.evaluate(() => {
+            const socket = (window as any).__getSession?.()?.getSocket?.();
+            if (socket) socket.close(3000, 'test drop');
+        });
+
+        // waitForTransport only reports 'api' when a live ApiSession exists, so
+        // this poll cannot pass until a NEW session is up — and it cannot pass on
+        // a legacy fallback. The wire check then proves the recovered session
+        // really carries traffic, not just a socket object.
+        await waitForTransport(page, 'api', 60000);
+        const text = `api-reconnect-${Date.now()}`;
+        await irc.sendMessage('#glowing-bear', text);
+        await expect(page.getByText(text).first()).toBeVisible({ timeout: 25000 });
+        await page.close();
+    });
+
     test('settings footer shows WeeChat + Relay API versions on the API transport', async ({ browser }) => {
         const page = await freshPage(browser);
         await connectToWeechat(page, '9010');
@@ -212,6 +241,25 @@ test.describe('Dual-protocol transport selection', () => {
         // Same host, legacy port: the cleared profile must re-detect and fall
         // back to legacy instead of reusing the cached API choice.
         await connectToWeechat(page, '9001');
+        await waitForTransport(page, 'legacy', 30000);
+        await page.close();
+    });
+
+    test('explicit Leave on the legacy transport leaves WeeChat running', async ({ browser }) => {
+        // The legacy transport used to send a quit frame on disconnect, mirroring
+        // upstream Angular Glowing Bear. Leave must close the socket and nothing
+        // more — /quit stays a composer action. On gbtest's WeeChat 4.10.1 the
+        // frame was inert (the relay logged a plain client disconnect and stayed
+        // up), so this spec passes either way against that fixture; it is the
+        // guard for the principle, not proof of a past outage.
+        const page = await freshPage(browser);
+        await connectLegacyToWeechat(page);
+        await waitForTransport(page, 'legacy', 30000);
+        await disconnect(page);
+
+        // Same relay, immediately afterwards: if Leave had quit WeeChat, nothing
+        // would answer and this would time out.
+        await connectLegacyToWeechat(page);
         await waitForTransport(page, 'legacy', 30000);
         await page.close();
     });

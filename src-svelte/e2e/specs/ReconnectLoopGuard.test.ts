@@ -5,7 +5,17 @@ import { setupEffectOrphanFilter } from '../helpers/pageerror';
 
 test.describe.configure({ mode: 'serial' });
 
-test.describe('Auto reconnect with countdown toast', () => {
+/** Read the banner's countdown as a number of seconds. */
+async function countdownSeconds(page: import('@playwright/test').Page): Promise<number> {
+    const text = await page.getByTestId('connection-banner-countdown').textContent();
+    return parseInt(text?.match(/in (\d+)s/)?.[1] ?? '0', 10);
+}
+
+// The countdown used to live in a sticky toast. The connection banner owns that
+// presentation now (see ConnectionBanner.test.ts for the shell itself), so these
+// specs read the banner: same intent — the user is told a retry is scheduled, can
+// see when, and can cut the countdown short — through the element that replaced it.
+test.describe('Auto reconnect with countdown banner', () => {
     let page: import('@playwright/test').Page;
 
     test.beforeEach(async ({ browser }) => {
@@ -13,10 +23,10 @@ test.describe('Auto reconnect with countdown toast', () => {
         setupEffectOrphanFilter(page);
     });
 
-    test('disconnect shows countdown toast when autoconnect enabled', async () => {
+    test('disconnect shows the countdown banner when autoconnect is enabled', async () => {
         await expect(page.getByTestId('chat-view')).toBeVisible();
 
-        // Enable autoconnect so disconnect triggers countdown toast
+        // Enable autoconnect so the loss schedules a retry
         await setSettings(page, { autoconnect: true });
 
         // Simulate unexpected WebSocket close
@@ -25,13 +35,15 @@ test.describe('Auto reconnect with countdown toast', () => {
             if (ws) ws.close(3000, 'test disconnect');
         });
 
-        // Warning toast should appear with countdown
-        await expect(page.getByTestId('toast').first()).toBeVisible({ timeout: 10000 });
-        await expect(page.getByText(/Disconnected from/)).toBeVisible({ timeout: 5000 });
-        await expect(page.getByText(/Reconnecting in \d+s/)).toBeVisible({ timeout: 5000 });
+        // The banner carries the state, and it carries it once: the toast that
+        // used to repeat it would sit on top of the banner's own buttons.
+        await expect(page.getByTestId('connection-banner')).toBeVisible({ timeout: 10000 });
+        await expect(page.getByTestId('connection-banner-countdown')).toBeVisible({ timeout: 5000 });
+        await expect(page.getByTestId('connection-banner-retry')).toBeVisible();
+        await expect(page.getByTestId('toast')).not.toBeVisible();
 
-        // Verify Reconnect button is present
-        await expect(page.getByTestId('toast-reconnect-button')).toBeVisible();
+        // The chat is still on screen while the retry is pending.
+        await expect(page.getByTestId('chat-view')).toBeVisible();
 
         // Verify nextReconnectAt is set
         const state = await page.evaluate(() => {
@@ -41,27 +53,28 @@ test.describe('Auto reconnect with countdown toast', () => {
         expect(state?.nextReconnectAt).toBeGreaterThan(0);
     });
 
-    test('manual reconnect button triggers immediate retry', async () => {
+    test('banner Retry now triggers an immediate retry', async () => {
         await expect(page.getByTestId('chat-view')).toBeVisible();
         await setSettings(page, { autoconnect: true });
 
-        // Simulate disconnect to trigger countdown toast
+        // Simulate disconnect to schedule a countdown
         await page.evaluate(() => {
             const ws = (window as any).__getSession?.()?.getSocket?.();
             if (ws) ws.close(3000, 'test disconnect');
         });
 
-        // Wait for countdown toast to appear
-        await expect(page.getByTestId('toast').first()).toBeVisible({ timeout: 10000 });
-        await expect(page.getByText(/Reconnecting in \d+s/)).toBeVisible({ timeout: 5000 });
+        // Wait for the countdown to appear
+        await expect(page.getByTestId('connection-banner-countdown')).toBeVisible({ timeout: 10000 });
 
-        // Click Reconnect button — should try immediately, not wait for countdown
-        await page.getByTestId('toast-reconnect-button').click();
+        // Retry now — should try immediately, not wait for the countdown
+        await page.getByTestId('connection-banner-retry').click();
 
         // Should reconnect successfully
         await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
 
-        // Toast should be cleared after successful connection
+        // The banner is gone once the connection is live again, and nothing was
+        // left behind in the toast stack.
+        await expect(page.getByTestId('connection-banner')).not.toBeVisible({ timeout: 10000 });
         await expect(page.getByTestId('toast')).not.toBeVisible({ timeout: 10000 });
 
         // Verify counter was reset and nextReconnectAt cleared
@@ -85,15 +98,17 @@ test.describe('Auto reconnect with countdown toast', () => {
             if (ws) ws.close(3000, 'test disconnect');
         });
 
-        // Disconnect toast should appear but WITHOUT countdown
-        await expect(page.getByTestId('toast').first()).toBeVisible({ timeout: 10000 });
-        await expect(page.getByText(/Disconnected from/)).toBeVisible({ timeout: 5000 });
+        // The banner appears, and it names the credential as the thing missing
+        // rather than pretending a retry will fix it.
+        await expect(page.getByTestId('connection-banner')).toBeVisible({ timeout: 10000 });
+        await expect(page.getByTestId('connection-banner')).toContainText(/verification code/i);
 
-        // Countdown should NOT be present for TOTP connections
-        await expect(page.getByText(/Reconnecting in \d+s/)).not.toBeVisible({ timeout: 2000 });
+        // No countdown: a scheduled retry would be a lie, the token is spent.
+        await expect(page.getByTestId('connection-banner-countdown')).not.toBeVisible();
 
-        // Reconnect button should still be present for manual retry
-        await expect(page.getByTestId('toast-reconnect-button')).toBeVisible();
+        // The action is still there, labelled as what it actually does.
+        await expect(page.getByTestId('connection-banner-retry')).toBeVisible();
+        await expect(page.getByTestId('connection-banner-retry')).toContainText(/verification code/i);
 
         // Verify nextReconnectAt is NOT set (no auto-reconnect scheduled)
         const state = await page.evaluate(() => {
@@ -113,11 +128,13 @@ test.describe('Auto reconnect with countdown toast', () => {
             if (ws) ws.close(3000, 'test disconnect');
         });
 
-        // Wait for toast to appear and extract first countdown
-        await expect(page.getByTestId('toast').first()).toBeVisible({ timeout: 10000 });
-        const countdownText = await page.getByText(/Reconnecting in \d+s/).first().textContent();
-        const firstSeconds = parseInt(countdownText?.match(/in (\d+)/)?.[1] || '0', 10);
-        expect(firstSeconds).toBeCloseTo(30, 0);
+        // Read the first countdown off the banner. The window ticks down from the
+        // scheduled instant, so assert the initial backoff as a range rather than
+        // pinning a number the render can legitimately be a second into.
+        await expect(page.getByTestId('connection-banner-countdown')).toBeVisible({ timeout: 10000 });
+        const firstSeconds = await countdownSeconds(page);
+        expect(firstSeconds).toBeGreaterThan(20);
+        expect(firstSeconds).toBeLessThanOrEqual(30);
 
         // Intercept WebSocket so the manual reconnect attempt fails immediately
         await page.evaluate(() => {
@@ -134,15 +151,13 @@ test.describe('Auto reconnect with countdown toast', () => {
             (window as any).WebSocket = wrapper;
         });
 
-        // Click Reconnect button — triggers immediate connect attempt, which will fail
-        await page.getByTestId('toast-reconnect-button').click();
+        // Retry now — triggers an immediate attempt, which the interceptor fails
+        await page.getByTestId('connection-banner-retry').click();
 
-        // Wait for the failed reconnect to trigger a new countdown with increased backoff
+        // Wait for the failed attempt to schedule a longer backoff
         await expect(async () => {
-            const newCountdown = await page.getByText(/Reconnecting in \d+s/).first().textContent();
-            const newSeconds = parseInt(newCountdown?.match(/in (\d+)/)?.[1] || '0', 10);
-            expect(newSeconds).toBeGreaterThan(firstSeconds);
-        }).toPass({ timeout: 10000, intervals: [500] });
+            expect(await countdownSeconds(page)).toBeGreaterThan(firstSeconds);
+        }).toPass({ timeout: 15000, intervals: [500] });
 
         // Verify reconnectAttempts increased
         const state = await page.evaluate(() => {

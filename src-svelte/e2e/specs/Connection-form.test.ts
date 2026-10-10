@@ -157,7 +157,10 @@ test.describe('Disconnect handling', () => {
         await waitForAppReady(page);
     });
 
-    test('should show disconnect toast when autoconnect is off after being connected', async ({ page }) => {
+    // Both of these used to be the toast's job. With a retained view on screen the
+    // banner presents the loss and carries the way back, and the toast is
+    // suppressed rather than stacked on top of it — see ConnectionBanner.test.ts.
+    test('shows the connection banner when autoconnect is off after being connected', async ({ page }) => {
         await connectToWeechat(page);
         await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
 
@@ -170,16 +173,16 @@ test.describe('Disconnect handling', () => {
             if (socket) socket.close(3000, 'test disconnect');
         });
 
-        // Toast should appear with disconnect message
-        await expect(page.getByTestId('toast').first()).toBeVisible({ timeout: 5000 });
-        await expect(page.getByText(/Disconnected from/i)).toBeVisible();
+        await expect(page.getByTestId('connection-banner')).toBeVisible({ timeout: 5000 });
+        await expect(page.getByTestId('connection-banner')).toContainText(/lost|reached/i);
+        await expect(page.getByTestId('toast')).not.toBeVisible();
     });
 
-    test('should reconnect when clicking toast reconnect button', async ({ page }) => {
+    test('should reconnect when clicking the banner reconnect action', async ({ page }) => {
         await connectToWeechat(page);
         await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
 
-        // Disable autoconnect to trigger disconnect toast instead of auto-reconnect
+        // Disable autoconnect so no loop is running: the banner's action starts one
         await setSettings(page, { autoconnect: false });
 
         // Simulate WebSocket close
@@ -188,17 +191,20 @@ test.describe('Disconnect handling', () => {
             if (socket) socket.close(3000, 'test disconnect');
         });
 
-        // Wait for toast to appear
-        await expect(page.getByTestId('toast').first()).toBeVisible({ timeout: 5000 });
+        await expect(page.getByTestId('connection-banner-retry')).toBeVisible({ timeout: 5000 });
+        await page.getByTestId('connection-banner-retry').click();
 
-        // Click reconnect button
-        await page.getByTestId('toast-reconnect-button').click();
-
-        // Should be connected again
+        // Should be connected again, with the banner gone
         await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
+        await expect(page.getByTestId('connection-banner')).not.toBeVisible({ timeout: 10000 });
     });
 
-    test('should show connection form after unexpected disconnect', async ({ page }) => {
+    // Rewritten together with the retained shell. This spec used to pin the
+    // behaviour the reconnect-in-place work removes — an unexpected disconnect
+    // replacing chat with the connection form — so the same scenario now asserts
+    // the opposite. Leaving on purpose still shows the form, and that is covered
+    // by the Leave specs in ConnectionBanner.test.ts.
+    test('keeps the chat shell after an unexpected disconnect', async ({ page }) => {
         await connectToWeechat(page);
         await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
 
@@ -212,8 +218,9 @@ test.describe('Disconnect handling', () => {
             if (socket) socket.close(3000, 'test disconnect');
         });
 
-        // After disconnect, TopBar is replaced by ConnectionForm — host input becomes visible
-        await expect(page.getByTestId('host-input')).toBeVisible({ timeout: 10000 });
-        await expect(page.getByTestId('chat-view')).not.toBeVisible();
+        // The shell survives and the banner takes over the status presentation.
+        await expect(page.getByTestId('connection-banner')).toBeVisible({ timeout: 10000 });
+        await expect(page.getByTestId('chat-view')).toBeVisible();
+        await expect(page.getByTestId('host-input')).not.toBeVisible();
     });
 });

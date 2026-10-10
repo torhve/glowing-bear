@@ -64,7 +64,10 @@ test('reconnect preserves settings and reconnects successfully', async () => {
     await expect(page.getByTestId('buffer-item').first()).toBeVisible({ timeout: 10000 });
 });
 
-test('disconnect toast shows reconnect button when autoconnect disabled', async () => {
+// Rewritten with the retained shell: the toast that used to carry this is
+// suppressed while the banner is on screen, and the way back is the banner's
+// "Edit connection" action revealing the form over the retained chat.
+test('banner offers a way back when autoconnect is disabled', async () => {
     // Ensure connected state (previous serial test may have disconnected)
     if (!(await page.getByTestId('disconnect-button').isVisible())) {
         await page.getByTestId('host-input').fill('localhost');
@@ -81,12 +84,16 @@ test('disconnect toast shows reconnect button when autoconnect disabled', async 
         if (ws) ws.close(3000, 'test disconnect');
     });
 
-    // Wait for disconnect toast to appear
-    const toast = page.getByTestId('toast');
-    await expect(toast).toBeVisible({ timeout: 8000 });
-    await expect(toast).toContainText(/Disconnected/i);
+    // The banner presents the loss, and the toast does not repeat it.
+    const banner = page.getByTestId('connection-banner');
+    await expect(banner).toBeVisible({ timeout: 8000 });
+    await expect(banner).toContainText(/lost|reached/i);
+    await expect(page.getByTestId('toast')).not.toBeVisible();
 
-    // Reconnect by filling in credentials and connecting
+    // Reconnect by editing the connection: the form appears over the retained
+    // chat, credentials are filled in, and Connect runs.
+    await page.getByTestId('connection-banner-edit').click();
+    await expect(page.getByTestId('host-input')).toBeVisible({ timeout: 10000 });
     await page.getByTestId('host-input').fill('localhost');
     await page.getByTestId('port-input').fill('9010');
     await page.getByTestId('password-input').fill('testpassword123');

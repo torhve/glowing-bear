@@ -87,7 +87,7 @@
 
 </script>
 
-<div class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm" data-testid="toast-container">
+<div class="toast-stack fixed right-4 z-50 flex flex-col gap-2 max-w-sm" data-testid="toast-container">
   {#each _displayToasts as toast (toast.id)}
     <div
       class:toast-removing={_removing.has(toast.id)}
@@ -139,4 +139,12 @@
   {/each}
 </div>
 
-
+<style>
+  /* Anchored below the TopBar, not at top-4. At top-4 the stack sat inside the
+     TopBar's own band and intercepted clicks on its buttons — and once the
+     connection banner appeared, the banner's actions were in the same corner.
+     A notification must not block the controls it is telling the user to use. */
+  .toast-stack {
+    top: calc(env(safe-area-inset-top, 0px) + var(--spacing-topbar-height, 40px) + 1rem);
+  }
+</style>

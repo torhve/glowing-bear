@@ -1,6 +1,7 @@
 <script lang="ts">
 
-  import { connected, weechatVersion } from '#lib/stores/models.ts';
+  import { weechatVersion } from '#lib/stores/models.ts';
+  import { connectionBanner } from '#lib/stores/connectionPresentation.ts';
   import { connectionState, connectionStats, formatBytes, timeAgo, formatDuration } from '#lib/stores/connectionStore.ts';
   import { settings } from '#lib/stores/settings.ts';
   import { disconnect } from '#lib/stores/connectionManager.ts';
@@ -19,6 +20,9 @@
 
   let { onBufferSelect = () => {}, onSearchOpen = () => {}, onNicklistToggle = () => {}, bufferListVisible = true } = $props();
 
+  // Leave is available whenever the shell is on screen, not only while
+  // connected: it is how a user stops a reconnect loop that is not going well,
+  // and the banner's own Leave runs the same command.
   function handleDisconnect() {
     disconnect();
   }
@@ -135,7 +139,7 @@
         <Settings size={16} />
       </button>
 
-      {#if $connected}
+      {#if $connectionBanner.shellVisible}
         <button
           data-tauri-drag-region="false"
           data-testid="disconnect-button"
