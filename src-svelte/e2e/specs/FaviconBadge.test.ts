@@ -34,6 +34,21 @@ async function getFaviconHref(
     });
 }
 
+/**
+ * The icon link as a path, so "the plain shipped file, no badge" means the same
+ * thing whatever base path the app is deployed under. A badge paints a data URL,
+ * which has no path, so a data URL is returned unchanged.
+ */
+async function getIconPath(
+    p: import("@playwright/test").Page,
+): Promise<string> {
+    return await p.evaluate(() => {
+        const link = document.querySelector("link[rel='icon'][sizes='32x32']") as HTMLLinkElement | null;
+        const href = link?.href ?? "";
+        return href.startsWith("data:") ? href : new URL(href).pathname;
+    });
+}
+
 test("favicon badge updates when unread messages arrive on inactive buffer", async () => {
     // Server-side first: the badge counts global notifications, and a hotlist entry this
     // spec cannot absorb (a buffer no longer in its list) would keep a badge painted
@@ -49,7 +64,7 @@ test("favicon badge updates when unread messages arrive on inactive buffer", asy
     // Without this the assertion below is vacuous: a badge left over from another spec would
     // satisfy "it is a data URL" on its own.
     await expect
-        .poll(() => getFaviconHref(page), { timeout: 10000, intervals: [200] })
+        .poll(() => getIconPath(page), { timeout: 10000, intervals: [200] })
         .toBe("/favicon.png");
 
     // Send unique message to #glowing-bear to create unread
@@ -72,7 +87,7 @@ test("favicon badge resets when switching to buffer with unread", async () => {
     await absorbAllUnread(page);
     await switchToBuffer(page, "gbtest");
     await expect
-        .poll(() => getFaviconHref(page), { timeout: 10000, intervals: [200] })
+        .poll(() => getIconPath(page), { timeout: 10000, intervals: [200] })
         .toBe("/favicon.png");
 
     // Send unique message to #glowing-bear to create unread
@@ -90,8 +105,8 @@ test("favicon badge resets when switching to buffer with unread", async () => {
     await switchToBuffer(page, "#glowing-bear");
     // Favicon should return to the default (no badge) once the unread clears.
     await expect(async () => {
-        const href = await getFaviconHref(page);
-        expect(href).toBe("/favicon.png");
+        const iconPath = await getIconPath(page);
+        expect(iconPath).toBe("/favicon.png");
     }).toPass({ timeout: 10000, intervals: [200] });
 });
 
@@ -107,8 +122,8 @@ test("no badge drawn when favico setting is disabled", async () => {
     // the favicon check below is a real negative instead of a guess at timing.
     await waitForUnreadAtLeast(page, "#glowing-bear", 1);
 
-    const faviconHref = await getFaviconHref(page);
-    expect(faviconHref).toBe("/favicon.png");
+    const iconPath = await getIconPath(page);
+    expect(iconPath).toBe("/favicon.png");
 });
 
 test("favico setting toggle persists", async () => {

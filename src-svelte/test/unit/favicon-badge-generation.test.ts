@@ -121,7 +121,9 @@ describe('favicon badge draw generation', () => {
         await pending;
 
         expect(paints).toBe(0);
-        expect(iconHref()).toBe('/favicon.png');
+        // The icon is still the plain shipped file, not a badge. Compared as a path:
+        // resetBadge restores an absolute URL, an untouched link keeps the shipped form.
+        expect(new URL(iconHref()!, document.baseURI).pathname).toBe('/favicon.png');
     });
 
     it('drops an in-flight draw when an appearance change invalidates the badge', async () => {
@@ -133,7 +135,9 @@ describe('favicon badge draw generation', () => {
         await pending;
 
         expect(paints).toBe(0);
-        expect(iconHref()).toBe('/favicon.png');
+        // The icon is still the plain shipped file, not a badge. Compared as a path:
+        // resetBadge restores an absolute URL, an untouched link keeps the shipped form.
+        expect(new URL(iconHref()!, document.baseURI).pathname).toBe('/favicon.png');
     });
 
     it('draws when nothing superseded the request', async () => {

@@ -1,25 +1,104 @@
 // Canvas-based favicon badge renderer — replaces favico.js
 // Draws colored badge circles with unread/notification counts on the favicon
+//
+// The favicon path is never hardcoded here. The app is deployed under a base
+// path (the Pages workflow builds with BASE_PATH=/glowing-bear), where an
+// absolute '/favicon.png' is a 404 — and a 404 base image used to mean no badge
+// ever, because every draw waited forever for an image that never arrived. The
+// 32x32 <link rel="icon"> in app.html already carries the href the deployment
+// actually serves, so that link is the source of truth and $app/paths' asset()
+// is only the fallback for a page that has no such link.
+
+import { asset } from '$app/paths';
+
+/** The icon link the badge paints over — the same one the tab icon reads. */
+const ICON_SELECTOR = "link[rel='icon'][sizes='32x32']";
 
 let baseImage: HTMLImageElement | null = null;
 let isReady = false;
 
+/** The base image load failed (404, offline, blocked request). Terminal. */
+let baseImageFailed = false;
+
+/** A load has been started, so a later draw does not start a second one. */
+let baseImageRequested = false;
+
 /**
- * Load the base favicon image once at startup
+ * The 32x32 icon URL the document shipped with, resolved to an absolute URL,
+ * before any badge painted a data URL over it. `resetBadge()` restores exactly
+ * this, so a deployment under a base path gets back the file its own server
+ * answers.
+ *
+ * Absolute on purpose: Kit's client runtime absolutizes every icon link at
+ * startup — "fix link[rel=icon], because browsers will occasionally try to load
+ * relative URLs after a pushState/replaceState" (see kit issue 3748). Restoring
+ * a relative href would undo that fix.
+ */
+let baseIconUrl = '';
+
+/** Draws parked on the base image, released by onload or onerror — never a timer. */
+let baseImageWaiters: Array<() => void> = [];
+
+/**
+ * Read the shipped icon URL once, before a badge overwrites it.
+ *
+ * `resetBadge()` can run before `initFavicon()` — the disconnect path, or an
+ * appearance invalidation on a page that has not initialised the icon yet — and
+ * it must not invent a path the deployment does not serve.
+ */
+function ensureBaseIconUrl(): string {
+    if (baseIconUrl === '') {
+        const link = document.querySelector(ICON_SELECTOR) as HTMLLinkElement | null;
+        const shipped = link?.getAttribute('href') ?? '';
+        // A draw may already have replaced the href with a data URL. The picture
+        // to load and the picture to restore is the one the document shipped
+        // with, not the one currently sitting on the link.
+        baseIconUrl = resolveIconUrl(shipped !== '' && !shipped.startsWith('data:') ? shipped : asset('favicon.png'));
+    }
+    return baseIconUrl;
+}
+
+/** Resolve the shipped href the way the browser resolves the icon request itself. */
+function resolveIconUrl(href: string): string {
+    try {
+        return new URL(href, document.baseURI).href;
+    } catch {
+        return href;
+    }
+}
+
+/** Release every draw parked on the base image. Both outcomes release them. */
+function releaseBaseImageWaiters(): void {
+    const waiters = baseImageWaiters;
+    baseImageWaiters = [];
+    for (const resolve of waiters) resolve();
+}
+
+/**
+ * Load the base favicon image once at startup.
+ *
+ * The URL is the icon link's own href resolved against the document, so a
+ * deployment under a base path loads the file it actually serves. A failed load
+ * is terminal and is not retried: it releases every parked draw, which then
+ * falls back to a flat square instead of waiting for an image that never comes.
  */
 export function initFavicon(): void {
-    if (isReady || typeof document === 'undefined') return;
+    if (baseImageRequested || typeof document === 'undefined') return;
+    baseImageRequested = true;
 
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
         baseImage = img;
         isReady = true;
+        releaseBaseImageWaiters();
     };
     img.onerror = () => {
-        console.warn('Failed to load favicon for badge rendering');
+        baseImageFailed = true;
+        console.warn('Failed to load favicon for badge rendering; badges will be drawn without the base icon');
+        releaseBaseImageWaiters();
     };
-    img.src = '/favicon.png';
+    img.src = ensureBaseIconUrl();
 }
 
 /**
@@ -181,6 +260,8 @@ function drawOnCanvas(count: number, type: 'notification' | 'unread'): void {
     if (baseImage) {
         ctx.drawImage(baseImage, 0, 0, 32, 32);
     } else {
+        // No base icon: either it has not loaded yet or its load failed. The
+        // badge still goes on a flat square rather than not being drawn at all.
         ctx.fillStyle = '#333';
         ctx.fillRect(0, 0, 32, 32);
     }
@@ -212,7 +293,7 @@ function drawOnCanvas(count: number, type: 'notification' | 'unread'): void {
     const href = canvas.toDataURL('image/png');
 
     // Update only the primary favicon link (32x32), not other icons
-    const links = document.querySelectorAll("link[rel='icon'][sizes='32x32']");
+    const links = document.querySelectorAll(ICON_SELECTOR);
     for (const link of links) {
         link.setAttribute('href', href);
     }
@@ -224,27 +305,28 @@ function drawOnCanvas(count: number, type: 'notification' | 'unread'): void {
  * Draw the favicon badge.
  * If the base image hasn't loaded yet, wait for it before drawing.
  * This prevents silent failures when drawBadge is called during reconnect
- * before initFavicon has finished loading /favicon.png.
+ * before initFavicon has finished loading the base icon.
  */
 export async function drawBadge(count: number, type: 'notification' | 'unread'): Promise<void> {
     if (typeof document === 'undefined') return;
 
     // Claim a generation before awaiting. drawBadge waits for the base image, so
-    // it can return long after the state that asked for it has been replaced —
+    // it can return long after the state that produced it has been replaced —
     // after a disconnect, or after a newer count arrived. Only the newest call
     // is allowed to paint; an older one resuming here would put a stale badge
     // back on the tab.
     const generation = ++drawGeneration;
 
-    // Wait for base image to be ready — initFavicon loads asynchronously
-    if (!isReady) {
-        await new Promise<void>(resolve => {
-            const check = () => {
-                if (isReady) resolve();
-                else setTimeout(check, 50);
-            };
-            check();
-        });
+    // Wait for the base image, but only for a load that is genuinely pending.
+    // A load nobody started is started here, and a load that already failed is
+    // not waited on at all — the badge is drawn on the fallback square instead.
+    // The old form polled every 50ms forever, so a base icon that 404s meant no
+    // badge ever, which is what a base-path deployment hit.
+    if (!isReady && !baseImageFailed) {
+        if (!baseImageRequested) initFavicon();
+        if (!isReady && !baseImageFailed) {
+            await new Promise<void>((resolve) => { baseImageWaiters.push(resolve); });
+        }
     }
 
     if (generation !== drawGeneration) return;
@@ -252,19 +334,20 @@ export async function drawBadge(count: number, type: 'notification' | 'unread'):
 }
 
 /**
- * Reset the favicon to the original base image
+ * Reset the favicon to the icon href the document shipped with.
  */
 export function resetBadge(): void {
     if (typeof document === 'undefined') return;
     // Also supersedes any draw still waiting for the base image.
     drawGeneration += 1;
-    // The href is about to go back to the plain file, so the next identical
+    // The href is about to go back to the shipped file, so the next identical
     // badge must actually draw even if this same picture was drawn before.
     lastPaint = null;
-    const links = document.querySelectorAll("link[rel='icon'][sizes='32x32']");
+    const href = ensureBaseIconUrl();
+    const links = document.querySelectorAll(ICON_SELECTOR);
     for (const link of links) {
-        if (link.getAttribute('href') !== '/favicon.png') {
-            link.setAttribute('href', '/favicon.png');
+        if (link.getAttribute('href') !== href) {
+            link.setAttribute('href', href);
         }
     }
 }
