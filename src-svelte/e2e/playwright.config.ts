@@ -34,6 +34,7 @@ const UI_ONLY_SPECS = [
     'SettingsModal-fonts',
     'SettingsModal-themes',
     'Toast',
+    'TopBar-bufferListToggle',
 ].map((name) => `**/${name}.test.ts`);
 
 // The specs whose behaviour depends on engine reflow timing: multi-frame re-wrap,

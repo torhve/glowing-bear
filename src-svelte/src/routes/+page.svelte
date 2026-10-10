@@ -597,6 +597,15 @@
     if (isMobileState) { showBufferList = true; nicklistOpenOnMobile = false; }
   }
 
+  // Tap-the-logo toggle, the gesture the Angular app's clickable brand gave:
+  // one control opens and closes the mobile buffer list. Desktop has no hidden
+  // buffer list to toggle, so it is a no-op there.
+  function toggleBufferListOnMobile() {
+    if (!isMobileState) return;
+    if (showBufferList) hideBufferListOnMobile();
+    else showBufferListOnMobile();
+  }
+
   function isMobile() {
     return isMobileState;
   }
@@ -718,7 +727,7 @@
   <ConnectionForm onBack={editingConnection ? () => { editingConnection = false; } : undefined} />
 {:else}
   <div class="main-layout h-dvh flex flex-col bg-bg" data-testid="chat-view">
-    <TopBar bufferListVisible={showBufferList || !isMobileState} onBufferSelect={hideBufferListOnMobile} onSearchOpen={showBufferListOnMobile} onNicklistToggle={() => { if (isMobile()) { nicklistOpenOnMobile = !nicklistOpenOnMobile; if (nicklistOpenOnMobile) showBufferList = false; } else updateSettings({ showNicklist: !$settings.showNicklist }); }} />
+    <TopBar isMobile={isMobileState} bufferListOpen={showBufferList} onBufferListToggle={toggleBufferListOnMobile} onBufferSelect={hideBufferListOnMobile} onSearchOpen={showBufferListOnMobile} onNicklistToggle={() => { if (isMobile()) { nicklistOpenOnMobile = !nicklistOpenOnMobile; if (nicklistOpenOnMobile) showBufferList = false; } else updateSettings({ showNicklist: !$settings.showNicklist }); }} />
     <div class="main-content flex-1 flex overflow-hidden">
       {#if showBufferList || !isMobileState}
         <BufferList altKeyPressed={_altKeyPressed} onBufferSelect={hideBufferListOnMobile} />

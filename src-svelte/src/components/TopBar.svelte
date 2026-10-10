@@ -18,7 +18,13 @@
   import MessageSquare from '@lucide/svelte/icons/message-square';
   import { asset } from '$app/paths';
 
-  let { onBufferSelect = () => {}, onSearchOpen = () => {}, onNicklistToggle = () => {}, bufferListVisible = true } = $props();
+  let { onBufferSelect = () => {}, onSearchOpen = () => {}, onNicklistToggle = () => {}, onBufferListToggle = () => {}, isMobile = false, bufferListOpen = false } = $props();
+
+  // The buffer list is always on screen on desktop and an opt-in overlay on
+  // mobile. Deriving visibility here from the two facts — rather than taking a
+  // pre-combined flag — keeps `bufferListOpen` the single source of truth the
+  // logo button reports through aria-expanded.
+  let bufferListVisible = $derived(bufferListOpen || !isMobile);
 
   // Leave is available whenever the shell is on screen, not only while
   // connected: it is how a user stops a reconnect loop that is not going well,
@@ -39,7 +45,25 @@
   <div class="top-bar-inner h-[var(--spacing-topbar-height,40px)] bg-surface-raised border-b border-border flex items-center px-2 space-x-2" data-tauri-drag-region>
     <div class="flex items-center gap-1 flex-1 min-w-0" data-tauri-drag-region>
       <TauriTitlebar variant="inline" />
-      <img src={asset('glowing-bear.svg')} alt="logo" class="app-logo w-5 h-5 flex-shrink-0" />
+      {#if isMobile}
+        <!-- Tapping the brand is how the Angular app opened the buffer list, so on
+             mobile the logo is that toggle rather than decoration. -->
+        <button
+          type="button"
+          data-tauri-drag-region="false"
+          data-testid="buffer-list-toggle"
+          onclick={() => onBufferListToggle()}
+          aria-label="Toggle buffer list"
+          aria-expanded={bufferListOpen}
+          title="Toggle buffer list"
+          class="app-logo-btn flex-shrink-0 rounded hover:bg-surface-raised transition-colors"
+          class:bg-surface-raised={bufferListOpen}
+        >
+          <img src={asset('glowing-bear.svg')} alt="" class="app-logo w-5 h-5" />
+        </button>
+      {:else}
+        <img src={asset('glowing-bear.svg')} alt="logo" class="app-logo w-5 h-5 flex-shrink-0" />
+      {/if}
       {#if bufferListVisible}
         <span data-testid="app-title" class="text-sm font-bold text-text">Glowing Bear</span>
         {#if $weechatVersion.length > 0}
@@ -174,5 +198,14 @@
   /* Spacing — overridable by themes via --spacing-* vars */
   .top-bar-btn {
     padding: var(--spacing-topbar-button-padding-y, 4px) var(--spacing-topbar-button-padding-x, 8px);
+  }
+
+  /* The mobile logo toggle keeps the plain logo's footprint — vertical padding
+     only, so the bar's left edge does not shift between desktop and mobile —
+     while giving the icon a real touch target. */
+  .app-logo-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--spacing-topbar-button-padding-y, 4px) 0;
   }
 </style>

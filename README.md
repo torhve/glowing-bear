@@ -227,7 +227,7 @@ Custom CSS injection is also available in settings for personalization.
 - **Hotlist bar** — horizontal strip of buffers with unread activity in the top bar; prominent on mobile when buffer list is hidden
 - **Pin/unpin buffers** — pinned buffers always stay visible and sort to the top
 - **Keyboard shortcuts** — Alt+1-9 quick keys, Alt+J two-digit jump-to-buffer, type-to-focus, PageUp/PageDown scroll, Alt+< previous buffer, Alt+L focus input, Alt+n toggle nicklist, Alt+A jump to most urgent buffer, Alt+↑/↓ adjacent buffer, Alt+h clear all unread, double-Escape disconnect
-- **Mobile touch gestures** — swipe right → buffer list, swipe left → nicklist, vertical swipe → switch buffer
+- **Mobile touch gestures** — tap the logo → toggle buffer list (also swipe right), swipe left → nicklist, vertical swipe → switch buffer
 - **Image upload** — drag-and-drop or click to upload images via Imgur
 - **URL embeds** — rich previews for links
 - **Emoji shortcodes** — optional `:beer:` → 🍺 replacement while typing
