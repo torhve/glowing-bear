@@ -9,7 +9,8 @@ import { Protocol } from '#lib/weechat.ts';
 import { sha256, pbkdf2 as nativePbkdf2, toHexString } from '#lib/utils/crypto.ts';
 import type { ProtocolMessage } from '#lib/types.ts';
 import { DEBUG_NICKLIST, DEBUG_WEECHAT_COMMANDS, DEBUG_CONNECTION } from '#lib/debug.ts';
-import { captureRetainedState, consumeCaptureIntent, hasRetainedViewForActiveProfile, markCaptureIntent } from '#lib/stores/retainedChat.ts';
+import { applyRetainedHandoff, captureRetainedState, consumeCaptureIntent, hasRetainedViewForActiveProfile, markCaptureIntent } from '#lib/stores/retainedChat.ts';
+import { clearHistoryOutcomes } from '#lib/stores/historyState.ts';
 
 // Protocol instance for instance methods (setId, parse)
 // Static methods (formatHandshake, formatInit, etc.) are called on the constructor directly
@@ -68,6 +69,10 @@ export const __resetAllStateForTest = resetAllState;
 function resetAllState(retainGeneration?: number) {
     // Flush any pending line batches before clearing state to avoid losing data.
     flushLineBatch();
+    // Buffer ids are per-session and 4.10.1 reuses them, so a recorded history
+    // outcome from this generation must not describe a buffer the next session
+    // creates under the same id.
+    clearHistoryOutcomes();
 
     // No hotlist baseline will arrive for a closed connection: never leave the sync
     // phase open across a disconnect.
@@ -381,6 +386,14 @@ export async function connect(host: string, port: number, path: string, password
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     sendWs(syncMsg, 'sync');
                 }
+
+                // Hand the retained window to this session before the view is told
+                // the connection is live. The order is the point: `chatDisplay`
+                // switches to live data at `connected`, so seeding after that
+                // would show an empty transcript for a frame, and skipping it
+                // altogether would leave a snapshot that reappears on the NEXT
+                // loss with older content.
+                applyRetainedHandoff();
 
                 // Mark connected after buffer info + line loading complete
                 setConnectionStatus('connected');

@@ -3,6 +3,7 @@
   import { get } from 'svelte/store';
   import { activeBufferId, bufferBottom, buffers, maxBufferLines, recalculateLinesPerScreen, getReadBoundaryIndex, isUserMessageLine, serverNick } from '#lib/stores/models.ts';
   import { chatDisplay } from '#lib/stores/chatPresentation.ts';
+  import { historyOutcomes, historyUnavailable } from '#lib/stores/historyState.ts';
   import { settings } from '#lib/stores/settings.ts';
   import { fetchMoreLines, closeBufferOnWeeChat, pinBuffer, unpinBuffer } from '#lib/stores/connectionManager.ts';
   import { buildMentionText, isFreeBuffer, modifyTextareaValue } from '#lib/utils.ts';
@@ -361,6 +362,13 @@
     viewport.requestHistoryNow();
   }
 
+  // A live buffer that renders nothing and whose history request failed is the
+  // one case where the app has to say so out loud. Everything else on screen is
+  // real content, so nothing looks wrong — which is exactly how a failed load
+  // becomes invisible. 'loading' is not this state, and an absent outcome is
+  // not this state either: only a recorded failure renders.
+  let historyMissing = $derived(isLive && historyUnavailable(current, $historyOutcomes));
+
   // Read-only view of the viewport controller, exposed for E2E specs.
   // 'Settled' means: the pin loop is not running, no layout frame is still queued
   // for this view, and the sticky follow-settle window has expired. A spec that
@@ -454,6 +462,14 @@
     {:else if bubbleMode}
       <!-- Bubble mode layout (private/query buffers with stylizePrivateChats enabled) -->
       <div class="chat-bubble-container">
+        {#if historyMissing}
+          <div class="chat-history-failed flex flex-col items-center gap-2 px-4 py-6 text-center">
+            <p class="text-sm text-text-secondary" data-testid="history-failed">Older messages could not be loaded.</p>
+            <button type="button" data-testid="history-retry" class="rounded px-3 py-1 text-xs font-medium bg-surface-raised text-text-secondary hover:text-text transition-colors" onclick={handleFetchMore}>
+              Try again
+            </button>
+          </div>
+        {/if}
         <!-- Fetch more lines -->
         {#if !current.allLinesFetched}
           <div class="bubble-fetchmore-row">
@@ -531,6 +547,16 @@
       <!-- Table layout (channels, servers, free buffers) -->
       <table class="chat-table">
         <tbody class="chat-tbody">
+          {#if historyMissing}
+            <tr class="bufferline history-failed-row">
+              <td class="text-center py-3" colspan=3>
+                <p class="text-sm text-text-secondary" data-testid="history-failed">Older messages could not be loaded.</p>
+                <button type="button" data-testid="history-retry" class="mt-1 rounded px-3 py-1 text-xs font-medium bg-surface-raised text-text-secondary hover:text-text transition-colors" onclick={handleFetchMore}>
+                  Try again
+                </button>
+              </td>
+            </tr>
+          {/if}
           <!-- Fetch more lines row -->
           {#if !current.allLinesFetched}
             <tr class="bufferline fetchmore-row">

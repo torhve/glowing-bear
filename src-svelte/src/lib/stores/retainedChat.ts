@@ -43,7 +43,7 @@
 import { get, readable, writable } from 'svelte/store';
 import { getActiveConnectionProfile } from '#lib/connectionProfile.ts';
 import { conversationKeyFor } from '#lib/stores/conversationDrafts.ts';
-import { activeBufferId, buffers } from '#lib/stores/models.ts';
+import { activeBufferId, buffers, setActiveBuffer } from '#lib/stores/models.ts';
 import { shouldResume } from '#lib/stores/bufferResume.ts';
 import type { BufferData, BufferLine, Nick, NickGroup, RichTextPart } from '#lib/types.ts';
 
@@ -552,6 +552,98 @@ export function retainedLineIds(retained: RetainedBuffer): Set<string> {
     const ids = new Set<string>(retained.lineIdsSeen);
     for (const line of retained.lines) if (line.lineId) ids.add(line.lineId);
     return ids;
+}
+
+/** What a handoff did, so the caller can report it rather than infer it. */
+export interface HandoffOutcome {
+    /** Retained conversations whose window was carried into the new session. */
+    seeded: number;
+    /** Retained conversations this session does not have at all. */
+    closedOnServer: number;
+    activeKey: string | null;
+    /** The conversation the user was reading is gone and a fallback was chosen. */
+    fellBack: boolean;
+}
+
+/**
+ * Hand the retained window to a new authoritative session, and end the snapshot.
+ *
+ * This is the one place the plan becomes state. It runs once, at the moment a
+ * transport has an authoritative buffer list, and it is what makes a reconnect
+ * continue the conversation instead of replacing it.
+ *
+ * Two things it exists to prevent:
+ *
+ *   - A snapshot that outlives the session it came from. Without this call the
+ *     snapshot survives a successful reconnect, and the NEXT loss re-displays
+ *     the FIRST outage's content — the transcript the user was reading is
+ *     replaced by an older one. `captureRetainedState` refuses a second capture
+ *     while a snapshot exists, so the stale view is not merely leftover, it is
+ *     what the user sees.
+ *   - Mixing across an identity change. Only a buffer whose store key is
+ *     present in the new list is seeded. A relay that rebuilt its buffers hands
+ *     back different instances under the same names, and 4.10.1 line ids restart
+ *     from a low counter, so merging by name would delete real lines.
+ *
+ * The retained line objects are moved rather than copied: the snapshot is
+ * released in the same call, so nothing else can still be holding them.
+ */
+export function applyRetainedHandoff(): HandoffOutcome | null {
+    const snapshot = current;
+    if (!snapshot) return null;
+
+    const plan = planRetainedHandoff(Object.keys(get(buffers)));
+    if (!plan) return null;
+
+    for (const [key, retained] of plan.seed) {
+        const buffer = get(buffers)[key];
+        if (!buffer) continue;
+        const merged = mergeRetainedLines(retained, buffer.lines);
+        const seen = retainedLineIds(retained);
+        for (const id of buffer.lineIdsSeen ?? []) seen.add(id);
+
+        buffers.update((live) => {
+            const target = live[key];
+            if (!target) return live;
+            return {
+                ...live,
+                [key]: {
+                    ...target,
+                    lines: merged,
+                    lineIdsSeen: seen,
+                    // The retained window is already on screen. A history gate
+                    // that asks "did we request enough?" has to count it, or the
+                    // handoff triggers a fetch for lines the user can already read.
+                    requestedLines: Math.max(target.requestedLines ?? 0, merged.length),
+                    // Completeness describes this session's fetch, not the frozen
+                    // window. Claiming the retained window was complete would
+                    // close the gate on a buffer that never finished loading.
+                    allLinesFetched: target.allLinesFetched,
+                    // Carry the reading anchor only where this session has none
+                    // of its own; a live boundary is a fact about the current
+                    // generation and outranks a remembered one.
+                    readBoundaryKnown: target.readBoundaryId == null ? retained.readBoundaryKnown : target.readBoundaryKnown,
+                    readBoundaryId: target.readBoundaryId ?? retained.readBoundaryId,
+                },
+            };
+        });
+    }
+
+    // The selection is applied through the normal path so the page's own
+    // history/nicklist coordination runs for the conversation being restored.
+    // A null activeKey is expected and benign: a snapshot can be captured while
+    // no buffer is selected, and leaving the selection untouched is the correct
+    // outcome — the new session's own default then stands. Do not "fix" this by
+    // inventing a target here; planRetainedHandoff already owns the fallback order.
+    if (plan.activeKey) setActiveBuffer(plan.activeKey);
+
+    releaseRetainedSnapshot('handoff');
+    return {
+        seeded: plan.seed.size,
+        closedOnServer: plan.closedOnServer.length,
+        activeKey: plan.activeKey,
+        fellBack: plan.activeFellBack,
+    };
 }
 
 // Test/diagnostic helper: the retained view's buffer count, for the invariant

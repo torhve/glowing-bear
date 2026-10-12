@@ -20,6 +20,7 @@
   import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer, listScripts, getSession, getWs, initFocusReconnect, cleanupFocusReconnect, setHotlistPollInterval } from '#lib/stores/connectionManager.ts';
   import { connectionBanner } from '#lib/stores/connectionPresentation.ts';
   import { chatDisplay } from '#lib/stores/chatPresentation.ts';
+  import { setHistoryOutcome } from '#lib/stores/historyState.ts';
   import { initNotifications, onDisconnect, refreshIndicators, startIndicatorOwner } from '#lib/notifications.ts';
   import { parseRelayUrl, isPopoverOpen, bufferHasNicklist, modifyTextareaValue, captureBufferAppearance, waitForFreshBuffer, scriptInstalled } from '#lib/utils.ts';
   import { addToast, toastStore } from '#lib/toast.ts';
@@ -177,14 +178,26 @@
     // smart-filtered lines and zero visible ones. Paging continues until visible
     // lines appear or the server reaches history start (allLinesFetched).
     if ((buf.requestedLines < 100 || buf.lines.length === 0) && !buf.allLinesFetched) {
+      const targetId = buf.id;
+      setHistoryOutcome(targetId, 'loading');
       void (async () => {
         try {
           await fetchMoreLines(100);
+          // Named rather than swallowed. The chat can tell "still loading" from
+          // "this failed" only if somebody records which one happened, and a
+          // buffer that renders nothing while offering a retry button forever
+          // reads as slow rather than as broken.
+          // A completed request is not the same as a complete transcript: the
+          // relay may have returned a window and stopped short of the start.
+          const settled = get(buffers)[targetId];
+          setHistoryOutcome(targetId, settled?.allLinesFetched ? 'loaded' : 'loading');
         } catch (err) {
           console.error('[+page] fetchMoreLines failed:', err);
-        // Silently ignore fetch failures on buffer switch
+          setHistoryOutcome(targetId, 'failed');
         }
       })();
+    } else if (buf.allLinesFetched) {
+      setHistoryOutcome(buf.id, 'loaded');
     }
     // Deltas can create a partial 'root' group before the buffer is first
     // opened (the API streams no initial nicklist state), so the gate is the

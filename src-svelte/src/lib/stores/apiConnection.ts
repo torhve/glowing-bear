@@ -28,7 +28,8 @@ import { createApiStoreReducers, flushApiLineBatch } from '#lib/api/api-store-re
 import { mapHotlist, applyNicklistRoot } from '#lib/api/api-mapping.ts';
 import { fetchHistory, sendInput, clearHiddenLineIdTracking, type InputOutcome } from '#lib/api/api-features.ts';
 import { validateScript } from '#lib/api/api-validation.ts';
-import { captureRetainedState, consumeCaptureIntent, hasRetainedViewForActiveProfile, markCaptureIntent } from '#lib/stores/retainedChat.ts';
+import { applyRetainedHandoff, captureRetainedState, consumeCaptureIntent, hasRetainedViewForActiveProfile, markCaptureIntent } from '#lib/stores/retainedChat.ts';
+import { clearHistoryOutcomes } from '#lib/stores/historyState.ts';
 import type { ApiSession } from '#lib/api/api-session.ts';
 import type { ApiBufferId } from '#lib/api/api-ids.ts';
 import { DEBUG_NICKLIST, DEBUG_WEECHAT_COMMANDS, DEBUG_CONNECTION } from '#lib/debug.ts';
@@ -99,6 +100,9 @@ export function shouldRetainOnStatus(
 export const __resetAllStateForTest = resetAllState;
 
 function resetAllState(retainGeneration?: number) {
+    // See the legacy note: buffer ids are per-session and reused, so a history
+    // outcome cannot be carried across a generation boundary.
+    clearHistoryOutcomes();
     // No hotlist baseline will arrive for a closed connection: never leave
     // the sync phase open across a disconnect.
     endSyncPhase();
@@ -243,6 +247,11 @@ export async function connect(host: string, port: number, path: string, password
                 // old one — a clock that was fixed between attempts would go on
                 // being reported as clock skew.
                 clearErrors();
+                // Same ordering as the legacy path: seed the retained window into
+                // the buffers this bootstrap just published, then let the view see
+                // a live connection. Bootstrap has published the buffer list by
+                // the time the orchestrator reports `connected`.
+                applyRetainedHandoff();
                 setConnectionStatus('connected');
                 connectionState.update((current) => ({ ...current, wasEverConnected: true, userDisconnect: false }));
                 connected.set(true);

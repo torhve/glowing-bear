@@ -14,6 +14,7 @@
 import { derived } from 'svelte/store';
 import { currentBuffer } from '#lib/stores/models.ts';
 import { retainedSnapshot, retainedBufferData } from '#lib/stores/retainedChat.ts';
+import { connectionState } from '#lib/stores/connectionStore.ts';
 import type { BufferData, BufferPresentation } from '#lib/types.ts';
 
 export interface ChatDisplay {
@@ -35,10 +36,18 @@ export interface ChatDisplay {
  * empty chat is worse than some chat.
  */
 export const chatDisplay = derived(
-    [currentBuffer, retainedSnapshot],
-    ([$currentBuffer, $retained]): ChatDisplay => {
-        if ($currentBuffer) return { buffer: $currentBuffer, live: true };
-        if (!$retained) return { buffer: null, live: false };
+    [currentBuffer, retainedSnapshot, connectionState],
+    ([$currentBuffer, $retained, $connection]): ChatDisplay => {
+        // Live data is authoritative for a live connection. During a reconnect's
+        // bootstrap the reducers publish buffers before the session is
+        // authoritative, and switching to them then would replace a readable
+        // transcript with an empty one for the length of the handshake — the
+        // exact regression the retained view exists to avoid. `applyRetainedHandoff`
+        // runs before the transport reports `connected`, so the switch to live
+        // data and the seeding of the retained window are the same step.
+        const liveAuthoritative = $connection.status === 'connected';
+        if (liveAuthoritative && $currentBuffer) return { buffer: $currentBuffer, live: true };
+        if (!$retained) return $currentBuffer ? { buffer: $currentBuffer, live: true } : { buffer: null, live: false };
 
         // activeKey is the conversation the user was reading when the session was
         // lost. Falling back to any retained buffer is deliberate: if that
