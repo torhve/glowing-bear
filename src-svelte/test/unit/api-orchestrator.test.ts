@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { ApiOrchestrator, type SyncPhaseTokens } from '#lib/api/api-orchestrator.ts';
+import { ApiOrchestrator, type OrchestratorOptions, type RetryDriver, type SyncPhaseTokens } from '#lib/api/api-orchestrator.ts';
 import { resolveApiEndpoint } from '#lib/api/api-endpoint.ts';
 import type { ApiReducers } from '#lib/api/api-contracts.ts';
 
@@ -146,10 +146,54 @@ afterEach(() => {
     vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers();
 });
 
-function makeOrchestrator(overrides: Partial<ConstructorParameters<typeof ApiOrchestrator>[0]> = {}) {
+/**
+ * Stand-in for the shared retry scheduler.
+ *
+ * The orchestrator no longer owns a retry timer, an attempt counter or a ladder:
+ * it hands the attempt to the app. These tests are about the orchestrator, so the
+ * scheduler is what gets faked here. The real one has its own coverage in
+ * retry-scheduler.test.ts, which is where the ladder sequence is pinned.
+ */
+function makeRetryStub(policy = { baseMs: 1000, maxMs: 30_000, factor: 2 }) {
+    let attempt = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let begin: (() => void) | null = null;
+    const scheduled: Array<{ error: string; generation: number }> = [];
+    let cancelled = 0;
+    const driver: RetryDriver = {
+        scheduleRetry: (error, generation) => {
+            scheduled.push({ error, generation });
+            if (timer) clearTimeout(timer);
+            const delay = Math.min(policy.baseMs * Math.pow(policy.factor, attempt), policy.maxMs);
+            attempt += 1;
+            timer = setTimeout(() => { timer = null; begin?.(); }, delay);
+            return true;
+        },
+        cancelPendingRetry: () => {
+            cancelled += 1;
+            if (timer) { clearTimeout(timer); timer = null; }
+        },
+        attemptNumber: () => attempt,
+        restartLadder: () => { attempt = 0; },
+    };
+    return {
+        driver,
+        scheduled,
+        setBegin: (fn: () => void) => { begin = fn; },
+        attemptCount: () => attempt,
+        pendingCount: () => (timer ? 1 : 0),
+        cancelCount: () => cancelled,
+    };
+}
+
+function makeOrchestrator(
+    overrides: Partial<OrchestratorOptions> & { retryPolicy?: { baseMs: number; maxMs: number; factor: number } } = {},
+) {
     const reducers = testReducers();
     const { sync, begins, ends } = testSync();
     const statuses: Array<{ state: string; error?: string }> = [];
+    const { retryPolicy, ...rest } = overrides;
+    const retry = makeRetryStub(retryPolicy);
     const orch = new ApiOrchestrator({
         endpoint,
         getPassword: () => 'pw',
@@ -157,10 +201,14 @@ function makeOrchestrator(overrides: Partial<ConstructorParameters<typeof ApiOrc
         sync,
         webSocketFactory: (u, p) => new FakeSocket(u, p) as unknown as WebSocket,
         onStatus: (s) => statuses.push({ state: s.state, error: s.error }),
-        ...overrides,
+        retry: retry.driver,
+        ...rest,
     });
+    // The scheduler starts the attempt through the orchestrator, so the stub needs
+    // the object it was injected into.
+    retry.setBegin(() => orch.startScheduledAttempt());
     liveOrchestrators.push(orch);
-    return { orch, reducers, begins, ends, statuses };
+    return { orch, reducers, begins, ends, statuses, retry };
 }
 
 describe('ApiOrchestrator bootstrap', () => {
@@ -268,11 +316,15 @@ describe('ApiOrchestrator reconnect lifecycle', () => {
                 relay_api_version: '0.6.0', relay_api_version_number: 1536,
             });
         }));
-        const { orch, reducers, begins, ends, statuses } = makeOrchestrator({ backoff: { baseMs: 1000, maxMs: 5000, factor: 2 } });
+        const { orch, reducers, begins, ends, statuses, retry } = makeOrchestrator({ retryPolicy: { baseMs: 1000, maxMs: 5000, factor: 2 } });
         orch.start();
         await vi.advanceTimersByTimeAsync(10);
+        // The failure is now a hand-off, not a status: the orchestrator reports
+        // attempts, the scheduler owns the waiting between them.
+        expect(retry.scheduled).toHaveLength(1);
+        expect(statuses.some((s) => s.state === 'reconnecting')).toBe(false);
+        await vi.advanceTimersByTimeAsync(1000); // first ladder step
         expect(statuses.some((s) => s.state === 'reconnecting')).toBe(true);
-        await vi.advanceTimersByTimeAsync(1000); // first backoff step
         const sock = await waitForSocket();
         sock.emitOpen();
         await completeBootstrap(sock);
@@ -286,13 +338,21 @@ describe('ApiOrchestrator reconnect lifecycle', () => {
 
     it('schedules a reconnect when a connected session drops', async () => {
         stubFetch();
-        const { orch, statuses } = makeOrchestrator();
+        const { orch, statuses, retry } = makeOrchestrator();
         orch.start();
         const sock = await waitForSocket();
         sock.emitOpen();
         await completeBootstrap(sock);
+        // Await the baseline before dropping: with no status written by the failure
+        // path, the close no longer drags the assertion forward to a settled state.
+        await vi.waitFor(() => expect(statuses[statuses.length - 1]!.state).toBe('connected'));
         sock.emitClose(1006);
-        expect(statuses[statuses.length - 1]!.state).toBe('reconnecting');
+        expect(retry.scheduled).toHaveLength(1);
+        expect(retry.scheduled[0]!.error).toContain('code 1006');
+        // The generation handed to the scheduler is the one this attempt ran under,
+        // which is what lets the app wipe the right session's state.
+        expect(retry.scheduled[0]!.generation).toBe(1);
+        expect(statuses[statuses.length - 1]!.state).toBe('connected');
         orch.dispose();
     });
 
@@ -301,7 +361,7 @@ describe('ApiOrchestrator reconnect lifecycle', () => {
     it('upgrade event reconnects in ~2 s, not via the slow backoff', async () => {
         vi.useFakeTimers();
         stubFetch();
-        const { orch, reducers } = makeOrchestrator({ backoff: { baseMs: 30_000, maxMs: 300_000, factor: 1.5 } });
+        const { orch, reducers } = makeOrchestrator({ retryPolicy: { baseMs: 30_000, maxMs: 300_000, factor: 1.5 } });
         orch.start();
         await vi.advanceTimersByTimeAsync(10);
         const sock = await waitForSocket();
@@ -315,9 +375,92 @@ describe('ApiOrchestrator reconnect lifecycle', () => {
 
         FakeSocket.instances = [];
         await vi.advanceTimersByTimeAsync(1999);
-        expect(FakeSocket.instances).toHaveLength(0); // 30 s backoff has NOT fired
+        expect(FakeSocket.instances).toHaveLength(0); // 30 s ladder has NOT fired
         await vi.advanceTimersByTimeAsync(2);
         expect(FakeSocket.instances).toHaveLength(1); // upgrade timer won
+        // The upgrade path replaces the slower attempt rather than joining it: a
+        // second socket 28 s later would be a second session beside the first.
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect(FakeSocket.instances).toHaveLength(1);
+        orch.dispose();
+        vi.useRealTimers();
+    });
+
+    it('reports no attempt in flight while waiting out a backoff', async () => {
+        vi.useFakeTimers();
+        stubFetch();
+        const { orch, statuses } = makeOrchestrator();
+        orch.start();
+        const sock = await waitForSocket();
+        expect(orch.attemptInFlight).toBe(true);
+        sock.emitOpen();
+        // Die during bootstrap, not after: that is the case where the last status
+        // the attempt wrote is the one that lies. A failure after 'connected'
+        // leaves a status that happens to read correctly, which is why this defect
+        // survived every test that dropped a healthy session.
+        await vi.waitFor(() => expect(statuses.some((s) => s.state === 'bootstrapping')).toBe(true));
+        expect(orch.attemptInFlight).toBe(true);
+
+        // The failure hands the attempt to the scheduler and writes no status of
+        // its own. If the orchestrator keeps claiming the attempt it started is
+        // still running, every consumer that asks "is an attempt in flight?" says
+        // yes while the client is waiting out a backoff — and the banner hides its
+        // own countdown because it believes a retry is already underway.
+        sock.emitClose(1006);
+        expect(orch.attemptInFlight).toBe(false);
+        expect(statuses[statuses.length - 1]!.state).toBe('bootstrapping');
+        orch.dispose();
+        vi.useRealTimers();
+    });
+
+    it('a scheduled attempt is cancelled by stopping, not left armed beside it', async () => {
+        vi.useFakeTimers();
+        stubFetch();
+        const { orch, statuses, retry } = makeOrchestrator({ retryPolicy: { baseMs: 1000, maxMs: 5000, factor: 2 } });
+        orch.start();
+        await vi.advanceTimersByTimeAsync(10);
+        const sock = await waitForSocket();
+        sock.emitOpen();
+        await completeBootstrap(sock);
+        await vi.waitFor(() => expect(statuses[statuses.length - 1]!.state).toBe('connected'));
+        sock.emitClose(1006);
+        expect(retry.scheduled).toHaveLength(1);
+        expect(retry.pendingCount()).toBe(1);
+
+        // The retry timer is no longer the orchestrator's, so `stop()` has to reach
+        // it through the driver. Asserting "no socket appeared" is not enough: the
+        // attempt itself refuses to start on a stopped orchestrator, which would
+        // hide an armed timer that outlived the object that scheduled it.
+        FakeSocket.instances = [];
+        orch.dispose();
+        expect(retry.pendingCount()).toBe(0);
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(FakeSocket.instances).toHaveLength(0);
+        vi.useRealTimers();
+    });
+
+    it('labels the next attempt from the shared counter, not from one of its own', async () => {
+        vi.useFakeTimers();
+        stubFetch();
+        const { orch, statuses, retry } = makeOrchestrator({ retryPolicy: { baseMs: 1000, maxMs: 5000, factor: 2 } });
+        orch.start();
+        await vi.advanceTimersByTimeAsync(10);
+        const sock = await waitForSocket();
+        sock.emitOpen();
+        await completeBootstrap(sock);
+        await vi.waitFor(() => expect(statuses[statuses.length - 1]!.state).toBe('connected'));
+        sock.emitClose(1006);
+        expect(retry.scheduled).toHaveLength(1);
+        FakeSocket.instances = [];
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(statuses.some((s) => s.state === 'reconnecting')).toBe(true);
+
+        // A takeover that resets the ladder is a first connect as far as the UI is
+        // concerned. The label follows the shared counter, which is also the number
+        // the banner shows as "attempt N".
+        orch.reconnectNow(true);
+        expect(statuses[statuses.length - 1]!.state).toBe('connecting');
+        expect(retry.attemptCount()).toBe(0);
         orch.dispose();
         vi.useRealTimers();
     });
@@ -325,7 +468,7 @@ describe('ApiOrchestrator reconnect lifecycle', () => {
     it('quit event logs via relayLifecycle and leaves reconnect to the close path', async () => {
         vi.useFakeTimers();
         stubFetch();
-        const { orch, reducers } = makeOrchestrator({ backoff: { baseMs: 5000, maxMs: 5000, factor: 2 } });
+        const { orch, reducers } = makeOrchestrator({ retryPolicy: { baseMs: 5000, maxMs: 5000, factor: 2 } });
         orch.start();
         await vi.advanceTimersByTimeAsync(10);
         const sock = await waitForSocket();

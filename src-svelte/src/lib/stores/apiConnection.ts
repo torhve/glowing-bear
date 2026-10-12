@@ -11,11 +11,10 @@ import { get } from 'svelte/store';
 import {
     setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore,
     connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts,
-    setReconnectAttempts, setNextReconnectAt,
+    setNextReconnectAt,
 } from '#lib/stores/connectionStore.ts';
 import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, weechatVersion, relayApiVersion, hasNoHistoryToFetch, markHistoryComplete } from '#lib/stores/models.ts';
 import { settings } from '#lib/stores/settings.ts';
-import { addToast, updateToast } from '#lib/toast.ts';
 
 import { resolveApiEndpoint } from '#lib/api/api-endpoint.ts';
 import { ApiOrchestrator, type OrchestratorStatus } from '#lib/api/api-orchestrator.ts';
@@ -23,16 +22,18 @@ import { createApiStoreReducers, flushApiLineBatch } from '#lib/api/api-store-re
 import { mapHotlist, applyNicklistRoot } from '#lib/api/api-mapping.ts';
 import { fetchHistory, sendInput, clearHiddenLineIdTracking, type InputOutcome } from '#lib/api/api-features.ts';
 import { validateScript } from '#lib/api/api-validation.ts';
-import { applyRetainedHandoff, hasRetainedViewForActiveProfile, markCaptureIntent } from '#lib/stores/retainedChat.ts';
+import { applyRetainedHandoff, markCaptureIntent } from '#lib/stores/retainedChat.ts';
 import {
-    RECONNECT_BACKOFF,
+    cancelPendingRetry,
     cleanupFocusReconnect as sharedCleanupFocusReconnect,
     beginManualReconnect,
     clearDisconnectToast,
-    countdownText,
     debounceHotlistQuery,
-    findDisconnectToast,
+    pendingRetryState,
     resetAppState,
+    restartRetryLadder,
+    retryAttemptNumber,
+    scheduleRetry,
     showDisconnectToast as sharedShowDisconnectToast,
     startHotlistPoll,
     stopHotlistPoll,
@@ -106,6 +107,15 @@ export function shouldRetainOnStatus(
  *  reimplementation. Application code must not call this: loss call sites go
  *  through the status branches that also declare capture intent. */
 export const __resetAllStateForTest = resetAllState;
+
+/**
+ * Release the promise `connect()` returned, from wherever the loss is noticed.
+ *
+ * The orchestrator no longer reports a failure as a status, so the rejection
+ * cannot live in the status branches. It is installed per attempt and cleared
+ * when that attempt settles, so a dead attempt can never reject a newer one.
+ */
+let settleConnectFailure: (error: string) => void = () => undefined;
 
 function resetAllState(retainGeneration?: number) {
     // See the legacy note: buffer ids are per-session and reused, so a history
@@ -193,6 +203,18 @@ export async function connect(profile: ConnectionProfile): Promise<void> {
 
     return new Promise<void>((resolve, reject) => {
         let settled = false;
+        // Installed per attempt. A driver that no longer owns `orchestrator` is
+        // refused before it can reach this, so an old attempt cannot reject a
+        // newer attempt's promise.
+        settleConnectFailure = (error: string) => {
+            if (settled) return;
+            settled = true;
+            reject(new Error(error));
+        };
+        // Captured so the retry driver can tell whether it still owns the
+        // orchestrator it belongs to. `orch` itself cannot be referenced from
+        // inside its own initializer.
+        let self: ApiOrchestrator | undefined = undefined;
         const orch = new ApiOrchestrator({
             endpoint,
             getPassword: () => connectionData?.password ?? '',
@@ -201,11 +223,46 @@ export async function connect(profile: ConnectionProfile): Promise<void> {
             // TOTP codes are single-use: a TOTP connection must not silently
             // retry with a stale code (legacy parity).
             autoReconnect: () => get(settings).autoconnect && !get(settings).useTotp,
-            // Legacy parity: 30 s initial, ×1.5, capped at 5 min.
-            backoff: RECONNECT_BACKOFF,
+            // The retry policy is injected, not owned: the ladder, the countdown
+            // and everything the app must do while it waits live in the shared
+            // scheduler, exactly as they do for the legacy transport.
+            retry: {
+                scheduleRetry: (error: string, generation: number) => {
+                    // A stale attempt must not schedule work for a newer
+                    // orchestrator: the scheduler's timer belongs to the attempt
+                    // that armed it.
+                    if (!self || orchestrator !== self || !connectionData) return false;
+                    const profile = connectionData;
+                    const scheduled = scheduleRetry(
+                        {
+                            profile,
+                            error,
+                            // The transport's own loss path, with this attempt's
+                            // generation. The drain is protocol-side, and the
+                            // drain -> capture -> wipe order is pinned against this
+                            // function, so the scheduler calls it rather than
+                            // assembling an approximation of it.
+                            wipe: () => resetAllState(generation),
+                            open: () => self?.startScheduledAttempt(),
+                            nameFailure: (e) => mapFailureToError(e, false),
+                        },
+                        () => triggerManualReconnect(false),
+                    );
+                    // Release the caller's connect() only once the loss has been
+                    // presented, which is where the status branch used to do it.
+                    // Rejecting before the wipe would let the form's error handling
+                    // run against stores that still describe the dead session.
+                    if (scheduled) settleConnectFailure(error);
+                    return scheduled;
+                },
+                cancelPendingRetry,
+                attemptNumber: retryAttemptNumber,
+                restartLadder: restartRetryLadder,
+            },
             onStatus: (status) => handleOrchestratorStatus(status, orch),
         });
         orchestrator = orch;
+        self = orch;
 
         const handleOrchestratorStatus = (status: OrchestratorStatus, owner: ApiOrchestrator) => {
             if (owner !== orchestrator) return; // stale generator
@@ -246,30 +303,13 @@ export async function connect(profile: ConnectionProfile): Promise<void> {
                 if (!settled) { settled = true; resolve(); }
                 break;
             case 'reconnecting':
+                // The scheduler already wrote the status, the countdown, the
+                // capture intent, the wipe and the toast. This branch now runs when
+                // an attempt STARTS, not when a failure happens — which is the
+                // whole point of the split: the protocol layer reports attempts, the
+                // app owns the waiting between them.
                 connecting = false;
-                // Name a failure the loop cannot fix by trying again (a clock that
-                // disagrees with the server, TOTP): without this, a relay that will
-                // never accept this client retries quietly forever and the only
-                // trace of why is in the console. A transport-level failure stays
-                // unnamed so the banner keeps saying "Connection lost. Retrying…",
-                // which is what a dropped session actually is.
-                mapFailureToError(status.error ?? 'connection failed', false);
-                setConnectionStatus('reconnecting');
                 connected.set(false);
-                setReconnectAttempts(status.attempt);
-                setNextReconnectAt(status.nextRetryAt);
-                // 'reconnecting' also follows a failed FIRST connect (the
-                // orchestrator labels attempt > 0 this way), so a session must
-                // have reached its bootstrap before there is anything to retain.
-                if (shouldRetainOnStatus(status.state, get(connectionState).wasEverConnected, !!connectionData)) {
-                    markCaptureIntent();
-                }
-                resetAllState(status.generation);
-                // After the wipe, not before: the retained view only exists once
-                // the wipe has taken its snapshot, and the toast defers to it.
-                // Safe because showReconnectToast reads `connectionData` and
-                // `settings`, neither of which resetAllState touches.
-                showReconnectToast(status);
                 if (!settled) { settled = true; reject(new Error(status.error ?? 'connection failed')); }
                 break;
             case 'disconnected':
@@ -306,39 +346,6 @@ function showDisconnectToast(connInfo: ConnectionProfile) {
     sharedShowDisconnectToast(connInfo, () => triggerManualReconnect(false));
 }
 
-// Countdown toast while the orchestrator schedules the next attempt.
-function showReconnectToast(status: OrchestratorStatus) {
-    if (!connectionData) return;
-    // The banner owns this presentation whenever a retained view is on screen.
-    if (hasRetainedViewForActiveProfile()) return;
-    // A 'reconnecting' status without nextRetryAt means an attempt is already
-    // in flight (not scheduled) — the existing countdown toast stands until
-    // the attempt resolves; stacking another one here is wrong.
-    if (status.nextRetryAt === undefined) return;
-    if (!get(settings).autoconnect) {
-        showDisconnectToast(connectionData);
-        return;
-    }
-    const { host, port } = connectionData;
-    const nextAt = status.nextRetryAt ?? Date.now();
-    const existingToast = findDisconnectToast(host, port);
-    if (existingToast) {
-        updateToast(existingToast.id, { messageFn: () => countdownText(nextAt) });
-    } else {
-        addToast(
-            `Disconnected from ${host}:${port}`,
-            {
-                type: 'warning',
-                duration: 0,
-                messageFn: () => countdownText(nextAt),
-                buttons: [{
-                    text: 'Reconnect',
-                    action: () => triggerManualReconnect(false)
-                }]
-            }
-        );
-    }
-}
 
 function clearReconnectToasts(): void {
     if (!connectionData) return;
@@ -361,9 +368,7 @@ function triggerManualReconnect(resetAttempts = false) {
  *  third attempt on top of one already running. False during the backoff wait
  *  between attempts — that is exactly when a retry is worth taking over. */
 export function isAttemptInProgress(): boolean {
-    if (!orchestrator) return false;
-    const state = orchestrator.currentStatus.state;
-    return state === 'connecting' || state === 'bootstrapping';
+    return orchestrator?.attemptInFlight ?? false;
 }
 
 /**
@@ -374,11 +379,7 @@ export function isAttemptInProgress(): boolean {
  * same question answered from a `setTimeout`.
  */
 function pendingRetry(): PendingRetry {
-    const status = orchestrator?.currentStatus;
-    if (!orchestrator || !connectionData || !status || status.state !== 'reconnecting') {
-        return { active: false };
-    }
-    return { active: true, nextRetryAt: status.nextRetryAt };
+    return pendingRetryState();
 }
 
 /**

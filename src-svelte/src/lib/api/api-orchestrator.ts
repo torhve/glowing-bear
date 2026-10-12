@@ -38,13 +38,29 @@ export interface OrchestratorStatus {
     serverVersion?: VersionResponse;
 }
 
-export interface BackoffPolicy {
-    baseMs: number;
-    maxMs: number;
-    factor: number;
+/**
+ * The retry policy, injected rather than owned.
+ *
+ * The orchestrator used to run its own retry loop: a timer, an attempt counter
+ * and a backoff ladder that duplicated the legacy transport's. Keeping it here
+ * meant the same policy had two owners with different indexing, and a change to
+ * one had to be remembered for the other.
+ *
+ * What the orchestrator still owns, and deliberately so: the generation, the
+ * abort/supersede machinery, the session teardown, and the sync-phase token. The
+ * sync phase must open inside an attempt and close on a protocol event — never
+ * from a retry timer — so the attempt stays here even though the timer does not.
+ */
+export interface RetryDriver {
+    /** Schedule the next attempt. Reports whether one was actually scheduled. */
+    scheduleRetry(error: string, generation: number): boolean;
+    /** Cancel a scheduled attempt without deciding to stop reconnecting. */
+    cancelPendingRetry(): void;
+    /** Which attempt is about to run: 0 is the first connect, 1 the first retry. */
+    attemptNumber(): number;
+    /** Restart the ladder from the beginning. */
+    restartLadder(): void;
 }
-
-const DEFAULT_BACKOFF: BackoffPolicy = { baseMs: 1000, maxMs: 30_000, factor: 2 };
 
 /** Live-verified baseline: Relay API 0.6.0 (number 1536). Older API servers
  *  lack endpoints this migration depends on (completion, batched arrays). */
@@ -57,7 +73,7 @@ export interface OrchestratorOptions {
     sync: SyncPhaseTokens;
     webSocketFactory?: (url: string, protocols: string[]) => WebSocket;
     autoReconnect?: boolean | (() => boolean);
-    backoff?: BackoffPolicy;
+    retry?: RetryDriver;
     minApiVersionNumber?: number;
     keepAliveMs?: number;
     requestTimeoutMs?: number;
@@ -69,12 +85,24 @@ class VersionTooOldError extends Error {}
 export class ApiOrchestrator {
     private readonly opts: OrchestratorOptions;
     private generation = 0;
-    private attempt = 0;
     private session: ApiSession | null = null;
     private abort: AbortController | null = null;
-    private retryTimer: ReturnType<typeof setTimeout> | null = null;
     private upgradeTimer: ReturnType<typeof setTimeout> | null = null;
     private stopped = true;
+    /**
+     * Which attempt is still running, by generation.
+     *
+     * The status used to answer this question: a failure wrote 'reconnecting', so
+     * reading the status told you whether an attempt was in flight. The failure
+     * path no longer writes a status — the scheduler does — which left the last
+     * status the attempt had started with. A session that died during bootstrap
+     * reported 'bootstrapping' forever, and every consumer that asks "is an
+     * attempt in flight?" answered yes while the client was actually waiting out a
+     * backoff. The banner hid its own countdown because of it.
+     *
+     * The attempt lifecycle is the orchestrator's, so it reports it directly.
+     */
+    private runningGeneration: number | null = null;
     private status: OrchestratorStatus = { state: 'idle', generation: 0, attempt: 0 };
 
     constructor(opts: OrchestratorOptions) {
@@ -94,7 +122,7 @@ export class ApiOrchestrator {
      *  any in-flight older attempt is superseded. */
     start(): void {
         this.stopped = false;
-        this.attempt = 0;
+        this.opts.retry?.restartLadder();
         this.beginAttempt();
     }
 
@@ -103,10 +131,18 @@ export class ApiOrchestrator {
     reconnectNow(resetAttempts = false): void {
         if (this.stopped) return;
         this.clearRetry();
-        // Manual "reconnect now" keeps the backoff ladder unless explicitly
-        // reset (focus-reconnect), so a failed immediate retry escalates.
-        if (resetAttempts) this.attempt = 0;
+        // Manual "reconnect now" keeps the ladder unless explicitly reset
+        // (focus-reconnect), so a failed immediate retry escalates.
+        if (resetAttempts) this.opts.retry?.restartLadder();
         this.supersedeCurrent();
+        this.beginAttempt();
+    }
+
+    /** Start the attempt the shared scheduler has decided to make. Distinct from
+     *  reconnectNow(): nothing is cancelled and the ladder is untouched, because
+     *  the scheduler has already done both. */
+    startScheduledAttempt(): void {
+        if (this.stopped) return;
         this.beginAttempt();
     }
 
@@ -114,9 +150,23 @@ export class ApiOrchestrator {
      *  by a client leaving. */
     stop(): void {
         this.stopped = true;
+        this.runningGeneration = null;
         this.clearRetry();
         this.supersedeCurrent();
         this.setStatus({ state: 'disconnected' });
+    }
+
+    /** True while an attempt is running: between an attempt starting and it
+     *  succeeding, failing, or being superseded. False while waiting out a
+     *  backoff, which is exactly when a manual retry is worth taking over. */
+    get attemptInFlight(): boolean {
+        return this.runningGeneration !== null && this.runningGeneration === this.generation;
+    }
+
+    /** Clear the running mark, but never for a superseded attempt: a late exit
+     *  from an older attempt must not claim the current one has finished. */
+    private markAttemptSettled(generation: number): void {
+        if (generation === this.generation) this.runningGeneration = null;
     }
 
     /** Full teardown (HMR cleanup / component destroy). */
@@ -128,14 +178,16 @@ export class ApiOrchestrator {
 
     private beginAttempt(): void {
         const generation = ++this.generation;
+        const attempt = this.opts.retry?.attemptNumber() ?? 0;
         this.supersedeCurrent();
         const abort = new AbortController();
         this.abort = abort;
         const syncToken = this.opts.sync.begin();
+        this.runningGeneration = generation;
         this.setStatus({
-            state: this.attempt === 0 ? 'connecting' : 'reconnecting',
+            state: attempt === 0 ? 'connecting' : 'reconnecting',
             generation,
-            attempt: this.attempt,
+            attempt,
             error: undefined,
             nextRetryAt: undefined,
         });
@@ -231,12 +283,14 @@ export class ApiOrchestrator {
             // Baseline applied — the only protocol event that closes a
             // successful sync phase.
             this.opts.sync.end(syncToken);
-            this.attempt = 0;
+            this.markAttemptSettled(generation);
+            this.opts.retry?.restartLadder();
             this.setStatus({ state: 'connected', error: undefined, nextRetryAt: undefined }, { generation });
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             // Failure exit closes the sync phase with this attempt's token.
             this.opts.sync.end(syncToken);
+            this.markAttemptSettled(generation);
             if (err instanceof VersionTooOldError) return; // status already failed
             if (!this.isCurrent(generation)) return;
             session?.destroy();
@@ -248,6 +302,7 @@ export class ApiOrchestrator {
 
     private handleSessionClose(generation: number, close: ApiSessionClose): void {
         if (!this.isCurrent(generation)) return;
+        this.markAttemptSettled(generation);
         this.session = null;
         // Disconnect is a protocol-level exit; any still-open sync phase for
         // this generation is closed here, never by a timer.
@@ -265,15 +320,11 @@ export class ApiOrchestrator {
             this.setStatus({ state: 'failed', error }, { generation });
             return;
         }
-        const backoff = this.opts.backoff ?? DEFAULT_BACKOFF;
-        const delay = Math.min(backoff.baseMs * Math.pow(backoff.factor, this.attempt), backoff.maxMs);
-        this.attempt += 1;
-        const nextRetryAt = Date.now() + delay;
-        this.setStatus({ state: 'reconnecting', error, nextRetryAt }, { generation });
-        this.retryTimer = setTimeout(() => {
-            this.retryTimer = null;
-            if (!this.stopped) this.beginAttempt();
-        }, delay);
+        // Two outcomes, nothing else: stop trying, or hand the attempt to the
+        // shared scheduler. The ladder, the countdown, the status write and the
+        // wipe that must happen while the client waits all belong to the app, not
+        // to the protocol layer.
+        this.opts.retry?.scheduleRetry(error, generation);
     }
 
     /** Legacy parity for upgrade/upgrade_ended: reconnect ~2 s after the
@@ -307,10 +358,9 @@ export class ApiOrchestrator {
             clearTimeout(this.upgradeTimer);
             this.upgradeTimer = null;
         }
-        if (this.retryTimer !== null) {
-            clearTimeout(this.retryTimer);
-            this.retryTimer = null;
-        }
+        // The retry timer is no longer this object's, but stopping or taking over
+        // an attempt still has to reach it.
+        this.opts.retry?.cancelPendingRetry();
     }
 
     private isCurrent(generation: number): boolean {
@@ -323,7 +373,7 @@ export class ApiOrchestrator {
             ...this.status,
             ...partial,
             generation: this.generation,
-            attempt: this.attempt,
+            attempt: this.opts.retry?.attemptNumber() ?? 0,
         };
         this.opts.onStatus?.(this.status);
     }

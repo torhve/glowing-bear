@@ -645,6 +645,10 @@ export function scheduleRetry(attempt: RetryAttempt, onReconnect: () => void): b
 
     retryTimer = setTimeout(() => {
         retryTimer = null;
+        // The countdown has been spent. Leaving it set would render a negative
+        // "next attempt in" for as long as the attempt takes, because an API retry
+        // is labelled 'reconnecting' while it is in flight, not 'connecting'.
+        setNextReconnectAt(undefined);
         // Status is already 'reconnecting' from the schedule; the attempt itself
         // moves it to 'connecting'.
         attempt.open();
