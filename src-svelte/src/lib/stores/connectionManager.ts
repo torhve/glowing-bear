@@ -29,6 +29,7 @@ import {
     registerTransportAdapter,
     retryAvailability as sharedRetryAvailability,
     retryNow as sharedRetryNow,
+    teardownAll,
     transportAdapterFor,
     type ConnectionProfile,
     type RetryAvailability,
@@ -178,10 +179,11 @@ export function disconnect(): void {
     // the two transport wipes run, so a stale intent can never make an
     // intentional Leave capture a session.
     clearCaptureIntent();
-    // Both transports clean up; the inactive one is a no-op except for the
-    // shared store resets, which are idempotent.
-    api.disconnect();
-    legacy.disconnect();
+    // One teardown for whichever transport is active, and one outcome. The
+    // inactive transport is quiesced, not wiped: it has no session to close, and
+    // running a second full reset for a transport that does not own the app state
+    // was only ever safe because every step happened to tolerate running twice.
+    teardownAll();
     // The retained view belongs to the relay the user just left.
     releaseRetainedSnapshot('explicit-leave');
     transport = null;

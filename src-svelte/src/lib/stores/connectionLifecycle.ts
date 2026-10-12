@@ -36,7 +36,7 @@
 
 import { get } from 'svelte/store';
 import { addToast, removeToast, toastStore, updateToast, type Toast } from '#lib/toast.ts';
-import { activeTransport, connectionState, incrementReconnectAttempts, resetReconnectAttempts, setConnectionStatus, setErrors, setNextReconnectAt, type RelayTransportKind } from '#lib/stores/connectionStore.ts';
+import { activeTransport, connectionState, disconnect as disconnectStore, incrementReconnectAttempts, resetReconnectAttempts, setConnectionStatus, setErrors, setNextReconnectAt, type RelayTransportKind } from '#lib/stores/connectionStore.ts';
 import { classifyConnectionFailure } from '#lib/utils/connectionFailure.ts';
 import { DEBUG_CONNECTION } from '#lib/debug.ts';
 import { settings } from '#lib/stores/settings.ts';
@@ -186,6 +186,55 @@ export function transportAdapterFor(kind: RelayTransportKind | null): TransportA
 /** The adapter for the transport the facade currently serves. */
 export function activeTransportAdapter(): TransportAdapter | null {
     return transportAdapterFor(get(activeTransport));
+}
+
+/**
+ * End the connection: one teardown, one outcome.
+ *
+ * The facade used to call both transports' `disconnect()`, so the inactive
+ * transport ran a full `resetAllState()` beside the active one. That was only
+ * harmless by accident — the wipes are idempotent, `onDisconnect()` is idempotent,
+ * and a capture intent can be consumed only once. "Harmless because everything
+ * tolerates running twice" is not a design: it means a future wipe that is NOT
+ * idempotent breaks silently.
+ *
+ * The active transport owns its own session, so it is the only one that tears
+ * down. The other gets `quiesce()`, which is enough by construction: a transport
+ * stops being active only after `connect()` quiesced it, so it cannot have a live
+ * session here — what it can still have is an armed timer, and quiesce clears
+ * exactly that.
+ *
+ * The outcome (`userDisconnect`, `'disconnected'`) belongs to the app, not to
+ * whichever transport happened to be active, so it is written once here instead
+ * of as the last line of each transport's teardown.
+ */
+export function teardownAll(): void {
+    // Before any teardown: a transport's close handler must be able to see that
+    // this departure is deliberate, and a socket's close event arrives on a later
+    // tick than the `close()` call that produced it.
+    //
+    // This also means a transport's wipe runs with `userDisconnect` already set,
+    // where the API transport used to wipe first. Invariant to preserve: a wipe
+    // must not branch on `userDisconnect` or `wasEverConnected` — it clears those
+    // stores, so reading them would make the outcome depend on wipe order.
+    disconnectStore();
+
+    const active = activeTransportAdapter();
+    for (const kind of ['api', 'legacy'] as const) {
+        const adapter = transportAdapterFor(kind);
+        if (!adapter) continue;
+        if (adapter === active) adapter.teardown();
+        else adapter.quiesce();
+    }
+
+    if (!active) {
+        // A connect attempt that never produced a session can still have left
+        // stores describing it, and there is no transport left to do the wiping.
+        // The wipe is part of the outcome, so it runs regardless.
+        resetAppState();
+    }
+
+    setConnectionStatus('disconnected');
 }
 
 /**

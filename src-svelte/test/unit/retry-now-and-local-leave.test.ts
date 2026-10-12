@@ -132,7 +132,9 @@ describe('Leave is local-only on the legacy transport', () => {
     it('sends no frame at all before closing the socket', () => {
         const socket = connectLegacy();
 
-        legacy.disconnect();
+        // Reached through the adapter, which is the only thing that calls it:
+        // tearing down a transport's own session is not a public command.
+        legacy.transportAdapter.teardown();
 
         expect(socket.sent, 'a Leave must not send /quit').toHaveLength(0);
         expect(socket.closeCalls).toEqual([{ code: 1000, reason: 'user disconnect' }]);
@@ -178,7 +180,7 @@ describe('retryNow delegates to the transport that owns the profile', () => {
             expect(vi.getTimerCount()).toBe(0);
             expect(FakeSocket.instances).toHaveLength(2);
         } finally {
-            legacy.disconnect();
+            legacy.transportAdapter.teardown();
             vi.useRealTimers();
         }
     });
@@ -203,7 +205,7 @@ describe('retryNow delegates to the transport that owns the profile', () => {
 
     it('refuses to retry after an explicit Leave', () => {
         connectLegacy();
-        legacy.disconnect();
+        facadeDisconnect();
 
         // connectionData is cleared and userDisconnect is set; either alone must
         // stop a retry from resurrecting a profile the user left.
@@ -230,7 +232,7 @@ describe('retryNow delegates to the transport that owns the profile', () => {
         // (apiConnection 'connected', legacyConnection handshake-complete), so a
         // refused retry cannot manufacture the state a real connect earns.
         connectLegacy();
-        legacy.disconnect();
+        facadeDisconnect();
         expect(get(connectionState).userDisconnect).toBe(true);
 
         expect(retryNow()).toBe('no-retry-loop');

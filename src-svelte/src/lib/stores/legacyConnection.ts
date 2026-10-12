@@ -1,5 +1,5 @@
 import { get } from 'svelte/store';
-import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts } from '#lib/stores/connectionStore.ts';
+import { setConnectionStatus, setErrors, clearErrors, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts } from '#lib/stores/connectionStore.ts';
 import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, hasNoHistoryToFetch, markHistoryComplete } from '#lib/stores/models.ts';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist, flushLineBatch, setOnUpgrade, setOnUpgradeEnded } from '#lib/stores/handlers.ts';
 import { addToast, removeToast, clearToasts, toastStore } from '#lib/toast.ts';
@@ -13,6 +13,7 @@ import {
     cancelPendingRetry,
     pendingRetryState,
     scheduleRetry,
+    teardownAll,
     debounceHotlistQuery,
     resetAppState,
     showDisconnectToast as sharedShowDisconnectToast,
@@ -666,7 +667,7 @@ function quiesce(): void {
 export const transportAdapter: TransportAdapter = {
     kind: 'legacy',
     open: (profile) => connect(profile),
-    teardown: () => disconnect(),
+    teardown: () => teardownSession(),
     hasLiveSession: () => ws !== null && ws.readyState === WebSocket.OPEN,
     isAttemptInProgress: () => connecting,
     // A captured profile is the whole retry loop for this transport: the armed
@@ -828,9 +829,12 @@ export function sendMessage(message: string): boolean {
     return sendWs(msg, 'msg:' + buffer.shortName);
 }
 
-export function disconnect() {
-    // Mark as user-initiated so the onclose handler doesn't auto-reconnect.
-    disconnectStore();
+function teardownSession() {
+    // `teardownAll()` has already marked this a user-initiated departure by the
+    // time this runs — that is what keeps the onclose handler below from
+    // auto-reconnecting. This function closes this transport's session; declaring
+    // the connection-level outcome is not its job, and doing it here is how both
+    // transports ended up wiping the app on a Leave.
     connectionData = null;
     // Close ALL tracked WebSocket instances (including orphaned ones from previous
     // connections). Local-only: this deliberately does NOT send /quit, matching
@@ -854,7 +858,6 @@ export function disconnect() {
     }
     // Clear all app state — buffers, servers, timers, callbacks, notifications.
     resetAllState();
-    setConnectionStatus('disconnected');
 }
 
 export async function requestNicklist(bufferId: string) {
@@ -1135,7 +1138,10 @@ if (import.meta.hot) {
         addToast('HMR detected — reconnecting...', { type: 'info', duration: 0 });
         const toastId = get(toastStore)[get(toastStore).length - 1]?.id;
 
-        disconnect();
+        // The whole-connection teardown, not just this transport's: the HMR path
+        // needs the same outcome a Leave produces — userDisconnect set and the
+        // status written — before it reconnects onto the same profile.
+        teardownAll();
 
         setTimeout(() => {
             connect(savedData!)

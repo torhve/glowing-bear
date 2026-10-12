@@ -9,7 +9,7 @@
 
 import { get } from 'svelte/store';
 import {
-    setConnectionStatus, clearErrors, disconnect as disconnectStore,
+    setConnectionStatus, clearErrors,
     connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts,
     setNextReconnectAt,
 } from '#lib/stores/connectionStore.ts';
@@ -402,7 +402,7 @@ function quiesce(): void {
 export const transportAdapter: TransportAdapter = {
     kind: 'api',
     open: (profile) => connect(profile),
-    teardown: () => disconnect(),
+    teardown: () => teardownSession(),
     hasLiveSession: () => currentSession() !== null,
     isAttemptInProgress: () => isAttemptInProgress(),
     // Both halves are required: an orchestrator with no profile has nothing to
@@ -621,15 +621,19 @@ export async function sendMessage(message: string): Promise<boolean> {
     return res.accepted;
 }
 
-export function disconnect() {
+function teardownSession() {
     // Local disconnect only — never /quit; WeeChat must not be shut down by
     // a client leaving.
+    //
+    // This closes THIS transport's session. The connection-level outcome —
+    // `userDisconnect`, the `'disconnected'` status — is written once by the
+    // shared `teardownAll()`, which is what decides whether a transport tears
+    // down at all. A teardown that also declared the outcome was how the two
+    // transports ended up both wiping the app on a Leave.
     orchestrator?.stop();
     orchestrator = null;
     connectionData = null;
     resetAllState();
-    disconnectStore();
-    setConnectionStatus('disconnected');
 }
 
 // Current live session for feature callers (completion, history, imgur
