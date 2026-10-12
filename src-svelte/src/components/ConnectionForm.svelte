@@ -145,7 +145,14 @@
     setConnectionStatus('connecting');
     try {
       const { host: parsedHost, port: parsedPort, path: parsedPath } = parseRelayUrl(hostField, port);
-      await connect(parsedHost, parsedPort, parsedPath, password, tls, false);
+      await connect({
+        host: parsedHost,
+        port: parsedPort,
+        path: parsedPath,
+        password,
+        tls,
+        noCompression: false,
+      });
       updateSettings({
         hostField: parsedHost,
         port: parsedPort.toString(),

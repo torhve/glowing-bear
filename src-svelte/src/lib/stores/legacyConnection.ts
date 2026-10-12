@@ -1,15 +1,28 @@
 import { get } from 'svelte/store';
 import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, incrementReconnectAttempts, setNextReconnectAt } from '#lib/stores/connectionStore.ts';
-import { buffers, servers, activeBufferId, getBuffer, connected, setActiveBuffer, localUnreadBuffers, hotlistClearedBuffers, bufferBottom, previousBufferId, pendingBufferSwitch, beginSyncPhase, endSyncPhase, weechatVersion, relayApiVersion, hasNoHistoryToFetch, markHistoryComplete } from '#lib/stores/models.ts';
+import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, hasNoHistoryToFetch, markHistoryComplete } from '#lib/stores/models.ts';
 import { settings } from '#lib/stores/settings.ts';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist, flushLineBatch, setOnUpgrade, setOnUpgradeEnded } from '#lib/stores/handlers.ts';
 import { addToast, removeToast, clearToasts, updateToast, toastStore } from '#lib/toast.ts';
-import { onDisconnect } from '#lib/notifications.ts';
+
 import { Protocol } from '#lib/weechat.ts';
 import { sha256, pbkdf2 as nativePbkdf2, toHexString } from '#lib/utils/crypto.ts';
 import type { ProtocolMessage } from '#lib/types.ts';
+import {
+    HOTLIST_DEBOUNCE_MS,
+    hotlistPollInterval,
+    cleanupFocusReconnect as sharedCleanupFocusReconnect,
+    countdownText,
+    findDisconnectToast,
+    registerFocusReconnect,
+    reconnectDelay,
+    resetAppState,
+    showDisconnectToast as sharedShowDisconnectToast,
+    type ConnectionProfile,
+    type PendingRetry,
+} from '#lib/stores/connectionLifecycle.ts';
 import { DEBUG_NICKLIST, DEBUG_WEECHAT_COMMANDS, DEBUG_CONNECTION } from '#lib/debug.ts';
-import { applyRetainedHandoff, captureRetainedState, consumeCaptureIntent, hasRetainedViewForActiveProfile, markCaptureIntent } from '#lib/stores/retainedChat.ts';
+import { applyRetainedHandoff, hasRetainedViewForActiveProfile, markCaptureIntent } from '#lib/stores/retainedChat.ts';
 import { clearHistoryOutcomes } from '#lib/stores/historyState.ts';
 
 // Protocol instance for instance methods (setId, parse)
@@ -38,18 +51,16 @@ export function resolveTotpCode(
 
 let ws: WebSocket | null = null;
 let hotlistInterval: ReturnType<typeof setInterval> | null = null;
-let hotlistPollIntervalMs = 15000;
+
 let reconnectingTimer: ReturnType<typeof setTimeout> | null = null;
-let connectionData: [string, number, string, string, boolean, boolean] | null = null;
+let connectionData: ConnectionProfile | null = null;
 let connecting = false;
 let manualReconnectRequested = false;
 let connectionGeneration = 0;
 
-/** Override the periodic hotlist sync interval (ms). Test hook so e2e tests
- * do not have to sit through the full 15 s poll cycle; call before connect. */
-export function setHotlistPollInterval(ms: number) {
-    hotlistPollIntervalMs = ms;
-}
+/** Hotlist poll interval is shared configuration; re-exported so callers that
+ * import this transport keep working unchanged. */
+export { setHotlistPollInterval } from '#lib/stores/connectionLifecycle.ts';
 
 // Comprehensive cleanup for any disconnection path.
 // Clears all app state (buffers, servers, unread tracking, timers, callbacks).
@@ -99,25 +110,9 @@ function resetAllState(retainGeneration?: number) {
         hotlistDebounceTimer = null;
     }
     pendingFetchBuffers.clear();
-    pendingBufferSwitch.set(null);
-    bufferBottom.set(true);
-    // Clear all buffer/server state — no stale entries accumulate across reconnects.
-    // Retain the session this wipe is about to destroy, but only when a loss call
-    // site declared intent. After the drain above and before the wipe below: the
-    // only moment the stores hold the complete session.
-    if (consumeCaptureIntent()) captureRetainedState(retainGeneration ?? null);
-    buffers.set({});
-    servers.set({});
-    localUnreadBuffers.update(() => new Set());
-    hotlistClearedBuffers.update(() => new Set());
-    activeBufferId.set('');
-    previousBufferId.set('');
-    connected.set(false);
-    // Drop the relay version info so the UI never shows a stale WeeChat
-    // version after a disconnect.
-    weechatVersion.set([]);
-    relayApiVersion.set('');
-    onDisconnect();
+    // Everything above is transport teardown; this is the shared wipe, and it is
+    // the last thing that runs because it destroys the stores.
+    resetAppState(retainGeneration);
 }
 
 // Detect error type from close event for initial connection failures.
@@ -162,7 +157,11 @@ function handleReconnectDecision(evt: CloseEvent) {
     }
 }
 
-export async function connect(host: string, port: number, path: string, password: string, tls: boolean, noCompression: boolean) {
+export async function connect(profile: ConnectionProfile) {
+    // Named destructuring, not positional: `host`/`path` are both strings and
+    // `tls`/`noCompression` are both booleans, so the old 6-tuple signature let a
+    // reordered call typecheck while connecting to the wrong thing.
+    const { host, port, path, password, tls, noCompression } = profile;
     // If user clicked manual reconnect while auto-reconnect was in progress,
     // abort the existing connection attempt and take over.
     if (manualReconnectRequested) {
@@ -198,7 +197,7 @@ export async function connect(host: string, port: number, path: string, password
     for (const w of webSockets) w.close(1000, 'new connection');
     webSockets.clear();
     ws = null;
-    connectionData = [host, port, path, password, tls, noCompression];
+    connectionData = profile;
     setConnectionStatus('connecting');
 
     // Register upgrade callbacks so handlers can trigger disconnect/reconnect.
@@ -208,9 +207,9 @@ export async function connect(host: string, port: number, path: string, password
         }
     });
     setOnUpgradeEnded(() => {
-        const [h, p, path, pw, tls, noComp] = connectionData || [null, 0, '', '', false, false];
-        if (h !== null) {
-            connect(h, p, path, pw, tls, noComp).catch((err) => {
+        const resumed = connectionData;
+        if (resumed) {
+            connect(resumed).catch((err) => {
                 console.warn('[reconnect after upgrade] failed:', err.message);
                 setErrors({ serverUnreachable: true });
             });
@@ -411,7 +410,7 @@ export async function connect(host: string, port: number, path: string, password
                         });
                         const hlResp = await sendAsync(hlMsg);
                         handleHotlistInfo(hlResp);
-                    }, hotlistPollIntervalMs);
+                    }, hotlistPollInterval());
                 }
 
                 // Reset reconnect attempt counter on successful connection
@@ -571,26 +570,8 @@ async function initializePBKDF2Native(password: string, nonce: Uint8Array, itera
 
 // Show a persistent disconnect toast with reconnect button.
 // Called from both disconnect handlers (restored WS and normal WS).
-function showDisconnectToast(connInfo: [string, number, string, string, boolean, boolean]) {
-    const [host, port] = connInfo;
-    // The banner owns this presentation whenever a retained view is on screen.
-    if (hasRetainedViewForActiveProfile()) return;
-    // Prevent stacking multiple disconnect toasts during reconnect cycles
-    const existing = get(toastStore);
-    if (existing.some(t => t.type === 'warning' && t.message.includes('Disconnected from'))) {
-        return;
-    }
-    addToast(
-        `Disconnected from ${host}:${port}`,
-        {
-            type: 'warning',
-            duration: 0,
-            buttons: [{
-                text: 'Reconnect',
-                action: () => triggerManualReconnect(false)
-            }]
-        }
-    );
+function showDisconnectToast(connInfo: ConnectionProfile) {
+    sharedShowDisconnectToast(connInfo, () => triggerManualReconnect(false));
 }
 
 // Manual reconnect triggered by toast button — resets backoff timer and tries immediately.
@@ -605,8 +586,7 @@ function triggerManualReconnect(resetAttempts = false) {
     setNextReconnectAt(undefined);
     if (resetAttempts) resetReconnectAttempts();
     manualReconnectRequested = true;
-    const [h, p, path, pw, tls, noComp] = connectionData!;
-    connect(h, p, path, pw, tls, noComp);
+    connect(connectionData!);
 }
 
 /**
@@ -636,18 +616,6 @@ export function isAttemptInProgress(): boolean {
 }
 
 // Initial delay before first reconnect attempt (ms)
-const initialReconnectDelay = 30_000;
-// Backoff multiplier for subsequent attempts
-const reconnectBackoffMultiplier = 1.5;
-// Maximum backoff delay cap (ms) — retries continue indefinitely beyond this
-const maxReconnectDelay = 300_000;
-
-// Calculate exponential backoff delay based on attempt number.
-// Starts at initialReconnectDelay, multiplies by reconnectBackoffMultiplier each attempt, capped at maxReconnectDelay.
-function reconnectDelay(attempts: number): number {
-    return Math.min(initialReconnectDelay * Math.pow(reconnectBackoffMultiplier, attempts - 1), maxReconnectDelay);
-}
-
 // Schedule the next reconnect attempt with countdown toast.
 // Uses exponential backoff starting at 30s, capped at 5 min. Retries indefinitely.
 function scheduleReconnect() {
@@ -660,37 +628,31 @@ function scheduleReconnect() {
         clearTimeout(reconnectingTimer);
     }
 
+    // `attempts` is 1-based because the user sees "attempt 1"; the shared ladder
+    // counts retries that have already failed, so the first retry is index 0.
     const attempts = incrementReconnectAttempts();
-    const delay = reconnectDelay(attempts);
+    const delay = reconnectDelay(attempts - 1);
     const nextAt = Date.now() + delay;
     setNextReconnectAt(nextAt);
 
     if (DEBUG_CONNECTION) console.log(`[reconnect] attempt ${attempts}, retrying in ${(delay / 1000).toFixed(1)}s`);
 
-    const [host, port] = connectionData;
+    const { host, port } = connectionData;
 
     // Create or update countdown toast — unless the banner is already presenting
     // this loss, which it is whenever a retained view is on screen.
     const existingToast = hasRetainedViewForActiveProfile()
         ? null
-        : findToastForDisconnect(host, port);
+        : findDisconnectToast(host, port);
     if (existingToast) {
-        updateToast(existingToast.id, {
-            messageFn: () => {
-                const remaining = Math.max(0, Math.ceil((nextAt - Date.now()) / 1000));
-                return `${remaining}s`;
-            },
-        });
+        updateToast(existingToast.id, { messageFn: () => countdownText(nextAt) });
     } else if (!hasRetainedViewForActiveProfile()) {
         addToast(
             `Disconnected from ${host}:${port}`,
             {
                 type: 'warning',
                 duration: 0,
-                messageFn: () => {
-                    const remaining = Math.max(0, Math.ceil((nextAt - Date.now()) / 1000));
-                    return `${remaining}s`;
-                },
+                messageFn: () => countdownText(nextAt),
                 buttons: [{
                     text: 'Reconnect',
                     action: () => triggerManualReconnect(false)
@@ -699,61 +661,38 @@ function scheduleReconnect() {
         );
     }
 
-    const [h, p, path, password, tls, noCompression] = connectionData;
+    // Captured, not re-read at fire time: `resetAllState()` runs inside the timer
+    // and a later profile change must not redirect an already-scheduled attempt.
+    const profile = connectionData;
 
     reconnectingTimer = setTimeout(() => {
         reconnectingTimer = null;
         setConnectionStatus('reconnecting');
         resetAllState();
-        connect(h, p, path, password, tls, noCompression);
+        connect(profile);
     }, delay);
 }
 
-// Threshold (ms): only trigger immediate reconnect if remaining delay exceeds this
-const focusReconnectThresholdMs = 10_000;
+/**
+ * This transport's answer to "is a retry scheduled, and when?".
+ *
+ * Legacy keeps the schedule as a live `setTimeout` handle plus the store's
+ * `nextReconnectAt`; the API transport keeps it as orchestrator status. The shared
+ * focus-reconnect listener only needs the question answered, so each transport
+ * supplies its own mapping instead of the listener knowing both shapes.
+ */
+function pendingRetry(): PendingRetry {
+    if (!reconnectingTimer || !connectionData) return { active: false };
+    return { active: true, nextRetryAt: get(connectionState).nextReconnectAt };
+}
 
-let focusReconnectCleanup: (() => void) | null = null;
-
-// Register a visibilitychange listener that triggers immediate reconnect when the tab
-// regains focus and a reconnect timer has significant delay remaining (>10s).
+// Register the shared visibilitychange listener for this transport.
 export function initFocusReconnect() {
-    if (typeof document === 'undefined') return;
-    // Guard against double-registration
-    if (focusReconnectCleanup) return;
-
-    const handler = () => {
-        if (document.visibilityState !== 'visible') return;
-        if (!reconnectingTimer) return;
-        if (!connectionData) return;
-        if (get(settings).useTotp) return;
-
-        // Check remaining delay on the pending timer via nextReconnectAt
-        const state = get(connectionState);
-        const remaining = (state.nextReconnectAt || 0) - Date.now();
-        if (remaining <= focusReconnectThresholdMs) return;
-
-        // Remaining delay is significant — reconnect immediately, reset backoff.
-        triggerManualReconnect(true);
-    };
-
-    document.addEventListener('visibilitychange', handler);
-    focusReconnectCleanup = () => {
-        document.removeEventListener('visibilitychange', handler);
-        focusReconnectCleanup = null;
-    };
+    registerFocusReconnect(pendingRetry, () => triggerManualReconnect(true));
 }
 
 // Remove the visibilitychange listener (called on page unmount).
-export function cleanupFocusReconnect() {
-    if (focusReconnectCleanup) {
-        focusReconnectCleanup();
-    }
-}
-
-// Find an existing disconnect toast for the given host:port.
-function findToastForDisconnect(host: string, port: number) {
-    return get(toastStore).find(t => t.type === 'warning' && t.message?.includes(`Disconnected from ${host}:${port}`)) ?? undefined;
-}
+export const cleanupFocusReconnect = sharedCleanupFocusReconnect;
 
 // Fetch a single WeeChat config option via infolist and update wconfig store.
 export async function fetchConfValue(name: string) {
@@ -1073,7 +1012,7 @@ export function sendWeeChatCommand(command: string, bufferId?: string): boolean 
 
 // Debounce hotlist queries: coalesce rapid buffer switches into a single request.
 let hotlistDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-const HOTLIST_DEBOUNCE_MS = 2000;
+
 
 export async function switchBuffer(bufferId: string): Promise<boolean> {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -1215,8 +1154,7 @@ if (import.meta.hot) {
         disconnect();
 
         setTimeout(() => {
-            const [h, p, path, pw, tls, noComp] = savedData!;
-            connect(h, p, path, pw, tls, noComp)
+            connect(savedData!)
                 .then(() => { if (toastId) removeToast(toastId); })
                 .finally(() => { hmrReconnecting = false; });
         }, 100);

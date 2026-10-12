@@ -68,7 +68,14 @@
     }
     try {
       const { host: parsedHost, port: parsedPort, path: parsedPath } = parseRelayUrl(s.hostField, s.port);
-      await connect(parsedHost, parsedPort, parsedPath, s.password, s.tls, false);
+      await connect({
+        host: parsedHost,
+        port: parsedPort,
+        path: parsedPath,
+        password: s.password,
+        tls: s.tls,
+        noCompression: false,
+      });
     } catch (e) {
       console.warn('Auto-connect failed:', e);
     }

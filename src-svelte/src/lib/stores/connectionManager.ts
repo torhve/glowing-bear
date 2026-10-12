@@ -23,6 +23,7 @@ import * as api from '#lib/stores/apiConnection.ts';
 import * as legacy from '#lib/stores/legacyConnection.ts';
 import type { ApiSession } from '#lib/api/api-session.ts';
 import { clearActiveConnectionProfile, setActiveConnectionProfile } from '#lib/connectionProfile.ts';
+import type { ConnectionProfile } from '#lib/stores/connectionLifecycle.ts';
 import { clearCaptureIntent, releaseIfProfileChanged, releaseRetainedSnapshot } from '#lib/stores/retainedChat.ts';
 
 export type RelayTransport = 'api' | 'legacy';
@@ -107,9 +108,13 @@ function profileKey(host: string, port: number, tls: boolean): string {
     return `${host}:${port}:${tls ? 'tls' : 'plain'}`;
 }
 
-export async function connect(host: string, port: number, path: string, password: string, tls: boolean, noCompression: boolean): Promise<void> {
+export async function connect(target: ConnectionProfile): Promise<void> {
     const preference = get(settings).protocol ?? 'auto';
-    const profile = profileKey(host, port, tls);
+    const { host, port, path, tls } = target;
+    // Named `key`, not `profile`. The local here is the identity STRING that caches
+    // which transport serves an address; the parameter is the address itself. The
+    // old code called both `profile`, which made the two meanings indistinguishable.
+    const key = profileKey(host, port, tls);
     // Capture the endpoint this attempt targets. Per-conversation state keys on
     // it, so it comes from the arguments of the attempt rather than from settings,
     // which stay editable while disconnected.
@@ -120,19 +125,19 @@ export async function connect(host: string, port: number, path: string, password
     // hand the retained window to the new session.
     releaseIfProfileChanged();
     if (preference === 'auto') {
-        transport = transportByProfile.get(profile)
+        transport = transportByProfile.get(key)
             ?? (await probeApiRelay(host, port, path, tls) ? 'api' : 'legacy');
-        transportByProfile.set(profile, transport);
+        transportByProfile.set(key, transport);
     } else {
         transport = preference;
-        transportByProfile.set(profile, transport);
+        transportByProfile.set(key, transport);
     }
     activeTransport.set(transport);
     return transport === 'api'
-        ? api.connect(host, port, path, password, tls, noCompression)
+        ? api.connect(target)
         // The legacy relay only completes the WebSocket upgrade under the
         // '/weechat' path; an empty path would hang the socket forever.
-        : legacy.connect(host, port, path || 'weechat', password, tls, noCompression);
+        : legacy.connect({ ...target, path: target.path || 'weechat' });
 }
 
 export function disconnect(): void {

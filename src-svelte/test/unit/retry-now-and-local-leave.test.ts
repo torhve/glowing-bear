@@ -90,7 +90,14 @@ class FakeSocket {
  * awaited — the socket exists synchronously.
  */
 function connectLegacy(): FakeSocket {
-    void facadeConnect('relay.example', 9001, 'weechat', 'testpassword123', false, true);
+    void facadeConnect({
+        host: 'relay.example',
+        port: 9001,
+        path: 'weechat',
+        password: 'testpassword123',
+        tls: false,
+        noCompression: true,
+    });
     const socket = FakeSocket.instances[FakeSocket.instances.length - 1];
     if (!socket) throw new Error('facadeConnect() did not open a socket');
     // The removed guard was `readyState === WebSocket.OPEN`. A CONNECTING
@@ -242,7 +249,14 @@ describe('retryNow delegates to the transport that owns the profile', () => {
         expect(legacy.isAttemptInProgress(), 'no onopen, no onclose: still in progress').toBe(true);
 
         const socketsBefore = FakeSocket.instances.length;
-        void legacy.connect('relay.example', 9001, 'weechat', 'testpassword123', false, true);
+        void legacy.connect({
+            host: 'relay.example',
+            port: 9001,
+            path: 'weechat',
+            password: 'testpassword123',
+            tls: false,
+            noCompression: true,
+        });
         expect(FakeSocket.instances, 'the pre-existing duplicate guard').toHaveLength(socketsBefore);
 
         expect(retryNow()).toBe('in-progress');
