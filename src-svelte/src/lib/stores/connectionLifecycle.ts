@@ -35,10 +35,11 @@
  */
 
 import { get } from 'svelte/store';
-import { addToast, removeToast, toastStore, type Toast } from '#lib/toast.ts';
-import { activeTransport, connectionState, resetReconnectAttempts, setNextReconnectAt, type RelayTransportKind } from '#lib/stores/connectionStore.ts';
+import { addToast, removeToast, toastStore, updateToast, type Toast } from '#lib/toast.ts';
+import { activeTransport, connectionState, incrementReconnectAttempts, resetReconnectAttempts, setConnectionStatus, setNextReconnectAt, type RelayTransportKind } from '#lib/stores/connectionStore.ts';
+import { DEBUG_CONNECTION } from '#lib/debug.ts';
 import { settings } from '#lib/stores/settings.ts';
-import { captureRetainedState, consumeCaptureIntent, hasRetainedViewForActiveProfile } from '#lib/stores/retainedChat.ts';
+import { captureRetainedState, consumeCaptureIntent, hasRetainedViewForActiveProfile, markCaptureIntent } from '#lib/stores/retainedChat.ts';
 import { onDisconnect } from '#lib/notifications.ts';
 import {
     activeBufferId,
@@ -509,4 +510,148 @@ export function beginManualReconnect(profile: ConnectionProfile, resetAttempts: 
 /** Countdown text for a retry scheduled at `nextRetryAt`. */
 export function countdownText(nextRetryAt: number): string {
     return `${Math.max(0, Math.ceil((nextRetryAt - Date.now()) / 1000))}s`;
+}
+
+// ---------------------------------------------------------------------------
+// The retry scheduler (decision D2)
+// ---------------------------------------------------------------------------
+
+/**
+ * One retry loop for both transports.
+ *
+ * It used to exist twice: legacy's `scheduleReconnect()` with a 1-based attempt
+ * counter, and the API orchestrator's `handleFailure()` with a 0-based one and its
+ * own timer. Same ladder, same status writes, same countdown, two owners — and a
+ * fix to one had to be remembered for the other.
+ *
+ * What stays with the transport, deliberately:
+ *   - the terminal decision (autoconnect off, TOTP, an explicit stop). Only the
+ *     transport knows whether it is willing to try again at all.
+ *   - `wipe`, which is the transport's own loss path. The drain is protocol-side,
+ *     and the drain -> capture -> wipe order is pinned against the real transport
+ *     function, so the scheduler calls that function instead of assembling the
+ *     wipe itself.
+ *   - `open`, which starts the next attempt. The scheduler must not know how to
+ *     open a session, and it must never re-probe or switch transport: exactly one
+ *     transport is active per connection.
+ *   - the connection generation bump and the sync-phase open, both of which live
+ *     inside the attempt and never here.
+ */
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+export interface RetryAttempt {
+    /** The profile this attempt will reconnect to. Captured at schedule time: a
+     *  later profile change must not redirect an already-scheduled attempt. */
+    profile: ConnectionProfile;
+    /** What failed, for the countdown toast and the failure classification. */
+    error: string;
+    /** The transport's own loss path: protocol teardown, drain, and the shared
+     *  store wipe. */
+    wipe: () => void;
+    /** Start the next attempt. */
+    open: () => void;
+    /** Run once the status says a retry is pending, so the transport can record
+     *  why this failure happened in its own terms. */
+    nameFailure?: (error: string) => void;
+}
+
+/** Cancel a scheduled attempt without deciding to stop reconnecting. */
+export function cancelPendingRetry(): void {
+    if (retryTimer) {
+        clearTimeout(retryTimer);
+        retryTimer = null;
+    }
+}
+
+/** Is a retry armed, and when will it fire? Feeds the banner and focus reconnect. */
+export function pendingRetryState(): PendingRetry {
+    if (!retryTimer) return { active: false };
+    return { active: true, nextRetryAt: get(connectionState).nextReconnectAt };
+}
+
+/**
+ * Which attempt is about to run: 0 is the first connect, 1 is the first retry.
+ *
+ * This is the same numbering the API orchestrator used for its private `attempt`
+ * field, and the same one the user sees as "attempt 1". The ladder index is one
+ * lower, which is the off-by-one that used to be hidden by the two transports
+ * counting from different ends.
+ */
+export function retryAttemptNumber(): number {
+    return Math.max(0, get(connectionState).reconnectAttempts);
+}
+
+/** Restart the ladder from the beginning: a fresh connect, or a takeover that
+ *  explicitly asks for it. */
+export function restartRetryLadder(): void {
+    resetReconnectAttempts();
+}
+
+/**
+ * A persistent "disconnected" toast whose text counts down to the next attempt,
+ * or nothing at all when the banner is already presenting this loss.
+ */
+function showCountdownToast(profile: ConnectionProfile, nextRetryAt: number, onReconnect: () => void): void {
+    const suppressed = hasRetainedViewForActiveProfile();
+    const existing = suppressed ? null : findDisconnectToast(profile.host, profile.port);
+    if (existing) {
+        updateToast(existing.id, { messageFn: () => countdownText(nextRetryAt) });
+        return;
+    }
+    if (suppressed) return;
+    addToast(
+        `Disconnected from ${profile.host}:${profile.port}`,
+        {
+            type: 'warning',
+            duration: 0,
+            messageFn: () => countdownText(nextRetryAt),
+            buttons: [{ text: 'Reconnect', action: onReconnect }],
+        },
+    );
+}
+
+/**
+ * Schedule the next attempt.
+ *
+ * Returns false when autoconnect is off — the only decision this function makes
+ * for itself. Whether to try again at all belongs to the transport.
+ */
+export function scheduleRetry(attempt: RetryAttempt, onReconnect: () => void): boolean {
+    if (!get(settings).autoconnect) return false;
+
+    // One loop, so a second schedule replaces the first instead of stacking a
+    // second timer beside it.
+    cancelPendingRetry();
+
+    // `reconnectAttempts` is 1-based because the user sees "attempt 1"; the ladder
+    // counts retries that have already failed, so the first retry is index 0.
+    const attempts = incrementReconnectAttempts();
+    const delay = reconnectDelay(attempts - 1);
+    const nextAt = Date.now() + delay;
+
+    setNextReconnectAt(nextAt);
+    // Written in the same synchronous step as the arm below: a status claiming a
+    // pending retry with no timer running yet would render a countdown for a retry
+    // that cannot fire.
+    setConnectionStatus('reconnecting');
+    connected.set(false);
+
+    attempt.nameFailure?.(attempt.error);
+
+    if (get(connectionState).wasEverConnected) markCaptureIntent();
+    attempt.wipe();
+
+    showCountdownToast(attempt.profile, nextAt, onReconnect);
+
+    retryTimer = setTimeout(() => {
+        retryTimer = null;
+        // Status is already 'reconnecting' from the schedule; the attempt itself
+        // moves it to 'connecting'.
+        attempt.open();
+    }, delay);
+
+    if (DEBUG_CONNECTION) {
+        console.log(`[retry] attempt ${attempts}, next in ${(delay / 1000).toFixed(1)}s`);
+    }
+    return true;
 }
