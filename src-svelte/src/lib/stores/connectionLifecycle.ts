@@ -36,7 +36,8 @@
 
 import { get } from 'svelte/store';
 import { addToast, removeToast, toastStore, updateToast, type Toast } from '#lib/toast.ts';
-import { activeTransport, connectionState, incrementReconnectAttempts, resetReconnectAttempts, setConnectionStatus, setNextReconnectAt, type RelayTransportKind } from '#lib/stores/connectionStore.ts';
+import { activeTransport, connectionState, incrementReconnectAttempts, resetReconnectAttempts, setConnectionStatus, setErrors, setNextReconnectAt, type RelayTransportKind } from '#lib/stores/connectionStore.ts';
+import { classifyConnectionFailure } from '#lib/utils/connectionFailure.ts';
 import { DEBUG_CONNECTION } from '#lib/debug.ts';
 import { settings } from '#lib/stores/settings.ts';
 import { captureRetainedState, consumeCaptureIntent, hasRetainedViewForActiveProfile, markCaptureIntent } from '#lib/stores/retainedChat.ts';
@@ -550,9 +551,6 @@ export interface RetryAttempt {
     wipe: () => void;
     /** Start the next attempt. */
     open: () => void;
-    /** Run once the status says a retry is pending, so the transport can record
-     *  why this failure happened in its own terms. */
-    nameFailure?: (error: string) => void;
 }
 
 /** Cancel a scheduled attempt without deciding to stop reconnecting. */
@@ -613,11 +611,62 @@ function showCountdownToast(profile: ConnectionProfile, nextRetryAt: number, onR
 /**
  * Schedule the next attempt.
  *
- * Returns false when autoconnect is off — the only decision this function makes
- * for itself. Whether to try again at all belongs to the transport.
+ * Name one connection failure with the flag the UI can explain.
+ *
+ * `nameTransient` decides what a transport-level failure ("connection closed", a
+ * timeout) becomes: false while a retry loop is live, because "Connection lost.
+ * Retrying…" is the honest sentence and inventing a cause would be a guess; true
+ * once the loop has stopped, because "the relay could not be reached" is the only
+ * thing left to say. A failure a retry cannot fix is named either way — that is
+ * the point of naming it.
+ */
+export function nameConnectionFailure(message: string, nameTransient: boolean): void {
+    const named = classifyConnectionFailure(message, nameTransient);
+    if (named) setErrors(named);
+}
+
+/**
+ * The terminal outcome: this loss will not be retried, and nothing on screen may
+ * imply otherwise.
+ *
+ * Both transports used to arrive here by their own route — the API transport
+ * through a 'failed' status that named the cause, legacy through an early return
+ * that named nothing and left the status reading 'disconnected'. Same decision,
+ * two different sentences in the same banner. Naming and status are not protocol
+ * facts, so they are written once here.
+ */
+function declareTerminalFailure(attempt: RetryAttempt, onReconnect: () => void): void {
+    // The loop has stopped: a transport-level failure is now worth naming.
+    nameConnectionFailure(attempt.error, true);
+    setConnectionStatus('error');
+    connected.set(false);
+    if (get(connectionState).wasEverConnected) markCaptureIntent();
+    attempt.wipe();
+    // After the wipe, so the toast can see whether the banner is already showing
+    // this loss. A session that was lost gets the toast; a first connect that
+    // never produced one does not.
+    if (get(connectionState).wasEverConnected) showDisconnectToast(attempt.profile, onReconnect);
+}
+
+/**
+ * Arm the one retry loop.
+ *
+ * Returns false when the app will not retry, and having decided that it also
+ * declares the terminal outcome — a declined retry is not a silent return,
+ * because the banner and the failure naming are still owed to the user.
  */
 export function scheduleRetry(attempt: RetryAttempt, onReconnect: () => void): boolean {
-    if (!get(settings).autoconnect) return false;
+    // One decision for both transports. Autoconnect is the user's veto; the
+    // verification code is a second one, and it belongs here rather than in
+    // either transport because it is not protocol knowledge: a TOTP code is
+    // single-use on both relays, so an automatic retry would present a spent
+    // credential and fail. `retryAvailability()` already refuses a manual retry
+    // for the same reason — the automatic path must not be more optimistic than
+    // the manual one.
+    if (!get(settings).autoconnect || get(settings).useTotp) {
+        declareTerminalFailure(attempt, onReconnect);
+        return false;
+    }
 
     // One loop, so a second schedule replaces the first instead of stacking a
     // second timer beside it.
@@ -636,7 +685,7 @@ export function scheduleRetry(attempt: RetryAttempt, onReconnect: () => void): b
     setConnectionStatus('reconnecting');
     connected.set(false);
 
-    attempt.nameFailure?.(attempt.error);
+    nameConnectionFailure(attempt.error, false);
 
     if (get(connectionState).wasEverConnected) markCaptureIntent();
     attempt.wipe();

@@ -229,6 +229,46 @@ test.describe('Connection banner', () => {
         await waitForTransport(page, 'legacy');
     });
 
+    test('a loss that will not be retried names the cause, on either transport', async ({ page }) => {
+        // Decision D3. With autoconnect off, nothing will retry, and the only
+        // thing the banner can honestly say is why it stopped. The API transport
+        // said "The relay could not be reached."; legacy said "Connection lost."
+        // — the generic sentence that also appears while a retry IS pending, so
+        // the two transports described the same outage with a sentence that
+        // implied different things. The retry affordance already agreed; the
+        // explanation did not.
+        const terminalBanner = async (kind: 'api' | 'legacy') => {
+            if (kind === 'api') await connectToWeechat(page, '9010');
+            else await connectLegacyToWeechat(page);
+            await waitForBuffer(page, '#glowing-bear');
+            await switchToBuffer(page, '#glowing-bear');
+            // Explicit, even though the Connect button already writes false: the
+            // whole spec depends on no retry being armed.
+            await setSettings(page, { autoconnect: false });
+
+            await page.evaluate((which: string) => {
+                const socket = which === 'api'
+                    ? (window as any).__getSession?.()?.getSocket?.()
+                    : (window as any).__getWs?.();
+                if (socket) socket.close(3000, 'terminal drop');
+            }, kind);
+
+            const banner = page.getByTestId('connection-banner');
+            await expect(banner).toBeVisible({ timeout: 10000 });
+            await expect(banner).toContainText('The relay could not be reached.');
+            // A countdown here would be a lie: nothing is scheduled.
+            await expect(page.getByTestId('connection-banner-countdown')).not.toBeVisible();
+            await expect(page.getByTestId('connection-banner-retry')).toContainText('Reconnect');
+
+            // Release the retained view so the next transport starts from the form.
+            await page.getByTestId('connection-banner-leave').click();
+            await expect(page.getByTestId('host-input')).toBeVisible({ timeout: 10000 });
+        };
+
+        await terminalBanner('api');
+        await terminalBanner('legacy');
+    });
+
     test('a retained view offers no remote controls', async ({ page }) => {
         await loseTheSession(page);
 

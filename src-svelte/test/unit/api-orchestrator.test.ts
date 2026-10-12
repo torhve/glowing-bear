@@ -293,11 +293,16 @@ describe('ApiOrchestrator bootstrap', () => {
             }
             return new Response(JSON.stringify({ error: 'nope' }), { status: 404 });
         }));
-        const { orch, statuses, ends } = makeOrchestrator({ autoReconnect: false });
+        // The retry driver is never asked. A relay that needs a code this client
+        // cannot send is a stop the protocol layer knows about, exactly like a
+        // relay whose API version is too old — before this it was reported as a
+        // failure and then retried through the whole ladder.
+        const { orch, statuses, ends, retry } = makeOrchestrator();
         orch.start();
         await vi.waitFor(() => expect(statuses.some((s) => s.state === 'failed')).toBe(true));
         expect(statuses[statuses.length - 1]!.error).toContain('TOTP');
         expect(ends).toEqual([1]);
+        expect(retry.scheduled).toEqual([]);
     });
 });
 

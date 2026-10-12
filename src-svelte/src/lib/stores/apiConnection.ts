@@ -9,12 +9,11 @@
 
 import { get } from 'svelte/store';
 import {
-    setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore,
+    setConnectionStatus, clearErrors, disconnect as disconnectStore,
     connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts,
     setNextReconnectAt,
 } from '#lib/stores/connectionStore.ts';
 import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, weechatVersion, relayApiVersion, hasNoHistoryToFetch, markHistoryComplete } from '#lib/stores/models.ts';
-import { settings } from '#lib/stores/settings.ts';
 
 import { resolveApiEndpoint } from '#lib/api/api-endpoint.ts';
 import { ApiOrchestrator, type OrchestratorStatus } from '#lib/api/api-orchestrator.ts';
@@ -28,6 +27,7 @@ import {
     cleanupFocusReconnect as sharedCleanupFocusReconnect,
     beginManualReconnect,
     clearDisconnectToast,
+    nameConnectionFailure,
     debounceHotlistQuery,
     pendingRetryState,
     resetAppState,
@@ -45,7 +45,6 @@ import { clearHistoryOutcomes } from '#lib/stores/historyState.ts';
 import type { ApiSession } from '#lib/api/api-session.ts';
 import type { ApiBufferId } from '#lib/api/api-ids.ts';
 import { DEBUG_NICKLIST, DEBUG_WEECHAT_COMMANDS, DEBUG_CONNECTION } from '#lib/debug.ts';
-import { classifyConnectionFailure } from '#lib/utils/connectionFailure.ts';
 
 let orchestrator: ApiOrchestrator | null = null;
 
@@ -149,17 +148,6 @@ function flushByteStats(): void {
     }
 }
 
-/**
- * Name one connection failure with the flag the UI can explain. The message
- * table lives in classifyConnectionFailure; `nameTransient` decides what a
- * transport-level failure becomes — false while a retry loop is live, true once
- * it has stopped.
- */
-function mapFailureToError(message: string, nameTransient = true): void {
-    const named = classifyConnectionFailure(message, nameTransient);
-    if (named) setErrors(named);
-}
-
 function startHotlistPolling(): void {
     startHotlistPoll(() => void pollHotlist());
 }
@@ -222,7 +210,6 @@ export async function connect(profile: ConnectionProfile): Promise<void> {
             sync: { begin: () => beginSyncPhase(), end: (token) => endSyncPhase(token) },
             // TOTP codes are single-use: a TOTP connection must not silently
             // retry with a stale code (legacy parity).
-            autoReconnect: () => get(settings).autoconnect && !get(settings).useTotp,
             // The retry policy is injected, not owned: the ladder, the countdown
             // and everything the app must do while it waits live in the shared
             // scheduler, exactly as they do for the legacy transport.
@@ -244,15 +231,20 @@ export async function connect(profile: ConnectionProfile): Promise<void> {
                             // assembling an approximation of it.
                             wipe: () => resetAllState(generation),
                             open: () => self?.startScheduledAttempt(),
-                            nameFailure: (e) => mapFailureToError(e, false),
                         },
                         () => triggerManualReconnect(false),
                     );
-                    // Release the caller's connect() only once the loss has been
-                    // presented, which is where the status branch used to do it.
+                    // Rejected on BOTH outcomes, after the scheduler has presented
+                    // the loss — which is where the status branch used to do it.
                     // Rejecting before the wipe would let the form's error handling
                     // run against stores that still describe the dead session.
-                    if (scheduled) settleConnectFailure(error);
+                    //
+                    // The decline used to be silent here: the transport's own
+                    // 'failed' branch rejected, and that branch no longer exists
+                    // for a settings decision. A caller awaiting connect() must
+                    // learn the app is not going to retry, or it waits on a
+                    // promise nobody will settle.
+                    settleConnectFailure(error);
                     return scheduled;
                 },
                 cancelPendingRetry,
@@ -322,7 +314,7 @@ export async function connect(profile: ConnectionProfile): Promise<void> {
                 connecting = false;
                 setConnectionStatus('error');
                 connected.set(false);
-                mapFailureToError(status.error ?? 'connection failed');
+                nameConnectionFailure(status.error ?? 'connection failed', true);
                 // Same gate as the toast below: a session that was lost, not a
                 // first connect that never produced one.
                 if (shouldRetainOnStatus(status.state, get(connectionState).wasEverConnected, !!connectionData)) {

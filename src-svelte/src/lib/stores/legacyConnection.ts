@@ -1,7 +1,6 @@
 import { get } from 'svelte/store';
 import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts } from '#lib/stores/connectionStore.ts';
 import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, hasNoHistoryToFetch, markHistoryComplete } from '#lib/stores/models.ts';
-import { settings } from '#lib/stores/settings.ts';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist, flushLineBatch, setOnUpgrade, setOnUpgradeEnded } from '#lib/stores/handlers.ts';
 import { addToast, removeToast, clearToasts, toastStore } from '#lib/toast.ts';
 
@@ -137,9 +136,12 @@ function detectError(evt: CloseEvent): boolean {
     return false;
 }
 
-// Decide whether to auto-reconnect or show a toast after WebSocket close.
-// Handles user disconnect, TOTP guard, first-connection failure, and
-// unexpected close codes. Delegates to scheduleReconnect for auto-retry.
+// Decide what a closed socket means for this transport.
+// Handles user disconnect, first-connection failure, and a rejected credential.
+// Everything after that — retry or terminal — is one decision in the shared
+// scheduler, which also owns what the app says while it waits and what it says
+// when it stops waiting. The TOTP veto used to live here; it belongs with the
+// decision it modifies.
 function handleReconnectDecision(evt: CloseEvent) {
     const state = get(connectionState);
     if (state.userDisconnect) {
@@ -150,9 +152,6 @@ function handleReconnectDecision(evt: CloseEvent) {
         setErrors({ passwordError: true });
         if (connectionData) showDisconnectToast(connectionData);
     } else if (connectionData) {
-        showDisconnectToast(connectionData);
-        // Don't auto-reconnect for TOTP connections — tokens expire and cannot be reused
-        if (get(settings).useTotp) return;
         scheduleReconnect();
     }
 }

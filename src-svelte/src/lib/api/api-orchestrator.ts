@@ -11,7 +11,7 @@
 // init failure, or disconnect. Never a timer.
 
 import type { ApiEndpoint } from '#lib/api/api-endpoint.ts';
-import { performHandshake, apiRequest, ApiHttpError } from '#lib/api/api-client.ts';
+import { performHandshake, apiRequest } from '#lib/api/api-client.ts';
 import { validateVersionResponse } from '#lib/api/api-validation.ts';
 import type { VersionResponse } from '#lib/weechat-rest-types.ts';
 import { ApiSession, ApiSessionError, type ApiSessionClose, type ApiSessionResponse } from '#lib/api/api-session.ts';
@@ -72,7 +72,6 @@ export interface OrchestratorOptions {
     reducers: ApiReducers;
     sync: SyncPhaseTokens;
     webSocketFactory?: (url: string, protocols: string[]) => WebSocket;
-    autoReconnect?: boolean | (() => boolean);
     retry?: RetryDriver;
     minApiVersionNumber?: number;
     keepAliveMs?: number;
@@ -80,7 +79,15 @@ export interface OrchestratorOptions {
     onStatus?: (status: OrchestratorStatus) => void;
 }
 
-class VersionTooOldError extends Error {}
+/**
+ * An attempt whose outcome is already final. Throwing this means "the status has
+ * been written and no retry can change the result" — the catch must not hand the
+ * attempt to the retry driver, because the driver would schedule an attempt
+ * against a condition it cannot fix.
+ */
+class TerminalAttemptError extends Error {}
+class VersionTooOldError extends TerminalAttemptError {}
+class RelayRequiresTotpError extends TerminalAttemptError {}
 
 export class ApiOrchestrator {
     private readonly opts: OrchestratorOptions;
@@ -203,8 +210,17 @@ export class ApiOrchestrator {
             if (!this.isCurrent(generation)) { this.opts.sync.end(syncToken); return; }
             if (auth.totp) {
                 // G3 unresolved: browser cannot deliver x-weechat-totp over WS.
-                throw new ApiHttpError(401, null,
-                    'This WeeChat requires TOTP, which the browser client cannot provide; disable relay.network.totp or use a password-only relay');
+                //
+                // This is a stop, not a failure. Nothing a retry can do produces a
+                // verification code this client cannot send, so handing it to the
+                // retry driver would burn the whole backoff ladder against a relay
+                // that answers the same way every time — which is what it did
+                // before this was written down. Same shape as the version gate.
+                const message = 'This WeeChat requires TOTP, which the browser client cannot provide; '
+                    + 'disable relay.network.totp or use a password-only relay';
+                this.stopped = true;
+                this.setStatus({ state: 'failed', error: message }, { generation });
+                throw new RelayRequiresTotpError(message);
             }
 
             // 2. Version gate before publishing readiness.
@@ -291,7 +307,7 @@ export class ApiOrchestrator {
             // Failure exit closes the sync phase with this attempt's token.
             this.opts.sync.end(syncToken);
             this.markAttemptSettled(generation);
-            if (err instanceof VersionTooOldError) return; // status already failed
+            if (err instanceof TerminalAttemptError) return; // status already failed
             if (!this.isCurrent(generation)) return;
             session?.destroy();
             if (session) this.session = null;
@@ -315,8 +331,12 @@ export class ApiOrchestrator {
     }
 
     private handleFailure(generation: number, error: string): void {
-        const autoReconnect = typeof this.opts.autoReconnect === 'function' ? this.opts.autoReconnect() : this.opts.autoReconnect;
-        if (autoReconnect === false || this.stopped) {
+        // 'failed' is reserved for a stop this layer knows about: an explicit stop,
+        // or a relay whose API version can never be fixed by retrying. Whether the
+        // APP will retry is not protocol knowledge — the shared scheduler decides
+        // that and reports the terminal outcome itself when it declines, so this
+        // layer stays silent rather than competing with it.
+        if (this.stopped) {
             this.setStatus({ state: 'failed', error }, { generation });
             return;
         }

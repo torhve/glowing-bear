@@ -9,7 +9,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { connectionState, setNextReconnectAt } from '#lib/stores/connectionStore.ts';
+import { clearErrors, connectionState, setNextReconnectAt } from '#lib/stores/connectionStore.ts';
 import { settings } from '#lib/stores/settings.ts';
 import { clearToasts, toastStore } from '#lib/toast.ts';
 import { clearCaptureIntent, hasCaptureIntent } from '#lib/stores/retainedChat.ts';
@@ -39,7 +39,6 @@ function attemptSpy() {
         error: 'connection closed (code 1006)',
         wipe: () => calls.push('wipe'),
         open: () => calls.push('open'),
-        nameFailure: () => calls.push('nameFailure'),
     };
     return { attempt, calls };
 }
@@ -51,8 +50,11 @@ describe('the shared retry scheduler', () => {
         setNextReconnectAt(undefined);
         clearToasts();
         clearCaptureIntent();
+        clearErrors();
         connectionState.update((s) => ({ ...s, wasEverConnected: true, userDisconnect: false }));
-        settings.update((s) => ({ ...s, autoconnect: true }));
+        // Reset both gates: a leaked useTotp from the veto test would send every
+        // later schedule down the terminal path and look like a ladder bug.
+        settings.update((s) => ({ ...s, autoconnect: true, useTotp: false }));
     });
 
     afterEach(() => {
@@ -83,18 +85,25 @@ describe('the shared retry scheduler', () => {
         const { attempt, calls } = attemptSpy();
         scheduleRetry(attempt, () => undefined);
         vi.advanceTimersByTime(30_000);
-        expect(calls).toEqual(['nameFailure', 'wipe', 'open']);
+        expect(calls).toEqual(['wipe', 'open']);
     });
 
-    it('names the failure and wipes before opening the next attempt', () => {
-        // The order is the one both transports had: explain the failure, close the
-        // session's state, then try again. Reordering the wipe after the open would
-        // destroy the buffers the new attempt has just published.
+    it('wipes before opening the next attempt', () => {
+        // Reordering the wipe after the open would destroy the buffers the new
+        // attempt has just published.
         const { attempt, calls } = attemptSpy();
         scheduleRetry(attempt, () => undefined);
-        expect(calls).toEqual(['nameFailure', 'wipe']);
+        expect(calls).toEqual(['wipe']);
         vi.advanceTimersByTime(30_000);
-        expect(calls).toEqual(['nameFailure', 'wipe', 'open']);
+        expect(calls).toEqual(['wipe', 'open']);
+    });
+
+    it('does not invent a cause while a retry is live', () => {
+        // "Connection closed" is a transport-level failure. While the loop is
+        // running, the honest sentence is "Connection lost. Retrying…" and naming
+        // the transient cause here would put a guess on screen beside it.
+        scheduleRetry(attemptSpy().attempt, () => undefined);
+        expect(get(connectionState).errors.serverUnreachable).toBeFalsy();
     });
 
     it('declares a retry pending in the same step that arms it', () => {
@@ -105,16 +114,46 @@ describe('the shared retry scheduler', () => {
         expect(pendingRetryState()).toMatchObject({ active: true });
     });
 
-    it('does not schedule anything when autoconnect is off', () => {
+    it('declares the loss terminal when autoconnect is off', () => {
         settings.update((s) => ({ ...s, autoconnect: false }));
         const { attempt, calls } = attemptSpy();
         const scheduled = scheduleRetry(attempt, () => undefined);
 
         expect(scheduled).toBe(false);
-        expect(calls).toEqual([]);
         expect(pendingRetryState().active).toBe(false);
         vi.advanceTimersByTime(120_000);
-        expect(calls).toEqual([]);
+        // Nothing was armed, so nothing opens. What it did do is close the session:
+        // a loss that will not be retried must not leave the stores describing a
+        // live connection.
+        expect(calls).toEqual(['wipe']);
+        expect(get(connectionState).status).toBe('error');
+    });
+
+    it('names the cause once the loop has stopped', () => {
+        // The same message that must NOT be named while a retry is live. With the
+        // loop gone, "the relay could not be reached" is the only thing left to
+        // say — and it is what the API transport already said while legacy left
+        // the banner reading the generic "Connection lost.".
+        settings.update((s) => ({ ...s, autoconnect: false }));
+        scheduleRetry(attemptSpy().attempt, () => undefined);
+        expect(get(connectionState).errors.serverUnreachable).toBe(true);
+    });
+
+    it('refuses an automatic retry when the relay needs a verification code', () => {
+        // A TOTP code is single-use on both relays — the legacy handshake feeds it
+        // into the password hash too — so an automatic retry would present a spent
+        // credential and fail. The manual path already refuses it via
+        // retryAvailability(); the automatic path must not be more optimistic.
+        // This used to be two separate guards, one per transport, and only the API
+        // one produced a named terminal failure.
+        settings.update((s) => ({ ...s, useTotp: true }));
+        const { attempt, calls } = attemptSpy();
+        const scheduled = scheduleRetry(attempt, () => undefined);
+
+        expect(scheduled).toBe(false);
+        vi.advanceTimersByTime(120_000);
+        expect(calls).toEqual(['wipe']);
+        expect(get(connectionState).status).toBe('error');
     });
 
     it('replaces a pending attempt instead of stacking a second one beside it', () => {
@@ -129,8 +168,8 @@ describe('the shared retry scheduler', () => {
         // The first schedule did its synchronous work when it was called; what the
         // second schedule replaced is its attempt, not its effects. Only one `open`
         // runs, and it is the second one's.
-        expect(first.calls).toEqual(['nameFailure', 'wipe']);
-        expect(second.calls).toEqual(['nameFailure', 'wipe', 'open']);
+        expect(first.calls).toEqual(['wipe']);
+        expect(second.calls).toEqual(['wipe', 'open']);
     });
 
     it('cancels a pending attempt without wiping or opening anything', () => {
@@ -140,7 +179,7 @@ describe('the shared retry scheduler', () => {
 
         expect(pendingRetryState().active).toBe(false);
         vi.advanceTimersByTime(120_000);
-        expect(calls).toEqual(['nameFailure', 'wipe']);
+        expect(calls).toEqual(['wipe']);
     });
 
     it('counts the ladder from the beginning only when told to', () => {
