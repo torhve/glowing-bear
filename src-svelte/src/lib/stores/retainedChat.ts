@@ -394,6 +394,30 @@ export function captureRetainedState(generation: number | null): CaptureOutcome 
  * Release the retained view. Idempotent: a second release is a no-op, which is
  * what makes the facade's double disconnect harmless.
  */
+/**
+ * Move the retained view to another retained conversation.
+ *
+ * This is the retained view's OWN selection. It deliberately does not write
+ * `activeBufferId`: that store is live transport authority, and putting a frozen
+ * key in it would let every live path resolve a buffer the relay is not serving.
+ * The consequence is that URL/Deep-link state, which is derived from the live
+ * selection, does NOT follow a retained selection. That is deliberate for a
+ * transient offline window — a link is a claim about a conversation the relay can
+ * still address. A handoff that wants to land where the reader was must read
+ * `activeKey` from the snapshot, not the URL.
+ * buffer's key into it would make the retained view addressable by every path
+ * that resolves a live buffer — which is the exact confusion this module exists
+ * to prevent. Returns false when the snapshot does not hold that conversation,
+ * so a click on a row that has gone cannot leave the view pointing at nothing.
+ */
+export function selectRetainedBuffer(key: string): boolean {
+    if (!current) return false;
+    if (!current.buffers.has(key)) return false;
+    current = { ...current, activeKey: key };
+    snapshotStore.set(current);
+    return true;
+}
+
 export function releaseRetainedSnapshot(reason: RetainedReleaseReason): void {
     // A release ends the session it belonged to, so a capture intent marked for
     // that session must not survive into a later wipe — including a wipe by the

@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { currentBuffer, buffers, pendingBufferSwitch, setActiveBuffer, findBufferByShortName, newPendingSwitch } from '#lib/stores/models.ts';
+  import { buffers, pendingBufferSwitch, setActiveBuffer, findBufferByShortName, newPendingSwitch } from '#lib/stores/models.ts';
   import { sendMessage, sendWeeChatCommand, getSession, getActiveTransport } from '#lib/stores/connectionManager.ts';
+  import { chatDisplay } from '#lib/stores/chatPresentation.ts';
   import { requestCompletion, rankCandidates, completionInsert } from '#lib/api/api-features.ts';
   import { settings } from '#lib/stores/settings.ts';
   import { addToHistory, getHistoryUp, getHistoryDown } from '#lib/stores/inputHistory.ts';
@@ -57,8 +58,15 @@
   // Which conversation the text in this composer belongs to. Both halves are
   // required: no relay means no profile, and no buffer means no conversation, and
   // without either the composer holds text that cannot be filed anywhere.
+  // The composer belongs to the conversation the reader can actually see. It used
+  // to read `currentBuffer`, which a retained view does not have: the chat rendered
+  // a conversation while the composer believed there was none, so the text being
+  // typed had nowhere to be filed and the placeholder denied the screen above it.
+  const current = $derived($chatDisplay.buffer);
+  const isLive = $derived($chatDisplay.live);
+
   const profileKey = $derived($activeConnectionProfile?.key ?? null);
-  const conversationKey = $derived(conversationKeyFor($currentBuffer));
+  const conversationKey = $derived(conversationKeyFor(current));
   const ownerRef = $derived<DraftRef | null>(
     profileKey && conversationKey ? { profileKey, conversationKey } : null,
   );
@@ -67,7 +75,7 @@
   // handlers that must not re-run on every buffer publication.
   function currentOwnerRef(): DraftRef | null {
     const relay = get(activeConnectionProfile)?.key ?? null;
-    const conversation = conversationKeyFor(get(currentBuffer));
+    const conversation = conversationKeyFor(get(chatDisplay).buffer);
     return relay && conversation ? { profileKey: relay, conversationKey: conversation } : null;
   }
 
@@ -128,7 +136,33 @@
     { code: '15', name: 'LightGrey', css: '#C0C0C0' },
   ] as const;
 
-  let canSend = $derived($currentBuffer && message.length > 0);
+  // Liveness, not presence. A retained buffer is a real conversation with real
+  // text in the composer, and it still cannot accept a send — presence alone would
+  // read as permission.
+  // Why the composer will not send, in the composer's own words rather than in a
+  // toast elsewhere on the screen.
+  let composerNotice = $state<string | null>(null);
+
+  let canSend = $derived(isLive && current !== null && message.length > 0);
+
+  // The explanation belongs to the attempt that failed, so it clears when the
+  // composer becomes able to answer — a notice left standing after a successful
+  // reconnect would describe a connection that no longer exists.
+  $effect(() => {
+    if (isLive && composerNotice !== null) composerNotice = null;
+  });
+
+  // The hint has to describe the screen the reader is looking at. Naming the
+  // conversation is true in both states; claiming no buffer is selected is not
+  // true in a retained view, and claiming the message will be sent is not true
+  // either.
+  const composerPlaceholder = $derived(
+    current === null
+      ? 'Select a buffer to start chatting...'
+      : isLive
+      ? `Message ${current.shortName}`
+      : `Message ${current.shortName} — kept while reconnecting`,
+  );
 
   function sameOwner(a: DraftRef | null, b: DraftRef | null): boolean {
     if (a === null || b === null) return a === b;
@@ -231,15 +265,25 @@
   }
 
   async function handleSend() {
-    if (!canSend) return;
+    if (message.length === 0) return;
 
+    // Refused before the composer is emptied. The send below clears the textarea
+    // before the round-trip, so a refusal that happens after that point has
+    // already taken the text — and Enter reaches this function even though the
+    // button beside it is disabled, so the refusal has to explain itself here.
+    if (!isLive || current === null) {
+      composerNotice = 'Not connected — your text is kept.';
+      return;
+    }
+
+    composerNotice = null;
     const text = message;
 
     // Everything this send may write — history, buffer clearing, the draft it came
     // from — belongs to the conversation Enter was pressed in. Reading the current
     // buffer after an await lets a switch during delivery land the result elsewhere.
     const sendRef = boundRef;
-    const sendBuffer = get(currentBuffer);
+    const sendBuffer = get(chatDisplay).buffer;
     const sendBufferId = sendBuffer?.id ?? null;
 
     // Split the command into multiple commands based on line breaks (matching AngularJS behavior)
@@ -337,8 +381,12 @@
   // add_space means a space must follow. Cycling walks the ranked list.
   async function completeViaApi(text: string, caretPos: number): Promise<{ text: string; cursor: number; iterCandidate: string | null } | null> {
     const session = getSession();
-    const buffer = get(currentBuffer);
-    if (!session || !buffer || buffer.apiBufferId === undefined) return null;
+    const { buffer, live } = get(chatDisplay);
+    // `live` is stated explicitly rather than inferred from a missing apiBufferId:
+    // a retained buffer has no authority fields anyway, but a guard that only
+    // notices when they are absent would quietly reopen if the session lifecycle
+    // ever changed.
+    if (!live || !session || !buffer || buffer.apiBufferId === undefined) return null;
     const res = await requestCompletion(session, {
       bufferId: buffer.apiBufferId as never,
       command: text,
@@ -572,8 +620,8 @@
         }
       }
       e.preventDefault();
-      if ($currentBuffer) {
-        message = getHistoryUp($currentBuffer.id, message);
+      if (current) {
+        message = getHistoryUp(current.id, message);
       }
       // Set cursor to last position
       setTimeout(() => {
@@ -594,8 +642,8 @@
         }
       }
       e.preventDefault();
-      if ($currentBuffer) {
-        message = getHistoryDown($currentBuffer.id, message);
+      if (current) {
+        message = getHistoryDown(current.id, message);
       }
       return true;
     }
@@ -712,6 +760,15 @@
     files: FileList | File[],
     base64Strings?: string[],
   ): void {
+    // Every upload path funnels through here — paste, drop, the file picker, and
+    // the clipboard-string fallback — so this is the one place the answer has to
+    // live. An image preview that cannot be sent is a draft the user assembled
+    // for a session that is not there; saying so at the moment of the attempt is
+    // cheaper than letting it sit in the composer looking ready.
+    if (!isLive) {
+      composerNotice = 'Not connected — images are kept until the relay is back';
+      return;
+    }
     // The conversation this clipboard content came from, captured before any async
     // read resolves.
     const pasteOwner = boundRef;
@@ -1175,7 +1232,7 @@
           lastCaretPos = inputRef?.selectionStart ?? 0;
         }}
         data-testid="message-input"
-        placeholder={$currentBuffer ? `Message ${$currentBuffer.shortName}` : 'Select a buffer to start chatting...'}
+        placeholder={composerPlaceholder}
         rows={1}
         class="input-bar-textarea flex-1 min-w-0 bg-input-bg border border-border rounded text-text text-sm placeholder-text-muted focus:outline-none focus:border-accent resize-none transition-colors min-h-9 max-h-[150px] {isDraggingFile ? 'border-accent bg-accent/10' : ''}"
 
@@ -1219,6 +1276,9 @@
         <Send size={16} />
       </button>
     </div>
+    {#if composerNotice}
+      <p class="composer-notice px-2 pb-1 text-xs text-warning" role="status" aria-live="polite" data-testid="composer-notice">{composerNotice}</p>
+    {/if}
   </div>
 
   <!-- Color picker popover — rendered outside toolbar so it stays visible when toolbar hides -->

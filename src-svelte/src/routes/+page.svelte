@@ -19,6 +19,7 @@
   import { connectionState, setReconnectAttempts, setNextReconnectAt, setErrors } from '#lib/stores/connectionStore.ts';
   import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer, listScripts, getSession, getWs, initFocusReconnect, cleanupFocusReconnect, setHotlistPollInterval } from '#lib/stores/connectionManager.ts';
   import { connectionBanner } from '#lib/stores/connectionPresentation.ts';
+  import { chatDisplay } from '#lib/stores/chatPresentation.ts';
   import { initNotifications, onDisconnect, refreshIndicators, startIndicatorOwner } from '#lib/notifications.ts';
   import { parseRelayUrl, isPopoverOpen, bufferHasNicklist, modifyTextareaValue, captureBufferAppearance, waitForFreshBuffer, scriptInstalled } from '#lib/utils.ts';
   import { addToast, toastStore } from '#lib/toast.ts';
@@ -454,6 +455,14 @@
   const GREP_BUFFER = 'grep';
 
   async function executeContentSearch(query: string) {
+    // Ask before spending three seconds waiting for a buffer that cannot arrive.
+    // Falling through would end at `listScripts()`, which also needs the relay, and
+    // the search would report "No results found" for a session that is not
+    // connected — an explanation that is not merely unhelpful but false.
+    if (get(connectionState).status !== 'connected') {
+      addToast('Not connected — content search needs the relay', { type: 'info', duration: 4000 });
+      return;
+    }
     const bufId = get(activeBufferId);
     // The result buffer is reused across searches, so snapshot it first: an
     // existing buffer only counts as a result once it was cleared or changed.
@@ -556,7 +565,7 @@
   // stale window.innerWidth that Svelte doesn't track.
   let isMobileState = $state(typeof window !== 'undefined' && window.innerWidth < 768);
   // Whether current buffer has nick data to display (used for auto-hiding nicklist)
-  let hasCurrentBufferNicklist = $derived(bufferHasNicklist($currentBuffer));
+  let hasCurrentBufferNicklist = $derived(bufferHasNicklist($chatDisplay.buffer));
   let touchStartX = 0;
   let touchStartY = 0;
   let touchStartTime = 0;

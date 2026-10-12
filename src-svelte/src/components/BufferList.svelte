@@ -3,6 +3,8 @@
   import { buffers, activeBufferId, getEffectiveUnread } from '#lib/stores/models.ts';
   import { sidebarOrder, sidebarRows } from '#lib/stores/bufferProjections.ts';
   import { switchBuffer } from '#lib/stores/connectionManager.ts';
+  import { chatDisplay, retainedRows } from '#lib/stores/chatPresentation.ts';
+  import { selectRetainedBuffer } from '#lib/stores/retainedChat.ts';
   import { settings, updateSettings } from '#lib/stores/settings.ts';
   import { getBufferIconName, getDisplayName } from '#lib/utils.ts';
   import { get } from 'svelte/store';
@@ -22,7 +24,12 @@
   // Rows come pre-filtered and pre-sorted from the projection: membership under
   // onlyUnread is part of what the list *is*, and the projection can suppress a
   // publication the component could not.
-  let sortedBuffers = $derived($sidebarRows);
+  // The sidebar has to describe the conversation the chat is showing. A retained
+  // view has no live buffers, so the live projection is empty — and an empty
+  // sidebar beside a readable chat reads as if the session itself had gone, not
+  // as a connection that dropped.
+  const isLive = $derived($chatDisplay.live);
+  let sortedBuffers = $derived(isLive ? $sidebarRows : $retainedRows);
   let groupedBuffers = $derived(
     $settings.orderbyserver
       ? groupByServer(sortedBuffers)
@@ -49,7 +56,11 @@
 
   function handleBufferClick(bufferId: string) {
     clearLongPress();
-    switchBuffer(bufferId);
+    // A retained row is a frozen conversation: selecting it moves the retained
+    // view. `switchBuffer` would fetch history and publish a live selection for a
+    // buffer the relay is not currently serving.
+    if (!get(chatDisplay).live) selectRetainedBuffer(bufferId);
+    else void switchBuffer(bufferId);
     onBufferSelect();
   }
 

@@ -33,6 +33,29 @@ export function getActiveTransport(): RelayTransport | null {
     return transport;
 }
 
+/**
+ * Whether a delivery could reach the relay at all.
+ *
+ * Each transport already refuses when its own socket is gone, so this is not the
+ * primary guard — it is the boundary for the call sites that never ask. A keyboard
+ * shortcut fires a command without consulting the composer's disabled state, and a
+ * send can begin a beat after the session died. Putting the decision here means
+ * "there is no connection" has one answer instead of one per caller.
+ *
+ * A refusal, not a queue: nothing is stored, nothing is scheduled, and the caller
+ * keeps whatever text it handed over.
+ */
+export function deliveryPossible(): boolean {
+    const { status } = get(connectionState);
+    // 'connecting' is allowed, and deliberately so. On the legacy path the socket
+    // is open and usable while the handshake finishes, and both transports already
+    // guard their own wire — refusing there would block a send that can genuinely
+    // be delivered, which is a new failure invented to cover an old one. What has
+    // to be refused is every state with no session to deliver through, and that is
+    // exactly the set of states a retained view is rendered in.
+    return status === 'connected' || status === 'connecting';
+}
+
 // A legacy relay never answers HTTP and never closes the socket either, so
 // this timeout is the detection cost on legacy relays. An API relay answers
 // in milliseconds even over slow links; 3s is a generous real-world ceiling.
@@ -214,6 +237,7 @@ export async function listScripts(): Promise<string[] | null> {
 }
 
 export async function sendWeeChatCommand(command: string, bufferId?: string): Promise<boolean> {
+    if (!deliveryPossible()) return false;
     if (transport === 'legacy') return legacy.sendWeeChatCommand(command, bufferId);
     return api.sendWeeChatCommand(command, bufferId);
 }
@@ -224,6 +248,7 @@ export async function switchBuffer(bufferId: string): Promise<boolean> {
 }
 
 export async function sendBufferCommand(bufferId: string, command: string): Promise<void> {
+    if (!deliveryPossible()) return;
     if (transport === 'legacy') return legacy.sendBufferCommand(bufferId, command);
     return api.sendBufferCommand(bufferId, command);
 }
@@ -244,6 +269,7 @@ export async function unpinBuffer(bufferId: string): Promise<void> {
 }
 
 export async function sendMessage(message: string): Promise<boolean> {
+    if (!deliveryPossible()) return false;
     if (transport === 'legacy') return legacy.sendMessage(message);
     return api.sendMessage(message);
 }

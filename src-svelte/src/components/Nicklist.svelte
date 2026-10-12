@@ -2,7 +2,8 @@
   import type { NickGroup, Nick } from '#lib/types.ts';
   import Users from '@lucide/svelte/icons/users';
   import Search from '@lucide/svelte/icons/search';
-  import { currentBuffer, pendingBufferSwitch, newPendingSwitch, getBuffer, clearPendingSwitchIfCurrent } from '#lib/stores/models.ts';
+  import { pendingBufferSwitch, newPendingSwitch, getBuffer, clearPendingSwitchIfCurrent } from '#lib/stores/models.ts';
+  import { chatDisplay } from '#lib/stores/chatPresentation.ts';
   import { sendBufferCommand } from '#lib/stores/connectionManager.ts';
   import { settings } from '#lib/stores/settings.ts';
   import { insertNickIntoInput, bufferHasNicklist, makeKeyboardActivatable } from '#lib/utils.ts';
@@ -11,18 +12,35 @@
   let { onClose, forceShow }: { onClose?: () => void; forceShow?: boolean } = $props();
   let searchQuery = $state('');
 
+  // The same view the chat and the composer are showing, so the member list
+  // cannot describe a different conversation than the one on screen.
+  let current = $derived($chatDisplay.buffer);
+  let isLive = $derived($chatDisplay.live);
+
   // Whether settings allow showing the nicklist (bypassed when forceShow is true for mobile overlay)
   let showNicklist = $derived(forceShow ?? $settings.showNicklist);
 
   // Whether current buffer actually has nick data to display
-  let hasNicklist = $derived(bufferHasNicklist($currentBuffer));
+  let hasNicklist = $derived(bufferHasNicklist(current));
+
+  /** Ask WeeChat for a private conversation with this nick. Only reachable from
+   *  a live view: the request is a command, not a navigation. */
+  function openQuery(nick: Nick): void {
+    if (DEBUG_NICKLIST) console.log('[nicklist] clicked', nick.name);
+    // The nick's own buffer supplies the server context: the same nick
+    // can be queried on several servers at once.
+    const request = newPendingSwitch(nick.name, getBuffer(nick.buffer)?.server || null);
+    pendingBufferSwitch.set(request);
+    sendBufferCommand(nick.buffer, `/query ${nick.name}`);
+    setTimeout(() => clearPendingSwitchIfCurrent(request.requestId), 5000);
+  }
 
   /* Use $derived.by() for explicit dependency tracking — ensures Svelte 5
          tracks all reactive reads (searchQueryLower, $currentBuffer) even when
          accessed inside nested callbacks like .filter() and .some(). */
   let filteredNickGroups = $derived.by(() => {
     const query = searchQuery.toLowerCase();
-    const nicklist = $currentBuffer?.nicklist;
+    const nicklist = current?.nicklist;
     if (!nicklist) return [];
     return (Object.entries(nicklist) as [string, NickGroup][])
       // The root group (nicks with no group) is kept: it renders as bare rows
@@ -68,6 +86,12 @@
   <div class="w-52 sm:w-28 lg:w-30 bg-panel border-l border-border flex flex-col overflow-hidden" data-testid="nicklist">
     <div class="nicklist-header h-[var(--spacing-nicklist-header-height,40px)] bg-surface-raised border-b border-border flex items-center justify-between px-3">
       <span class="nicklist-title flex items-center gap-1.5"><Users size={14} />Nicklist</span>
+      {#if !isLive}
+        <!-- The members are who was in the room when the session died, not who is
+             in it now. Saying so is the difference between a cached list and a
+             claim about the present. -->
+        <span class="nicklist-stale text-[10px] text-text-muted" data-testid="nicklist-stale">cached</span>
+      {/if}
       {#if onClose}
         <button
           onclick={onClose}
@@ -98,32 +122,36 @@
     </div>
 
     <div class="flex-1 overflow-y-auto" data-testid="nicklist-items">
+      {#snippet nickBody(nick: Nick)}
+        <span class="nick-prefix text-xs {getPrefixClass(getPrefix(nick.prefix))} mr-1">
+          {getPrefix(nick.prefix)}
+        </span>
+        <span class="nick-name text-sm truncate {nickNameClasses(nick.nameClasses)}">
+          {nick.name}
+        </span>
+      {/snippet}
       {#each filteredNickGroups as [groupName, group], gi (gi)}
         <div class={nickSectionClass(groupName)}>
           {#each group.nicks as nick (nick.name)}
-            <div
-              data-testid="nick-item"
-              class="nick-item flex items-center hover:bg-surface-raised transition-colors"
-              onclick={() => {
-                if (DEBUG_NICKLIST) console.log('[nicklist] clicked', nick.name);
-                // The nick's own buffer supplies the server context: the same nick
-                  // can be queried on several servers at once.
-                const request = newPendingSwitch(nick.name, getBuffer(nick.buffer)?.server || null);
-                pendingBufferSwitch.set(request);
-                sendBufferCommand(nick.buffer, `/query ${nick.name}`);
-                setTimeout(() => clearPendingSwitchIfCurrent(request.requestId), 5000);
-              }}
-              role="button"
-              tabindex="0"
-              onkeydown={makeKeyboardActivatable(() => insertNickIntoInput(nick.name))}
-            >
-              <span class="nick-prefix text-xs {getPrefixClass(getPrefix(nick.prefix))} mr-1">
-                {getPrefix(nick.prefix)}
-              </span>
-              <span class="nick-name text-sm truncate {nickNameClasses(nick.nameClasses)}">
-                {nick.name}
-              </span>
-            </div>
+            {#if isLive}
+              <div
+                data-testid="nick-item"
+                class="nick-item nick-item-live flex items-center hover:bg-surface-raised transition-colors"
+                onclick={() => openQuery(nick)}
+                role="button"
+                tabindex="0"
+                onkeydown={makeKeyboardActivatable(() => insertNickIntoInput(nick.name))}
+              >
+                {@render nickBody(nick)}
+              </div>
+            {:else}
+              <!-- A row that looks clickable and does nothing is worse than one
+                   that does not look clickable. A /query needs a session, and a
+                   retained view has none. -->
+              <div data-testid="nick-item" class="nick-item nick-item-cached flex items-center transition-colors">
+                {@render nickBody(nick)}
+              </div>
+            {/if}
           {/each}
         </div>
 

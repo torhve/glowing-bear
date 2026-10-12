@@ -14,7 +14,7 @@
 import { derived } from 'svelte/store';
 import { currentBuffer } from '#lib/stores/models.ts';
 import { retainedSnapshot, retainedBufferData } from '#lib/stores/retainedChat.ts';
-import type { BufferData } from '#lib/types.ts';
+import type { BufferData, BufferPresentation } from '#lib/types.ts';
 
 export interface ChatDisplay {
     /** The buffer to render. Null means "there is nothing to render". */
@@ -52,5 +52,28 @@ export const chatDisplay = derived(
             buffer: active ? retainedBufferData(active) : null,
             live: false,
         };
+    },
+);
+
+/**
+ * The sidebar's rows for the same view `chatDisplay` renders.
+ *
+ * Kept beside `chatDisplay` rather than inside `bufferProjections` on purpose:
+ * the live projection is memoised against the live buffer map, and mixing a
+ * frozen snapshot into that memo would let a retained row survive a live change.
+ * The retained list is re-projected each time, which is cheap — it is bounded by
+ * the snapshot, not by the session.
+ *
+ * Ordered by buffer number so the retained list reads like the live one instead
+ * of like capture order.
+ */
+export const retainedRows = derived(
+    [retainedSnapshot],
+    ([$retained]): BufferPresentation[] => {
+        if (!$retained) return [];
+        return Array.from($retained.buffers.values())
+            .filter((buffer) => !buffer.presentation.hidden)
+            .map((buffer) => retainedBufferData(buffer))
+            .sort((a, b) => a.number - b.number);
     },
 );
