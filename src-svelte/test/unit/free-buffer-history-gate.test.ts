@@ -9,8 +9,21 @@ import { fetchMoreLines } from '#lib/stores/connectionManager.ts';
 import { fetchMoreLines as apiFetchMoreLines } from '#lib/stores/apiConnection.ts';
 import { fetchMoreLines as legacyFetchMoreLines } from '#lib/stores/legacyConnection.ts';
 
-vi.mock('#lib/stores/apiConnection.ts', () => ({ fetchMoreLines: vi.fn() }));
-vi.mock('#lib/stores/legacyConnection.ts', () => ({ fetchMoreLines: vi.fn() }));
+// The facade registers each transport's adapter when it loads, so a mock of a
+// transport has to carry one or the facade throws before the test runs. Kept
+// inert: this spec is about the history gate, not about retry state.
+const inertAdapter = vi.hoisted(() => (kind: 'api' | 'legacy') => ({
+    kind,
+    open: () => Promise.resolve(),
+    teardown: () => {},
+    hasLiveSession: () => false,
+    isAttemptInProgress: () => false,
+    hasRetryLoop: () => false,
+    manualReconnect: () => {},
+    pendingRetry: () => ({ active: false }),
+}));
+vi.mock('#lib/stores/apiConnection.ts', () => ({ fetchMoreLines: vi.fn(), transportAdapter: inertAdapter('api') }));
+vi.mock('#lib/stores/legacyConnection.ts', () => ({ fetchMoreLines: vi.fn(), transportAdapter: inertAdapter('legacy') }));
 
 const FREE_ID = 'free-buffer';
 const CHANNEL_ID = 'channel-buffer';

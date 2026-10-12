@@ -14,12 +14,12 @@ import {
     cleanupFocusReconnect as sharedCleanupFocusReconnect,
     countdownText,
     findDisconnectToast,
-    registerFocusReconnect,
     reconnectDelay,
     resetAppState,
     showDisconnectToast as sharedShowDisconnectToast,
     type ConnectionProfile,
     type PendingRetry,
+    type TransportAdapter,
 } from '#lib/stores/connectionLifecycle.ts';
 import { DEBUG_NICKLIST, DEBUG_WEECHAT_COMMANDS, DEBUG_CONNECTION } from '#lib/debug.ts';
 import { applyRetainedHandoff, hasRetainedViewForActiveProfile, markCaptureIntent } from '#lib/stores/retainedChat.ts';
@@ -589,25 +589,6 @@ function triggerManualReconnect(resetAttempts = false) {
     connect(connectionData!);
 }
 
-/**
- * Manual "Retry now" for the facade's retained shell. Returns false when this
- * transport has no retry loop to take over: a retry must never start one from
- * nothing, because that would reconnect to a profile the user already left.
- * Keeps the backoff ladder (resetAttempts=false) so a failed immediate retry
- * still escalates instead of hammering the relay.
- */
-export function retryNow(): boolean {
-    if (!connectionData) return false;
-    triggerManualReconnect(false);
-    return true;
-}
-
-/** Whether this transport has a captured profile a retry could use. Split out so
- *  the banner's button state comes from the same predicate the command checks. */
-export function canRetryNow(): boolean {
-    return connectionData !== null;
-}
-
 /** True while a handshake is in flight, so a second Retry click cannot stack a
  *  third attempt on top of one already running. False during the backoff wait
  *  between attempts — that is exactly when a retry is worth taking over. */
@@ -686,10 +667,25 @@ function pendingRetry(): PendingRetry {
     return { active: true, nextRetryAt: get(connectionState).nextReconnectAt };
 }
 
-// Register the shared visibilitychange listener for this transport.
-export function initFocusReconnect() {
-    registerFocusReconnect(pendingRetry, () => triggerManualReconnect(true));
-}
+/**
+ * This transport's `TransportAdapter` — the lifecycle's view of it.
+ *
+ * Every method is a thin read of state this module already owns. Nothing here is
+ * new behaviour; the point is that the shared layer can ask these questions
+ * without knowing it is talking to the legacy relay.
+ */
+export const transportAdapter: TransportAdapter = {
+    kind: 'legacy',
+    open: (profile) => connect(profile),
+    teardown: () => disconnect(),
+    hasLiveSession: () => ws !== null && ws.readyState === WebSocket.OPEN,
+    isAttemptInProgress: () => connecting,
+    // A captured profile is the whole retry loop for this transport: the armed
+    // timer is what reconnects, and without a profile there is nothing to arm.
+    hasRetryLoop: () => connectionData !== null,
+    manualReconnect: (resetAttempts) => triggerManualReconnect(resetAttempts),
+    pendingRetry,
+};
 
 // Remove the visibilitychange listener (called on page unmount).
 export const cleanupFocusReconnect = sharedCleanupFocusReconnect;

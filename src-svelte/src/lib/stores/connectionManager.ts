@@ -23,10 +23,25 @@ import * as api from '#lib/stores/apiConnection.ts';
 import * as legacy from '#lib/stores/legacyConnection.ts';
 import type { ApiSession } from '#lib/api/api-session.ts';
 import { clearActiveConnectionProfile, setActiveConnectionProfile } from '#lib/connectionProfile.ts';
-import type { ConnectionProfile } from '#lib/stores/connectionLifecycle.ts';
+import {
+    cleanupFocusReconnect as sharedCleanupFocusReconnect,
+    registerActiveFocusReconnect,
+    registerTransportAdapter,
+    retryAvailability as sharedRetryAvailability,
+    retryNow as sharedRetryNow,
+    type ConnectionProfile,
+    type RetryAvailability,
+    type RetryNowOutcome,
+} from '#lib/stores/connectionLifecycle.ts';
 import { clearCaptureIntent, releaseIfProfileChanged, releaseRetainedSnapshot } from '#lib/stores/retainedChat.ts';
 
 export type RelayTransport = 'api' | 'legacy';
+
+// Hand each transport's adapter to the shared lifecycle. The facade is the only
+// module that imports both transports, so it is the only place that can supply
+// both; "which one is active" stays in the `activeTransport` store, not here.
+registerTransportAdapter(api.transportAdapter);
+registerTransportAdapter(legacy.transportAdapter);
 
 let transport: RelayTransport | null = null;
 
@@ -157,63 +172,35 @@ export function disconnect(): void {
     clearActiveConnectionProfile();
 }
 
-export type RetryNowOutcome = 'retried' | 'in-progress' | 'no-retry-loop' | 'needs-credentials';
-/** The same question without performing it, so the banner's button state and a
- * refused command are one decision made in one place. */
-export type RetryAvailability = 'available' | 'in-progress' | 'no-retry-loop' | 'needs-credentials';
-
-export function retryAvailability(): RetryAvailability {
-    if (!transport) return 'no-retry-loop';
-    // A Leave ends the retry loop and the retained view with it. A retry from
-    // here would reconnect to a profile the user deliberately left.
-    if (get(connectionState).userDisconnect) return 'no-retry-loop';
-    // TOTP codes are single-use and expire. Reusing the captured one produces an
-    // auth error the user cannot interpret, so route them to explicit credential
-    // entry — the same reason the transports refuse to auto-reconnect on TOTP.
-    if (get(settings).useTotp) return 'needs-credentials';
-    const inProgress = transport === 'api' ? api.isAttemptInProgress() : legacy.isAttemptInProgress();
-    if (inProgress) return 'in-progress';
-    const retryable = transport === 'api' ? api.canRetryNow() : legacy.canRetryNow();
-    return retryable ? 'available' : 'no-retry-loop';
-}
+// The retry decision lives in the shared lifecycle and is made through the active
+// adapter. Re-exported here because the banner and the tests reach the command
+// through the facade, which is the module that owns "which transport".
+export type { RetryNowOutcome, RetryAvailability };
+export const retryAvailability = sharedRetryAvailability;
 
 /**
- * Manual "Retry now" for the retained shell.
- *
- * Delegates to whichever transport owns the active profile and NEVER to this
- * module's connect(): connect() re-probes the relay, and a probe that fails
- * mid-retry would silently move a session onto the other protocol — the
- * mid-connection fallback the dual-protocol rule forbids. The transports' own
- * takeover paths cancel any scheduled retry before starting, so a click
- * replaces the pending attempt instead of adding a second loop.
- *
- * Outcomes rather than a boolean: the caller has to distinguish "a click did
- * nothing" from "this needs a credential the user must type", because only the
- * latter has to route to the connection form.
+ * Manual "Retry now" for the retained shell. Lives in the shared lifecycle; see
+ * `retryAvailability` for why it goes through the adapter's own takeover path and
+ * never through this module's connect() — connect() re-probes the relay, and a
+ * probe that fails mid-retry would silently move a session onto the other
+ * protocol, which the dual-protocol rule forbids.
  */
-export function retryNow(): RetryNowOutcome {
-    const availability = retryAvailability();
-    if (availability === 'in-progress') return 'in-progress';
-    if (availability === 'needs-credentials') return 'needs-credentials';
-    if (availability === 'no-retry-loop') return 'no-retry-loop';
-    const started = transport === 'api' ? api.retryNow() : legacy.retryNow();
-    return started ? 'retried' : 'no-retry-loop';
-}
+export const retryNow = sharedRetryNow;
 
 export function setHotlistPollInterval(ms: number): void {
     api.setHotlistPollInterval(ms);
     legacy.setHotlistPollInterval(ms);
 }
 
+// Registered ONCE, for whichever transport is active when the handler runs.
+// Registering both transports' listeners was a bug, not belt-and-braces: the
+// shared guard is first-wins, so the API transport's `pendingRetry` closure was
+// installed permanently and a legacy session's focus reconnect never fired.
 export function initFocusReconnect(): void {
-    api.initFocusReconnect();
-    legacy.initFocusReconnect();
+    registerActiveFocusReconnect();
 }
 
-export function cleanupFocusReconnect(): void {
-    api.cleanupFocusReconnect();
-    legacy.cleanupFocusReconnect();
-}
+export const cleanupFocusReconnect = sharedCleanupFocusReconnect;
 
 export async function requestNicklist(bufferId: string): Promise<void> {
     if (transport === 'legacy') return legacy.requestNicklist(bufferId);

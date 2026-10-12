@@ -32,11 +32,11 @@ import {
     clearDisconnectToast,
     countdownText,
     findDisconnectToast,
-    registerFocusReconnect,
     resetAppState,
     showDisconnectToast as sharedShowDisconnectToast,
     type ConnectionProfile,
     type PendingRetry,
+    type TransportAdapter,
 } from '#lib/stores/connectionLifecycle.ts';
 import { clearHistoryOutcomes } from '#lib/stores/historyState.ts';
 import type { ApiSession } from '#lib/api/api-session.ts';
@@ -368,28 +368,6 @@ function triggerManualReconnect(resetAttempts = false) {
     }
 }
 
-/**
- * Manual "Retry now" for the facade's retained shell. Returns false when this
- * transport has no orchestrator to hand the attempt to — a retry must never
- * start a connection loop from nothing, because that would reconnect to a
- * profile the user already left. Delegates to the orchestrator's own takeover,
- * which cancels any scheduled retry and bumps the generation, so this replaces
- * the pending attempt rather than adding a parallel one. Keeps the backoff
- * ladder so a failed immediate retry still escalates.
- */
-export function retryNow(): boolean {
-    if (!orchestrator || !connectionData) return false;
-    triggerManualReconnect(false);
-    return true;
-}
-
-/** Whether this transport has a live orchestrator and captured profile a retry
- *  could take over. Split out so the banner's button state comes from the same
- *  predicate the command checks. */
-export function canRetryNow(): boolean {
-    return orchestrator !== null && connectionData !== null;
-}
-
 /** True while an attempt is in flight, so a second Retry click cannot stack a
  *  third attempt on top of one already running. False during the backoff wait
  *  between attempts — that is exactly when a retry is worth taking over. */
@@ -414,10 +392,27 @@ function pendingRetry(): PendingRetry {
     return { active: true, nextRetryAt: status.nextRetryAt };
 }
 
-// Register the shared visibilitychange listener for this transport.
-export function initFocusReconnect() {
-    registerFocusReconnect(pendingRetry, () => triggerManualReconnect(true));
-}
+/**
+ * This transport's `TransportAdapter` — the lifecycle's view of it.
+ *
+ * Thin reads of state this module already owns. The API transport keeps its retry
+ * schedule inside the orchestrator rather than in a timer it holds, which is why
+ * `pendingRetry` and `isAttemptInProgress` are status reads here and timer reads in
+ * the legacy transport — the adapter exists so the shared layer never has to know
+ * that difference exists.
+ */
+export const transportAdapter: TransportAdapter = {
+    kind: 'api',
+    open: (profile) => connect(profile),
+    teardown: () => disconnect(),
+    hasLiveSession: () => currentSession() !== null,
+    isAttemptInProgress: () => isAttemptInProgress(),
+    // Both halves are required: an orchestrator with no profile has nothing to
+    // reconnect to, and a profile with no orchestrator has no loop to take over.
+    hasRetryLoop: () => orchestrator !== null && connectionData !== null,
+    manualReconnect: (resetAttempts) => triggerManualReconnect(resetAttempts),
+    pendingRetry,
+};
 
 export const cleanupFocusReconnect = sharedCleanupFocusReconnect;
 

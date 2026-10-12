@@ -36,6 +36,7 @@
 
 import { get } from 'svelte/store';
 import { addToast, removeToast, toastStore, type Toast } from '#lib/toast.ts';
+import { activeTransport, connectionState, type RelayTransportKind } from '#lib/stores/connectionStore.ts';
 import { settings } from '#lib/stores/settings.ts';
 import { captureRetainedState, consumeCaptureIntent, hasRetainedViewForActiveProfile } from '#lib/stores/retainedChat.ts';
 import { onDisconnect } from '#lib/notifications.ts';
@@ -120,6 +121,111 @@ export interface PendingRetry {
     nextRetryAt?: number;
 }
 
+/**
+ * The seam between the shared lifecycle and a protocol.
+ *
+ * Everything the lifecycle must be able to ask a transport, and nothing about how
+ * a protocol is spoken. `sendMessage`, `pinBuffer`, `fetchMoreLines` and the rest
+ * of the wire surface deliberately stay on the transport module: the lifecycle has
+ * no business dispatching them, and adding them here would turn the adapter into a
+ * second facade with a second set of transport branches.
+ */
+export interface TransportAdapter {
+    readonly kind: RelayTransportKind;
+    /** Open a fresh connection. Resolves on connect; rejects on terminal failure. */
+    open(profile: ConnectionProfile): Promise<void>;
+    /**
+     * Close this transport's live session and clear its own retry state (armed
+     * timer, captured profile). Does NOT wipe app stores — that is `resetAppState`.
+     */
+    teardown(): void;
+    /** A live session exists. */
+    hasLiveSession(): boolean;
+    /** A handshake is in flight, so a Retry click cannot stack a second attempt. */
+    isAttemptInProgress(): boolean;
+    /** A retry loop exists that "Retry now" may take over. */
+    hasRetryLoop(): boolean;
+    /** Take over the pending attempt immediately; `resetAttempts` also rewinds the ladder. */
+    manualReconnect(resetAttempts: boolean): void;
+    /** Is a backoff retry scheduled, and when? */
+    pendingRetry(): PendingRetry;
+}
+
+const adapters = new Map<RelayTransportKind, TransportAdapter>();
+
+/**
+ * Register a transport's adapter. The facade calls this: it is the only module
+ * that imports both transports.
+ *
+ * The registry is keyed by kind, and "which one is active" is answered by the
+ * existing `activeTransport` store rather than by a second slot owned here. A
+ * lifecycle-owned "current adapter" would be a second source of one fact, and the
+ * two would drift the moment one was updated without the other — which is the
+ * failure mode the whole module exists to remove.
+ */
+export function registerTransportAdapter(adapter: TransportAdapter): void {
+    adapters.set(adapter.kind, adapter);
+}
+
+export function transportAdapterFor(kind: RelayTransportKind | null): TransportAdapter | null {
+    return kind ? adapters.get(kind) ?? null : null;
+}
+
+/** The adapter for the transport the facade currently serves. */
+export function activeTransportAdapter(): TransportAdapter | null {
+    return transportAdapterFor(get(activeTransport));
+}
+
+/**
+ * Manual "Retry now" outcomes. The caller must distinguish "a click did nothing"
+ * from "this needs a credential the user must type", because only the latter has
+ * to route to the connection form.
+ */
+export type RetryNowOutcome = 'retried' | 'in-progress' | 'no-retry-loop' | 'needs-credentials';
+
+/** The same question without performing it, so the banner's button state and a
+ *  refused command are one decision made in one place. */
+export type RetryAvailability = 'available' | 'in-progress' | 'no-retry-loop' | 'needs-credentials';
+
+/**
+ * Whether a "Retry now" would be accepted, without performing it.
+ *
+ * Order matters and each guard is a different reason:
+ * - no adapter: nothing was ever connected, or a Leave ended the session.
+ * - `userDisconnect`: a Leave ends the retry loop and the retained view with it;
+ *   retrying from here would reconnect to a profile the user deliberately left.
+ * - TOTP: codes are single-use and expire. Reusing the captured one produces an
+ *   auth error the user cannot interpret, so route them to explicit credential
+ *   entry — the same reason the transports refuse to auto-reconnect on TOTP.
+ */
+export function retryAvailability(): RetryAvailability {
+    const adapter = activeTransportAdapter();
+    if (!adapter) return 'no-retry-loop';
+    if (get(connectionState).userDisconnect) return 'no-retry-loop';
+    if (get(settings).useTotp) return 'needs-credentials';
+    if (adapter.isAttemptInProgress()) return 'in-progress';
+    return adapter.hasRetryLoop() ? 'available' : 'no-retry-loop';
+}
+
+/**
+ * Manual "Retry now" for the retained shell.
+ *
+ * Delegates to the active adapter's own takeover path and NEVER through the
+ * facade's connect(): connect() re-probes the relay, and a probe that fails
+ * mid-retry would silently move a session onto the other protocol — the
+ * mid-connection fallback the dual-protocol rule forbids. The adapters' takeover
+ * cancels any scheduled retry before starting, so a click replaces the pending
+ * attempt instead of adding a second loop.
+ */
+export function retryNow(): RetryNowOutcome {
+    const availability = retryAvailability();
+    if (availability !== 'available') return availability;
+    const adapter = activeTransportAdapter();
+    if (!adapter) return 'no-retry-loop';
+    adapter.manualReconnect(false);
+    return 'retried';
+}
+
 /** Only cut in front of a scheduled retry when the wait left is longer than this. */
 const FOCUS_RECONNECT_THRESHOLD_MS = 10_000;
 
@@ -156,6 +262,24 @@ export function registerFocusReconnect(
         document.removeEventListener('visibilitychange', handler);
         focusReconnectCleanup = null;
     };
+}
+
+/**
+ * Install the listener for whichever transport is active AT CALL TIME.
+ *
+ * This indirection is the fix, not a convenience. The facade used to call both
+ * transports' `initFocusReconnect()`, and the double-registration guard above is
+ * first-wins — so whichever transport registered first owned the listener forever.
+ * On a legacy connection the handler asked the (null) API orchestrator whether a
+ * retry was pending, always got "no", and the early reconnect silently never
+ * happened. Resolving the adapter inside the handler makes the listener ask the
+ * transport that is actually serving the session.
+ */
+export function registerActiveFocusReconnect(): void {
+    registerFocusReconnect(
+        () => activeTransportAdapter()?.pendingRetry() ?? { active: false },
+        () => activeTransportAdapter()?.manualReconnect(true),
+    );
 }
 
 /** Remove the visibilitychange listener (called on page unmount). */

@@ -38,6 +38,7 @@ import { connectionState, setNextReconnectAt } from '#lib/stores/connectionStore
 import { settings } from '#lib/stores/settings.ts';
 import { clearToasts, toastStore } from '#lib/toast.ts';
 import { clearActiveConnectionProfile, setActiveConnectionProfile } from '#lib/connectionProfile.ts';
+import { activeTransport } from '#lib/stores/connectionStore.ts';
 import { createApiStoreReducers, flushApiLineBatch } from '#lib/api/api-store-reducers.ts';
 import type { BufferSnapshot } from '#lib/api/api-contracts.ts';
 import type { ApiBufferId, ApiLineId } from '#lib/api/api-ids.ts';
@@ -53,9 +54,12 @@ import {
     RECONNECT_BACKOFF,
     cleanupFocusReconnect,
     countdownText,
+    retryAvailability,
     findDisconnectToast,
     hotlistPollInterval,
+    registerActiveFocusReconnect,
     registerFocusReconnect,
+    registerTransportAdapter,
     reconnectDelay,
     resetAppState,
     setHotlistPollInterval,
@@ -243,6 +247,59 @@ describe('resetAppState — the shared wipe', () => {
         resetAppState();
 
         expect(get(connectionState).nextReconnectAt).toBeDefined();
+    });
+});
+
+describe('which transport the lifecycle is talking to', () => {
+    function fakeAdapter(kind: 'api' | 'legacy', pending: PendingRetry, calls: string[]) {
+        return {
+            kind,
+            open: () => Promise.resolve(),
+            teardown: () => {},
+            hasLiveSession: () => false,
+            isAttemptInProgress: () => false,
+            hasRetryLoop: () => true,
+            manualReconnect: () => { calls.push(kind); },
+            pendingRetry: () => pending,
+        };
+    }
+
+    /**
+     * The bug this pins: the facade used to register BOTH transports' focus
+     * listener, and the shared guard is first-wins, so the API transport's
+     * `pendingRetry` closure owned the listener forever. On a legacy session the
+     * handler asked the API orchestrator — null — got {active:false}, and the
+     * early reconnect never happened. Nothing failed; the feature was just off.
+     */
+    it('asks the transport that is actually serving the session', () => {
+        const calls: string[] = [];
+        registerTransportAdapter(fakeAdapter('api', { active: false }, calls));
+        registerTransportAdapter(fakeAdapter('legacy', { active: true, nextRetryAt: Date.now() + 60_000 }, calls));
+        activeTransport.set('legacy');
+        registerActiveFocusReconnect();
+
+        Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+        document.dispatchEvent(new Event('visibilitychange'));
+
+        expect(calls).toEqual(['legacy']);
+        cleanupFocusReconnect();
+        activeTransport.set(null);
+    });
+
+    it('reports availability through the active adapter, not through a branch', () => {
+        const calls: string[] = [];
+        registerTransportAdapter(fakeAdapter('api', { active: false }, calls));
+        registerTransportAdapter(fakeAdapter('legacy', { active: true, nextRetryAt: Date.now() + 60_000 }, calls));
+
+        activeTransport.set(null);
+        expect(retryAvailability()).toBe('no-retry-loop');
+
+        activeTransport.set('legacy');
+        expect(retryAvailability()).toBe('available');
+
+        activeTransport.set('api');
+        expect(retryAvailability()).toBe('available');
+        activeTransport.set(null);
     });
 });
 
