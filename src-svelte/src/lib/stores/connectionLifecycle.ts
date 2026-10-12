@@ -36,7 +36,7 @@
 
 import { get } from 'svelte/store';
 import { addToast, removeToast, toastStore, type Toast } from '#lib/toast.ts';
-import { activeTransport, connectionState, type RelayTransportKind } from '#lib/stores/connectionStore.ts';
+import { activeTransport, connectionState, resetReconnectAttempts, setNextReconnectAt, type RelayTransportKind } from '#lib/stores/connectionStore.ts';
 import { settings } from '#lib/stores/settings.ts';
 import { captureRetainedState, consumeCaptureIntent, hasRetainedViewForActiveProfile } from '#lib/stores/retainedChat.ts';
 import { onDisconnect } from '#lib/notifications.ts';
@@ -369,6 +369,12 @@ let hotlistPollIntervalMs = DEFAULT_HOTLIST_POLL_INTERVAL_MS;
  *  do not have to sit through the full 15 s poll cycle; call before connect. */
 export function setHotlistPollInterval(ms: number): void {
     hotlistPollIntervalMs = ms;
+    // A running interval keeps the period it was armed with, so changing this
+    // setting used to take effect only on the next reconnect. Re-arm in place.
+    if (hotlistInterval && hotlistPollFn) {
+        clearInterval(hotlistInterval);
+        hotlistInterval = setInterval(hotlistPollFn, hotlistPollIntervalMs);
+    }
 }
 
 export function hotlistPollInterval(): number {
@@ -419,6 +425,85 @@ export function showDisconnectToast(profile: ConnectionProfile, onReconnect: () 
 export function clearDisconnectToast(profile: ConnectionProfile): void {
     const toast = findDisconnectToast(profile.host, profile.port);
     if (toast) removeToast(toast.id);
+}
+
+/**
+ * Hotlist polling — one interval and one debounce timer for the whole app.
+ *
+ * Each transport used to own its own pair. Nothing stopped the timers of a
+ * transport that was *replaced* rather than disconnected: `quiesce()` bumps the
+ * connection generation so the old socket's `onclose` returns early, and that
+ * early return skips `resetAllState()`, which is where both timers were cleared.
+ * A poll that outlives its transport keeps querying a relay the user has left.
+ * Owning them here is what lets `quiesce()` stop them.
+ */
+let hotlistInterval: ReturnType<typeof setInterval> | null = null;
+let hotlistDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+/** The live poll's callback, so an interval-settings change can re-arm it. */
+let hotlistPollFn: (() => void) | null = null;
+
+/**
+ * Arm the periodic hotlist poll.
+ *
+ * `hotlistsync` is honoured here. The legacy transport gated its poll on the
+ * setting and the API transport polled unconditionally, so turning it off only
+ * ever worked against one of the two relays.
+ */
+export function startHotlistPoll(onPoll: () => void): void {
+    if (!get(settings).hotlistsync) return;
+    if (hotlistInterval) clearInterval(hotlistInterval);
+    hotlistPollFn = onPoll;
+    hotlistInterval = setInterval(onPoll, hotlistPollInterval());
+}
+
+/** Stop the poll and drop any coalesced query still waiting. */
+export function stopHotlistPoll(): void {
+    if (hotlistInterval) {
+        clearInterval(hotlistInterval);
+        hotlistInterval = null;
+    }
+    // Cleared with the interval: a stored callback is a reference into a
+    // transport, and re-arming it after that transport was replaced would poll a
+    // relay the user has left.
+    hotlistPollFn = null;
+    cancelPendingHotlistQuery();
+}
+
+/**
+ * Coalesce rapid buffer switches into a single hotlist query.
+ *
+ * `run` is protocol-side — the legacy transport formats an hdata query, the API
+ * transport issues a GET — so it is passed in rather than having the shared
+ * module reach into a transport.
+ */
+export function debounceHotlistQuery(run: () => void): void {
+    cancelPendingHotlistQuery();
+    hotlistDebounceTimer = setTimeout(() => {
+        hotlistDebounceTimer = null;
+        run();
+    }, HOTLIST_DEBOUNCE_MS);
+}
+
+export function cancelPendingHotlistQuery(): void {
+    if (hotlistDebounceTimer) {
+        clearTimeout(hotlistDebounceTimer);
+        hotlistDebounceTimer = null;
+    }
+}
+
+/**
+ * The shared half of a manual "reconnect now": drop the toast that was counting
+ * down to the next attempt, stop advertising that attempt, optionally restart the
+ * ladder. The transport then opens the attempt itself, because only it knows how
+ * to start its own protocol.
+ */
+export function beginManualReconnect(profile: ConnectionProfile, resetAttempts: boolean): void {
+    // Precisely the disconnect toast, not "whatever toast happens to be last" —
+    // which is what both transports used to remove, and which would have dropped
+    // an unrelated toast if one arrived first.
+    clearDisconnectToast(profile);
+    setNextReconnectAt(undefined);
+    if (resetAttempts) resetReconnectAttempts();
 }
 
 /** Countdown text for a retry scheduled at `nextRetryAt`. */

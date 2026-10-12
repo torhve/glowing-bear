@@ -15,7 +15,7 @@ import {
 } from '#lib/stores/connectionStore.ts';
 import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, weechatVersion, relayApiVersion, hasNoHistoryToFetch, markHistoryComplete } from '#lib/stores/models.ts';
 import { settings } from '#lib/stores/settings.ts';
-import { addToast, removeToast, updateToast, toastStore } from '#lib/toast.ts';
+import { addToast, updateToast } from '#lib/toast.ts';
 
 import { resolveApiEndpoint } from '#lib/api/api-endpoint.ts';
 import { ApiOrchestrator, type OrchestratorStatus } from '#lib/api/api-orchestrator.ts';
@@ -25,15 +25,17 @@ import { fetchHistory, sendInput, clearHiddenLineIdTracking, type InputOutcome }
 import { validateScript } from '#lib/api/api-validation.ts';
 import { applyRetainedHandoff, hasRetainedViewForActiveProfile, markCaptureIntent } from '#lib/stores/retainedChat.ts';
 import {
-    HOTLIST_DEBOUNCE_MS,
     RECONNECT_BACKOFF,
-    hotlistPollInterval,
     cleanupFocusReconnect as sharedCleanupFocusReconnect,
+    beginManualReconnect,
     clearDisconnectToast,
     countdownText,
+    debounceHotlistQuery,
     findDisconnectToast,
     resetAppState,
     showDisconnectToast as sharedShowDisconnectToast,
+    startHotlistPoll,
+    stopHotlistPoll,
     type ConnectionProfile,
     type PendingRetry,
     type TransportAdapter,
@@ -45,7 +47,6 @@ import { DEBUG_NICKLIST, DEBUG_WEECHAT_COMMANDS, DEBUG_CONNECTION } from '#lib/d
 import { classifyConnectionFailure } from '#lib/utils/connectionFailure.ts';
 
 let orchestrator: ApiOrchestrator | null = null;
-let hotlistInterval: ReturnType<typeof setInterval> | null = null;
 
 let connectionData: ConnectionProfile | null = null;
 let connecting = false;
@@ -114,14 +115,7 @@ function resetAllState(retainGeneration?: number) {
     // the sync phase open across a disconnect.
     endSyncPhase();
     connecting = false;
-    if (hotlistInterval) {
-        clearInterval(hotlistInterval);
-        hotlistInterval = null;
-    }
-    if (hotlistDebounceTimer) {
-        clearTimeout(hotlistDebounceTimer);
-        hotlistDebounceTimer = null;
-    }
+    stopHotlistPoll();
     // Drain the frame's queued line events before wiping state, so nothing is
     // left pending for the next session to apply against reused buffer ids. The
     // drain must precede the wipe: after it there is nothing left to drain into.
@@ -157,8 +151,7 @@ function mapFailureToError(message: string, nameTransient = true): void {
 }
 
 function startHotlistPolling(): void {
-    if (hotlistInterval) clearInterval(hotlistInterval);
-    hotlistInterval = setInterval(() => void pollHotlist(), hotlistPollInterval());
+    startHotlistPoll(() => void pollHotlist());
 }
 
 async function pollHotlist(): Promise<void> {
@@ -354,11 +347,7 @@ function clearReconnectToasts(): void {
 
 // Manual reconnect triggered by toast button — resets backoff and tries now.
 function triggerManualReconnect(resetAttempts = false) {
-    const toasts = get(toastStore);
-    const lastToast = toasts[toasts.length - 1];
-    if (lastToast) removeToast(lastToast.id);
-    setNextReconnectAt(undefined);
-    if (resetAttempts) resetReconnectAttempts();
+    beginManualReconnect(connectionData ?? { host: '', port: 0, path: '', password: '', tls: false, noCompression: false }, resetAttempts);
     manualReconnectRequested = true;
     if (orchestrator) {
         resetAllState();
@@ -400,6 +389,9 @@ function pendingRetry(): PendingRetry {
  * both.
  */
 function quiesce(): void {
+    // The hotlist poll is shared now; stopping it here is the only thing that
+    // keeps a replaced transport from polling a relay the user has left.
+    stopHotlistPoll();
     orchestrator?.stop();
     orchestrator = null;
     connectionData = null;
@@ -574,7 +566,6 @@ export async function sendWeeChatCommand(command: string, bufferId?: string): Pr
 }
 
 // Debounce hotlist queries: coalesce rapid buffer switches into a single request.
-let hotlistDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 
 export async function switchBuffer(bufferId: string): Promise<boolean> {
@@ -607,11 +598,7 @@ export async function switchBuffer(bufferId: string): Promise<boolean> {
 
 // Schedule a hotlist query with debounce — rapid switches coalesce.
 function scheduleHotlistQuery(): void {
-    if (hotlistDebounceTimer) clearTimeout(hotlistDebounceTimer);
-    hotlistDebounceTimer = setTimeout(() => {
-        hotlistDebounceTimer = null;
-        void pollHotlist();
-    }, HOTLIST_DEBOUNCE_MS);
+    debounceHotlistQuery(() => void pollHotlist());
 }
 
 export async function sendBufferCommand(bufferId: string, command: string) {

@@ -9,14 +9,16 @@ import { Protocol } from '#lib/weechat.ts';
 import { sha256, pbkdf2 as nativePbkdf2, toHexString } from '#lib/utils/crypto.ts';
 import type { ProtocolMessage } from '#lib/types.ts';
 import {
-    HOTLIST_DEBOUNCE_MS,
-    hotlistPollInterval,
+    beginManualReconnect,
     cleanupFocusReconnect as sharedCleanupFocusReconnect,
     countdownText,
+    debounceHotlistQuery,
     findDisconnectToast,
     reconnectDelay,
     resetAppState,
     showDisconnectToast as sharedShowDisconnectToast,
+    startHotlistPoll,
+    stopHotlistPoll,
     type ConnectionProfile,
     type PendingRetry,
     type TransportAdapter,
@@ -50,7 +52,6 @@ export function resolveTotpCode(
 }
 
 let ws: WebSocket | null = null;
-let hotlistInterval: ReturnType<typeof setInterval> | null = null;
 
 let reconnectingTimer: ReturnType<typeof setTimeout> | null = null;
 let connectionData: ConnectionProfile | null = null;
@@ -111,14 +112,7 @@ function resetAllState(retainGeneration?: number) {
         clearTimeout(reconnectingTimer);
         reconnectingTimer = null;
     }
-    if (hotlistInterval) {
-        clearInterval(hotlistInterval);
-        hotlistInterval = null;
-    }
-    if (hotlistDebounceTimer) {
-        clearTimeout(hotlistDebounceTimer);
-        hotlistDebounceTimer = null;
-    }
+    stopHotlistPoll();
     pendingFetchBuffers.clear();
     // Everything above is transport teardown; this is the shared wipe, and it is
     // the last thing that runs because it destroys the stores.
@@ -414,16 +408,16 @@ export async function connect(profile: ConnectionProfile) {
 
                 // Start hotlist sync interval — only if user enabled it in settings.
                 // Keeps unread counts in sync with other clients or terminal usage directly.
-                if (get(settings).hotlistsync) {
-                    hotlistInterval = setInterval(async () => {
+                startHotlistPoll(() => {
+                    void (async () => {
                         const hlMsg = Protocol.formatHdata({
                             path: 'hotlist:gui_hotlist(*)',
                             keys: []
                         });
                         const hlResp = await sendAsync(hlMsg);
                         handleHotlistInfo(hlResp);
-                    }, hotlistPollInterval());
-                }
+                    })();
+                });
 
                 // Reset reconnect attempt counter on successful connection
                 resetReconnectAttempts();
@@ -591,15 +585,11 @@ function showDisconnectToast(connInfo: ConnectionProfile) {
 
 // Manual reconnect triggered by toast button — resets backoff timer and tries immediately.
 function triggerManualReconnect(resetAttempts = false) {
-    const toasts = get(toastStore);
-    const lastToast = toasts[toasts.length - 1];
-    if (lastToast) removeToast(lastToast.id);
+    beginManualReconnect(connectionData!, resetAttempts);
     if (reconnectingTimer) {
         clearTimeout(reconnectingTimer);
         reconnectingTimer = null;
     }
-    setNextReconnectAt(undefined);
-    if (resetAttempts) resetReconnectAttempts();
     manualReconnectRequested = true;
     // Handled, not fire-and-forget: this attempt can fail, and an unhandled
     // rejection from a retry is noise in the console and nothing on screen.
@@ -714,6 +704,10 @@ function quiesce(): void {
         reconnectingTimer = null;
     }
     manualReconnectRequested = false;
+    // The hotlist poll is shared now, and this is the path that would otherwise
+    // leak it: bumping the generation makes the old socket's onclose return early,
+    // skipping the resetAllState() that used to clear these timers.
+    stopHotlistPoll();
     // Without a profile there is nothing for a stale timer to reconnect to, even
     // if something still holds a reference to it.
     connectionData = null;
@@ -1072,7 +1066,6 @@ export function sendWeeChatCommand(command: string, bufferId?: string): boolean 
 }
 
 // Debounce hotlist queries: coalesce rapid buffer switches into a single request.
-let hotlistDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 
 export async function switchBuffer(bufferId: string): Promise<boolean> {
@@ -1113,12 +1106,11 @@ export async function switchBuffer(bufferId: string): Promise<boolean> {
 }
 
 // Schedule a hotlist query with debounce — resets timer on each call so rapid
-// buffer switches coalesce into a single request after switching settles.
+// buffer switches coalesce into a single request after switching settles. The
+// timer itself is shared; only the query is legacy's.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function scheduleHotlistQuery(_bufferId: string) {
-    if (hotlistDebounceTimer) clearTimeout(hotlistDebounceTimer);
-    hotlistDebounceTimer = setTimeout(() => {
-        hotlistDebounceTimer = null;
+    debounceHotlistQuery(() => {
         // Request authoritative current hotlist state from WeeChat to ensure
         // stale counts are cleared (e.g., after scroll-to-bottom).
         const hlMsg = Protocol.formatHdata({
@@ -1126,7 +1118,7 @@ function scheduleHotlistQuery(_bufferId: string) {
             keys: []
         });
         sendAsync(hlMsg).catch(() => {});
-    }, HOTLIST_DEBOUNCE_MS);
+    });
 }
 
 export function sendBufferCommand(bufferId: string, command: string) {
