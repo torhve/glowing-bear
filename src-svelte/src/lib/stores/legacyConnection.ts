@@ -615,6 +615,18 @@ function scheduleReconnect() {
     const delay = reconnectDelay(attempts - 1);
     const nextAt = Date.now() + delay;
     setNextReconnectAt(nextAt);
+    // Written in the same synchronous step as the arm above, and before any
+    // await: a status that says "a retry is pending" with no timer running yet
+    // would show a countdown for a retry that cannot fire.
+    //
+    // This used to be written inside the timer callback, which meant the whole
+    // backoff wait reported 'disconnected'. The banner derives its "Retrying…"
+    // wording and its countdown from status === 'reconnecting', so on the legacy
+    // transport a user saw "Connection lost." with a "Reconnect" button and no
+    // countdown for 30 s, then 45 s, then 67.5 s — while the store held a live
+    // attempt count and a ticking next-attempt time. The API transport already
+    // said "Connection lost. Retrying… attempt 1  next attempt in 30s".
+    setConnectionStatus('reconnecting');
 
     if (DEBUG_CONNECTION) console.log(`[reconnect] attempt ${attempts}, retrying in ${(delay / 1000).toFixed(1)}s`);
 
@@ -648,7 +660,8 @@ function scheduleReconnect() {
 
     reconnectingTimer = setTimeout(() => {
         reconnectingTimer = null;
-        setConnectionStatus('reconnecting');
+        // Status is already 'reconnecting' from the schedule; the attempt itself
+        // moves it to 'connecting' inside connect().
         resetAllState();
         connect(profile);
     }, delay);

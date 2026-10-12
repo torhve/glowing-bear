@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, setSettings, waitForAppReady, waitForTransport } from '../helpers/connection';
+import { connectToWeechat, connectLegacyToWeechat, setSettings, waitForAppReady, waitForTransport } from '../helpers/connection';
 import { switchToBuffer, waitForBuffer } from '../helpers/buffers';
 import { waitForChatSettled, waitForRow } from '../helpers/waits';
 import { expectInputFocused } from '../helpers/input';
@@ -191,6 +191,42 @@ test.describe('Connection banner', () => {
         // Nothing wrote scrollTop: the retained re-render kept the offset it was
         // given, which is the scroll-ownership contract holding.
         expect(after.scrollTop).toBe(before.scrollTop);
+    });
+
+    test('a scheduled retry is visible while it is still waiting, on either transport', async ({ page }) => {
+        // The countdown and the "Retrying…" wording are derived from
+        // status === 'reconnecting'. The legacy transport used to write that
+        // status only when the timer FIRED, so the entire backoff wait reported
+        // 'disconnected': "Connection lost." with a "Reconnect" button and no
+        // countdown, for 30 s then 45 s then 67.5 s, while the store held a live
+        // attempt count and a ticking next-attempt time. The API transport said
+        // "Connection lost. Retrying… attempt 1  next attempt in 30s" the whole
+        // time. Same outage, two different stories.
+        await connectLegacyToWeechat(page);
+        await waitForBuffer(page, '#glowing-bear');
+        await switchToBuffer(page, '#glowing-bear');
+        // After connecting: the Connect button writes autoconnect itself, so
+        // setting it first is silently overwritten.
+        await setSettings(page, { autoconnect: true });
+        await waitForChatSettled(page);
+
+        await page.evaluate(() => {
+            const socket = (window as any).__getWs?.();
+            if (socket) socket.close(3000, 'test drop');
+        });
+
+        const banner = page.getByTestId('connection-banner');
+        await expect(banner).toBeVisible({ timeout: 10000 });
+        await expect(banner).toContainText('Retrying');
+        await expect(page.getByTestId('connection-banner-countdown')).toBeVisible();
+        await expect(page.getByTestId('connection-banner-countdown')).toContainText('next attempt in');
+        await expect(page.getByTestId('connection-banner-retry')).toContainText('Retry now');
+
+        // Take over the scheduled attempt rather than leaving a 30 s timer armed
+        // for the next serial spec to trip over.
+        await page.getByTestId('connection-banner-retry').click();
+        await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
+        await waitForTransport(page, 'legacy');
     });
 
     test('a retained view offers no remote controls', async ({ page }) => {
