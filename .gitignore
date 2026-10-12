@@ -73,3 +73,10 @@ packages/weechat-format/oracle/weechat_color_scan.c
 packages/weechat-format/oracle/corpus.txt
 packages/weechat-format/oracle/weechat-oracle.txt
 artifacts/
+
+# `npm run build` runs static/generate-icons.mjs, which rewrites this file even
+# though nothing reads it: b3fce836 untracked it and moved manifest generation into
+# the PWA plugin (app.html links to the generated manifest.webmanifest). It only
+# reappears when an icon actually regenerates, which is why it sat unnoticed until a
+# `git add -A` swept a build artifact into a refactor commit.
+static/webapp.manifest.json
