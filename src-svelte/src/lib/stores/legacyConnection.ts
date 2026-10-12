@@ -1,9 +1,9 @@
 import { get } from 'svelte/store';
-import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, incrementReconnectAttempts, setNextReconnectAt } from '#lib/stores/connectionStore.ts';
+import { setConnectionStatus, setErrors, clearErrors, disconnect as disconnectStore, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts } from '#lib/stores/connectionStore.ts';
 import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, hasNoHistoryToFetch, markHistoryComplete } from '#lib/stores/models.ts';
 import { settings } from '#lib/stores/settings.ts';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist, flushLineBatch, setOnUpgrade, setOnUpgradeEnded } from '#lib/stores/handlers.ts';
-import { addToast, removeToast, clearToasts, updateToast, toastStore } from '#lib/toast.ts';
+import { addToast, removeToast, clearToasts, toastStore } from '#lib/toast.ts';
 
 import { Protocol } from '#lib/weechat.ts';
 import { sha256, pbkdf2 as nativePbkdf2, toHexString } from '#lib/utils/crypto.ts';
@@ -11,10 +11,10 @@ import type { ProtocolMessage } from '#lib/types.ts';
 import {
     beginManualReconnect,
     cleanupFocusReconnect as sharedCleanupFocusReconnect,
-    countdownText,
+    cancelPendingRetry,
+    pendingRetryState,
+    scheduleRetry,
     debounceHotlistQuery,
-    findDisconnectToast,
-    reconnectDelay,
     resetAppState,
     showDisconnectToast as sharedShowDisconnectToast,
     startHotlistPoll,
@@ -24,7 +24,7 @@ import {
     type TransportAdapter,
 } from '#lib/stores/connectionLifecycle.ts';
 import { DEBUG_NICKLIST, DEBUG_WEECHAT_COMMANDS, DEBUG_CONNECTION } from '#lib/debug.ts';
-import { applyRetainedHandoff, hasRetainedViewForActiveProfile, markCaptureIntent } from '#lib/stores/retainedChat.ts';
+import { applyRetainedHandoff, markCaptureIntent } from '#lib/stores/retainedChat.ts';
 import { clearHistoryOutcomes } from '#lib/stores/historyState.ts';
 
 // Protocol instance for instance methods (setId, parse)
@@ -53,7 +53,6 @@ export function resolveTotpCode(
 
 let ws: WebSocket | null = null;
 
-let reconnectingTimer: ReturnType<typeof setTimeout> | null = null;
 let connectionData: ConnectionProfile | null = null;
 let connecting = false;
 /**
@@ -108,10 +107,7 @@ function resetAllState(retainGeneration?: number) {
         delete callbacks[id];
     });
     connecting = false;
-    if (reconnectingTimer) {
-        clearTimeout(reconnectingTimer);
-        reconnectingTimer = null;
-    }
+    cancelPendingRetry();
     stopHotlistPoll();
     pendingFetchBuffers.clear();
     // Everything above is transport teardown; this is the shared wipe, and it is
@@ -421,10 +417,7 @@ export async function connect(profile: ConnectionProfile) {
 
                 // Reset reconnect attempt counter on successful connection
                 resetReconnectAttempts();
-                if (reconnectingTimer) {
-                    clearTimeout(reconnectingTimer);
-                    reconnectingTimer = null;
-                }
+                cancelPendingRetry();
                 // Clear stale disconnect toasts from previous connection cycle
                 clearToasts();
                 pendingConnectReject = null;
@@ -471,8 +464,9 @@ export async function connect(profile: ConnectionProfile) {
             if (DEBUG_CONNECTION) console.log('[connect] WebSocket close code=' + evt.code + ' reason=' + evt.reason);
             // onclose also fires for a first connect that never completed, so a
             // session must have reached its bootstrap before there is anything to
-            // retain. The retry timer's wipe (scheduleReconnect) deliberately does
-            // NOT mark intent: the loss is already retained.
+            // retain. The retry scheduler's wipe re-runs this loss path without
+            // marking intent again: the loss is already retained, and a second
+            // capture would snapshot the empty stores the first wipe left behind.
             if (get(connectionState).wasEverConnected) markCaptureIntent();
             resetAllState(connectionGeneration);
             setConnectionStatus('disconnected');
@@ -586,10 +580,7 @@ function showDisconnectToast(connInfo: ConnectionProfile) {
 // Manual reconnect triggered by toast button — resets backoff timer and tries immediately.
 function triggerManualReconnect(resetAttempts = false) {
     beginManualReconnect(connectionData!, resetAttempts);
-    if (reconnectingTimer) {
-        clearTimeout(reconnectingTimer);
-        reconnectingTimer = null;
-    }
+    cancelPendingRetry();
     manualReconnectRequested = true;
     // Handled, not fire-and-forget: this attempt can fail, and an unhandled
     // rejection from a retry is noise in the console and nothing on screen.
@@ -608,86 +599,30 @@ export function isAttemptInProgress(): boolean {
 // Uses exponential backoff starting at 30s, capped at 5 min. Retries indefinitely.
 function scheduleReconnect() {
     if (!connectionData) return;
-    // Don't auto-reconnect if user has disabled autoconnect in settings
-    if (!get(settings).autoconnect) return;
 
-    // Prevent stacking multiple reconnect timers
-    if (reconnectingTimer) {
-        clearTimeout(reconnectingTimer);
-    }
-
-    // `attempts` is 1-based because the user sees "attempt 1"; the shared ladder
-    // counts retries that have already failed, so the first retry is index 0.
-    const attempts = incrementReconnectAttempts();
-    const delay = reconnectDelay(attempts - 1);
-    const nextAt = Date.now() + delay;
-    setNextReconnectAt(nextAt);
-    // Written in the same synchronous step as the arm above, and before any
-    // await: a status that says "a retry is pending" with no timer running yet
-    // would show a countdown for a retry that cannot fire.
-    //
-    // This used to be written inside the timer callback, which meant the whole
-    // backoff wait reported 'disconnected'. The banner derives its "Retrying…"
-    // wording and its countdown from status === 'reconnecting', so on the legacy
-    // transport a user saw "Connection lost." with a "Reconnect" button and no
-    // countdown for 30 s, then 45 s, then 67.5 s — while the store held a live
-    // attempt count and a ticking next-attempt time. The API transport already
-    // said "Connection lost. Retrying… attempt 1  next attempt in 30s".
-    setConnectionStatus('reconnecting');
-
-    if (DEBUG_CONNECTION) console.log(`[reconnect] attempt ${attempts}, retrying in ${(delay / 1000).toFixed(1)}s`);
-
-    const { host, port } = connectionData;
-
-    // Create or update countdown toast — unless the banner is already presenting
-    // this loss, which it is whenever a retained view is on screen.
-    const existingToast = hasRetainedViewForActiveProfile()
-        ? null
-        : findDisconnectToast(host, port);
-    if (existingToast) {
-        updateToast(existingToast.id, { messageFn: () => countdownText(nextAt) });
-    } else if (!hasRetainedViewForActiveProfile()) {
-        addToast(
-            `Disconnected from ${host}:${port}`,
-            {
-                type: 'warning',
-                duration: 0,
-                messageFn: () => countdownText(nextAt),
-                buttons: [{
-                    text: 'Reconnect',
-                    action: () => triggerManualReconnect(false)
-                }]
-            }
-        );
-    }
-
-    // Captured, not re-read at fire time: `resetAllState()` runs inside the timer
-    // and a later profile change must not redirect an already-scheduled attempt.
+    // Captured, not re-read at fire time: the wipe the scheduler runs destroys the
+    // stores, and a later profile change must not redirect an already-scheduled
+    // attempt.
     const profile = connectionData;
 
-    reconnectingTimer = setTimeout(() => {
-        reconnectingTimer = null;
-        // Status is already 'reconnecting' from the schedule; the attempt itself
-        // moves it to 'connecting' inside connect().
-        resetAllState();
-        // Handled for the same reason as the manual path, and this one is the
-        // site that produced a real unhandled rejection: a scheduled retry whose
-        // handshake failed had nobody listening for it.
-        void connect(profile).catch(() => undefined);
-    }, delay);
+    scheduleRetry(
+        {
+            profile,
+            error: 'connection closed',
+            // The transport's own loss path, not an approximation of it: the drain
+            // and the protocol teardown are what make the shared wipe safe here.
+            wipe: () => resetAllState(),
+            // Handled for the same reason as the manual path, and this one is the
+            // site that produced a real unhandled rejection: a scheduled retry whose
+            // handshake failed had nobody listening for it.
+            open: () => void connect(profile).catch(() => undefined),
+        },
+        () => triggerManualReconnect(false),
+    );
 }
 
-/**
- * This transport's answer to "is a retry scheduled, and when?".
- *
- * Legacy keeps the schedule as a live `setTimeout` handle plus the store's
- * `nextReconnectAt`; the API transport keeps it as orchestrator status. The shared
- * focus-reconnect listener only needs the question answered, so each transport
- * supplies its own mapping instead of the listener knowing both shapes.
- */
 function pendingRetry(): PendingRetry {
-    if (!reconnectingTimer || !connectionData) return { active: false };
-    return { active: true, nextRetryAt: get(connectionState).nextReconnectAt };
+    return pendingRetryState();
 }
 
 /**
@@ -699,10 +634,7 @@ function pendingRetry(): PendingRetry {
  * about to start, and it wipes the stores the new attempt is about to fill.
  */
 function quiesce(): void {
-    if (reconnectingTimer) {
-        clearTimeout(reconnectingTimer);
-        reconnectingTimer = null;
-    }
+    cancelPendingRetry();
     manualReconnectRequested = false;
     // The hotlist poll is shared now, and this is the path that would otherwise
     // leak it: bumping the generation makes the old socket's onclose return early,
