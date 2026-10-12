@@ -139,6 +139,16 @@ export interface TransportAdapter {
      * timer, captured profile). Does NOT wipe app stores — that is `resetAppState`.
      */
     teardown(): void;
+    /**
+     * Cancel everything this transport might still do — an armed retry timer, an
+     * in-flight handshake, a live socket — without wiping app stores and without
+     * recording a user-initiated disconnect.
+     *
+     * `teardown()` is the wrong tool for this: it marks `userDisconnect`, which
+     * makes `retryAvailability()` answer 'no-retry-loop' for the session that is
+     * about to start, and it wipes the stores that session is about to fill.
+     */
+    quiesce(): void;
     /** A live session exists. */
     hasLiveSession(): boolean;
     /** A handshake is in flight, so a Retry click cannot stack a second attempt. */

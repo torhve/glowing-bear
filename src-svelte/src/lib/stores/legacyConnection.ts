@@ -55,6 +55,16 @@ let hotlistInterval: ReturnType<typeof setInterval> | null = null;
 let reconnectingTimer: ReturnType<typeof setTimeout> | null = null;
 let connectionData: ConnectionProfile | null = null;
 let connecting = false;
+/**
+ * The in-flight `connect()` promise's rejecter.
+ *
+ * A superseded attempt needs settling, not just ignoring: `connect()` closes the
+ * sockets of an older attempt after bumping `connectionGeneration`, so those
+ * handlers return early and their promise never settles — not a crash, just a
+ * promise and every closure it holds, retained forever. `quiesce()` uses this to
+ * settle it deliberately.
+ */
+let pendingConnectReject: ((e: Error) => void) | null = null;
 let manualReconnectRequested = false;
 let connectionGeneration = 0;
 
@@ -220,11 +230,13 @@ export async function connect(profile: ConnectionProfile) {
 
     return new Promise<void>((resolve, reject) => {
         rejectPromise = reject;
+        pendingConnectReject = reject;
         try {
             ws = new WebSocket(url);
             webSockets.add(ws);
         } catch (e) {
             connecting = false;
+            pendingConnectReject = null;
             reject(e);
             return;
         }
@@ -421,6 +433,7 @@ export async function connect(profile: ConnectionProfile) {
                 }
                 // Clear stale disconnect toasts from previous connection cycle
                 clearToasts();
+                pendingConnectReject = null;
                 resolve();
             } catch (e) {
                 // Init ended without applying a hotlist baseline — this attempt closes
@@ -431,6 +444,7 @@ export async function connect(profile: ConnectionProfile) {
                     // A newer attempt owns the connection state now. Reporting an error or
                     // flipping `connected` here would describe this attempt, not the app.
                     if (DEBUG_CONNECTION) console.log('[connect] init abandoned: superseded by a newer attempt');
+                    pendingConnectReject = null;
                     resolve();
                     return;
                 }
@@ -471,6 +485,7 @@ export async function connect(profile: ConnectionProfile) {
             const shouldReject = detectError(evt);
             handleReconnectDecision(evt);
             if (shouldReject && rejectPromise) {
+                pendingConnectReject = null;
                 rejectPromise(new Error('Authentication failed'));
             }
         };
@@ -586,7 +601,9 @@ function triggerManualReconnect(resetAttempts = false) {
     setNextReconnectAt(undefined);
     if (resetAttempts) resetReconnectAttempts();
     manualReconnectRequested = true;
-    connect(connectionData!);
+    // Handled, not fire-and-forget: this attempt can fail, and an unhandled
+    // rejection from a retry is noise in the console and nothing on screen.
+    void connect(connectionData!).catch(() => undefined);
 }
 
 /** True while a handshake is in flight, so a second Retry click cannot stack a
@@ -663,7 +680,10 @@ function scheduleReconnect() {
         // Status is already 'reconnecting' from the schedule; the attempt itself
         // moves it to 'connecting' inside connect().
         resetAllState();
-        connect(profile);
+        // Handled for the same reason as the manual path, and this one is the
+        // site that produced a real unhandled rejection: a scheduled retry whose
+        // handshake failed had nobody listening for it.
+        void connect(profile).catch(() => undefined);
     }, delay);
 }
 
@@ -678,6 +698,37 @@ function scheduleReconnect() {
 function pendingRetry(): PendingRetry {
     if (!reconnectingTimer || !connectionData) return { active: false };
     return { active: true, nextRetryAt: get(connectionState).nextReconnectAt };
+}
+
+/**
+ * Cancel everything this transport might still do, without wiping app stores and
+ * without claiming the user left.
+ *
+ * `disconnect()` is the wrong tool here: it marks `userDisconnect`, which makes
+ * the shared retry classifier answer 'no-retry-loop' for the session that is
+ * about to start, and it wipes the stores the new attempt is about to fill.
+ */
+function quiesce(): void {
+    if (reconnectingTimer) {
+        clearTimeout(reconnectingTimer);
+        reconnectingTimer = null;
+    }
+    manualReconnectRequested = false;
+    // Without a profile there is nothing for a stale timer to reconnect to, even
+    // if something still holds a reference to it.
+    connectionData = null;
+    // Bump the generation BEFORE closing. Every handler on these sockets then sees
+    // a superseded attempt and returns, instead of running the onclose path —
+    // which would wipe app stores and arm a retry for a transport that has just
+    // been replaced.
+    connectionGeneration++;
+    const reject = pendingConnectReject;
+    pendingConnectReject = null;
+    for (const w of webSockets) w.close(1000, 'superseded by another transport');
+    webSockets.clear();
+    ws = null;
+    connecting = false;
+    reject?.(new Error('Connection attempt superseded'));
 }
 
 /**
@@ -698,6 +749,7 @@ export const transportAdapter: TransportAdapter = {
     hasRetryLoop: () => connectionData !== null,
     manualReconnect: (resetAttempts) => triggerManualReconnect(resetAttempts),
     pendingRetry,
+    quiesce,
 };
 
 // Remove the visibilitychange listener (called on page unmount).
@@ -1165,6 +1217,9 @@ if (import.meta.hot) {
         setTimeout(() => {
             connect(savedData!)
                 .then(() => { if (toastId) removeToast(toastId); })
+                // `.finally` does not swallow a rejection; without this the HMR
+                // reconnect could reject into nobody.
+                .catch(() => undefined)
                 .finally(() => { hmrReconnecting = false; });
         }, 100);
     });

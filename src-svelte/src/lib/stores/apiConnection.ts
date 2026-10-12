@@ -393,6 +393,19 @@ function pendingRetry(): PendingRetry {
 }
 
 /**
+ * Cancel everything this transport might still do, without wiping app stores and
+ * without recording a user-initiated disconnect. See the legacy transport for the
+ * full reasoning; the API transport is the easy case because the orchestrator
+ * already owns its retry timer and its abort controller, so stopping it cancels
+ * both.
+ */
+function quiesce(): void {
+    orchestrator?.stop();
+    orchestrator = null;
+    connectionData = null;
+}
+
+/**
  * This transport's `TransportAdapter` — the lifecycle's view of it.
  *
  * Thin reads of state this module already owns. The API transport keeps its retry
@@ -412,6 +425,7 @@ export const transportAdapter: TransportAdapter = {
     hasRetryLoop: () => orchestrator !== null && connectionData !== null,
     manualReconnect: (resetAttempts) => triggerManualReconnect(resetAttempts),
     pendingRetry,
+    quiesce,
 };
 
 export const cleanupFocusReconnect = sharedCleanupFocusReconnect;

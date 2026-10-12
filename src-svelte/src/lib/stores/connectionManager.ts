@@ -29,6 +29,7 @@ import {
     registerTransportAdapter,
     retryAvailability as sharedRetryAvailability,
     retryNow as sharedRetryNow,
+    transportAdapterFor,
     type ConnectionProfile,
     type RetryAvailability,
     type RetryNowOutcome,
@@ -139,6 +140,23 @@ export async function connect(target: ConnectionProfile): Promise<void> {
     // offline → form". An attempt for the same relay keeps it, so a retry can
     // hand the retained window to the new session.
     releaseIfProfileChanged();
+    // Exactly one transport may be live, and this is where that invariant was
+    // broken. connect() used to leave the transport it was not selecting armed:
+    // measured, a legacy session dropped its socket (arming a 30 s retry), the
+    // user went to Edit connection and connected to a different relay over the API
+    // transport, and 34 s later BOTH `__getWs()` and `__getSession()` were live —
+    // the legacy timer had fired and opened a socket to the old relay beside the
+    // new session. Nothing reported it.
+    //
+    // Both are quiesced, not just the other one: a retry armed for the SAME
+    // transport would otherwise survive a connect that came from the form rather
+    // than from the retry path, and fire alongside the new attempt.
+    //
+    // `quiesce()` rather than `disconnect()`: disconnect marks `userDisconnect`,
+    // which would make the retry classifier refuse the session about to start, and
+    // wipes the stores that session is about to fill.
+    transportAdapterFor('api')?.quiesce();
+    transportAdapterFor('legacy')?.quiesce();
     if (preference === 'auto') {
         transport = transportByProfile.get(key)
             ?? (await probeApiRelay(host, port, path, tls) ? 'api' : 'legacy');

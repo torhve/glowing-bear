@@ -245,6 +245,62 @@ test.describe('Dual-protocol transport selection', () => {
         await page.close();
     });
 
+    test('switching transport does not leave the other transport armed', async ({ browser }) => {
+        // "Exactly one transport is active per connection" is a stated rule, and
+        // connect() was the hole in it: it never touched the transport it was not
+        // selecting. Measured before the fix — legacy session on 9001, socket
+        // dropped (arming a 30 s retry), Edit connection, connect to a different
+        // address over the API transport, clean session — and 34 s later BOTH
+        // __getWs() and __getSession() were live. The legacy timer had fired and
+        // opened a socket to the old relay beside the new session. Nothing on
+        // screen reported it.
+        const page = await freshPage(browser);
+        await connectLegacyToWeechat(page);
+        await waitForTransport(page, 'legacy', 30000);
+        // After connecting: the Connect button writes autoconnect itself.
+        await setSettings(page, { autoconnect: true });
+
+        await page.evaluate(() => {
+            const socket = (window as any).__getWs?.();
+            if (socket) socket.close(3000, 'test drop');
+        });
+        await expect(page.getByTestId('connection-banner')).toBeVisible({ timeout: 10000 });
+        // Capture the deadline the armed attempt is holding, before the switch
+        // clears it. The test then waits for THAT moment to pass rather than for
+        // an arbitrary duration: the stale attempt must have had its chance.
+        const armedUntil = await page.evaluate(() => (window as any).__connectionState.nextReconnectAt);
+        expect(armedUntil, 'the legacy retry should be scheduled before the switch').toBeTruthy();
+
+        await page.getByTestId('connection-banner-edit').click();
+        await setSettings(page, { protocol: 'api' });
+        await fillInput(page, 'host-input', '127.0.0.1');
+        await fillInput(page, 'port-input', '9010');
+        await fillInput(page, 'password-input', 'testpassword123');
+        await page.getByTestId('connect-button').click();
+        await expect(page.getByTestId('chat-view')).toBeVisible({ timeout: 45000 });
+        await waitForTransport(page, 'api', 30000);
+
+        await expect.poll(async () => page.evaluate(() => !!(window as any).__getSession?.())).toBe(true);
+
+        await page.waitForFunction(
+            (until) => Date.now() > until + 3000,
+            armedUntil as number,
+            { timeout: 90000 },
+        );
+
+        // The armed attempt is now well past its deadline. A legacy socket must
+        // not exist: the API session is live, and the legacy relay is still up on
+        // 9001, so an un-quiesced timer would have reconnected to it successfully.
+        await expect.poll(async () => {
+            const state = await page.evaluate(() => ({
+                ws: !!(window as any).__getWs?.(),
+                session: !!(window as any).__getSession?.(),
+            }));
+            return state.session && !state.ws ? 'api-only' : state.ws && state.session ? 'both-live' : 'neither';
+        }, { timeout: 5000, intervals: [500] }).toBe('api-only');
+        await page.close();
+    });
+
     test('explicit Leave on the legacy transport leaves WeeChat running', async ({ browser }) => {
         // The legacy transport used to send a quit frame on disconnect, mirroring
         // upstream Angular Glowing Bear. Leave must close the socket and nothing
