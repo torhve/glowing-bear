@@ -10,7 +10,7 @@
 import { get } from 'svelte/store';
 import {
     setConnectionStatus, clearErrors,
-    connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts,
+    connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, beginSessionStats,
     setNextReconnectAt,
 } from '#lib/stores/connectionStore.ts';
 import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, weechatVersion, relayApiVersion, hasNoHistoryToFetch, markHistoryComplete } from '#lib/stores/models.ts';
@@ -212,6 +212,10 @@ export async function connect(profile: ConnectionProfile): Promise<void> {
             // timeout; this one covers the WebSocket opening, which no request
             // timeout can reach.
             connectTimeoutMs: HANDSHAKE_TIMEOUT_MS,
+            // First connect, scheduled retry and manual takeover all start an
+            // attempt here, so the counters cannot be started from one entry
+            // point in this module and miss the others.
+            onAttemptStart: () => beginSessionStats(),
             reducers: createApiStoreReducers(),
             sync: { begin: () => beginSyncPhase(), end: (token) => endSyncPhase(token) },
             // TOTP codes are single-use: a TOTP connection must not silently

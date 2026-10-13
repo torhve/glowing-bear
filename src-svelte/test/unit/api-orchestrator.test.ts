@@ -470,6 +470,38 @@ describe('ApiOrchestrator reconnect lifecycle', () => {
         vi.useRealTimers();
     });
 
+    it('tells the transport once per attempt, and scheduling is not an attempt', async () => {
+        // The API transport starts its session counters from this hook. Started
+        // too often, the popover would erase the traffic of the session it is
+        // describing; started too rarely, it would keep describing an old one.
+        vi.useFakeTimers();
+        stubFetch();
+        let starts = 0;
+        const { orch, retry } = makeOrchestrator({
+            retryPolicy: { baseMs: 5000, maxMs: 5000, factor: 2 },
+            onAttemptStart: () => { starts += 1; },
+        });
+
+        orch.start();
+        expect(starts, 'the first connect is an attempt').toBe(1);
+
+        await vi.advanceTimersByTimeAsync(10);
+        const sock = await waitForSocket();
+        sock.emitOpen();
+        await completeBootstrap(sock);
+        sock.emitClose(1006);
+
+        expect(retry.scheduled, 'the loss scheduled a retry').toHaveLength(1);
+        expect(starts, 'scheduling a retry is not starting one').toBe(1);
+
+        await vi.advanceTimersByTimeAsync(5100);
+        expect(starts, 'the retry that fired is a second attempt').toBe(2);
+
+        orch.dispose();
+        expect(starts, 'a teardown does not start an attempt').toBe(2);
+        vi.useRealTimers();
+    });
+
     it('quit event logs via relayLifecycle and leaves reconnect to the close path', async () => {
         vi.useFakeTimers();
         stubFetch();

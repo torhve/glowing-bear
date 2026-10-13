@@ -79,6 +79,12 @@ export interface OrchestratorOptions {
     /** Passed to the session: the WebSocket-open deadline the transport decided on. */
     connectTimeoutMs?: number;
     onStatus?: (status: OrchestratorStatus) => void;
+    /**
+     * Fired once per attempt, from `beginAttempt()`, before any request runs.
+     * The transport owns what that means; the orchestrator only guarantees it
+     * happens for every attempt and for no other reason.
+     */
+    onAttemptStart?: () => void;
 }
 
 /**
@@ -189,6 +195,10 @@ export class ApiOrchestrator {
         const generation = ++this.generation;
         const attempt = this.opts.retry?.attemptNumber() ?? 0;
         this.supersedeCurrent();
+        // Every path that starts an attempt — first connect, scheduled retry,
+        // manual takeover — passes here, so this is the one place the API
+        // transport can say "this attempt is what the app now describes".
+        this.opts.onAttemptStart?.();
         const abort = new AbortController();
         this.abort = abort;
         const syncToken = this.opts.sync.begin();

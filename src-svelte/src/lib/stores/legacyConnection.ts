@@ -1,5 +1,5 @@
 import { get } from 'svelte/store';
-import { setConnectionStatus, setErrors, clearErrors, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts } from '#lib/stores/connectionStore.ts';
+import { setConnectionStatus, setErrors, clearErrors, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, beginSessionStats } from '#lib/stores/connectionStore.ts';
 import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, hasNoHistoryToFetch, markHistoryComplete } from '#lib/stores/models.ts';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist, flushLineBatch, setOnUpgrade, setOnUpgradeEnded } from '#lib/stores/handlers.ts';
 import { addToast, removeToast, clearToasts, toastStore } from '#lib/toast.ts';
@@ -216,6 +216,9 @@ export async function connect(profile: ConnectionProfile) {
     connecting = true;
     connectionGeneration++;
     clearErrors();
+    // This attempt is now the one the app describes. The counters start here so
+    // they cover the whole session, bootstrap and history fetch included.
+    beginSessionStats();
 
     const hasCryptoSubtle = typeof crypto.subtle !== 'undefined';
     const proto = tls ? 'wss' : 'ws';

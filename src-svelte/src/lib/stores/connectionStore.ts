@@ -82,6 +82,10 @@ export function clearErrors() {
 }
 
 export function disconnect() {
+    // Deliberately does NOT reset the traffic counters. They describe the most
+    // recent attempt (see `beginSessionStats`), and a Leave is not the start of
+    // one. Uptime is cleared here by `setConnectionStatus('disconnected')`,
+    // which every Leave path runs.
     connectionState.set({
         status: 'disconnected',
         userDisconnect: true,
@@ -91,7 +95,6 @@ export function disconnect() {
         lastReconnectAt: 0,
         nextReconnectAt: undefined
     });
-    connectionStats.set(initialStats);
 }
 
 export function recordBytesReceived(bytes: number) {
@@ -113,7 +116,21 @@ export function recordBytesSent(bytes: number) {
     }));
 }
 
-export function resetStats() {
+/**
+ * Start the traffic counters for a new attempt.
+ *
+ * The stats popover pairs Sent / Recv / messages with Uptime, and Uptime belongs
+ * to a live connection — so counters that kept accumulating across a reconnect
+ * attributed the previous session's traffic to the session now on screen. The
+ * rule is now single: these counters describe the most recent attempt, and only
+ * the start of an attempt clears them.
+ *
+ * A loss therefore leaves the numbers of the session that just ended, which is
+ * what the retained view is still showing; the next attempt replaces them with
+ * its own. Clearing them at the wipe instead would zero the popover while the
+ * dead session's messages were still on screen.
+ */
+export function beginSessionStats() {
     connectionStats.set(initialStats);
 }
 
