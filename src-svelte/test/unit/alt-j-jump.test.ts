@@ -5,6 +5,9 @@ import { buffers, createBuffer } from '#lib/stores/models.ts';
 import { switchBuffer } from '#lib/stores/connectionManager.ts';
 import type { BufferData } from '#lib/types.ts';
 
+// This mock must cover every export `+page.svelte` imports from the facade: the
+// component's debug-global block reads them all at module scope, so a missing key
+// fails the render rather than going unnoticed.
 vi.mock('#lib/stores/connectionManager.ts', () => ({
     connect: vi.fn(),
     fetchMoreLines: vi.fn(),
@@ -17,6 +20,7 @@ vi.mock('#lib/stores/connectionManager.ts', () => ({
     initFocusReconnect: vi.fn(),
     cleanupFocusReconnect: vi.fn(),
     setHotlistPollInterval: vi.fn(),
+    pendingRetry: vi.fn(() => ({ active: false })),
 }));
 
 vi.mock('#lib/notifications.ts', () => ({

@@ -25,6 +25,7 @@ import type { ApiSession } from '#lib/api/api-session.ts';
 import { clearActiveConnectionProfile, setActiveConnectionProfile } from '#lib/connectionProfile.ts';
 import {
     cleanupFocusReconnect as sharedCleanupFocusReconnect,
+    pendingRetryState as sharedPendingRetryState,
     registerActiveFocusReconnect,
     registerTransportAdapter,
     retryAvailability as sharedRetryAvailability,
@@ -221,6 +222,16 @@ export function initFocusReconnect(): void {
 }
 
 export const cleanupFocusReconnect = sharedCleanupFocusReconnect;
+
+/**
+ * Read-only view of the shared retry loop: whether an attempt is armed, and when.
+ *
+ * `connectionState.nextReconnectAt` cannot answer this. It is a display field that
+ * several paths clear — a manual takeover clears it while the timer it replaced is
+ * still running — so "no countdown" is not evidence of "no armed attempt". This
+ * reports the timer itself.
+ */
+export const pendingRetry = sharedPendingRetryState;
 
 export async function requestNicklist(bufferId: string): Promise<void> {
     if (transport === 'legacy') return legacy.requestNicklist(bufferId);

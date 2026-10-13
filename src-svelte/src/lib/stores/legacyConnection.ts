@@ -665,9 +665,20 @@ function triggerManualReconnect(resetAttempts = false) {
     void connect(connectionData!).catch(() => undefined);
 }
 
-/** True while a handshake is in flight, so a second Retry click cannot stack a
- *  third attempt on top of one already running. False during the backoff wait
- *  between attempts — that is exactly when a retry is worth taking over. */
+/**
+ * Whether this transport currently owns a session — an attempt in flight OR a live
+ * one. Not "a handshake is in flight".
+ *
+ * `connecting` is set on entry to `connect()`, set true again in `onopen`, and cleared
+ * only by `resetAllState()`, `quiesce()`, and a failed socket construction. So it stays
+ * true for the whole life of a healthy session. It is false during the backoff wait
+ * between attempts, which is the part the retry UI cares about: that is what makes
+ * "take over now" available then, and a stacked attempt impossible now.
+ *
+ * Measured, because it is load-bearing and easy to mistake: a stale retry timer that
+ * fires while a session is live reaches `connect()` and is turned away by this flag,
+ * not by the cancellation that armed it.
+ */
 export function isAttemptInProgress(): boolean {
     return connecting;
 }

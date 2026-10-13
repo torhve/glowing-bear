@@ -18,6 +18,7 @@ const UI_ONLY_SPECS = [
     'ConnectionForm-clockSkew',
     'ConnectionForm-password',
     'DisconnectReconnect',
+    'FocusReconnect',
     'ErrorPage-unmatchedRoute',
     'Hash-params',
     'HashAlgorithmMismatch',
