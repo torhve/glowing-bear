@@ -60,6 +60,15 @@ export interface ApiSessionOptions {
     /** Injectable for deterministic tests; defaults to the global WebSocket. */
     webSocketFactory?: (url: string, protocols: string[]) => WebSocket;
     requestTimeoutMs?: number;
+    /**
+     * Deadline for the WebSocket OPENING, which no request timeout can cover:
+     * a relay that accepts the TCP connection and never answers the upgrade
+     * fires neither `open` nor `close`, so `connect()` would stay pending and
+     * the attempt would never settle. Supplied by the transport, which owns the
+     * handshake rule; left unset here so this class does not invent its own
+     * second patience.
+     */
+    connectTimeoutMs?: number;
     /** Application-level keepalive; 0/undefined disables it. */
     keepAliveMs?: number;
     onEvent: (event: ApiSessionEvent) => void;
@@ -156,8 +165,30 @@ export class ApiSession {
 
         return new Promise<void>((resolve, reject) => {
             let settledOpen = false;
+            const connectTimeoutMs = this.opts.connectTimeoutMs;
+            let openDeadline: ReturnType<typeof setTimeout> | null = null;
+            if (connectTimeoutMs && connectTimeoutMs > 0) {
+                openDeadline = setTimeout(() => {
+                    if (this.isStale(mySocket)) return;
+                    // Full teardown rather than a close: the socket's own
+                    // handlers must be silenced, because a browser is not
+                    // obliged to deliver a close event for a socket that never
+                    // opened and this attempt cannot wait for one.
+                    this.destroy();
+                    reject(new ApiSessionError('timeout', `WebSocket handshake timed out after ${connectTimeoutMs}ms`));
+                }, connectTimeoutMs);
+            }
+            const clearOpenDeadline = () => {
+                if (openDeadline !== null) {
+                    clearTimeout(openDeadline);
+                    openDeadline = null;
+                }
+            };
             socket.onopen = () => {
                 if (this.isStale(mySocket)) return;
+                // A healthy session must not be closed by the timer that was
+                // armed to catch a handshake that never arrived.
+                clearOpenDeadline();
                 settledOpen = true;
                 this.opened = true;
                 this.lastActivityAt = Date.now();
@@ -174,6 +205,7 @@ export class ApiSession {
                 // Browser WS errors carry no detail; classification happens on close.
             };
             socket.onclose = (ev: CloseEvent) => {
+                clearOpenDeadline();
                 if (this.isStale(mySocket)) {
                     this.closeSocketQuietly(mySocket);
                     return;

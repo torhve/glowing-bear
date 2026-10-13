@@ -76,6 +76,8 @@ export interface OrchestratorOptions {
     minApiVersionNumber?: number;
     keepAliveMs?: number;
     requestTimeoutMs?: number;
+    /** Passed to the session: the WebSocket-open deadline the transport decided on. */
+    connectTimeoutMs?: number;
     onStatus?: (status: OrchestratorStatus) => void;
 }
 
@@ -250,6 +252,7 @@ export class ApiOrchestrator {
                 generation,
                 webSocketFactory: this.opts.webSocketFactory,
                 requestTimeoutMs: this.opts.requestTimeoutMs,
+                connectTimeoutMs: this.opts.connectTimeoutMs,
                 keepAliveMs: this.opts.keepAliveMs,
                 onEvent: (event) => {
                     if (!this.isCurrent(generation)) return;

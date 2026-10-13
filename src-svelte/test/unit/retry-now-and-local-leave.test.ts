@@ -38,6 +38,7 @@ import {
     sendWeeChatCommand,
 } from '#lib/stores/connectionManager.ts';
 import * as legacy from '#lib/stores/legacyConnection.ts';
+import { pendingRetryState } from '#lib/stores/connectionLifecycle.ts';
 
 vi.mock('#lib/notifications.ts', () => ({
     createHighlight: vi.fn(),
@@ -172,12 +173,15 @@ describe('retryNow delegates to the transport that owns the profile', () => {
         try {
             const socket = connectLegacy();
             loseSession(socket);
-            expect(vi.getTimerCount(), 'the loss must have scheduled a backoff retry').toBeGreaterThan(0);
+            expect(pendingRetryState().active, 'the loss must have scheduled a backoff retry').toBe(true);
 
             expect(retryNow()).toBe('retried');
 
             // The scheduled attempt is gone; only the immediate takeover remains.
-            expect(vi.getTimerCount()).toBe(0);
+            // Asserted on the retry loop itself rather than by counting timers:
+            // an attempt that is in flight now legitimately arms its own
+            // handshake deadline, and a count cannot tell those apart.
+            expect(pendingRetryState().active, 'the takeover must not leave a second loop armed').toBe(false);
             expect(FakeSocket.instances).toHaveLength(2);
         } finally {
             legacy.transportAdapter.teardown();

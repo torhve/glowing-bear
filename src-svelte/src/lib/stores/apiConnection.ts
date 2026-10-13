@@ -27,6 +27,7 @@ import {
     cleanupFocusReconnect as sharedCleanupFocusReconnect,
     beginManualReconnect,
     clearDisconnectToast,
+    HANDSHAKE_TIMEOUT_MS,
     nameConnectionFailure,
     debounceHotlistQuery,
     pendingRetryState,
@@ -206,6 +207,11 @@ export async function connect(profile: ConnectionProfile): Promise<void> {
         const orch = new ApiOrchestrator({
             endpoint,
             getPassword: () => connectionData?.password ?? '',
+            // The same patience as the legacy transport's handshake deadline. The
+            // HTTP phases of an attempt are already bounded by api-client's own
+            // timeout; this one covers the WebSocket opening, which no request
+            // timeout can reach.
+            connectTimeoutMs: HANDSHAKE_TIMEOUT_MS,
             reducers: createApiStoreReducers(),
             sync: { begin: () => beginSyncPhase(), end: (token) => endSyncPhase(token) },
             // TOTP codes are single-use: a TOTP connection must not silently

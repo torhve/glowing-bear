@@ -21,6 +21,7 @@ const UI_ONLY_SPECS = [
     'ErrorPage-unmatchedRoute',
     'Hash-params',
     'HashAlgorithmMismatch',
+    'HandshakeDeadline',
     'InputBar-emojify',
     'InputBar-formatting',
     'InputBar-paste',

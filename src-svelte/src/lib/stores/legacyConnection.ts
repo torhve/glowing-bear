@@ -12,6 +12,7 @@ import {
     cleanupFocusReconnect as sharedCleanupFocusReconnect,
     cancelPendingRetry,
     pendingRetryState,
+    HANDSHAKE_TIMEOUT_MS,
     scheduleRetry,
     teardownAll,
     debounceHotlistQuery,
@@ -65,6 +66,18 @@ let connecting = false;
  * settle it deliberately.
  */
 let pendingConnectReject: ((e: Error) => void) | null = null;
+// Armed per attempt. Module-level rather than a closure local so that every
+// path which ends an attempt — a real close, an explicit teardown, a quiesce —
+// can disarm it; a deadline left armed past its own attempt is a timer that
+// closes a socket belonging to a later one.
+let handshakeDeadlineTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearHandshakeDeadline(): void {
+    if (handshakeDeadlineTimer !== null) {
+        clearTimeout(handshakeDeadlineTimer);
+        handshakeDeadlineTimer = null;
+    }
+}
 let manualReconnectRequested = false;
 let connectionGeneration = 0;
 
@@ -157,6 +170,29 @@ function handleReconnectDecision(evt: CloseEvent) {
     }
 }
 
+/**
+ * End an attempt this connection still owns.
+ *
+ * Shared by `onclose` and the handshake deadline: a session that died and a
+ * handshake that never completed are different causes of the same state — an
+ * attempt that will not produce a protocol response — and they must not end by
+ * two different sequences. The retry decision in particular belongs to
+ * `handleReconnectDecision()`, not to whichever path noticed the loss.
+ */
+function handleAttemptLoss(evt: CloseEvent): void {
+    clearHandshakeDeadline();
+    if (get(connectionState).wasEverConnected) markCaptureIntent();
+    resetAllState(connectionGeneration);
+    setConnectionStatus('disconnected');
+    const shouldReject = detectError(evt);
+    handleReconnectDecision(evt);
+    if (shouldReject) {
+        const reject = pendingConnectReject;
+        pendingConnectReject = null;
+        reject?.(new Error('Authentication failed'));
+    }
+}
+
 export async function connect(profile: ConnectionProfile) {
     // Named destructuring, not positional: `host`/`path` are both strings and
     // `tls`/`noCompression` are both booleans, so the old 6-tuple signature let a
@@ -216,10 +252,9 @@ export async function connect(profile: ConnectionProfile) {
         }
     });
 
-    let rejectPromise: ((e: Error) => void) | null = null;
-
     return new Promise<void>((resolve, reject) => {
-        rejectPromise = reject;
+        // One module-level handle rather than a closure local: the deadline that
+        // settles a hung attempt lives outside this promise's own scope.
         pendingConnectReject = reject;
         try {
             ws = new WebSocket(url);
@@ -234,6 +269,50 @@ export async function connect(profile: ConnectionProfile) {
         const thisWs = ws;
         ws.binaryType = 'arraybuffer';
 
+        // The only thing that bounds a handshake. A relay that accepts the TCP
+        // connection and never answers the WebSocket upgrade fires no `open` and
+        // no `close`, so without this the attempt is pending forever: `connecting`
+        // stays true, the status stays 'connecting', and the form's own Connect
+        // button is disabled by that status.
+        clearHandshakeDeadline();
+        handshakeDeadlineTimer = setTimeout(() => {
+            handshakeDeadlineTimer = null;
+            // Defence in depth, not a reachable state today: `connect()` and
+            // `quiesce()` both disarm this timer before any newer attempt exists,
+            // so an armed deadline always belongs to the live attempt. The guard
+            // is here because that is a property of the call graph, and call
+            // graphs change.
+            if (genAtConnect !== connectionGeneration) return;
+            if (thisWs.readyState === WebSocket.OPEN || thisWs.readyState === WebSocket.CLOSED) return;
+
+            // Silence the socket before closing it, the way `ApiSession.destroy()`
+            // does. A browser is not obliged to deliver a close event for a socket
+            // that never opened, so the attempt is settled here rather than
+            // awaited from a handler that may not run.
+            thisWs.onopen = null;
+            thisWs.onmessage = null;
+            thisWs.onclose = null;
+            thisWs.onerror = null;
+            thisWs.close();
+            webSockets.delete(thisWs);
+            if (ws === thisWs) ws = null;
+
+            // The loss is reported as 1006 because that is what a handshake that
+            // never completed is, and `detectError()` already names that code as
+            // an unreachable relay. The socket is closed without a code of its
+            // own — a code the relay never saw would be a claim nothing earned —
+            // and whatever the browser then reports is irrelevant, because the
+            // handlers are silenced above and this call carries the code.
+            handleAttemptLoss({ code: 1006, reason: 'handshake timeout', wasClean: false } as CloseEvent);
+
+            // `ConnectionForm` awaits `connect()` and only stores the profile when
+            // it resolves. A deadline that merely closed the socket would leave
+            // that await pending for the life of the page.
+            const reject = pendingConnectReject;
+            pendingConnectReject = null;
+            reject?.(new Error(`Relay did not complete the WebSocket handshake within ${HANDSHAKE_TIMEOUT_MS / 1000}s`));
+        }, HANDSHAKE_TIMEOUT_MS);
+
         ws.onopen = async () => {
             // If connect() was called again while this WebSocket was connecting,
             // connectionGeneration has changed and this handler is stale.
@@ -241,6 +320,10 @@ export async function connect(profile: ConnectionProfile) {
                 thisWs.close();
                 return;
             }
+            // The socket answered. From here the handshake is bounded by the
+            // per-request timeouts, and a timer left armed past this point would
+            // close a healthy connection ten seconds after it opened.
+            clearHandshakeDeadline();
             connecting = true;
             // Sync phase, owned by this connection attempt: opened before anything is
             // requested, so it already covers the window in which WeeChat may push
@@ -467,15 +550,7 @@ export async function connect(profile: ConnectionProfile) {
             // retain. The retry scheduler's wipe re-runs this loss path without
             // marking intent again: the loss is already retained, and a second
             // capture would snapshot the empty stores the first wipe left behind.
-            if (get(connectionState).wasEverConnected) markCaptureIntent();
-            resetAllState(connectionGeneration);
-            setConnectionStatus('disconnected');
-            const shouldReject = detectError(evt);
-            handleReconnectDecision(evt);
-            if (shouldReject && rejectPromise) {
-                pendingConnectReject = null;
-                rejectPromise(new Error('Authentication failed'));
-            }
+            handleAttemptLoss(evt);
         };
 
         ws.onerror = (evt) => {
@@ -635,6 +710,7 @@ function pendingRetry(): PendingRetry {
  */
 function quiesce(): void {
     cancelPendingRetry();
+    clearHandshakeDeadline();
     manualReconnectRequested = false;
     // The hotlist poll is shared now, and this is the path that would otherwise
     // leak it: bumping the generation makes the old socket's onclose return early,
@@ -830,6 +906,7 @@ export function sendMessage(message: string): boolean {
 }
 
 function teardownSession() {
+    clearHandshakeDeadline();
     // `teardownAll()` has already marked this a user-initiated departure by the
     // time this runs — that is what keeps the onclose handler below from
     // auto-reconnecting. This function closes this transport's session; declaring

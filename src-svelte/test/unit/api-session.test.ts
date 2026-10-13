@@ -98,6 +98,48 @@ describe('ApiSession connect', () => {
         expect(closes[0]).toMatchObject({ code: 1006, authenticated: false });
     });
 
+    it('settles a WebSocket that never opens and never closes', async () => {
+        // The blackhole relay: TCP succeeded, the upgrade is never answered, and
+        // the browser reports neither `open` nor `close`. No request timeout can
+        // reach this — there is no request — so without a deadline `connect()`
+        // stays pending and the attempt above it never settles.
+        vi.useFakeTimers();
+        try {
+            const { session, socket } = makeSession({ connectTimeoutMs: 10_000 });
+            const p = session.connect();
+            let settled = false;
+            p.then(() => (settled = true), () => (settled = true));
+
+            await vi.advanceTimersByTimeAsync(9_000);
+            expect(settled, 'a handshake still in progress must not be interrupted').toBe(false);
+
+            await vi.advanceTimersByTimeAsync(2_000);
+            await expect(p).rejects.toThrow(/timed out/);
+            expect(socket().readyState, 'the dead socket must not be left open').toBe(3);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('does not close a session that opened in time', async () => {
+        // The likeliest way to get a deadline wrong: leave it armed past a
+        // successful open, and the user watches a healthy connection die ten
+        // seconds after it connected.
+        vi.useFakeTimers();
+        try {
+            const { session, socket } = makeSession({ connectTimeoutMs: 10_000 });
+            const p = session.connect();
+            (await waitForSocket()).emitOpen();
+            await p;
+
+            await vi.advanceTimersByTimeAsync(60_000);
+            expect(socket().readyState, 'a session that opened must outlive its handshake deadline').toBe(1);
+            expect(socket().closeCode, 'nothing may have closed it').toBeNull();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it('marks the session authenticated once a valid frame arrives', async () => {
         const { session, socket, closes } = makeSession();
         const p = session.connect();

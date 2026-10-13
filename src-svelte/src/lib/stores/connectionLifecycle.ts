@@ -89,6 +89,24 @@ export interface ConnectionProfile {
 export const RECONNECT_BACKOFF = { baseMs: 30_000, maxMs: 300_000, factor: 1.5 };
 
 /**
+ * How long an attempt may take to reach a protocol response at all.
+ *
+ * A relay that accepts the TCP connection and never answers the WebSocket
+ * upgrade reports NOTHING to the browser: no `open`, no `close`, no `error`.
+ * Without a deadline the attempt never settles, and that is not a cosmetic
+ * stall — the legacy transport's `connecting` flag and the `'connecting'`
+ * status both stay set, and `ConnectionForm` disables its own Connect button
+ * on that status, so the user cannot retry, cancel, or edit the address. Only
+ * a page reload escapes.
+ *
+ * One number for both transports. It matches `api-client.ts`'s HTTP timeout so
+ * the two phases of an API attempt have the same patience, and it is generous
+ * for a local relay while still short enough that a wrong address is not a
+ * half-minute of dead UI.
+ */
+export const HANDSHAKE_TIMEOUT_MS = 10_000;
+
+/**
  * Delay before a retry, where `attempt` is the number of retries that have
  * ALREADY failed — the first retry is `attempt 0` and waits `baseMs`.
  *
