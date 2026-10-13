@@ -43,6 +43,17 @@ function parseResults(text) {
         const m = line.match(/^([A-Z][A-Za-z0-9-]*(?: [a-z][A-Za-z0-9-]*)?)\b.*?median\s+([\d.]+)ms/);
         if (m) { out.set(m[1], { median: Number(m[2]), raw: line }); continue; }
         // E2E arms report the median of several in-page floods per run.
+        // The history bench measures a burst, which is the other half of the story:
+        // on reconnect the relay resends the whole retained window at once and the
+        // app has to build it before anything is on screen. Message arrival cannot
+        // hide the render cost here the way it hides it in a live flood.
+        const hist = line.match(/\[bench\] history (\d+) lines: reload-to-last-row=(\d+)ms finalVisibleRows=(\d+)/);
+        if (hist) {
+            out.set('E2E history reload', { median: Number(hist[2]), raw: line });
+            out.set('E2E history rows', { median: Number(hist[3]), raw: line });
+            continue;
+        }
+        // E2E arms report the median of several in-page floods per run.
         const e2e = line.match(/\[prodflood\] renderMedian=(\d+)ms/)
             ?? line.match(/\[prodbadge\] elapsedMedian=(\d+)ms/);
         if (e2e) {

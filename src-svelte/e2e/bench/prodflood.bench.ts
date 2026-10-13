@@ -111,7 +111,26 @@ function median(values: number[]): number {
 test('prodflood: in-page measurement of a 2000-message flood', async ({ browser }) => {
     fs.mkdirSync(path.dirname(SNAPSHOT_PATH), { recursive: true });
 
-    const page = await createConnectedPage(browser, { initScript: INSTRUMENT });
+    // Inbound relay frames are counted from the moment the socket exists. Playwright
+    // only reports websockets created after the listener is attached, so the hook has
+    // to be installed in the fixture's beforeConnect rather than after the page is
+    // already connected.
+    const net = { frames: 0, first: 0, last: 0, bytes: 0 };
+    let netRoundT0 = 0;
+    const page = await createConnectedPage(browser, {
+        initScript: INSTRUMENT,
+        beforeConnect: async (p) => {
+            p.on('websocket', (ws) => {
+                ws.on('framereceived', (payload) => {
+                    const t = Date.now();
+                    net.frames += 1;
+                    if (!net.first) net.first = t;
+                    net.last = t;
+                    net.bytes += typeof payload === 'string' ? payload.length : 0;
+                });
+            });
+        },
+    });
     const profiling = process.env.GB_E2E_PROFILE === '1';
     const cdp = await page.context().newCDPSession(page);
     // Layout counts come from the browser, so "the follow effect forces a layout
@@ -138,6 +157,28 @@ test('prodflood: in-page measurement of a 2000-message flood', async ({ browser 
             taskMs: pick('TaskDuration') * 1000,
         };
     };
+
+    // When does the flood actually arrive? The render span says when the last row
+    // appeared; it cannot say whether the app was building rows or waiting for
+    // messages. Playwright sees every inbound relay frame, so the arrival window
+    // can be measured next to the render window without touching the app. Both are
+    // durations, so the Node and page clocks never have to be reconciled.
+
+
+    const netWindow = () => ({
+        frames: net.frames,
+        firstMs: netRoundT0 ? net.first - netRoundT0 : 0,
+        lastMs: netRoundT0 ? net.last - netRoundT0 : 0,
+        bytes: net.bytes,
+    });
+    const netReset = () => {
+        netRoundT0 = Date.now();
+        net.frames = 0;
+        net.first = 0;
+        net.last = 0;
+        net.bytes = 0;
+    };
+
     try {
         if (cdp) {
             await cdp.send('Profiler.enable');
@@ -170,6 +211,7 @@ test('prodflood: in-page measurement of a 2000-message flood', async ({ browser 
             layouts: number; layoutMs: number; scriptMs: number;
             styleCount: number; styleMs: number; taskMs: number;
         }[] = [];
+        const netTotals: { frames: number; firstMs: number; lastMs: number; bytes: number }[] = [];
         let last: any = {};
 
         for (let round = 0; round < REPEATS; round++) {
@@ -195,6 +237,7 @@ test('prodflood: in-page measurement of a 2000-message flood', async ({ browser 
             // now fast enough (~120 ms) that stamping after it would quietly drop
             // the first slice of the app's own work from the window.
             const layoutsBefore = await layoutMetrics();
+            netReset();
             await page.evaluate(() => { (window as any).__pf.t0 = performance.now(); });
             const sendStart = Date.now();
             await sendSequence(CHANNEL, floodTexts(tag));
@@ -219,6 +262,12 @@ test('prodflood: in-page measurement of a 2000-message flood', async ({ browser 
                 console.log('[prodflood][debug] ' + JSON.stringify(dbg, null, 1));
                 throw e;
             }
+
+            // Snapshot the arrival window at the instant the last row appeared:
+            // "last frame in" versus "last row on screen" is the whole difference
+            // between a slow renderer and a slow pipe.
+            const netNow = netWindow();
+
 
             const pf = await page.evaluate(() => {
                 const p = (window as any).__pf;
@@ -252,13 +301,15 @@ test('prodflood: in-page measurement of a 2000-message flood', async ({ browser 
             layoutTotals.push({ layouts, layoutMs, scriptMs, styleCount, styleMs, taskMs });
 
             renders.push(pf.renderMs);
+            netTotals.push(netNow);
             last = pf;
             console.log(
                 `[prodflood][round ${round}] render=${pf.renderMs.toFixed(0)}ms send=${sends[round]}ms ` +
                 `rows=${pf.rowsAdded} faviconWrites=${pf.faviconWrites} scrollIntoView=${pf.sivCalls} ` +
                 `layouts=${layouts} layoutMs=${layoutMs.toFixed(0)} scriptMs=${scriptMs.toFixed(0)} ` +
                 `styleCount=${styleCount} styleMs=${styleMs.toFixed(0)} taskMs=${taskMs.toFixed(0)} ` +
-                `containerNodes=${pf.containerNodes} docNodes=${pf.docNodes} scrollHeight=${pf.scrollHeight}`,
+                `containerNodes=${pf.containerNodes} docNodes=${pf.docNodes} scrollHeight=${pf.scrollHeight} ` +
+                `netFrames=${netNow.frames} netFirst=${netNow.firstMs} netLast=${netNow.lastMs} netKB=${Math.round(netNow.bytes / 1024)}`,
             );
         }
 
@@ -295,7 +346,10 @@ test('prodflood: in-page measurement of a 2000-message flood', async ({ browser 
             `layoutMs=${sum('layoutMs').toFixed(0)} ` +
             `scriptMs=${sum('scriptMs').toFixed(0)} ` +
             `styleCount=${sum('styleCount')} styleMs=${sum('styleMs').toFixed(0)} ` +
-            `taskMs=${sum('taskMs').toFixed(0)} snapshot=${SNAPSHOT_PATH}`,
+            `taskMs=${sum('taskMs').toFixed(0)} ` +
+            `netFrames=${netTotals.reduce((t, r) => t + r.frames, 0)} netKB=${Math.round(netTotals.reduce((t, r) => t + r.bytes, 0) / 1024)} ` +
+            `netFirstMedian=${median(netTotals.map((r) => r.firstMs)).toFixed(0)}ms ` +
+            `netLastMedian=${median(netTotals.map((r) => r.lastMs)).toFixed(0)}ms snapshot=${SNAPSHOT_PATH}`,
         );
         for (const [stack, count] of (last.sivStacks ?? [])) {
             console.log(`[prodflood][siv] x${count} ${stack}`);

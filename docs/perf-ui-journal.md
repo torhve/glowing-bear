@@ -67,6 +67,14 @@ Instrumentation added to `prodflood` in this campaign: `RecalcStyleCount`,
 `RecalcStyleDuration`, `TaskDuration`, chat-container element count, document
 element count, container `scrollHeight`.
 
+**Harness trap, learned the expensive way.** `ab-unit.sh` snapshots the *working
+tree* into `CAND_DIR` at startup for every file in the manifest. Editing
+`CAND_DIR` by hand before a run does nothing — the snapshot overwrites it, and both
+arms end up identical. The candidate must be applied to the working tree before
+launching. The first exp25 batch (retained rows 200 → 60) was wasted this way: both
+arms reported `bodyRows=200`, `containerNodes=2813`, and a 0.996 median ratio that
+measured nothing but the machine.
+
 ## Baseline
 
 Baseline commit: `9d1ab228` (branch point; the working tree also carries unrelated
@@ -249,6 +257,134 @@ inherent: 2,200 renders × (tokenize + embed scan + ~11 DOM elements) is what a
 2,000-message flood costs, and no reactive restructuring removes it. The open
 questions are therefore (a) how much of the total is the 200 live rows the browser
 keeps laying out, and (b) whether a row can be built from fewer elements.
+
+### What a row actually costs (direct measurement, no A/B)
+
+Two numbers that changed the direction of the campaign, both measured directly
+rather than inferred:
+
+**Tokenization is not the cost.** `tokenizeAndCodify` was called 2,200 times per
+flood (one per row, proven by counters in exp24). Run directly in Node over five
+representative message shapes — plain text, a nicked line, two URLs, two backtick
+code segments, a long plain line — 2,200 calls take **1.1 ms total** (0.37–1.01 µs
+per call). Against 267 ms of browser script time per round, the entire tokenizer is
+0.1%.
+
+**So the per-message budget is construction, not logic.** 267 ms of script per
+2,000-message round is ~133 µs per message, and essentially none of it is
+application computation. It is Svelte component instantiation and the ~14 elements
+each row builds (`tr`, 3 `td`, `span.date.compact-time`, `span.time-delimiter`,
+`span.compact-prefix`, `span.mention-link`, 2–3 `span.prefix-part`,
+`span.message-content`, `span.token-group`), which matches the measured
+`containerNodes=2813 / 200 rows = 14.1`.
+
+**And the DOM cannot be slimmed.** The only span in a row with no CSS rule is
+`.prefix-part` — but it carries the WeeChat colour classes (`part.classes`), so
+removing it would drop per-part prefix colouring. Every other span in the row is
+load-bearing for colour, for the click-to-mention handler, or for the
+`white-space-collapse` rule that keeps line breaks inside table cells. DOM slimming
+is a measured dead end, not an untried idea.
+
+### exp25 — how much is the 200 live rows: the ceiling probe
+
+**Hypothesis.** The retained window renders 200 rows to show ~46. If the cost is
+proportional to live rows, cutting them to ~60 bounds what virtualisation can win.
+
+**Change (probe only, not a candidate).** Force the retained-line clamp down:
+`Math.min(60, Math.min(1000, Math.max(200, 2 * $lps + 10)))`.
+
+**Benchmark.** 8 paired reps, alternating arm order, `GB_E2E_REPEATS=5`, prodflood:
+
+```bash
+GB_PERF_MANIFEST=artifacts/perf/campaign4/manifest-probe.txt \
+GB_PERF_BASE_DIR=artifacts/perf/campaign4/baseline-src \
+GB_PERF_CAND_DIR=artifacts/perf/campaign4/cand-src \
+GB_PERF_ARM_SCRIPT=scripts/perf/e2e-arm.sh GB_E2E_REPEATS=5 \
+bash scripts/perf/ab-unit.sh exp25b-dom-ceiling 8
+```
+
+The probe took effect: `bodyRows 200 → 60`, `containerNodes 2813 → 853`,
+`docNodes 3441 → 1481`.
+
+| stage | win rate | median ratio | speedup |
+| --- | --- | ---: | ---: |
+| rendered rows | 8/8 | 0.300 | 3.33x |
+| chat DOM nodes | 8/8 | 0.303 | 3.30x |
+| document nodes | 8/8 | 0.430 | 2.32x |
+| layout time | 8/8 | 0.578 | 1.73x |
+| main-thread total | 8/8 | 0.621 | 1.61x |
+| main-thread JS | 8/8 | 0.827 | 1.21x |
+| style time | 8/8 | 0.928 | 1.08x |
+| layout count | 2/8 | 1.015 | — |
+| style count | 3/8 | 1.003 | — |
+| **flood render (wall)** | **6/8** | **0.995** | **1.005x** |
+
+**Finding — the live flood's wall clock is not render-bound.** Every browser-side
+stage moved 8/8 with ratios far outside the noise floor: 70% fewer elements, 42%
+less layout time, 38% less main-thread time. The time the user actually waits for a
+2,000-message flood did not move at all (1671 ms → 1651 ms).
+
+The arithmetic explains it. Per round the main thread is busy 949 ms inside a
+1671 ms window; with 60 rows it is busy 580 ms inside a 1651 ms window. The app is
+already idle-waiting for the next batch. Removing render work removes idle time,
+not wall time: **a live flood is bounded by how fast the relay delivers messages,
+not by how fast the app renders them.**
+
+That is the most consequential measurement in this campaign, and it bounds every
+later claim: virtualisation cannot make a live flood feel faster. What it can do is
+cut CPU and memory — 70% fewer DOM nodes and 38% less main-thread time — which is a
+real win, just not the one the flood benchmark measures.
+
+**Consequence for the campaign.** The remaining question is whether any workload is
+render-bound. The one that should be is a burst: on reconnect the relay resends the
+whole retained window at once and nothing is on screen until the app has built it.
+exp26 measures exactly that.
+
+### exp26 — is any workload render-bound? No.
+
+**The burst test.** A reconnect is the workload that *should* be render-bound: the
+relay resends the whole retained window at once and nothing is on screen until the
+app has built it. 3,000 lines of history, 200 rows rendered versus 60:
+
+| stage | win rate | median ratio |
+| --- | --- | ---: |
+| history rows rendered | 6/6 | 0.600 |
+| reload → last row visible | 5/6 | 0.969 |
+
+40% fewer rows made the burst 3% faster. Reload-to-last-row is ~255 ms of which
+most is connect, auth and buffer discovery — rendering was never the majority of it.
+
+**The direct test of what sets the flood's wall clock.** `prodflood` now records
+every inbound relay frame (Playwright sees the socket; the hook is installed in the
+fixture's `beforeConnect` because Playwright only reports websockets created after
+the listener exists). Both windows are durations, so the Node and page clocks never
+have to be reconciled:
+
+```
+[prodflood][round 0] render=787ms  netFrames=2031 netFirst=11ms netLast=820ms
+[prodflood][round 1] render=759ms  netFrames=2056 netFirst=1ms  netLast=809ms
+[prodflood][round 2] render=792ms  netFrames=2026 netFirst=0ms  netLast=797ms
+```
+
+**Finding — the app already keeps up with the pipe.** The last relay frame arrives
+at 797–820 ms and the last row is on screen at 759–792 ms. The render window and the
+arrival window are the same window. The app is not backed up behind the relay; it
+renders each batch as it lands and then waits for the next one.
+
+That closes the question exp25 left open. A live flood's duration is set by how fast
+the relay delivers — ~0.4 ms per message, one frame per message — and the app's
+rendering sits entirely inside that span. Cutting render work cuts CPU, not the
+span, because the span is the pipe.
+
+It also explains the drift that made early baselines look unstable: the same build
+measured 923 ms per round early in the session and 1671 ms per round later, with no
+code change. Each flood leaves 2,000 more lines in the channel, and the relay
+delivers from a bigger buffer more slowly. The benchmark's wall clock was partly
+measuring WeeChat's history, not the app.
+
+**Consequence.** No optimization of the chat render path can shorten a live flood.
+What render work can still buy is CPU and memory — which is what the retained window
+is actually sized for.
 
 (one section per change: hypothesis, code, benchmark command, before/after per
 stage and total, ratio + win rate, correctness validation, KEEP/REVERT, reason,

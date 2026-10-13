@@ -14,16 +14,20 @@
  */
 import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
+import path from 'node:path';
 import { createConnectedPage } from '../fixtures/auth';
 import { switchToBuffer } from '../helpers/buffers';
 import { waitForAppReady } from '../helpers/connection';
 import { irc } from '../helpers/irc-control';
 
-const HISTORY_COUNT = 3000;
+const HISTORY_COUNT = Number(process.env.GB_E2E_HISTORY_COUNT ?? 3000);
 const CHANNEL = '#glowing-bear';
+// The A/B harness passes a per-run snapshot path so each arm's rendered rows are
+// hashed separately; standalone runs keep the historical fixed path.
+const SNAPSHOT = process.env.GB_E2E_SNAPSHOT ?? '/tmp/gb-perf/e2e-history-rows.json';
 
 test('history: reload with 3000 lines of history', async ({ browser }) => {
-    fs.mkdirSync('/tmp/gb-perf', { recursive: true });
+    fs.mkdirSync(path.dirname(SNAPSHOT), { recursive: true });
     const page = await createConnectedPage(browser, {
         // Persist credentials via the form (not the settings store): the form's
         // local checkbox state is what handleConnect persists on connect.
@@ -63,7 +67,7 @@ test('history: reload with 3000 lines of history', async ({ browser }) => {
             }
             return out;
         });
-        fs.writeFileSync('/tmp/gb-perf/e2e-history-rows.json', JSON.stringify(rows));
+        fs.writeFileSync(SNAPSHOT, JSON.stringify(rows));
 
         console.log(
             `[bench] history ${HISTORY_COUNT} lines: reload-to-last-row=${tEnd - t0}ms finalVisibleRows=${rows.length}`
