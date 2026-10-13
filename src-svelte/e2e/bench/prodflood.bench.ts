@@ -117,16 +117,25 @@ test('prodflood: in-page measurement of a 2000-message flood', async ({ browser 
     // Layout counts come from the browser, so "the follow effect forces a layout
     // per batch" can be measured rather than inferred from CPU samples.
     await cdp.send('Performance.enable');
-    const layoutMetrics = async (): Promise<{ count: number; durationMs: number; scriptMs: number }> => {
+    const layoutMetrics = async (): Promise<{
+        count: number; durationMs: number; scriptMs: number;
+        styleCount: number; styleMs: number; taskMs: number;
+    }> => {
         const { metrics } = await cdp.send('Performance.getMetrics');
         const pick = (name: string) => metrics.find((m: { name: string }) => m.name === name)?.value ?? 0;
         // ScriptDuration is the browser's own tally of main-thread JavaScript time.
         // A change that only removes store-pipeline work barely moves wall time at
         // 2000 messages, so this is the metric that can actually see it.
+        // RecalcStyle* and TaskDuration are the other two buckets a render-heavy
+        // change moves: style recalculation is charged per element the app touched,
+        // and TaskDuration is everything the main thread spent, script or not.
         return {
             count: pick('LayoutCount'),
             durationMs: pick('LayoutDuration') * 1000,
             scriptMs: pick('ScriptDuration') * 1000,
+            styleCount: pick('RecalcStyleCount'),
+            styleMs: pick('RecalcStyleDuration') * 1000,
+            taskMs: pick('TaskDuration') * 1000,
         };
     };
     try {
@@ -157,7 +166,10 @@ test('prodflood: in-page measurement of a 2000-message flood', async ({ browser 
         const REPEATS = Number(process.env.GB_E2E_REPEATS ?? 3);
         const renders: number[] = [];
         const sends: number[] = [];
-        const layoutTotals: { layouts: number; layoutMs: number; scriptMs: number }[] = [];
+        const layoutTotals: {
+            layouts: number; layoutMs: number; scriptMs: number;
+            styleCount: number; styleMs: number; taskMs: number;
+        }[] = [];
         let last: any = {};
 
         for (let round = 0; round < REPEATS; round++) {
@@ -210,11 +222,17 @@ test('prodflood: in-page measurement of a 2000-message flood', async ({ browser 
 
             const pf = await page.evaluate(() => {
                 const p = (window as any).__pf;
+                const container = document.querySelector('[data-testid="chat-messages"]');
                 return {
                     renderMs: p.tLast - p.t0,
                     rowsAdded: p.rowsAdded,
                     lastSeenText: p.lastSeenText,
                     bodyRows: document.querySelectorAll('[data-testid="bufferline-row"]').length,
+                    // The DOM the browser has to style, lay out and paint. A render
+                    // change that does not shrink this is not a render change.
+                    containerNodes: container ? container.querySelectorAll('*').length : 0,
+                    docNodes: document.querySelectorAll('*').length,
+                    scrollHeight: container ? container.scrollHeight : 0,
                     faviconWrites: p.faviconWrites,
                     titleWrites: p.titleWrites,
                     longtaskCount: p.longtasks.length,
@@ -228,14 +246,19 @@ test('prodflood: in-page measurement of a 2000-message flood', async ({ browser 
             const layouts = layoutsAfter.count - layoutsBefore.count;
             const layoutMs = layoutsAfter.durationMs - layoutsBefore.durationMs;
             const scriptMs = layoutsAfter.scriptMs - layoutsBefore.scriptMs;
-            layoutTotals.push({ layouts, layoutMs, scriptMs });
+            const styleCount = layoutsAfter.styleCount - layoutsBefore.styleCount;
+            const styleMs = layoutsAfter.styleMs - layoutsBefore.styleMs;
+            const taskMs = layoutsAfter.taskMs - layoutsBefore.taskMs;
+            layoutTotals.push({ layouts, layoutMs, scriptMs, styleCount, styleMs, taskMs });
 
             renders.push(pf.renderMs);
             last = pf;
             console.log(
                 `[prodflood][round ${round}] render=${pf.renderMs.toFixed(0)}ms send=${sends[round]}ms ` +
                 `rows=${pf.rowsAdded} faviconWrites=${pf.faviconWrites} scrollIntoView=${pf.sivCalls} ` +
-                `layouts=${layouts} layoutMs=${layoutMs.toFixed(0)} scriptMs=${scriptMs.toFixed(0)}`,
+                `layouts=${layouts} layoutMs=${layoutMs.toFixed(0)} scriptMs=${scriptMs.toFixed(0)} ` +
+                `styleCount=${styleCount} styleMs=${styleMs.toFixed(0)} taskMs=${taskMs.toFixed(0)} ` +
+                `containerNodes=${pf.containerNodes} docNodes=${pf.docNodes} scrollHeight=${pf.scrollHeight}`,
             );
         }
 
@@ -259,6 +282,7 @@ test('prodflood: in-page measurement of a 2000-message flood', async ({ browser 
         });
         fs.writeFileSync(SNAPSHOT_PATH, JSON.stringify(rows));
 
+        const sum = (key: string) => layoutTotals.reduce((t, r) => t + (r as any)[key], 0);
         console.log(
             `[prodflood] renderMedian=${median(renders).toFixed(0)}ms ` +
             `renderMin=${Math.min(...renders).toFixed(0)}ms renderMax=${Math.max(...renders).toFixed(0)}ms ` +
@@ -266,9 +290,12 @@ test('prodflood: in-page measurement of a 2000-message flood', async ({ browser 
             `rows=${last.rowsAdded} faviconWrites=${last.faviconWrites} titleWrites=${last.titleWrites} ` +
             `longtasks=${last.longtaskCount}(sum=${last.longtaskTotalMs}ms max=${last.longtaskMaxMs}ms) ` +
             `scrollIntoView=${last.sivCalls} bodyRows=${last.bodyRows} visibleRows=${rows.length} ` +
-            `layouts=${layoutTotals.reduce((t, r) => t + r.layouts, 0)} ` +
-            `layoutMs=${layoutTotals.reduce((t, r) => t + r.layoutMs, 0).toFixed(0)} ` +
-            `scriptMs=${layoutTotals.reduce((t, r) => t + r.scriptMs, 0).toFixed(0)} snapshot=${SNAPSHOT_PATH}`,
+            `containerNodes=${last.containerNodes} docNodes=${last.docNodes} ` +
+            `layouts=${sum('layouts')} ` +
+            `layoutMs=${sum('layoutMs').toFixed(0)} ` +
+            `scriptMs=${sum('scriptMs').toFixed(0)} ` +
+            `styleCount=${sum('styleCount')} styleMs=${sum('styleMs').toFixed(0)} ` +
+            `taskMs=${sum('taskMs').toFixed(0)} snapshot=${SNAPSHOT_PATH}`,
         );
         for (const [stack, count] of (last.sivStacks ?? [])) {
             console.log(`[prodflood][siv] x${count} ${stack}`);

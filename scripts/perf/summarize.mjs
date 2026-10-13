@@ -49,8 +49,33 @@ function parseResults(text) {
             out.set('E2E production flood', { median: Number(e2e[1]), raw: line });
             // ScriptDuration is the browser's own main-thread JavaScript tally:
             // the metric that can see store-pipeline work wall time cannot.
-            const script = line.match(/scriptMs=(\d+)/) ?? line.match(/scriptMedian=(\d+)ms/);
-            if (script) out.set('E2E main-thread JS', { median: Number(script[1]), raw: line });
+            const grab = (...patterns) => {
+                for (const re of patterns) {
+                    const m = line.match(re);
+                    if (m) return Number(m[1]);
+                }
+                return null;
+            };
+            // ScriptDuration is the browser's own main-thread JavaScript tally:
+            // the metric that can see store-pipeline work wall time cannot.
+            // The rest are the browser's other buckets and the size of the DOM the
+            // app asked the browser to style, lay out and paint — a render change
+            // that does not shrink those is not a render change.
+            const extra = [
+                ['E2E main-thread JS', [/scriptMs=(\d+)/, /scriptMedian=(\d+)ms/]],
+                ['E2E layout time', [/layoutMs=(\d+)/]],
+                ['E2E layout count', [/layouts=(\d+)/]],
+                ['E2E style time', [/styleMs=(\d+)/]],
+                ['E2E style count', [/styleCount=(\d+)/]],
+                ['E2E main-thread total', [/taskMs=(\d+)/]],
+                ['E2E chat DOM nodes', [/containerNodes=(\d+)/]],
+                ['E2E document nodes', [/docNodes=(\d+)/]],
+                ['E2E rendered rows', [/bodyRows=(\d+)/]],
+            ];
+            for (const [stage, patterns] of extra) {
+                const v = grab(...patterns);
+                if (v !== null) out.set(stage, { median: v, raw: line });
+            }
         }
     }
     return out;
