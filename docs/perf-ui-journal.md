@@ -145,6 +145,111 @@ Written before the code, as required. Status is updated in place.
 
 ## Experiment log
 
+### Noise floor (null test: both arms identical)
+
+`artifacts/perf/runs/nulltest` — 6 paired reps, `ChatView.svelte` and
+`BufferLineRow.svelte` copied byte-identically into both arms. This is the
+measurement error of the harness itself, and every later ratio is read against it.
+
+| stage | win rate | median ratio | per-pair spread |
+| --- | --- | ---: | ---: |
+| flood render (in-page wall) | 3/6 | 1.004 | 0.807 – 1.205 |
+| main-thread JS (ScriptDuration) | 5/6 | 0.980 | 0.870 – 1.064 |
+| layout time | 3/6 | 1.018 | 0.900 – 1.112 |
+| layout count | 3/6 | 1.017 | 0.828 – 1.161 |
+| style time | 4/6 | 0.995 | 0.926 – 1.096 |
+| style count | 2/6 | 1.025 | 0.822 – 1.162 |
+| process instructions retired | — | 0.999 | ±1% |
+
+Two things this settles:
+
+1. **The in-page flood wall time cannot resolve anything under ~20% at 6 reps.**
+   Its per-pair ratio spans 0.81–1.21 for two identical builds, because the
+   machine's load rose from 4.3 to 6.7 during the batch and the measurement window
+   is under a second. A single-digit render-time claim from 6 reps is not a result.
+2. **`/usr/bin/time -l` counters do not measure the browser.** They are stable to
+   ~1% here, but they cover the Playwright/Node process. Chromium is a separate
+   process, so a browser-side win can be invisible in them. They are a harness
+   stability check, not evidence about the app. Retracting any earlier framing of
+   instructions-retired as a browser tie-breaker.
+
+Consequence for the rest of the campaign: judge a change on the CDP buckets
+(`ScriptDuration` first, then layout/style), require a win rate consistent across
+pairs, and only quote the flood wall time when the effect is large enough to clear
+a ±20% floor — or with more reps.
+
+### exp24 — pass the row's predecessor instead of (index, messages) — REVERTED
+
+**Hypothesis.** Every row was handed `index` and the whole `messages` array and
+looked its predecessor up itself. Both props change on every batch — the array is
+a fresh object per publication and a front trim shifts every index — so the guess
+was that all 200 rendered rows re-ran their derived chain per batch: ~14,000
+re-tokenizations, re-embed-scans and grouping recomputations per 2,000-message
+flood.
+
+**Change.** `BufferLineRow` takes `previous: BufferLine | null` and `first: boolean`
+instead of `index` and `messages`; `ChatView` supplies them through `prevLine(i)`.
+
+**Benchmark.** 8 paired reps, alternating arm order, `GB_E2E_REPEATS=5`:
+
+```bash
+GB_PERF_MANIFEST=artifacts/perf/campaign4/manifest.txt \
+GB_PERF_BASE_DIR=artifacts/perf/campaign4/baseline-src \
+GB_PERF_CAND_DIR=artifacts/perf/campaign4/cand-src \
+GB_PERF_ARM_SCRIPT=scripts/perf/e2e-arm.sh GB_E2E_REPEATS=5 \
+bash scripts/perf/ab-unit.sh exp24-row-props 8
+```
+
+| stage | win rate | median ratio | noise floor (null test) |
+| --- | --- | ---: | ---: |
+| flood render (wall) | 3/8 | 1.004 | 3/6, 1.004 |
+| main-thread JS | 5/8 | 0.981 | 5/6, 0.980 |
+| layout time | 6/8 | 0.989 | 3/6, 1.018 |
+| layout count | 6/8 | 0.992 | 3/6, 1.017 |
+| style time | 4/8 | 1.000 | 4/6, 0.995 |
+| style count | 4/8 | 1.002 | 2/6, 1.025 |
+
+Output identity: all 16 runs produced the same row-snapshot hash as the baseline.
+
+**Why timing could not answer it, and what did.** A counter has no noise, so the
+hypothesis was tested by counting instead of timing. `prodcount.bench.ts` reads
+`gbCount()` counters compiled into the shipped build; the same counters were added
+to both arms. One 2,000-message flood each:
+
+| counter | baseline | candidate |
+| --- | ---: | ---: |
+| row renders | 2200 | 2200 |
+| predecessor lookups | **28,861** | 2,276 |
+| repeated-time evaluations | 2,272 | 2,276 |
+| repeated-prefix evaluations | 2,272 | 2,276 |
+| message tokenizations | 2200 | 2200 |
+| embed/metadata scans | 2200 | 2200 |
+| date-separator checks | 2200 | 2200 |
+| nick extractions | 2200 | 2200 |
+
+**Finding — the hypothesis was wrong about the expensive part.** The cascade is
+real (28,861 predecessor lookups against 2,200 rows) and the change removes 26,585
+of them. It does not touch the expensive work: tokenization, embed scanning, date
+checks and nick extraction each already ran **exactly once per row render** in the
+baseline. Svelte 5's derived chain is lazy — a dirty `previousMessage` that
+recomputes to the same object never re-dirties the render effect, so the row's
+template and its expensive deriveds never re-ran. The eliminated work is 26,585
+array index reads, which is sub-millisecond.
+
+That is the whole explanation for the flat benchmark: the candidate is not a small
+win, it is no win.
+
+**Decision: REVERT.** No measured effect on any stage, and it changes a component's
+public props. Kept instead: `prodcount.bench.ts` as the counter harness, and
+`row-predecessor-equivalence.test.ts`, which locks which row counts as whose
+predecessor across an append, a front trim, and a no-op re-publication.
+
+**Next suspected bottleneck.** Row *creation* is the script cost, and it is
+inherent: 2,200 renders × (tokenize + embed scan + ~11 DOM elements) is what a
+2,000-message flood costs, and no reactive restructuring removes it. The open
+questions are therefore (a) how much of the total is the 200 live rows the browser
+keeps laying out, and (b) whether a row can be built from fewer elements.
+
 (one section per change: hypothesis, code, benchmark command, before/after per
 stage and total, ratio + win rate, correctness validation, KEEP/REVERT, reason,
 next suspected bottleneck)
