@@ -346,7 +346,13 @@ export function trimBufferLines(buffer: BufferData, limit: number): void {
     const wasKnown = buffer.readBoundaryKnown !== false;
     const oldLastSeen = buffer.lastSeen;
     buffer.lines.splice(0, linesToRemove);
-    buffer.requestedLines -= linesToRemove;
+    // requestedLines counts what this session ASKED the server for, not what it
+    // still holds. Trimming the display window must not subtract from it: the
+    // scroll-up page size is derived from it (requestedLines * 2), so cancelling
+    // it here made a capped buffer request a zero-sized history page forever.
+    // The clamp only floors: the legacy pass still subtracts, and a counter that
+    // has gone negative can never be brought back by additions alone.
+    buffer.requestedLines = Math.max(0, buffer.requestedLines);
     if (wasKnown) {
         if (boundaryId === null) {
             setReadBoundary(buffer, -1);
