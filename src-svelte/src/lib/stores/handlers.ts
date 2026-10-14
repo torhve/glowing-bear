@@ -918,6 +918,7 @@ export function handleBufferOpened(message: ProtocolMessage) {
                 lines: existingBuffer.lines,
                 requestedLines: existingBuffer.requestedLines,
                 allLinesFetched: existingBuffer.allLinesFetched,
+                newestWindowFetched: existingBuffer.newestWindowFetched,
                 lastSeen: existingBuffer.lastSeen,
                 readBoundaryKnown: existingBuffer.readBoundaryKnown,
                 readBoundaryId: existingBuffer.readBoundaryId,

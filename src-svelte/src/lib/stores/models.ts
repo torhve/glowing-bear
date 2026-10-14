@@ -374,6 +374,7 @@ export function createBuffer(message: {
         lines: [],
         requestedLines: 0,
         allLinesFetched: false,
+        newestWindowFetched: false,
         lastSeen: -1,
         readBoundaryKnown: false,
         readBoundaryId: null,

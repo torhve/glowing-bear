@@ -661,6 +661,8 @@ export function createApiStoreReducers(): ApiReducers {
                 const target = copy[key]!;
                 target.clearEpoch = (target.clearEpoch ?? 0) + 1;
                 target.requestedLines = 0;
+                // Nothing is held any more, so this session has fetched nothing either.
+                target.newestWindowFetched = false;
                 // No lines remain, so the id superset has nothing left to protect.
                 target.lineIdsSeen = undefined;
                 target.allLinesFetched = false;

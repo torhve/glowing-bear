@@ -1061,6 +1061,11 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
                 [bufferId]: {
                     ...buf,
                     allLinesFetched: linesReceived < numLines,
+                    // The page's history gate asks whether THIS session has seen the
+                    // relay's current newest window, and that gate is shared by both
+                    // transports. Only the API path used to answer it, so a legacy
+                    // buffer would keep re-firing the gate on every batch.
+                    newestWindowFetched: true,
                 },
             };
         });

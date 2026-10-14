@@ -520,6 +520,11 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
                 [bufferId]: {
                     ...buf,
                     allLinesFetched: result.complete,
+                    // The window was fetched, whether or not it added anything.
+                    // Setting this only on newly-applied lines is what made the
+                    // gate re-fire forever on a buffer whose window was already
+                    // complete: 301 identical `lines=-100` requests in one run.
+                    newestWindowFetched: true,
                 },
             };
         });
@@ -575,7 +580,9 @@ export async function switchBuffer(bufferId: string): Promise<boolean> {
     if (!currentSession()) return false;
     const buffer = getBuffer(bufferId);
     // Fetch lines for buffers that need historical context before switching.
-    if (buffer && (buffer.lastSeen < 0 || buffer.lines.length < 20) && buffer.requestedLines < 100) {
+    // Freshness, not line count: a buffer can hold a full retained window and
+    // still have fetched nothing in this session.
+    if (buffer && (buffer.lastSeen < 0 || buffer.lines.length < 20) && !buffer.newestWindowFetched) {
         try {
             await fetchMoreLines(100, bufferId);
         } catch {

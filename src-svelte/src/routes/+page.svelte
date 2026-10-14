@@ -185,7 +185,10 @@
     // history window over RAW lines, so a join/part-heavy channel can return N
     // smart-filtered lines and zero visible ones. Paging continues until visible
     // lines appear or the server reaches history start (allLinesFetched).
-    if ((buf.requestedLines < 100 || buf.lines.length === 0) && !buf.allLinesFetched) {
+    // `newestWindowFetched` is the freshness question — has THIS session asked the
+    // relay for its current newest window? A retained window answers "how many
+    // lines am I holding", which is a different question and the wrong one here.
+    if ((!buf.newestWindowFetched || buf.lines.length === 0) && !buf.allLinesFetched) {
       const targetId = buf.id;
       setHistoryOutcome(targetId, 'loading');
       void (async () => {

@@ -201,7 +201,7 @@ describe('seeding: only an instance the new session actually has', () => {
         expect(get(buffers)[KEY_GONE].lines).toHaveLength(1);
     });
 
-    it('counts the seeded window so the history gate does not refetch readable lines', () => {
+    it('claims nothing about this session: a retained window is not a fetch', () => {
         setActiveConnectionProfile('relay.example', 443, undefined, true);
         seed(KEY_CHANNEL, CHANNEL, '#glowing-bear', 10, 4);
         setActiveBuffer(KEY_CHANNEL);
@@ -211,10 +211,15 @@ describe('seeding: only an instance the new session actually has', () => {
         applyRetainedHandoff();
 
         const buffer = get(buffers)[KEY_CHANNEL];
-        expect(buffer.requestedLines, 'the gate asks "did we request enough?"').toBe(4);
+        expect(buffer.lines, 'the transcript continues across the outage').toHaveLength(4);
+        // Counting the seeded window as this session's fetch is what closed the
+        // history gate after an overnight outage: the buffer held a full stale
+        // window, the gate read it as "already requested enough", and the lines
+        // that arrived while the app was away were never asked for.
+        expect(buffer.requestedLines, 'holding lines is not the same as fetching them').toBe(0);
+        expect(buffer.newestWindowFetched, 'the frozen window is the window as of the outage').toBe(false);
         expect(buffer.allLinesFetched, 'completeness belongs to this session, not the frozen window').toBe(false);
     });
-
     it('seeds the seen-set so a replayed line cannot render twice later', () => {
         setActiveConnectionProfile('relay.example', 443, undefined, true);
         seed(KEY_CHANNEL, CHANNEL, '#glowing-bear', 10, 3);

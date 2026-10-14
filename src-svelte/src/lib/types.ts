@@ -205,6 +205,11 @@ export interface BufferData extends BufferPresentation {
     lines: BufferLine[];
     requestedLines: number;
     allLinesFetched: boolean;
+    /** True once THIS session has fetched the server's newest window for this
+     *  buffer. A retained window says nothing about that: it is the window as of
+     *  the outage, so freshness has to be a separate fact from how many lines are
+     *  currently held. */
+    newestWindowFetched: boolean;
     /** Legacy array index retained for compatibility with callers and diagnostics. */
     lastSeen: number;
     /** True when the exact read boundary is known; false means reconnect ambiguity. */
