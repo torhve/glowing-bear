@@ -1021,6 +1021,34 @@ export function markHistoryComplete(bufferId: string): void {
 }
 
 /**
+ * Did this history response actually establish the buffer's newest window?
+ *
+ * The page's history gate is one-shot per session, so a response that carried no
+ * window must not close it. `lines=0` is answered with an empty array and is not
+ * "history start reached" — it is a request that asked for nothing. A genuinely
+ * empty buffer is answered by fewer lines than requested, which does count.
+ */
+export function historyWindowEstablished(lineCount: number, complete: boolean): boolean {
+    return lineCount > 0 || complete;
+}
+
+/** Smallest page either transport will ever ask for. */
+const MIN_HISTORY_PAGE = 100;
+
+/**
+ * How many raw lines a history page asks for.
+ *
+ * The cursor doubles so paging accelerates, but the cursor is a held-line count
+ * on the legacy transport and it legitimately reaches 0 — a retained handoff
+ * starts one, and an activation trim subtracts from it. `lines=0` / `last_line(-0)`
+ * is answered with an empty array, which a caller cannot tell apart from "there
+ * is nothing older", so a zero-sized page silently ends upward paging.
+ */
+export function historyPageSize(requested: number, cursor: number): number {
+    return Math.max(requested, cursor * 2, MIN_HISTORY_PAGE);
+}
+
+/**
  * Shallow-copy a single buffer with partial field overrides.
  * Returns a new BufferData object — caller must apply via `buffers.update()` merge.
  */

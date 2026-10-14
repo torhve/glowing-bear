@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
 import { setConnectionStatus, setErrors, clearErrors, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, beginSessionStats } from '#lib/stores/connectionStore.ts';
-import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, hasNoHistoryToFetch, markHistoryComplete } from '#lib/stores/models.ts';
+import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, hasNoHistoryToFetch, markHistoryComplete, historyWindowEstablished, historyPageSize } from '#lib/stores/models.ts';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist, flushLineBatch, setOnUpgrade, setOnUpgradeEnded } from '#lib/stores/handlers.ts';
 import { addToast, removeToast, clearToasts, toastStore } from '#lib/toast.ts';
 
@@ -1003,7 +1003,11 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
     }
     pendingFetchBuffers.add(bufferIdStr);
 
-    numLines = Math.max(numLines, buffer.requestedLines * 2);
+    // A page size of 0 is a request for nothing: `last_line(-0)` answers with an
+    // empty array, and the caller cannot tell that apart from a buffer that has
+    // no older history. requestedLines is this transport's held-line count, so it
+    // reaches 0 exactly when the buffer has been emptied underneath the session.
+    numLines = historyPageSize(numLines, buffer.requestedLines);
 
     const msg = Protocol.formatHdata({
         path: `buffer:0x${buffer.id}/own_lines/last_line(-${numLines})/data`,
@@ -1065,7 +1069,7 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
                     // relay's current newest window, and that gate is shared by both
                     // transports. Only the API path used to answer it, so a legacy
                     // buffer would keep re-firing the gate on every batch.
-                    newestWindowFetched: true,
+                    newestWindowFetched: historyWindowEstablished(linesReceived, linesReceived < numLines),
                 },
             };
         });

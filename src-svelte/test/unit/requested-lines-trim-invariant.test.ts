@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { trimBufferLines } from '#lib/api/api-store-reducers.ts';
-import { createBuffer, createBufferLine } from '#lib/stores/models.ts';
+import { createBuffer, createBufferLine, historyPageSize } from '#lib/stores/models.ts';
 import type { BufferData } from '#lib/types.ts';
 
 /**
@@ -58,5 +58,34 @@ describe('requestedLines survives the memory trim', () => {
         buffer.requestedLines = 5;
         trimBufferLines(buffer, 3);
         expect(buffer.lines.map((l) => l.text)).toEqual(['msg 2', 'msg 3', 'msg 4']);
+    });
+});
+
+/**
+ * The cursor may legitimately reach zero, so the page size must not.
+ *
+ * setActiveBuffer trims the buffer being switched to when it holds more lines
+ * than the current cap, and subtracts from the cursor along with the window —
+ * readmarker.test.ts locks that, and on this transport it is consistent because
+ * every received line increments the cursor. The consequence is that a cursor can
+ * arrive at 0 (a retained handoff starts one), and `last_line(-0)` is answered
+ * with an empty array that looks exactly like "no older history exists".
+ */
+describe('a history page is never zero-sized', () => {
+    it('doubles the cursor so paging accelerates', () => {
+        expect(historyPageSize(0, 200)).toBe(400);
+    });
+
+    it('honours a larger explicit request', () => {
+        expect(historyPageSize(500, 10)).toBe(500);
+    });
+
+    it('never asks for a page of zero', () => {
+        expect(historyPageSize(0, 0)).toBe(100);
+    });
+
+    it('never asks for a negative page either', () => {
+        // A cursor subtracted below zero by repeated activation trims.
+        expect(historyPageSize(0, -140)).toBe(100);
     });
 });

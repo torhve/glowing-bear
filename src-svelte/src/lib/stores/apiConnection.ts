@@ -13,7 +13,7 @@ import {
     connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, beginSessionStats,
     setNextReconnectAt,
 } from '#lib/stores/connectionStore.ts';
-import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, weechatVersion, relayApiVersion, hasNoHistoryToFetch, markHistoryComplete } from '#lib/stores/models.ts';
+import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, weechatVersion, relayApiVersion, hasNoHistoryToFetch, markHistoryComplete, historyWindowEstablished, historyPageSize } from '#lib/stores/models.ts';
 
 import { resolveApiEndpoint } from '#lib/api/api-endpoint.ts';
 import { ApiOrchestrator, type OrchestratorStatus } from '#lib/api/api-orchestrator.ts';
@@ -502,7 +502,10 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
     if (pendingFetchBuffers.has(buffer.id)) return;
     pendingFetchBuffers.add(buffer.id);
 
-    numLines = Math.max(numLines, buffer.requestedLines * 2);
+    // Same rule as the legacy path: `lines=0` is answered with an empty array,
+    // which is indistinguishable from "there is nothing older". A buffer whose
+    // counter is 0 — freshly retained, or cleared — still has to get a real page.
+    numLines = historyPageSize(numLines, buffer.requestedLines);
 
     try {
         const result = await fetchHistory(session, { bufferId: apiId, count: numLines });
@@ -520,11 +523,11 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
                 [bufferId]: {
                     ...buf,
                     allLinesFetched: result.complete,
-                    // The window was fetched, whether or not it added anything.
-                    // Setting this only on newly-applied lines is what made the
+                    // The window was fetched, whether or not it added anything:
+                    // setting this only on newly-applied lines is what made the
                     // gate re-fire forever on a buffer whose window was already
-                    // complete: 301 identical `lines=-100` requests in one run.
-                    newestWindowFetched: true,
+                    // complete — 301 identical `lines=-100` requests in one run.
+                    newestWindowFetched: historyWindowEstablished(result.lines.length, result.complete),
                 },
             };
         });
