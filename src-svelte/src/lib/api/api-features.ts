@@ -20,7 +20,7 @@ import type { CompletionResponse } from '#lib/weechat-rest-types.ts';
 import type { LineSnapshot } from '#lib/api/api-contracts.ts';
 import type { ApiBufferId, ApiLineId } from '#lib/api/api-ids.ts';
 import { createBufferLine } from '#lib/stores/models.ts';
-import type { BufferData } from '#lib/types.ts';
+import type { BufferData, BufferLine } from '#lib/types.ts';
 
 // ---- UTF-8 byte-offset conversion ----
 // The completion request `position` is a UTF-8 code-point offset; the
@@ -142,7 +142,54 @@ function hiddenIdsFor(buffer: BufferData): Set<number> {
     return entry.ids;
 }
 
-/** Prepend oldest-first, dedupe by stable lineId, keep display order. */
+/** WeeChat's numeric line id, or null when the line carries only the content-hash
+ *  fallback. Ids are monotonic in print order on both relays — dense counters on
+ *  4.10.1, timestamps on 5.0 — which is what makes a positional merge correct. */
+function serverLineId(line: BufferLine): number | null {
+    const match = /^weechat:(\d+)$/.exec(line.lineId ?? '');
+    return match === null ? null : Number(match[1]);
+}
+
+/**
+ * Merge a fetched history window into the buffer by line id.
+ *
+ * The old code always prepended, which is right only when the fetched window is
+ * older than everything held. After a retained handoff that assumption inverts:
+ * the held window is the transcript as of the outage, and the newest-N window is
+ * newer than its tail — so prepending put today's lines above last night's, and
+ * the front trim (which drops the oldest, i.e. index 0) then deleted exactly the
+ * lines the fetch had just recovered.
+ *
+ * Held lines are never moved. A fetched line is inserted before the first held
+ * line with a larger id, and leftovers land at the tail, so the ordinary case —
+ * history older than everything held — produces the same array as a prepend.
+ */
+export function insertHistoryLines(buffer: BufferData, fresh: BufferLine[]): void {
+    const firstFetched = serverLineId(fresh[0]!);
+    if (firstFetched === null || !buffer.lines.length) {
+        buffer.lines = [...fresh, ...buffer.lines];
+        return;
+    }
+    const merged: BufferLine[] = [];
+    let i = 0;
+    for (const held of buffer.lines) {
+        const heldId = serverLineId(held);
+        while (i < fresh.length) {
+            const fetchedId = serverLineId(fresh[i]!);
+            if (fetchedId === null || (heldId !== null && fetchedId >= heldId)) break;
+            merged.push(fresh[i]!);
+            i++;
+        }
+        merged.push(held);
+    }
+    while (i < fresh.length) {
+        merged.push(fresh[i]!);
+        i++;
+    }
+    buffer.lines = merged;
+}
+
+/** Dedupe by stable lineId, then merge the window into display order. */
 function applyHistory(buffer: BufferData, lines: LineSnapshot[]): void {
     const hiddenSeen = hiddenIdsFor(buffer);
     const existing = new Set(buffer.lines.map((l) => l.lineId));
@@ -161,14 +208,14 @@ function applyHistory(buffer: BufferData, lines: LineSnapshot[]): void {
         .map((l) => lineSnapshotToBufferLine(buffer, l));
     for (const l of unseen) if (isServerHiddenLine(l)) hiddenSeen.add(l.id);
     if (!fresh.length) return;
-    buffer.lines = [...fresh, ...buffer.lines];
+    insertHistoryLines(buffer, fresh);
     // History rows are live-line candidates for the idempotence check in
     // applyLineAdded, so they must be in the buffer's id superset.
     const lineLimit = get(maxBufferLines);
     for (const l of fresh) noteLineId(buffer, l.lineId, lineLimit);
-    // A capped buffer trims the oldest prepended lines right away, exactly
-    // like the legacy history pass (trimmed lines still count in
-    // requestedLines so scroll-up paging knows it is exhausted).
+    // A capped buffer trims immediately. The trim drops the oldest end, which is
+    // only safe because insertHistoryLines put the window where it belongs —
+    // trimming before the merge is what used to discard a recovered window.
     trimBufferLines(buffer, lineLimit);
     // Bootstrap snapshots carry no lines, so WeeChat's read marker was almost
     // always outside the retained window when the buffer first appeared and the
