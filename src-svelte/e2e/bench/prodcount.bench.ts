@@ -2,7 +2,7 @@
  * Work-count benchmark: count how often the hot code actually runs.
  *
  * Timing on this machine cannot resolve a change under ~20% at eight paired reps
- * (see docs/perf-ui-journal.md: two byte-identical arms produced per-pair ratios
+ * (see docs/perf-ui-2026-10.md §3: two byte-identical arms produced per-pair ratios
  * from 0.81 to 1.21). A counter has no noise. When the question is "does this
  * code run 2,000 times or 14,000 times per flood", the answer is available
  * exactly, and it settles a hypothesis that a stopwatch cannot.
