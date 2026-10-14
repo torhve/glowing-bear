@@ -44,6 +44,16 @@ async function waitForSelectedIndex(expectedFn: (idx: number) => boolean, timeou
     }).toPass({ timeout });
 }
 
+async function activeIndexOf(p: import('@playwright/test').Page): Promise<number> {
+    return p.evaluate(() => {
+        const box = document.querySelector('.buffer-search-results');
+        if (!box) return -1;
+        const active = Array.from(box.querySelectorAll('[data-search-index]'))
+            .find((el) => el.classList.contains('!bg-accent'));
+        return active ? Number(active.getAttribute('data-search-index')) : -1;
+    });
+}
+
 async function waitForSearchResults(appear = true, timeout = 5000) {
     await expect(async () => {
         const count = await page.locator('[data-search-index]').count();
@@ -104,6 +114,11 @@ test('ArrowDown wraps around to first result', async () => {
     await waitForSelectedIndex((idx) => idx >= 0);
 });
 
+// The claim is "the selected row ends up on screen", so measure that directly.
+// This test used to compare the results box's scrollTop against a value read
+// before clearing the query — but clearing re-renders the list and resets its
+// offset (observed 829 -> 8), so the old comparison only passed when the
+// preceding test happened to have left the box near the top.
 test('selected item scrolls into view', async () => {
     await openBufferSearch(page);
 
@@ -111,23 +126,41 @@ test('selected item scrolls into view', async () => {
     await searchInput.fill('');
     await waitForSearchResults(true);
 
-    const scrollTop = await page.evaluate(() => {
-        const container = document.querySelector('.buffer-search-results');
-        return container ? (container as HTMLElement).scrollTop : -1;
-    });
-
-    // Navigate down many items
-    for (let i = 0; i < 15; i++) {
+    // Walk until the selection reaches the last row, instead of pressing a fixed
+    // number of times. Two things make a fixed count unreliable here: the selection
+    // wraps, so a fixed count lands wherever the list length happens to divide it,
+    // and `selectedIndex` is component state that survives the dialog closing — a
+    // previous spec leaves it wherever it stopped, so the walk does not start at 0.
+    const results = await page.locator('[data-search-index]').count();
+    for (let guard = 0; guard < results + 2; guard++) {
+        if (await activeIndexOf(page) === results - 1) break;
         await searchInput.press('ArrowDown');
     }
 
     await expect(async () => {
-        const newScrollTop = await page.evaluate(() => {
-            const container = document.querySelector('.buffer-search-results');
-            return container ? (container as HTMLElement).scrollTop : -1;
+        const state = await page.evaluate(() => {
+            const container = document.querySelector('.buffer-search-results') as HTMLElement | null;
+            if (!container) return null;
+            const items = Array.from(container.querySelectorAll('[data-search-index]'));
+            const active = items.find((el) => el.classList.contains('!bg-accent'));
+            if (!active) return null;
+            const box = container.getBoundingClientRect();
+            const row = active.getBoundingClientRect();
+            return {
+                index: Number(active.getAttribute('data-search-index')),
+                offscreen: row.top < box.top - 1 || row.bottom > box.bottom + 1,
+                results: items.length,
+            };
         });
-        // Scroll position should have changed or stayed the same (if all items fit)
-        expect(newScrollTop).toBeGreaterThanOrEqual(scrollTop);
+        expect(state, 'the highlighted row should exist').not.toBeNull();
+        expect(
+            state!.index,
+            `arrow navigation should reach the last of ${state!.results} results`,
+        ).toBe(state!.results - 1);
+        expect(
+            state!.offscreen,
+            `selected row ${state!.index} of ${state!.results} is outside the results box`,
+        ).toBe(false);
     }).toPass({ timeout: 5000 });
 });
 
