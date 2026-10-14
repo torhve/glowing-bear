@@ -60,8 +60,12 @@ Workloads:
   MutationObserver (first message in → last row on screen).
 - `prodwalk` (new, `src-svelte/e2e/bench/prodwalk.bench.ts`) — scroll the whole
   retained window top → bottom and record every row passed, plus scroll-geometry
-  drift. This is the equivalence gate for a windowed renderer, whose DOM snapshot
-  is *expected* to differ.
+  drift. Intended as the equivalence gate for a windowed renderer, whose DOM snapshot
+  is *expected* to differ. **It is not yet a working gate**: scrolling to `scrollTop = 0`
+  triggers `onReachTop` history loading, which prepends lines and shifts `scrollTop`, so
+  the walk breaks after one step and its own assertion fails. It reports usable geometry
+  (`clientHeight` 598, `scrollHeight` 3395, ~17 px per row, `heightDrift` 0) but must
+  absorb the reach-top prepend before it can certify a virtualized renderer.
 
 Instrumentation added to `prodflood` in this campaign: `RecalcStyleCount`,
 `RecalcStyleDuration`, `TaskDuration`, chat-container element count, document
@@ -443,6 +447,65 @@ alignment — output-altering, and out of scope.
 
 **Consequence.** There is no CSS-only way to make a `<table>` chat cheaper. Any
 reduction in rendered rows has to come from rendering fewer rows.
+
+### exp28 — does fewer live rows make the app *feel* faster? No.
+
+exp25b and exp26 showed row reduction does not shorten a flood or a reconnect. The
+remaining question is the one that actually matters for a chat client: does it make
+**interaction** faster while traffic is in flight — typing, switching buffers, opening
+search — which is where a busy main thread is normally felt.
+
+**Hypothesis.** With 200 live rows the main thread is busy 80% of a flood window; a
+long task between a keystroke and its presentation is exactly what a render reduction
+should remove.
+
+**Benchmark.** `prodreact` measures six scenarios against the production build,
+including Event Timing (`inputMaxMs`/`inputMedianMs`) while a flood is in flight.
+
+```bash
+GB_PERF_MANIFEST=artifacts/perf/campaign4/manifest-probe.txt \
+GB_PERF_BASE_DIR=artifacts/perf/campaign4/baseline-src \
+GB_PERF_CAND_DIR=artifacts/perf/campaign4/cand-src \
+GB_PERF_ARM_SCRIPT=scripts/perf/e2e-arm.sh GB_PERF_ARM_TIMEOUT=900 \
+GB_PERF_E2E_GREP=prodreact GB_PERF_E2E_RESULT_PATTERN='^\[prodreact\]' \
+GB_E2E_REPEATS=2 GB_E2E_IDLE_MS=3000 \
+bash scripts/perf/ab-unit.sh exp28b-interaction-under-load 8
+```
+
+**Result (8 paired reps, 200 live rows vs 60).**
+
+| scenario | what it measures | win rate | median ratio |
+| --- | --- | --- | ---: |
+| `R-idle` | quiet window, no traffic | 2/8 | 1.000 |
+| `R-bg` | flood into a *background* buffer | 4/8 | 1.000 |
+| `R-active` | flood into the visible buffer | 4/8 | 1.049 |
+| `R-search` | background flood with search open | 1/8 | 1.000 |
+| `R-switch` | buffer switch during a flood | 3/8 | 1.009 |
+| `R-type` | keystroke latency during a flood | 2/8 | 1.000 |
+
+**Output identity gate: passed.** All 16 runs hashed identical (`fe9a98d7…`). This is
+the one probe in the campaign whose gate is clean, because `prodreact` snapshots the
+buffer list rather than the chat rows — so the comparison is not confounded by the
+probe's own row-count change.
+
+**Decision — no change to keep.** Every scenario is flat, and the one that moved at
+all (`R-active`, pairs scattered 0.866–1.164, 4/8) moved in both directions. Cutting
+live rows 3.3× changes nothing a user can feel in any measured scenario.
+
+**Harness trap found on the way (recorded because it silently invalidates a run).**
+`e2e-arm.sh` defaults `GB_PERF_E2E_RESULT_PATTERN` to `^\[prodflood\] renderMedian`.
+A bench whose summary line is `[prodreact] …` and whose stages print as `R-type median
+14.0ms` matches neither, so `unit-results.txt` came out empty and the summarizer
+reported "no complete runs to compare". The first exp28 therefore produced 8 arms of
+perfectly good data that the summarizer could not read. The stage lines were
+re-derived from each arm's captured `stdout.txt` with `grep -E '^(R-[a-z]+|prodreact)'`
+— the runs themselves were never re-executed, and every number below is still read
+from the saved per-arm artifacts.
+
+**Consequence.** Three independent scenarios — live flood duration, reconnect burst
+duration, interaction under load — all measure flat under a 3.3× reduction in live
+rows. The app's render work is real but it is not on the critical path of anything
+the user experiences.
 
 (one section per change: hypothesis, code, benchmark command, before/after per
 stage and total, ratio + win rate, correctness validation, KEEP/REVERT, reason,
