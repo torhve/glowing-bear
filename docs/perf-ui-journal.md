@@ -386,6 +386,64 @@ measuring WeeChat's history, not the app.
 What render work can still buy is CPU and memory — which is what the retained window
 is actually sized for.
 
+### exp27 — `content-visibility: auto` on chat rows — REVERTED (measured regression)
+
+**Hypothesis.** 165 of 200 rows are off screen (`clientHeight` 598 px, rows ~17 px,
+so ~35 visible). If the browser skipped painting and laying out the off-screen ones,
+the DOM would stay byte-identical — every selector, copy and text-selection test
+still sees all 200 rows — while layout and paint cost fell. This was the only lever
+left that could reduce render work *without* changing what is rendered.
+
+**Code.** Two declarations on `.bufferline` in `BufferLineRow.svelte`:
+
+```css
+content-visibility: auto;
+contain-intrinsic-size: auto 17px;
+```
+
+**Benchmark.**
+
+```bash
+GB_PERF_MANIFEST=artifacts/perf/campaign4/manifest.txt \
+GB_PERF_BASE_DIR=artifacts/perf/campaign4/baseline-src \
+GB_PERF_CAND_DIR=artifacts/perf/campaign4/cand-src \
+GB_PERF_ARM_SCRIPT=scripts/perf/e2e-arm.sh GB_PERF_ARM_TIMEOUT=600 GB_E2E_REPEATS=5 \
+bash scripts/perf/ab-unit.sh exp27-content-visibility 8
+```
+
+**Result (8 paired reps).**
+
+| stage | win rate | median ratio |
+| --- | --- | ---: |
+| chat DOM nodes | 0/8 | 1.000 |
+| document nodes | 0/8 | 1.000 |
+| rendered rows | 0/8 | 1.000 |
+| layout count | 4/8 | 1.000 |
+| layout time | 5/8 | 0.988 |
+| main-thread JS | 5/8 | 0.993 |
+| flood wall time | 5/8 | 0.998 |
+| **style time** | **0/8** | **1.357** |
+
+**Decision — REVERT, with a negative effect measured.** Node count, row count and
+layout count are *exactly* unchanged in all 8 pairs: nothing was skipped. Style
+recalculation time got 36% worse in every single pair — the only stage that moved at
+all moved the wrong way, and it moved consistently enough to be believed.
+
+**Why it failed — the specification says so.** `content-visibility` is defined to
+follow the applicability rules of *size containment*, and size containment has no
+effect when the element's principal box is an internal table box. A `<tr>` is
+`display: table-row`. Firefox ([bug 1663685](https://hg.mozilla.org/mozilla-central/rev/228f4a8ccf96b3bd724b82c7bd6ad92b4e7ba8ef))
+and WebKit ([eea0af365](https://github.com/WebKit/WebKit/commit/eea0af365e1cca71d12a328eee4398d5f2db9745))
+both made this explicit; the CSSWG discussion is
+[csswg-drafts#7658](https://lists.w3.org/Archives/Public/public-css-archive/2022Aug/0906.html).
+Chromium accepts the declaration, gets no skipping, and the extra containment bookkeeping
+shows up as style cost. The escape hatch would be to take the rows out of the table
+formatting context (`display: grid`/`block`), which changes column widths and
+alignment — output-altering, and out of scope.
+
+**Consequence.** There is no CSS-only way to make a `<table>` chat cheaper. Any
+reduction in rendered rows has to come from rendering fewer rows.
+
 (one section per change: hypothesis, code, benchmark command, before/after per
 stage and total, ratio + win rate, correctness validation, KEEP/REVERT, reason,
 next suspected bottleneck)
