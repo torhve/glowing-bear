@@ -87,4 +87,17 @@ describe('history window placement', () => {
         expect(buffer.lines[0]!.text).toBe('no id');
         expect(ids(buffer).slice(1)).toEqual([10, 11]);
     });
+    it('refuses to place the same line id twice', () => {
+        // The merge positions by id, so a duplicate would sit beside its original
+        // as a second row rather than being recognised as the same line.
+        const buffer = bufferWith([10, 11]);
+        insertHistoryLines(buffer, [line(11, 'b again'), line(12, 'c')]);
+        expect(buffer.lines.map((l) => l.text)).toEqual(['msg 10', 'msg 11', 'c']);
+    });
+
+    it('refuses a duplicate inside the fetched window itself', () => {
+        const buffer = bufferWith([10]);
+        insertHistoryLines(buffer, [line(11, 'x'), line(11, 'x twice'), line(12, 'y')]);
+        expect(buffer.lines.map((l) => l.text)).toEqual(['msg 10', 'x', 'y']);
+    });
 });

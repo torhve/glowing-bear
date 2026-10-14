@@ -170,6 +170,28 @@ export function insertHistoryLines(buffer: BufferData, fresh: BufferLine[]): voi
         buffer.lines = [...fresh, ...buffer.lines];
         return;
     }
+
+    // Idempotent by id. A line the buffer already holds, or an id repeated inside
+    // one response, must not create a second row: the merge positions lines by id,
+    // so a duplicate would land beside its original as a separate row. Lines with
+    // only the content-hash fallback carry no comparable id and are kept as-is.
+    const heldIds = new Set<number>();
+    for (const held of buffer.lines) {
+        const id = serverLineId(held);
+        if (id !== null) heldIds.add(id);
+    }
+    const novel: BufferLine[] = [];
+    const taken = new Set<number>();
+    for (const line of fresh) {
+        const id = serverLineId(line);
+        if (id === null) { novel.push(line); continue; }
+        if (heldIds.has(id) || taken.has(id)) continue;
+        taken.add(id);
+        novel.push(line);
+    }
+    if (!novel.length) return;
+    fresh = novel;
+
     const merged: BufferLine[] = [];
     let i = 0;
     for (const held of buffer.lines) {

@@ -1032,8 +1032,14 @@ export function historyWindowEstablished(lineCount: number, complete: boolean): 
     return lineCount > 0 || complete;
 }
 
-/** Smallest page either transport will ever ask for. */
+/**
+ * Page bounds. The floor exists because a zero-sized page is answered with an
+ * empty array that looks like "no older history"; the ceiling exists because the
+ * cursor doubles, and on the legacy transport the cursor is a held-line count, so
+ * an uncapped doubling asks a busy buffer for thousands of raw lines at once.
+ */
 const MIN_HISTORY_PAGE = 100;
+const MAX_HISTORY_PAGE = 1000;
 
 /**
  * How many raw lines a history page asks for.
@@ -1045,7 +1051,7 @@ const MIN_HISTORY_PAGE = 100;
  * is nothing older", so a zero-sized page silently ends upward paging.
  */
 export function historyPageSize(requested: number, cursor: number): number {
-    return Math.max(requested, cursor * 2, MIN_HISTORY_PAGE);
+    return Math.min(MAX_HISTORY_PAGE, Math.max(requested, cursor * 2, MIN_HISTORY_PAGE));
 }
 
 /**

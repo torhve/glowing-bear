@@ -88,4 +88,12 @@ describe('a history page is never zero-sized', () => {
         // A cursor subtracted below zero by repeated activation trims.
         expect(historyPageSize(0, -140)).toBe(100);
     });
+
+    it('does not grow without bound on a busy buffer', () => {
+        // The cursor doubles, and on the legacy transport it is a held-line count
+        // that grows with activity. Uncapped, a long-lived buffer would ask for
+        // thousands of raw lines in one response.
+        expect(historyPageSize(0, 900)).toBe(1000);
+        expect(historyPageSize(0, 100000)).toBe(1000);
+    });
 });
