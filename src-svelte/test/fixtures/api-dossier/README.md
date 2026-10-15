@@ -184,6 +184,13 @@ No PUT/DELETE resources exist despite the CORS Allow header.
   (nick candidates embed the configured completer suffix).
 - `/msg prob` → context `command_arg`, `position_replace:5`, `list:["probebot"]`.
 - `/ver` (core) → context `command`, `position_replace:1`, `list:["version"]`.
+- A **completed command is answered as its arguments, not as its remaining
+  candidates**: `/msgbuf `@8 → context `command_arg`, `position_replace:8`,
+  `list:[core.weechat, irc.gbtest.#gbperf9, …]`; `/version `@9 → context
+  `command_arg`, `list:["-o","-ol","-v"]`. Asking again after a candidate has
+  been placed asks a different question, so walking a candidate list means
+  keeping the answer that was already given.
+
 ### Completion on the legacy `weechat` relay (live)
 
 Captured from the app's own legacy connection to gbtest's WeeChat 4.10.1 (port

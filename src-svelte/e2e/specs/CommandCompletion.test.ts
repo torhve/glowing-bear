@@ -11,6 +11,9 @@ import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
  * asks POST /api/completion; the legacy transport asks the relay's `completion`
  * command. Both must complete a command the user defined themselves, because a
  * composer that only knows the built-in commands is useless for aliases.
+ *
+ * Tab walks the candidate list forward and Shift-Tab walks it back: a prefix
+ * that matches three commands is only useful if all three are reachable.
  */
 
 const ALIAS = 'zzzgb';
@@ -62,6 +65,36 @@ async function defineAlias(page: import('@playwright/test').Page) {
 
 async function removeAlias(page: import('@playwright/test').Page) {
     await sendComposerLine(page, `/alias del ${ALIAS}`).catch(() => undefined);
+}
+
+
+/**
+ * Press a completion key and return the composer text once it has moved.
+ * The candidate order comes from WeeChat, so the tests assert the walk
+ * (one step back, then wrap) rather than pinning an ordering.
+ */
+async function pressAndWait(page: import('@playwright/test').Page, key: 'Tab' | 'Shift+Tab', from: string) {
+    await page.getByTestId('message-input').press(key);
+    await expect.poll(async () => await inputText(page), { timeout: 8000 }).not.toBe(from);
+    return inputText(page);
+}
+
+// Three aliases sharing a prefix, so the completion list has something to walk.
+const CYCLE_ALIASES = ['zzza', 'zzzb', 'zzzc'];
+
+async function defineCycleAliases(page: import('@playwright/test').Page) {
+    for (const name of CYCLE_ALIASES) {
+        await sendComposerLine(page, `/alias add ${name} echo cycle-hit`);
+    }
+    // The client cannot observe that new commands exist yet, so this paces
+    // WeeChat's alias registration rather than any app state.
+    await new Promise(r => setTimeout(r, 1200));
+}
+
+async function removeCycleAliases(page: import('@playwright/test').Page) {
+    for (const name of CYCLE_ALIASES) {
+        await sendComposerLine(page, `/alias del ${name}`).catch(() => undefined);
+    }
 }
 
 
@@ -121,3 +154,49 @@ test('API transport completes a custom command', async ({ browser }) => {
         await page.close();
     }
 });
+
+test('legacy Shift-Tab walks the command list backwards', async ({ browser }) => {
+    const page = await createConnectedPage(browser, { port: '9001', settings: { protocol: 'legacy' } });
+    try {
+        await waitForTransport(page, 'legacy');
+        await waitForBuffer(page, '#glowing-bear', 10000);
+        await switchToBuffer(page, '#glowing-bear');
+        await defineCycleAliases(page);
+
+        await typeIntoInput(page, '/zzz');
+        const first = await pressAndWait(page, 'Tab', '/zzz');
+        const second = await pressAndWait(page, 'Tab', first);
+        const back = await pressAndWait(page, 'Shift+Tab', second);
+        expect(back).toBe(first);
+        // One step further back leaves the start of the list and wraps to the end.
+        const wrapped = await pressAndWait(page, 'Shift+Tab', back);
+        expect(wrapped).not.toBe(first);
+        expect(wrapped).not.toBe(second);
+    } finally {
+        await removeCycleAliases(page);
+        await page.close();
+    }
+});
+
+test('API Shift-Tab walks the command list backwards', async ({ browser }) => {
+    const page = await createConnectedPage(browser, { port: '9010' });
+    try {
+        await waitForTransport(page, 'api');
+        await waitForBuffer(page, '#glowing-bear', 10000);
+        await switchToBuffer(page, '#glowing-bear');
+        await defineCycleAliases(page);
+
+        await typeIntoInput(page, '/zzz');
+        const first = await pressAndWait(page, 'Tab', '/zzz');
+        const second = await pressAndWait(page, 'Tab', first);
+        const back = await pressAndWait(page, 'Shift+Tab', second);
+        expect(back).toBe(first);
+        const wrapped = await pressAndWait(page, 'Shift+Tab', back);
+        expect(wrapped).not.toBe(first);
+        expect(wrapped).not.toBe(second);
+    } finally {
+        await removeCycleAliases(page);
+        await page.close();
+    }
+});
+

@@ -3,6 +3,7 @@
   import { sendMessage, sendWeeChatCommand, getSession, getActiveTransport, requestLegacyCompletion } from '#lib/stores/connectionManager.ts';
   import { chatDisplay } from '#lib/stores/chatPresentation.ts';
   import { requestCompletion, rankCandidates, completionInsert } from '#lib/api/api-features.ts';
+  import { cycleKey, entryIndex, stepIndex, type CompletionCycle, type CompletionDirection } from '#lib/completionCycle.ts';
   import { settings } from '#lib/stores/settings.ts';
   import { addToHistory, getHistoryUp, getHistoryDown } from '#lib/stores/inputHistory.ts';
   import { isPopoverOpen, filterImageFiles, joinMultilineToSingle, MULTILINE_PASTE_THRESHOLD, completeNick } from '#lib/utils.ts';
@@ -100,14 +101,12 @@
   // span is carried forward instead of re-derived, because after a completion
   // the word sitting at the replacement point is the candidate the client put
   // there, not one the relay has ever seen.
-  let _legacyCycle: {
-    key: string;
-    candidates: string[];
-    addSpace: boolean;
-    index: number;
-    start: number;
-    end: number;
-  } | null = null;
+  let _legacyCycle: CompletionCycle | null = null;
+  // The API transport walks the same kind of cycle: the relay answered for the
+  // word that was asked about, and re-asking after a candidate lands asks a
+  // different question — a completed command plus a space is answered with
+  // buffer names.
+  let _apiCycle: CompletionCycle | null = null;
   let isDraggingFile = $state(false);
   let previewImages = $state<PreviewItem[]>([]);
   // Ref to ImageUploadPreview component for programmatic dialog show/hide
@@ -245,6 +244,8 @@
     // would make Tab continue a list the reader is no longer looking at.
     _iterCandidate = null;
     _legacyCycle = null;
+    _apiCycle = null;
+
     const entry = target ? readDraft(target) : null;
     message = entry?.text ?? '';
     pendingSelection = entry ? [entry.selectionStart, entry.selectionEnd] : null;
@@ -393,10 +394,13 @@
     }
   }
 
+
   // Relay API completion (G2 strategy): server candidates, locally re-ranked
   // by nick recency. Candidates already embed the configured completer suffix;
-  // add_space means a space must follow. Cycling walks the ranked list.
-  async function completeViaApi(text: string, caretPos: number): Promise<{ text: string; cursor: number; iterCandidate: string | null } | null> {
+  // add_space means a space must follow. The list is asked for once and then
+  // walked, because re-asking after a candidate has landed asks a different
+  // question — the relay answers a completed command with buffer names.
+  async function completeViaApi(text: string, caretPos: number, direction: CompletionDirection): Promise<{ text: string; cursor: number; iterCandidate: string | null } | null> {
     const session = getSession();
     const { buffer, live } = get(chatDisplay);
     // `live` is stated explicitly rather than inferred from a missing apiBufferId:
@@ -404,30 +408,47 @@
     // notices when they are absent would quietly reopen if the session lifecycle
     // ever changed.
     if (!live || !session || !buffer || buffer.apiBufferId === undefined) return null;
-    const res = await requestCompletion(session, {
-      bufferId: buffer.apiBufferId as never,
-      command: text,
-      cursor: caretPos,
-    });
-    if (!res.ok || res.candidates.length === 0) return null;
-    const spokeAt: Record<string, number> = {};
-    for (const key in buffer.nicklist) {
-      for (const nick of buffer.nicklist[key]!.nicks) {
-        spokeAt[nick.name.toLowerCase()] = nick.spokeAt ?? 0;
+    const key = cycleKey(text, buffer.id);
+    let cycle = _apiCycle && _apiCycle.key === key ? _apiCycle : null;
+    let index: number;
+    if (!cycle) {
+      const res = await requestCompletion(session, {
+        bufferId: buffer.apiBufferId as never,
+        command: text,
+        cursor: caretPos,
+      });
+      if (!res.ok || res.candidates.length === 0) return null;
+      const spokeAt: Record<string, number> = {};
+      for (const nickKey in buffer.nicklist) {
+        for (const nick of buffer.nicklist[nickKey]!.nicks) {
+          spokeAt[nick.name.toLowerCase()] = nick.spokeAt ?? 0;
+        }
       }
-    }
-    const ranked = rankCandidates(res.candidates, spokeAt);
-    let candidate: string;
-    if (_iterCandidate === null) {
-      candidate = ranked[0]!;
+      index = entryIndex(res.candidates.length, direction);
+      cycle = {
+        key,
+        // Server candidates, locally re-ranked by nick recency.
+        candidates: rankCandidates(res.candidates, spokeAt),
+        addSpace: res.addSpace,
+        index,
+        start: res.replaceStart,
+        end: res.replaceEnd,
+        context: res.context,
+      };
     } else {
-      const idx = ranked.indexOf(_iterCandidate);
-      candidate = ranked[(idx >= 0 ? idx + 1 : 0) % ranked.length]!;
+      index = stepIndex(cycle, direction);
     }
-    const insert = completionInsert(candidate, res.addSpace, res.context);
+    const candidate = cycle.candidates[index]!;
+    const insert = completionInsert(candidate, cycle.addSpace, cycle.context);
+    const resultText = text.slice(0, cycle.start) + insert + text.slice(cycle.end);
+    // One candidate is a finished completion, not a list to keep walking: the
+    // cycle is dropped so the next Tab asks the relay about the new word.
+    _apiCycle = cycle.candidates.length > 1
+      ? { ...cycle, key: cycleKey(resultText, buffer.id), index, end: cycle.start + insert.length }
+      : null;
     return {
-      text: text.slice(0, res.replaceStart) + insert + text.slice(res.replaceEnd),
-      cursor: res.replaceStart + insert.length,
+      text: resultText,
+      cursor: cycle.start + insert.length,
       iterCandidate: candidate,
     };
   }
@@ -436,30 +457,36 @@
   async function completeViaLegacyCommand(
     text: string,
     caretPos: number,
+    direction: CompletionDirection,
   ): Promise<{ text: string; cursor: number; iterCandidate: string | null } | null> {
     const { buffer, live } = get(chatDisplay);
     if (!live || !buffer) return null;
-    const key = `${text}\u0000${buffer.id}`;
+    const key = cycleKey(text, buffer.id);
     let cycle = _legacyCycle && _legacyCycle.key === key ? _legacyCycle : null;
+    let index: number;
     if (!cycle) {
       const res = await requestLegacyCompletion(buffer.id, caretPos, text);
       if (!res) return null;
+      index = entryIndex(res.candidates.length, direction);
       cycle = {
         key,
         candidates: res.candidates,
         addSpace: res.addSpace,
-        index: 0,
+        index,
         start: Math.min(res.replaceStart, text.length),
         end: Math.min(res.replaceEnd, text.length),
+        context: '',
       };
+    } else {
+      index = stepIndex(cycle, direction);
     }
-    const candidate = cycle.candidates[cycle.index % cycle.candidates.length]!;
+    const candidate = cycle.candidates[index]!;
     const insert = candidate + (cycle.addSpace ? ' ' : '');
     const resultText = text.slice(0, cycle.start) + insert + text.slice(cycle.end);
     // One candidate is a finished completion, not a list to keep walking: the
     // cycle is dropped so the next Tab asks the relay about the new word.
     _legacyCycle = cycle.candidates.length > 1
-      ? { ...cycle, key: `${resultText}\u0000${buffer.id}`, index: cycle.index + 1, end: cycle.start + insert.length }
+      ? { ...cycle, key: cycleKey(resultText, buffer.id), index, end: cycle.start + insert.length }
       : null;
     return {
       text: resultText,
@@ -473,14 +500,14 @@
   // legacy transport asks the relay for command candidates and uses the
   // client-side matcher for nicks (nick_completer read from wconfig during the
   // legacy handshake).
-  async function completeInput(text: string, caretPos: number): Promise<{ text: string; cursor: number; iterCandidate: string | null } | null> {
+  async function completeInput(text: string, caretPos: number, direction: CompletionDirection): Promise<{ text: string; cursor: number; iterCandidate: string | null } | null> {
     if (getActiveTransport() === 'legacy') {
       // A leading slash is a command, and only WeeChat knows which commands
       // exist — custom aliases included. Anything else is a nick.
-      if (text.startsWith('/')) return completeViaLegacyCommand(text, caretPos);
+      if (text.startsWith('/')) return completeViaLegacyCommand(text, caretPos, direction);
       return completeNick(text, caretPos, _iterCandidate);
     }
-    return completeViaApi(text, caretPos);
+    return completeViaApi(text, caretPos, direction);
   }
 
   function getCaretPos(): number {
@@ -662,9 +689,10 @@
       return true;
     }
 
-    // Shift-Tab -> command completion backward (not yet implemented)
+    // Shift-Tab -> walk the command list the previous Tab produced, backwards
     if (code === 9 && !e.altKey && !e.ctrlKey && e.shiftKey) {
       e.preventDefault();
+      void runCompletion('backward');
       return true;
     }
 
@@ -901,14 +929,19 @@
    * if the draft moved, and it is only shown while the composer still belongs to the
    * conversation the completion was requested in.
    */
-  async function runCompletion(): Promise<void> {
+  async function runCompletion(direction: CompletionDirection = 'forward'): Promise<void> {
+    // Shift-Tab walks a command list back; it does not start a nick completion.
+    // A nick cycle has one candidate worth having and no order worth walking.
+    if (direction === 'backward' && !message.startsWith('/')) return;
     const caretPos = getCaretPos();
     const ref = boundRef;
     const claim = ref ? claimDraft(ref) : null;
     const textAtRequest = message;
-    const result = await completeInput(message, caretPos);
+    const result = await completeInput(message, caretPos, direction);
     if (!result) {
       _iterCandidate = null;
+      _legacyCycle = null;
+      _apiCycle = null;
       return;
     }
     if (claim) {
