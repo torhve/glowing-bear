@@ -319,8 +319,10 @@
     // Handle /buffer clear command on first line only
     if (/^\/buffer\s+clear\s*$/i.test(lines[0]!)) {
       // Clear locally only when the socket accepted the command — otherwise the buffer
-      // looks emptied while its lines are still on the server.
-      if (sendBuffer && await sendWeeChatCommand('/buffer clear')) {
+      // looks emptied while its lines are still on the server. The command is aimed at
+      // the buffer Enter was pressed in: `/buffer clear` with no argument clears the
+      // buffer it is executed on, so aiming it at core would empty the wrong one.
+      if (sendBuffer && await sendWeeChatCommand('/buffer clear', sendBufferId!)) {
         clearBufferMessages(sendBufferId!);
       }
     }

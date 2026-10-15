@@ -1165,9 +1165,12 @@ export function sendWeeChatCommand(command: string, bufferId?: string): boolean 
         console.warn('[sendWeeChatCommand] WebSocket not open');
         return false;
     }
-    // Send command to core WeeChat buffer (0x0), or to a specific buffer if bufferId is provided
+    // A command with no target belongs to the core buffer. The relay resolves a
+    // buffer by pointer or by full name, and `0x0` is neither, so it used to be
+    // dropped without any error reaching the client. Same target the API
+    // transport picks for a command with no buffer.
     const msg = Protocol.formatInput({
-        buffer: bufferId ? '0x' + bufferId : '0x0',
+        buffer: bufferId ? '0x' + bufferId : 'core.weechat',
         data: command
     });
     return sendWs(msg, 'cmd:' + command.substring(0, 50));
