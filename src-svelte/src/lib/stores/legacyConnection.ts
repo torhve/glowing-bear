@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
 import { setConnectionStatus, setErrors, clearErrors, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, beginSessionStats } from '#lib/stores/connectionStore.ts';
-import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, hasNoHistoryToFetch, markHistoryComplete, historyWindowEstablished, historyPageSize } from '#lib/stores/models.ts';
+import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, weechatVersion, hasNoHistoryToFetch, markHistoryComplete, historyWindowEstablished, historyPageSize } from '#lib/stores/models.ts';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist, flushLineBatch, setOnUpgrade, setOnUpgradeEnded } from '#lib/stores/handlers.ts';
 import { addToast, removeToast, clearToasts, toastStore } from '#lib/toast.ts';
 
@@ -780,6 +780,80 @@ export async function fetchConfValue(name: string) {
     });
     const resp = await sendAsync(msg);
     handleConfValue(resp);
+}
+
+/** Command completion candidates returned by the legacy relay. */
+export interface LegacyCompletion {
+    candidates: string[];
+    addSpace: boolean;
+    /** Index of the first character the candidate replaces. */
+    replaceStart: number;
+    /** Index just past the last character the candidate replaces. */
+    replaceEnd: number;
+}
+
+/**
+ * Read the completion record out of a relay reply.
+ *
+ * The reply is an hdata with one item: `context`, `base_word`, `pos_start` (index
+ * of the FIRST character to replace), `pos_end` (index of the LAST one, so the
+ * span is inclusive), `add_space` as an integer, and `list`. Live probe on
+ * gbtest's WeeChat 4.10.1 — `completion 0x… 6 /zzzgb` for a custom alias:
+ * `{context:"command", base_word:"zzzgb", pos_start:1, pos_end:5, add_space:1,
+ * list:["zzzgb"]}`.
+ *
+ * "Nothing to complete" answers with an empty list and an unknown buffer answers
+ * with an empty hdata, so both report null here.
+ */
+export function parseLegacyCompletion(message: ProtocolMessage): LegacyCompletion | null {
+    const content = message.objects?.[0]?.content as unknown;
+    const record = (Array.isArray(content) ? content[0] : undefined) as
+        | { list?: unknown; add_space?: unknown; pos_start?: unknown; pos_end?: unknown }
+        | undefined;
+    if (!record || !Array.isArray(record.list)) return null;
+    const candidates = record.list.filter((word): word is string => typeof word === 'string');
+    if (candidates.length === 0) return null;
+    const start = Number(record.pos_start);
+    const end = Number(record.pos_end);
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start) return null;
+    return {
+        candidates,
+        addSpace: record.add_space === 1 || record.add_space === true,
+        replaceStart: start,
+        replaceEnd: end + 1,
+    };
+}
+
+/**
+ * Ask WeeChat to complete the word under the cursor (legacy relay).
+ *
+ * The command list belongs to WeeChat, custom aliases included, so the client
+ * cannot answer this locally — it asks the relay and applies the answer. The
+ * `completion` command exists from WeeChat 2.9; on anything older the relay does
+ * not know the command at all, so the request is not sent.
+ *
+ * Returns null on any failure: completion is a convenience, and a failed probe
+ * must never surface as a connection problem.
+ */
+export async function requestLegacyCompletion(
+    bufferId: string,
+    position: number,
+    data: string,
+): Promise<LegacyCompletion | null> {
+    const version = get(weechatVersion);
+    if (version.length >= 2 && (version[0]! < 2 || (version[0] === 2 && version[1]! < 9))) return null;
+    let message: ProtocolMessage;
+    try {
+        message = await sendAsync(Protocol.formatCompletion({
+            buffer: '0x' + bufferId,
+            position,
+            data,
+        }));
+    } catch (e) {
+        if (DEBUG_WEECHAT_COMMANDS) console.debug('[completion] request failed:', e);
+        return null;
+    }
+    return parseLegacyCompletion(message);
 }
 
 // Send a formatted message and await its response via callback

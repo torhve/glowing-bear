@@ -1,6 +1,6 @@
 <script lang="ts">
   import { buffers, pendingBufferSwitch, setActiveBuffer, findBufferByShortName, newPendingSwitch } from '#lib/stores/models.ts';
-  import { sendMessage, sendWeeChatCommand, getSession, getActiveTransport } from '#lib/stores/connectionManager.ts';
+  import { sendMessage, sendWeeChatCommand, getSession, getActiveTransport, requestLegacyCompletion } from '#lib/stores/connectionManager.ts';
   import { chatDisplay } from '#lib/stores/chatPresentation.ts';
   import { requestCompletion, rankCandidates, completionInsert } from '#lib/api/api-features.ts';
   import { settings } from '#lib/stores/settings.ts';
@@ -94,6 +94,20 @@
     mountDraft ? [mountDraft.selectionStart, mountDraft.selectionEnd] : null,
   );
   let _iterCandidate: string | null = $state(null);
+  // Legacy command completion: WeeChat answers with the candidate list and the
+  // exact span to replace, so the client only places a candidate and walks the
+  // list while the composer still holds the text that list was asked for. The
+  // span is carried forward instead of re-derived, because after a completion
+  // the word sitting at the replacement point is the candidate the client put
+  // there, not one the relay has ever seen.
+  let _legacyCycle: {
+    key: string;
+    candidates: string[];
+    addSpace: boolean;
+    index: number;
+    start: number;
+    end: number;
+  } | null = null;
   let isDraggingFile = $state(false);
   let previewImages = $state<PreviewItem[]>([]);
   // Ref to ImageUploadPreview component for programmatic dialog show/hide
@@ -230,6 +244,7 @@
     // Completion cycling belongs to one conversation's text; carrying it into another
     // would make Tab continue a list the reader is no longer looking at.
     _iterCandidate = null;
+    _legacyCycle = null;
     const entry = target ? readDraft(target) : null;
     message = entry?.text ?? '';
     pendingSelection = entry ? [entry.selectionStart, entry.selectionEnd] : null;
@@ -415,11 +430,52 @@
     };
   }
 
-  // Transport-aware completion: the API relay answers via /api/completion;
-  // the legacy transport uses the client-side matcher (nick_completer read
-  // from wconfig during the legacy handshake).
+
+  async function completeViaLegacyCommand(
+    text: string,
+    caretPos: number,
+  ): Promise<{ text: string; cursor: number; iterCandidate: string | null } | null> {
+    const { buffer, live } = get(chatDisplay);
+    if (!live || !buffer) return null;
+    const key = `${text}\u0000${buffer.id}`;
+    let cycle = _legacyCycle && _legacyCycle.key === key ? _legacyCycle : null;
+    if (!cycle) {
+      const res = await requestLegacyCompletion(buffer.id, caretPos, text);
+      if (!res) return null;
+      cycle = {
+        key,
+        candidates: res.candidates,
+        addSpace: res.addSpace,
+        index: 0,
+        start: Math.min(res.replaceStart, text.length),
+        end: Math.min(res.replaceEnd, text.length),
+      };
+    }
+    const candidate = cycle.candidates[cycle.index % cycle.candidates.length]!;
+    const insert = candidate + (cycle.addSpace ? ' ' : '');
+    const resultText = text.slice(0, cycle.start) + insert + text.slice(cycle.end);
+    // One candidate is a finished completion, not a list to keep walking: the
+    // cycle is dropped so the next Tab asks the relay about the new word.
+    _legacyCycle = cycle.candidates.length > 1
+      ? { ...cycle, key: `${resultText}\u0000${buffer.id}`, index: cycle.index + 1, end: cycle.start + insert.length }
+      : null;
+    return {
+      text: resultText,
+      cursor: cycle.start + insert.length,
+      iterCandidate: candidate,
+    };
+  }
+
+
+  // Transport-aware completion: the API relay answers via /api/completion; the
+  // legacy transport asks the relay for command candidates and uses the
+  // client-side matcher for nicks (nick_completer read from wconfig during the
+  // legacy handshake).
   async function completeInput(text: string, caretPos: number): Promise<{ text: string; cursor: number; iterCandidate: string | null } | null> {
     if (getActiveTransport() === 'legacy') {
+      // A leading slash is a command, and only WeeChat knows which commands
+      // exist — custom aliases included. Anything else is a nick.
+      if (text.startsWith('/')) return completeViaLegacyCommand(text, caretPos);
       return completeNick(text, caretPos, _iterCandidate);
     }
     return completeViaApi(text, caretPos);

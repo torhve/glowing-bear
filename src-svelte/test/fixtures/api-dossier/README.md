@@ -184,6 +184,29 @@ No PUT/DELETE resources exist despite the CORS Allow header.
   (nick candidates embed the configured completer suffix).
 - `/msg prob` → context `command_arg`, `position_replace:5`, `list:["probebot"]`.
 - `/ver` (core) → context `command`, `position_replace:1`, `list:["version"]`.
+### Completion on the legacy `weechat` relay (live)
+
+Captured from the app's own legacy connection to gbtest's WeeChat 4.10.1 (port
+9001). Request: `(13) completion 0x<buffer> <position> <data>`. The reply is an
+**hdata** with one item carrying `context`, `base_word`, `pos_start`, `pos_end`,
+`add_space` (integer) and `list` — different keys from the API relay's
+`position_replace`, and `pos_end` is the index of the **last** character to
+replace, so the span to replace is `[pos_start, pos_end]`.
+
+| request | reply item |
+|---|---|
+| `completion 0x… 4 /zzz` | `context:"command" base_word:"zzz" pos_start:1 pos_end:3 add_space:1 list:["zzzgb"]` |
+| `completion 0x… 6 /zzzgb` (user alias) | `context:"command" base_word:"zzzgb" pos_start:1 pos_end:5 add_space:1 list:["zzzgb"]` |
+| `completion 0x… 6 /zzzgb and more` | `context:"auto" base_word:"/zzzgb" pos_start:0 pos_end:5 add_space:0 list:[]` |
+| `completion 0x… 7 "/zzzgb "` | `context:"auto" base_word:"" pos_start:7 pos_end:7 add_space:1 list:[buffer names…]` |
+
+- A **custom alias completes exactly like a built-in command**, so command
+  completion cannot be answered locally on this transport either.
+- `position` is the caret offset in `data`; `-1` means "end of `data`".
+- A mid-word caret does not narrow the word: `/zzzgb and more` at 6 completes the
+  whole word `/zzzgb`, in context `auto`, and finds nothing.
+- An unknown buffer answers with an **empty hdata** and "nothing found" answers
+  with an empty `list`; neither is an error and both mean "no completion".
 
 ### Scripts list + content-search freshness (live, `probes/probe-scripts-grep.mjs`)
 

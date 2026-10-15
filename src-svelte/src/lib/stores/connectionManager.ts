@@ -22,6 +22,7 @@ import { resolveApiEndpoint } from '#lib/api/api-endpoint.ts';
 import * as api from '#lib/stores/apiConnection.ts';
 import * as legacy from '#lib/stores/legacyConnection.ts';
 import type { ApiSession } from '#lib/api/api-session.ts';
+import type { LegacyCompletion } from '#lib/stores/legacyConnection.ts';
 import { clearActiveConnectionProfile, setActiveConnectionProfile } from '#lib/connectionProfile.ts';
 import {
     cleanupFocusReconnect as sharedCleanupFocusReconnect,
@@ -305,6 +306,17 @@ export function getSession(): ApiSession | null {
 /** Legacy WebSocket socket (legacy transport only; null on the API path). */
 export function getWs(): WebSocket | null {
     return legacy.getWs();
+}
+
+/** Legacy relay command completion (WeeChat 2.9+). The API transport completes
+ *  through POST /api/completion instead, so this reports null on the API path. */
+export async function requestLegacyCompletion(
+    bufferId: string,
+    position: number,
+    data: string,
+): Promise<LegacyCompletion | null> {
+    if (transport !== 'legacy') return null;
+    return legacy.requestLegacyCompletion(bufferId, position, data);
 }
 
 /** Legacy config read: sends a confinfo request whose response lands in the
