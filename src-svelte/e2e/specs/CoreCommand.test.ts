@@ -72,8 +72,19 @@ test('/buffer clear clears the buffer it was typed in, not the core buffer', asy
         await waitForBuffer(page, CHANNEL, 10000);
         await switchToBuffer(page, CHANNEL);
 
+        // Cleared in a channel of its own. #glowing-bear is the channel every
+        // other spec in the serial run reads from, and emptying it here left a
+        // later spec with less history than one screenful — no older history to
+        // fetch, and therefore no fetch control to click.
+        const target = '#core-clear-probe';
+        await irc.botJoin(target);
+        await typeIntoInput(page, `/join ${target}`);
+        await page.getByTestId('message-input').press('Enter');
+        await waitForBuffer(page, target, 15000);
+        await switchToBuffer(page, target);
+
         const marker = `clear-target-${Date.now()}`;
-        await irc.sendMessage(CHANNEL, marker);
+        await irc.sendMessage(target, marker);
         await waitForRow(page, marker);
 
         await typeIntoInput(page, '/buffer clear');

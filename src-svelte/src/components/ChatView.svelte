@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { BufferLine } from '#lib/types.ts';
   import { get } from 'svelte/store';
-  import { activeBufferId, bufferBottom, buffers, maxBufferLines, recalculateLinesPerScreen, getReadBoundaryIndex, isUserMessageLine, serverNick } from '#lib/stores/models.ts';
+  import { activeBufferId, bufferBottom, buffers, lineLimitFor, recalculateLinesPerScreen, getReadBoundaryIndex, isUserMessageLine, serverNick } from '#lib/stores/models.ts';
   import { chatDisplay } from '#lib/stores/chatPresentation.ts';
   import { historyOutcomes, historyUnavailable } from '#lib/stores/historyState.ts';
   import { settings } from '#lib/stores/settings.ts';
@@ -342,7 +342,9 @@
     if (!token) return;
     const topLineBefore = buffer.lines[0]?.lineId;
     try {
-      await fetchMoreLines(0, buffer.id);
+      // Both ways here are the reader paging upward — the explicit control and
+      // reaching the top of the view — so this page may widen the window.
+      await fetchMoreLines(0, buffer.id, true);
       const after = get(buffers)[buffer.id];
       const topAfter = after?.lines[0]?.lineId;
       // Nothing was prepended while the buffer sits at its line cap: the
@@ -350,7 +352,7 @@
       const prependedNothing = !!after
         && topAfter !== undefined
         && topAfter === topLineBefore
-        && after.lines.length >= get(maxBufferLines);
+        && after.lines.length >= lineLimitFor(after);
       viewport.finishHistory(token, { preserveScroll: !force, prependedNothing });
     } catch (err) {
       console.warn('[fetchMoreLines] fetch failed:', err);

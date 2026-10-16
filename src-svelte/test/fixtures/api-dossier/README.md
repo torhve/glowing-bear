@@ -165,6 +165,26 @@ No PUT/DELETE resources exist despite the CORS Allow header.
   for `type:"free"` buffers `lines_free` overrides `lines`
   (`?lines=5&lines_free=1` → 1 line). Free buffer recipe: `/exec -nf -name <n> <cmd>`.
 
+- **No server-side page ceiling**: `lines=-5000` and `lines=-100000` on a channel
+  holding 2,507 lines return the *same* complete set, oldest-first, in one
+  response. Any ceiling on how deep the client asks is the client's own.
+- **There is no cursor into older content.** `after=<lineId>` and `before=<lineId>`
+  are accepted without error and **ignored**: each answers exactly what `lines`
+  alone answers (`after=mid&lines=-5` → the newest 5; `after=mid&lines=5` → the
+  oldest 5; `after=oldest&lines=-100000` → all 2,507). Older content is therefore
+  reachable only by asking for a wider newest-N window, which is why a history
+  page is sized to the whole window the client intends to retain rather than to
+  an increment. (`probes/probe-history-window.mjs` → `raw/history-window.json`,
+  WeeChat 4.10.1, API 0.6.0.)
+- **Legacy transport, same shape (source reference, not probed here).** The legacy
+  client asks for older content through the hdata query
+  `buffer:0x<id>/own_lines/last_line(-N)/data` — `last_line(-N)` is the newest N
+  lines and the query carries no cursor into older content, so paging upward means
+  widening N. Upstream glowing-bear does exactly that, doubling the window per page
+  (`src-angular/js/connection.js:601`, `last_line(-numLines)` at `:609`) and treating
+  `linesReceivedCount < numLines` as exhaustion (`:635`). The legacy claim rests on
+  that source and the relay protocol's `line` hdata query, not on a captured frame.
+
 ### G1 notify experiment (live)
 
 - Buffer JSON keys (complete, live): `id, name, short_name, number, type, hidden,
@@ -267,6 +287,23 @@ replace, so the span to replace is `[pos_start, pos_end]`.
 - Event names `buffer_input_changed`, `buffer_localvar_set` and `input_changed`
   do NOT exist in WeeChat source — they were fake names in the client's type
   union/mapper and have been removed.
+
+### Which buffer a command runs on (live, measured 2026-10-16)
+
+`POST /api/input` answers 204 for a command the *target buffer* cannot run, so the
+status code is not evidence the command executed. Sent to `core.weechat`:
+
+- `/alias add …`, `/buffer set …`, `/input hotlist_clear`: executed.
+- `/join #chan`: 204, and WeeChat writes
+  `irc: command "join" must be executed on irc buffer (server, channel or private)`
+  into core.weechat. No buffer is created.
+
+So "targetless commands go to core.weechat" is right for core commands and wrong for
+IRC commands. An IRC command has to be aimed at an IRC buffer — the app's composer
+already does that (it sends to the active buffer's pointer), and a spec that needs a
+new channel joins it through the composer rather than through a core-buffer send.
+Evidence: `probes/probe-input-context.mjs` → `raw/input-core-context.json`.
+
 
 ### Read markers / hotlist control (live, `probes/probe-read-marker-commands.mjs`)
 

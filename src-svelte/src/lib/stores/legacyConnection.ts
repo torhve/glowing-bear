@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
 import { setConnectionStatus, setErrors, clearErrors, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, beginSessionStats } from '#lib/stores/connectionStore.ts';
-import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, weechatVersion, hasNoHistoryToFetch, markHistoryComplete, historyWindowEstablished, historyPageSize } from '#lib/stores/models.ts';
+import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, weechatVersion, hasNoHistoryToFetch, markHistoryComplete, historyWindowEstablished, historyPageSize, growHistoryLimit, initialHistoryWindow } from '#lib/stores/models.ts';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist, flushLineBatch, setOnUpgrade, setOnUpgradeEnded } from '#lib/stores/handlers.ts';
 import { addToast, removeToast, clearToasts, toastStore } from '#lib/toast.ts';
 
@@ -1049,7 +1049,14 @@ export async function requestNicklist(bufferId: string) {
     }
 }
 
-export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: string): Promise<void> {
+/**
+ * Ask the relay for older lines.
+ *
+ * `deliberate` marks a page the reader asked for — the explicit control, or
+ * reaching the top of the view. Only those widen the window this buffer may
+ * retain; an initial or programmatic fetch stays at the screen cap.
+ */
+export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: string, deliberate = false): Promise<void> {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         throw new Error('WebSocket not open');
     }
@@ -1079,9 +1086,24 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
 
     // A page size of 0 is a request for nothing: `last_line(-0)` answers with an
     // empty array, and the caller cannot tell that apart from a buffer that has
-    // no older history. requestedLines is this transport's held-line count, so it
-    // reaches 0 exactly when the buffer has been emptied underneath the session.
-    numLines = historyPageSize(numLines, buffer.requestedLines);
+    // no older history.
+    //
+    // A page the reader asked for is sized to fill the whole window this buffer
+    // may retain. This transport replaces the window with the response, so a
+    // page smaller than the window would drop lines the buffer already holds —
+    // hence the floor at what is held. A page nobody asked for stays at one
+    // screenful above that, so a freshly opened buffer keeps room for live
+    // traffic to grow it.
+    //
+    // Known limit of the replace: the floor is measured when the request leaves,
+    // but the response is the relay's window as of when it was built. A line that
+    // arrives on this buffer while the request is in flight is older than the
+    // response's newest line and is absent from it, so the replace drops it.
+    // Merging instead of replacing would fix that — it is why the API transport
+    // prepends rather than replaces.
+    numLines = deliberate
+        ? historyPageSize(numLines, growHistoryLimit(bufferId))
+        : historyPageSize(numLines, Math.max(initialHistoryWindow(), buffer.lines.length));
 
     const msg = Protocol.formatHdata({
         path: `buffer:0x${buffer.id}/own_lines/last_line(-${numLines})/data`,

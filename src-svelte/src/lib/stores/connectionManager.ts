@@ -239,7 +239,7 @@ export async function requestNicklist(bufferId: string): Promise<void> {
     return api.requestNicklist(bufferId);
 }
 
-export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: string): Promise<void> {
+export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: string, deliberate = false): Promise<void> {
     // Free buffers (/exec -nf, plugin output) have no older history: gate them
     // here as well as inside each transport, because each transport also calls
     // its own fetchMoreLines when you switch to a buffer.
@@ -249,8 +249,11 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
         markHistoryComplete(bufferId);
         return;
     }
-    if (transport === 'legacy') return legacy.fetchMoreLines(numLines, explicitBufferId);
-    return api.fetchMoreLines(numLines, explicitBufferId);
+    // `deliberate` says this page was asked for by the reader, which is what
+    // lets a buffer retain more than the screen cap. See each transport's
+    // fetchMoreLines.
+    if (transport === 'legacy') return legacy.fetchMoreLines(numLines, explicitBufferId, deliberate);
+    return api.fetchMoreLines(numLines, explicitBufferId, deliberate);
 }
 
 /** Installed script names, or null when they cannot be listed. The legacy

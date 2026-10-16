@@ -276,7 +276,7 @@
     const buf = current[bufferId];
     if (!buf) return;
     const updated = { ...current };
-    updated[bufferId] = { ...buf, lines: [], requestedLines: 0 };
+    updated[bufferId] = { ...buf, lines: [], requestedLines: 0, historyLimit: undefined };
     buffers.set(updated);
   }
 

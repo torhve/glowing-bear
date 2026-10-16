@@ -15,10 +15,10 @@ import type { ApiSession, ApiSessionResponse } from '#lib/api/api-session.ts';
 import { validateCompletionResponse, validateLineArray } from '#lib/api/api-validation.ts';
 import { mapLine, isServerHiddenLine } from '#lib/api/api-mapping.ts';
 import { storeKeyForBufferId, trimBufferLines, flushApiLineBatch, noteLineId } from '#lib/api/api-store-reducers.ts';
-import { buffers, maxBufferLines, resolveReadBoundaryAfterHistory } from '#lib/stores/models.ts';
+import { buffers, lineLimitFor, resolveReadBoundaryAfterHistory } from '#lib/stores/models.ts';
 import type { CompletionResponse } from '#lib/weechat-rest-types.ts';
 import type { LineSnapshot } from '#lib/api/api-contracts.ts';
-import type { ApiBufferId, ApiLineId } from '#lib/api/api-ids.ts';
+import type { ApiBufferId } from '#lib/api/api-ids.ts';
 import { createBufferLine } from '#lib/stores/models.ts';
 import type { BufferData, BufferLine } from '#lib/types.ts';
 
@@ -61,10 +61,10 @@ export function charIndexToCodePointOffset(str: string, charIndex: number): numb
 
 export interface HistoryRequest {
     bufferId: ApiBufferId;
-    /** Newest N lines when `after` is omitted (negative `lines` in the API). */
+    /** Lines to fetch. The relay answers this as "the newest `count` lines"
+     *  (negative `lines` in the API), and there is no older-than cursor — see
+     *  fetchHistory — so a count is the whole window to retain, not an increment. */
     count: number;
-    /** Exclusive lower bound: fetch `count` lines older than this line. */
-    after?: ApiLineId;
 }
 
 export interface HistoryResult {
@@ -85,9 +85,11 @@ export async function fetchHistory(session: ApiSession, req: HistoryRequest): Pr
     const epochBefore = get(buffers)[key]?.clearEpoch ?? 0;
 
     const params = new URLSearchParams();
-    // Negative lines = newest N; `after` pages older than a line id.
+    // Negative lines = the newest N lines. There is no cursor into older content:
+    // `after=` and `before=` are accepted and ignored, each answering exactly what
+    // `lines` alone answers (live probe, api-dossier). Older content is reachable
+    // only by asking for a wider newest-N window.
     params.set('lines', String(-Math.abs(req.count)));
-    if (req.after !== undefined) params.set('after', String(req.after));
     // WeeChat-internal color codes: the renderer's rich-text engine parses
     // them; the default `ansi` encoding has no client-side parser.
     params.set('colors', 'weechat');
@@ -233,7 +235,7 @@ function applyHistory(buffer: BufferData, lines: LineSnapshot[]): void {
     insertHistoryLines(buffer, fresh);
     // History rows are live-line candidates for the idempotence check in
     // applyLineAdded, so they must be in the buffer's id superset.
-    const lineLimit = get(maxBufferLines);
+    const lineLimit = lineLimitFor(buffer);
     for (const l of fresh) noteLineId(buffer, l.lineId, lineLimit);
     // A capped buffer trims immediately. The trim drops the oldest end, which is
     // only safe because insertHistoryLines put the window where it belongs —

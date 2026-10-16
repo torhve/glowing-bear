@@ -23,6 +23,7 @@ import {
     matchesPendingSwitch,
     isSyncing,
     maxBufferLines,
+    lineLimitFor,
     setReadBoundary,
     setReadBoundaryUnknown,
     resolvePendingReadBoundary,
@@ -259,6 +260,7 @@ export function handleBufferInfo(message: ProtocolMessage) {
                 ...updates,
                 lines: [],
                 requestedLines: 0,
+                historyLimit: undefined,
                 allLinesFetched: false,
                 lastSeen: -1,
                 readBoundaryKnown: false,
@@ -683,11 +685,10 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
     // Update spokeAt timestamps for tab completion on the immutable copies
     handleNickMessageForSpeakOnBuffers(createdLines, updatedBuffers);
 
-    // Trim lines exceeding memory limit on affected buffers
-    const limit = get(maxBufferLines);
+    // Trim lines exceeding each buffer's own cap on affected buffers
     for (const id of affectedIds) {
         const buf = updatedBuffers[id];
-        if (buf) trimBufferLines(buf, limit);
+        if (buf) trimBufferLines(buf, lineLimitFor(buf));
     }
 
     // Apply server unread deltas immutably.
@@ -1145,6 +1146,7 @@ export function handleBufferCleared(message: ProtocolMessage) {
     const updated = updateBufferDeep(bufferId, {
         lines: [],
         requestedLines: 0,
+        historyLimit: undefined,
         localUnread: 0,
         readBoundaryKnown: true,
         readBoundaryId: null,
@@ -1828,19 +1830,22 @@ export function handleLineInfo(
         updatedBuffers[id] = updated;
     }
 
-    // trimBufferLines drops lines older than maxBufferLines per buffer. Lines are
+    // trimBufferLines drops lines older than each buffer's own cap. Lines are
     // appended oldest-first, so only the newest (limit - existingCount) per buffer
     // can survive. Creating (rich-text parsing) the guaranteed-trimmed ones is
     // wasted work on large histories, so count them in requestedLines (which
     // gates history re-fetches) and skip the rest.
-    const trimLimit = get(maxBufferLines);
     const perBufferSkip = new Map<string, number>();
     const perBufferCount = new Map<string, number>();
     for (const lineMsg of reversed) {
         perBufferCount.set(lineMsg.buffer, (perBufferCount.get(lineMsg.buffer) ?? 0) + 1);
     }
     for (const [id, count] of perBufferCount) {
-        const existing = updatedBuffers[id]?.lines.length ?? 0;
+        const buf = updatedBuffers[id];
+        const existing = buf?.lines.length ?? 0;
+        // A buffer that has not been paged has no cap of its own; the screen cap
+        // is what it falls back to.
+        const trimLimit = buf ? lineLimitFor(buf) : get(maxBufferLines);
         const survive = Math.min(count, Math.max(0, trimLimit - existing));
         perBufferSkip.set(id, count - survive);
     }
@@ -1902,10 +1907,10 @@ export function handleLineInfo(
         }
     }
 
-    // Trim lines exceeding memory limit on affected buffers
+    // Trim lines exceeding each buffer's own cap on affected buffers
     for (const id of affectedIds) {
         const buf = updatedBuffers[id];
-        if (buf) trimBufferLines(buf, trimLimit);
+        if (buf) trimBufferLines(buf, lineLimitFor(buf));
     }
 
 

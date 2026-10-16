@@ -18,7 +18,7 @@ import {
     buffers, servers, activeBufferId, previousBufferId, localUnreadBuffers,
     createBuffer, createBufferLine, createNick, createNickGroup,
     parseRichText, removeBuffer, isSyncing, isRelayStatusBuffer,
-    maxBufferLines, setReadBoundary, setReadBoundaryUnknown, applyServerReadMarker, markHotlistBaselineApplied,
+    maxBufferLines, lineLimitFor, lineLimitWith, setReadBoundary, setReadBoundaryUnknown, applyServerReadMarker, markHotlistBaselineApplied,
     injectDateChangeMessageIfNeeded, pendingBufferSwitch, setActiveBuffer, matchesPendingSwitch,
 } from '#lib/stores/models.ts';
 import { shouldResume } from '#lib/stores/bufferResume.ts';
@@ -130,10 +130,12 @@ export function flushApiLineBatch(): void {
     }
 
     // One map copy + one lines-array copy per affected buffer, not per line.
-    // Read the memory cap once per batch. `get()` on a Svelte store subscribes
+    // One map copy + one lines-array copy per affected buffer, not per line.
+    // Read the screen cap once per batch. `get()` on a Svelte store subscribes
     // and unsubscribes, and doing it twice per line measured 26% of the API
     // flood's store time — the cap cannot move inside one synchronous flush.
-    const lineLimit = get(maxBufferLines);
+    // A buffer that has been paged deeper carries its own cap on the buffer.
+    const screenCap = get(maxBufferLines);
     // One accumulator for the whole flush, not per buffer: several buffers can
     // be flooded in one frame and the Set and servers map are global.
     const effects: LineBatchEffects = { localUnreadIds: new Set(), serverDeltas: {} };
@@ -151,6 +153,7 @@ export function flushApiLineBatch(): void {
             if (!buffer) return current; // buffer not synced yet; history fetch covers it
             const copy = { ...current, [key]: { ...buffer, lines: [...buffer.lines] } };
             const target = copy[key]!;
+            const lineLimit = lineLimitWith(target, screenCap);
             for (const item of group.items) applyLineAdded(target, item.line, item.activeId, lineLimit, effects);
             return copy;
         });
@@ -534,7 +537,7 @@ export function createApiStoreReducers(): ApiReducers {
             const copy: Record<string, BufferData> = { ...current };
             const buffer = upsertBuffer(copy, snap);
             if (lines && lines.length) {
-                const lineLimit = get(maxBufferLines);
+                const lineLimit = lineLimitFor(buffer);
                 appendLines(buffer, lines, lineLimit);
                 trimToLimit(buffer, lineLimit);
             }

@@ -13,7 +13,7 @@ import {
     connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, beginSessionStats,
     setNextReconnectAt,
 } from '#lib/stores/connectionStore.ts';
-import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, weechatVersion, relayApiVersion, hasNoHistoryToFetch, markHistoryComplete, historyWindowEstablished, historyPageSize } from '#lib/stores/models.ts';
+import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, weechatVersion, relayApiVersion, hasNoHistoryToFetch, markHistoryComplete, historyWindowEstablished, historyPageSize, growHistoryLimit, initialHistoryWindow } from '#lib/stores/models.ts';
 
 import { resolveApiEndpoint } from '#lib/api/api-endpoint.ts';
 import { ApiOrchestrator, type OrchestratorStatus } from '#lib/api/api-orchestrator.ts';
@@ -480,7 +480,14 @@ export async function listScripts(): Promise<string[] | null> {
 
 const pendingFetchBuffers = new Set<string>();
 
-export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: string): Promise<void> {
+/**
+ * Ask the relay for older lines.
+ *
+ * `deliberate` marks a page the reader asked for — the explicit control, or
+ * reaching the top of the view. Only those widen the window the buffer may
+ * retain; an initial or programmatic fetch stays at the screen cap.
+ */
+export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: string, deliberate = false): Promise<void> {
     const session = currentSession();
     if (!session) throw new Error('Not connected');
 
@@ -505,7 +512,16 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
     // Same rule as the legacy path: `lines=0` is answered with an empty array,
     // which is indistinguishable from "there is nothing older". A buffer whose
     // counter is 0 — freshly retained, or cleared — still has to get a real page.
-    numLines = historyPageSize(numLines, buffer.requestedLines);
+    // A page the reader asked for is sized to fill the whole window this buffer
+    // may retain: both relays answer a lines request as "the newest N lines", so
+    // asking for less than the window cannot reach anything older than what is
+    // already held. A page nobody asked for stays at one screenful — a buffer
+    // that opens at the cap has no room left for live traffic to grow it. This
+    // transport merges a page into what it holds, so a small page is safe here;
+    // the legacy path replaces the window and has to floor the page instead.
+    numLines = deliberate
+        ? historyPageSize(numLines, growHistoryLimit(bufferId))
+        : historyPageSize(numLines, initialHistoryWindow());
 
     try {
         const result = await fetchHistory(session, { bufferId: apiId, count: numLines });

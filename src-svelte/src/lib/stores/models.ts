@@ -1033,26 +1033,88 @@ export function historyWindowEstablished(lineCount: number, complete: boolean): 
 }
 
 /**
- * Page bounds. The floor exists because a zero-sized page is answered with an
- * empty array that looks like "no older history"; the ceiling exists because the
- * cursor doubles, and on the legacy transport the cursor is a held-line count, so
- * an uncapped doubling asks a busy buffer for thousands of raw lines at once.
+ * Hard ceiling for a buffer a reader has deliberately paged into.
+ *
+ * Every retained line is a rendered row — measured at roughly 14 DOM elements
+ * per row in docs/perf-ui-2026-10.md — so depth is not free and nothing
+ * virtualizes it yet. This is what keeps "keep fetching older content" bounded:
+ * a buffer grows only while the reader keeps asking, and it stops here instead
+ * of growing without end. Raising it further is a virtualization decision, not
+ * a constant to edit.
  */
+const HISTORY_LINE_CEILING = 2000;
+
+/**
+ * The line cap that applies to one buffer.
+ *
+ * A buffer holds the screen-derived cap until the reader pages upward, and each
+ * deliberate page raises that buffer's own limit. Depth follows intent: a
+ * buffer nobody scrolls into stays cheap.
+ */
+export function lineLimitWith(buffer: BufferData, screenCap: number): number {
+    return buffer.historyLimit ?? screenCap;
+}
+
+export function lineLimitFor(buffer: BufferData): number {
+    return lineLimitWith(buffer, get(maxBufferLines));
+}
+
+/**
+ * Raise one buffer's cap for a deliberate page, doubling toward the ceiling.
+ *
+ * A cap is retention permission, not allocation — raising it costs nothing
+ * until lines actually arrive — so it can be raised before the request that
+ * fills it. Returns the cap the page should be sized to.
+ */
+export function growHistoryLimit(bufferId: string): number {
+    const buffer = getBuffer(bufferId);
+    const screenCap = get(maxBufferLines);
+    const limit = Math.min(HISTORY_LINE_CEILING, Math.max(screenCap, (buffer?.historyLimit ?? screenCap) * 2));
+    if (!buffer || buffer.historyLimit === limit) return limit;
+    buffers.update((current) => {
+        const buf = current[bufferId];
+        if (!buf) return current;
+        return { ...current, [bufferId]: { ...buf, historyLimit: limit } };
+    });
+    return limit;
+}
+
+/** Floor for a history page; the reason is in historyPageSize. */
 const MIN_HISTORY_PAGE = 100;
-const MAX_HISTORY_PAGE = 1000;
 
 /**
  * How many raw lines a history page asks for.
  *
- * The cursor doubles so paging accelerates, but the cursor is a held-line count
- * on the legacy transport and it legitimately reaches 0 — a retained handoff
- * starts one, and an activation trim subtracts from it. `lines=0` / `last_line(-0)`
- * is answered with an empty array, which a caller cannot tell apart from "there
- * is nothing older", so a zero-sized page silently ends upward paging.
+ * Both relays answer a lines request as "the newest N lines". Neither can be
+ * asked for lines older than what the client already holds — live probe:
+ * `after=` and `before=` are accepted and ignored, each answering exactly what
+ * `lines` alone answers — so a page is sized as the whole window the buffer may
+ * now retain. That also
+ * bounds the ask: the cap doubles, the request follows the cap, and the ceiling
+ * stops both.
+ *
+ * The floor exists because `lines=0` / `last_line(-0)` is answered with an empty
+ * array, which a caller cannot tell apart from "there is nothing older".
  */
-export function historyPageSize(requested: number, cursor: number): number {
-    return Math.min(MAX_HISTORY_PAGE, Math.max(requested, cursor * 2, MIN_HISTORY_PAGE));
+export function historyPageSize(requested: number, limit: number): number {
+    return Math.max(requested, limit, MIN_HISTORY_PAGE);
 }
+
+/** Headroom above one screenful for a buffer's first window. */
+const INITIAL_WINDOW_HEADROOM = 10;
+
+/**
+ * How much a buffer fetches before the reader asks for more.
+ *
+ * One screenful, not the whole retention cap. A buffer that opens already at the
+ * cap has no room left for live traffic to grow it, and it renders the maximum
+ * number of rows before anybody asked for depth. Depth is what a deliberate page
+ * is for — see fetchMoreLines.
+ */
+export function initialHistoryWindow(): number {
+    return get(linesPerScreen) + INITIAL_WINDOW_HEADROOM;
+}
+
 
 /**
  * Shallow-copy a single buffer with partial field overrides.
@@ -1188,7 +1250,7 @@ export function setActiveBuffer(bufferId: string): boolean {
 
     // Discard old lines above the dynamic limit. Re-find the stable boundary after
     // trimming; if its anchor was removed, all retained lines are known unread.
-    const maxLines = get(maxBufferLines);
+    const maxLines = lineLimitFor(updatedBuffers[bufferId]!);
     const targetLinesLength = updatedBuffers[bufferId]!.lines.length;
     if (targetLinesLength > maxLines) {
         const target = updatedBuffers[bufferId]!;

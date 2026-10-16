@@ -1,0 +1,24 @@
+{
+  "probed_at": "2026-10-16T02:08:04.824Z",
+  "weechat": "4.10.1",
+  "relay_api": "0.6.0",
+  "core_command": {
+    "add_status": 204,
+    "completion_context": "command",
+    "completion_list": [
+      "zzzctxprobe"
+    ]
+  },
+  "irc_command_on_core": {
+    "join_status": 204,
+    "buffer_created": false,
+    "buffer_existed_before": false,
+    "core_lines_after": [
+      "irc: command \"join\" must be executed on irc buffer (server, channel or private)"
+    ]
+  },
+  "irc_command_on_channel": {
+    "join_status": 204,
+    "buffer_created": true
+  }
+}
