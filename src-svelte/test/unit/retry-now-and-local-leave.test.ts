@@ -91,14 +91,18 @@ class FakeSocket {
  * awaited — the socket exists synchronously.
  */
 function connectLegacy(): FakeSocket {
-    void facadeConnect({
+    // Caught on purpose. These tests kill the socket, so the connect promise is
+    // expected to reject; the app's own call sites already catch it
+    // (legacyConnection.ts). Left uncaught it surfaces as an unhandled rejection,
+    // which fails the suite for a condition the app cannot produce.
+    facadeConnect({
         host: 'relay.example',
         port: 9001,
         path: 'weechat',
         password: 'testpassword123',
         tls: false,
         noCompression: true,
-    });
+    }).catch(() => undefined);
     const socket = FakeSocket.instances[FakeSocket.instances.length - 1];
     if (!socket) throw new Error('facadeConnect() did not open a socket');
     // The removed guard was `readyState === WebSocket.OPEN`. A CONNECTING
