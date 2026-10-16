@@ -87,10 +87,12 @@ describe("a deliberate page raises only that buffer's cap", () => {
     it('stops at the ceiling instead of growing without bound', () => {
         install(0, { historyLimit: 1500 });
 
-        expect(growHistoryLimit(ID)).toBe(2000);
-        expect(growHistoryLimit(ID)).toBe(2000);
-        expect(growHistoryLimit(ID)).toBe(2000);
-        expect(held().historyLimit).toBe(2000);
+        // 4096 is WeeChat's own history.max_buffer_lines_number default, so the
+        // client stops exactly where the relay stops. Pinned deliberately.
+        expect(growHistoryLimit(ID)).toBe(3000);
+        expect(growHistoryLimit(ID)).toBe(4096);
+        expect(growHistoryLimit(ID)).toBe(4096);
+        expect(held().historyLimit).toBe(4096);
     });
 
     it("never sets a cap below what the screen itself holds", () => {
@@ -176,7 +178,7 @@ describe('a buffer opens with room left for live traffic', () => {
 
 describe('a buffer paged to the ceiling', () => {
     it('stops widening the window', () => {
-        install(0, { historyLimit: 1900 });
+        install(0, { historyLimit: 3000 });
         const first = growHistoryLimit(ID);
         const second = growHistoryLimit(ID);
         expect(second, 'the ceiling is a ceiling').toBe(first);
@@ -186,7 +188,7 @@ describe('a buffer paged to the ceiling', () => {
     });
 
     it('keeps every line it holds at the ceiling', () => {
-        install(0, { historyLimit: 1900 });
+        install(0, { historyLimit: 3000 });
         const limit = growHistoryLimit(ID);
         const full = bufferWith(limit, { historyLimit: limit });
         trimBufferLines(full, lineLimitFor(full));
@@ -199,7 +201,7 @@ describe('a buffer paged to the ceiling', () => {
         // allLinesFetched false at the ceiling and the control keeps re-requesting
         // the same window. Locked deliberately — hiding it would need an exhaustion
         // signal neither relay provides.
-        install(0, { historyLimit: 1900, allLinesFetched: false });
+        install(0, { historyLimit: 3000, allLinesFetched: false });
         growHistoryLimit(ID);
         expect(get(buffers)[ID]!.allLinesFetched).toBe(false);
     });

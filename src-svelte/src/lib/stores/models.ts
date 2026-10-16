@@ -1035,14 +1035,24 @@ export function historyWindowEstablished(lineCount: number, complete: boolean): 
 /**
  * Hard ceiling for a buffer a reader has deliberately paged into.
  *
- * Every retained line is a rendered row — measured at roughly 14 DOM elements
- * per row in docs/perf-ui-2026-10.md — so depth is not free and nothing
- * virtualizes it yet. This is what keeps "keep fetching older content" bounded:
- * a buffer grows only while the reader keeps asking, and it stops here instead
- * of growing without end. Raising it further is a virtualization decision, not
- * a constant to edit.
+ * 4096 is not an arbitrary number: it is WeeChat's own default for
+ * `weechat.history.max_buffer_lines_number`, the limit on how many lines a
+ * buffer keeps in memory before the relay is even asked. Matching it means the
+ * client stops exactly where WeeChat stops, so a reader can never be capped
+ * short of what the relay is able to hand back. A live probe confirmed the
+ * effect: 6 000 lines planted into a channel, and the relay could only ever
+ * return 4096 of them.
+ *
+ * Depth is not free and nothing virtualizes it yet. Measured in a production
+ * build (docs/perf-ui-2026-10.md): 13 DOM nodes per retained row, ~23 KB of JS
+ * heap per row, and ~0.2 ms more latency for every live message per held row —
+ * a new line appears in ~0.25 s at 1 000 rows and ~0.9 s at 4 000, where a page
+ * also starts causing 137–160 ms main-thread blocks. That is the accepted price
+ * of reading a backlog this deep; a buffer nobody pages stays at the far cheaper
+ * screen cap. Going past 4096 would mean raising WeeChat's own option too, and
+ * virtualizing the row list.
  */
-const HISTORY_LINE_CEILING = 2000;
+const HISTORY_LINE_CEILING = 4096;
 
 /**
  * The line cap that applies to one buffer.

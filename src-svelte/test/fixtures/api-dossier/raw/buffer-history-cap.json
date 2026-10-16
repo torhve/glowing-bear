@@ -1,0 +1,7 @@
+{
+  "channel": "irc.gbtest.#gbcap1792136746",
+  "planted": 6000,
+  "relay_lines_returned": 4096,
+  "weechat_history_option": "weechat.history.max_buffer_lines_number (default 4096)",
+  "note": "The relay answers a wide lines request with everything the buffer holds. The buffer itself is bounded by WeeChat, not by the relay, so a client ceiling above this number can never be reached while WeeChat keeps its default."
+}

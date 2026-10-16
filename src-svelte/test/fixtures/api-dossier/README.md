@@ -168,6 +168,13 @@ No PUT/DELETE resources exist despite the CORS Allow header.
 - **No server-side page ceiling**: `lines=-5000` and `lines=-100000` on a channel
   holding 2,507 lines return the *same* complete set, oldest-first, in one
   response. Any ceiling on how deep the client asks is the client's own.
+- **What bounds depth is WeeChat, not the relay.** Planting 6,000 lines into a
+  dedicated channel and then asking `lines=-100000` returns exactly **4096** —
+  the default of `weechat.history.max_buffer_lines_number`, WeeChat's own limit on
+  lines kept per buffer. So a client ceiling above 4096 cannot be reached while
+  WeeChat keeps its default, and a client ceiling below it stops the reader short
+  of what the relay would hand back.
+  (`probes/probe-buffer-history-cap.mjs` → `raw/buffer-history-cap.json`.)
 - **There is no cursor into older content.** `after=<lineId>` and `before=<lineId>`
   are accepted without error and **ignored**: each answers exactly what `lines`
   alone answers (`after=mid&lines=-5` → the newest 5; `after=mid&lines=5` → the
