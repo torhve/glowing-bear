@@ -233,6 +233,16 @@ not a scroll write.
   event outside the settle window, which is correct but slower than a gesture.
 - **In bubble mode the row-identity anchor is the table-mode selector.** Reading
   position across a history prepend is asserted in table mode.
+- **A single upward gesture can cascade to the depth ceiling.** Rows prepended by a
+  history page render asynchronously, so scroll events keep firing while the reader is
+  still near the top and the position restore has not landed — one gesture can trigger
+  several consecutive doublings. Accepted rather than fixed: it matches upstream, and it
+  is bounded by `HISTORY_LINE_CEILING` (4096), whose ladder is pinned in
+  `src-svelte/test/unit/history-limit-growth.test.ts`. 4096 is also the depth where a
+  page starts blocking the main thread for 137–160 ms (`docs/perf-ui-2026-10.md`), so a
+  reader who simply lingers at the top is the one case that reaches that cost without
+  ever clicking. Once the ladder is exhausted the control says "History limit reached"
+  instead of offering a page that would fetch nothing.
 
 ## Where this is proven
 

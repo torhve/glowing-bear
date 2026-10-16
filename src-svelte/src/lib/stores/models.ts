@@ -1070,6 +1070,17 @@ export function lineLimitFor(buffer: BufferData): number {
 }
 
 /**
+ * True when a buffer sits at the depth ceiling with a window that already fills
+ * it. The next deliberate page would ask for exactly the lines it already holds,
+ * so it is provably a no-op — the one exhaustion signal the client has, since
+ * neither relay reports running out of older content.
+ */
+export function historyCappedFor(buffer: BufferData): boolean {
+    return (buffer.historyLimit ?? 0) >= HISTORY_LINE_CEILING
+        && buffer.lines.length >= HISTORY_LINE_CEILING;
+}
+
+/**
  * Raise one buffer's cap for a deliberate page, doubling toward the ceiling.
  *
  * A cap is retention permission, not allocation — raising it costs nothing

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
 import {
     buffers, createBuffer, createBufferLine, lineLimitFor, growHistoryLimit,
-    historyPageSize, initialHistoryWindow, maxBufferLines, linesPerScreen, setActiveBuffer,
+    historyCappedFor, historyPageSize, initialHistoryWindow, maxBufferLines, linesPerScreen, setActiveBuffer,
 } from '#lib/stores/models.ts';
 import { handleBufferCleared } from '#lib/stores/handlers.ts';
 import { trimBufferLines } from '#lib/api/api-store-reducers.ts';
@@ -177,6 +177,15 @@ describe('a buffer opens with room left for live traffic', () => {
 });
 
 describe('a buffer paged to the ceiling', () => {
+    it('climbs the doubling ladder from the screen cap to the ceiling', () => {
+        // A reader who keeps going upward — by clicking, or by lingering at the top
+        // while the auto-fetch cascade runs — walks this ladder and no further.
+        // Pinned because the cascade is accepted behaviour, and this is its bound.
+        install(0);
+        const ladder = Array.from({ length: 6 }, () => growHistoryLimit(ID));
+        expect(ladder).toEqual([420, 840, 1680, 3360, 4096, 4096]);
+    });
+
     it('stops widening the window', () => {
         install(0, { historyLimit: 3000 });
         const first = growHistoryLimit(ID);
@@ -195,15 +204,32 @@ describe('a buffer paged to the ceiling', () => {
         expect(full.lines.length).toBe(limit);
     });
 
-    it('is not provably exhausted, so the control stays available', () => {
+    it('is not provably exhausted by the relay, so allLinesFetched stays false', () => {
         // A full page is not evidence of exhaustion: the relay answers "the newest
-        // N lines" and N here was the window itself. The app therefore leaves
-        // allLinesFetched false at the ceiling and the control keeps re-requesting
-        // the same window. Locked deliberately — hiding it would need an exhaustion
-        // signal neither relay provides.
+        // N lines", and N here was the window itself.
         install(0, { historyLimit: 3000, allLinesFetched: false });
         growHistoryLimit(ID);
-        expect(get(buffers)[ID]!.allLinesFetched).toBe(false);
+        expect(held().allLinesFetched, 'neither relay reports running out of older content').toBe(false);
+    });
+
+    it('treats its own ceiling as the signal to stop offering a page', () => {
+        // The client cannot know the relay is empty, but it does know the next page
+        // would ask for exactly the window it already holds — a provable no-op.
+        // The control reports that instead of offering a dead click.
+        install(4096, { historyLimit: 4096, allLinesFetched: false });
+        expect(historyCappedFor(held())).toBe(true);
+    });
+
+    it('keeps the control while a capped buffer still has room', () => {
+        // At the ceiling but holding less than it: a later page could still bring
+        // older lines, so this is not a capped buffer yet.
+        install(1200, { historyLimit: 4096, allLinesFetched: false });
+        expect(historyCappedFor(held())).toBe(false);
+    });
+
+    it('does not call an unpaged buffer capped', () => {
+        install(1000);
+        expect(historyCappedFor(held()), 'a buffer nobody paged into sits at the screen cap').toBe(false);
     });
 });
 

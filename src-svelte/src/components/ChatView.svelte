@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { BufferLine } from '#lib/types.ts';
   import { get } from 'svelte/store';
-  import { activeBufferId, bufferBottom, buffers, lineLimitFor, recalculateLinesPerScreen, getReadBoundaryIndex, isUserMessageLine, serverNick } from '#lib/stores/models.ts';
+  import { activeBufferId, bufferBottom, buffers, historyCappedFor, lineLimitFor, recalculateLinesPerScreen, getReadBoundaryIndex, isUserMessageLine, serverNick } from '#lib/stores/models.ts';
   import { chatDisplay } from '#lib/stores/chatPresentation.ts';
   import { historyOutcomes, historyUnavailable } from '#lib/stores/historyState.ts';
   import { settings } from '#lib/stores/settings.ts';
@@ -371,6 +371,11 @@
   // not this state either: only a recorded failure renders.
   let historyMissing = $derived(isLive && historyUnavailable(current, $historyOutcomes));
 
+  // A buffer paged to the depth ceiling cannot go deeper: the next page would ask
+  // for exactly the window it already holds. The control says so instead of
+  // offering a click that fetches nothing.
+  let historyCapped = $derived(isLive && current !== null && historyCappedFor(current));
+
   // Read-only view of the viewport controller, exposed for E2E specs.
   // 'Settled' means: the pin loop is not running, no layout frame is still queued
   // for this view, and the sticky follow-settle window has expired. A spec that
@@ -475,10 +480,14 @@
         <!-- Fetch more lines -->
         {#if !current.allLinesFetched}
           <div class="bubble-fetchmore-row">
-            <button type="button" data-testid="fetch-more-lines" class="fetchmorelines flex items-center gap-1 px-3 py-1 rounded text-xs font-medium text-text-secondary hover:text-text hover:bg-surface-raised transition-colors" onclick={handleFetchMore}>
-              <ChevronUp size={14} class="text-text-muted" />
-              Fetch more lines
-            </button>
+            {#if historyCapped}
+              <p class="px-3 py-1 text-xs font-medium text-text-muted" data-testid="history-capped">History limit reached</p>
+            {:else}
+              <button type="button" data-testid="fetch-more-lines" class="fetchmorelines flex items-center gap-1 px-3 py-1 rounded text-xs font-medium text-text-secondary hover:text-text hover:bg-surface-raised transition-colors" onclick={handleFetchMore}>
+                <ChevronUp size={14} class="text-text-muted" />
+                Fetch more lines
+              </button>
+            {/if}
             <span class={['loading-spinner', { hidden: !isLoadingMore }]}>
               Fetching more lines<span class="loading-dots"><span>.</span><span>.</span><span>.</span></span>
             </span>
@@ -563,10 +572,14 @@
           {#if !current.allLinesFetched}
             <tr class="bufferline fetchmore-row">
               <td class="text-center py-1" colspan=3>
-                <button type="button" data-testid="fetch-more-lines" class="fetchmorelines flex items-center gap-1 px-3 py-1 rounded text-xs font-medium text-text-secondary hover:text-text hover:bg-surface-raised transition-colors" onclick={handleFetchMore}>
-                  <ChevronUp size={14} class="text-text-muted" />
-                  Fetch more lines
-                </button>
+                {#if historyCapped}
+                  <p class="text-xs font-medium text-text-muted" data-testid="history-capped">History limit reached</p>
+                {:else}
+                  <button type="button" data-testid="fetch-more-lines" class="fetchmorelines flex items-center gap-1 px-3 py-1 rounded text-xs font-medium text-text-secondary hover:text-text hover:bg-surface-raised transition-colors" onclick={handleFetchMore}>
+                    <ChevronUp size={14} class="text-text-muted" />
+                    Fetch more lines
+                  </button>
+                {/if}
                 <span class={['loading-spinner', { hidden: !isLoadingMore }]}>
                   Fetching more lines<span class="loading-dots"><span>.</span><span>.</span><span>.</span></span>
                 </span>
