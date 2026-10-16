@@ -62,11 +62,26 @@ async function markBufferRead() {
     await switchToBuffer(page, 'gbtest');
 }
 
-async function clickFetchMore() {
+/**
+ * Page upward once. Returns false when the app has stopped offering a page: the
+ * buffer's history is exhausted, or it reached the depth ceiling and the control
+ * became a label. On a long-lived channel either is legitimate, and a click can
+ * land exactly on that swap, so a vanished control is verified rather than assumed.
+ */
+async function clickFetchMore(): Promise<boolean> {
+    const capped = page.getByTestId('history-capped');
+    if (await capped.count() > 0) return false;
     const fetchButton = page.getByTestId('fetch-more-lines');
-    await expect(fetchButton).toBeVisible({ timeout: 10000 });
-    await fetchButton.click();
+    if (!(await fetchButton.isVisible().catch(() => false))) return false;
+    try {
+        await fetchButton.click({ timeout: 10000 });
+    } catch {
+        if (await capped.count() > 0) return false;
+        throw new Error('the fetch-more control vanished without reporting the history ceiling');
+    }
+    return true;
 }
+
 
 // Loading older history only widens the retained window. It must not turn the
 // lines it loads into unread ones: the separator and its "N new" badge stay
@@ -124,16 +139,17 @@ test('fetching older history keeps an existing marker and its badge fixed', asyn
     const before = await chatState(unread[0]);
     expect(before.badgeCount).toBeGreaterThanOrEqual(unread.length);
 
-    await clickFetchMore();
-    await expect.poll(() => chatState(unread[0]), { timeout: 15000 }).toMatchObject({
-        hasReadmarker: true,
-        badge: before.badge,
-        markerImmediatelyBeforeFirstUnread: true,
-    });
-    await clickFetchMore();
-    await expect.poll(() => chatState(unread[0]), { timeout: 15000 }).toMatchObject({
-        hasReadmarker: true,
-        badge: before.badge,
-        markerImmediatelyBeforeFirstUnread: true,
-    });
+    // Page upward until the app stops offering more. Every page must leave the
+    // separator and its badge exactly where they were.
+    let pages = 0;
+    for (let step = 0; step < 6; step++) {
+        if (!(await clickFetchMore())) break;
+        pages++;
+        await expect.poll(() => chatState(unread[0]), { timeout: 15000 }).toMatchObject({
+            hasReadmarker: true,
+            badge: before.badge,
+            markerImmediatelyBeforeFirstUnread: true,
+        });
+    }
+    expect(pages, 'a channel this deep should offer at least one page').toBeGreaterThanOrEqual(1);
 });

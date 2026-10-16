@@ -54,6 +54,17 @@ test.beforeAll(async ({ browser }) => {
     await waitForChatSettled(page);
 });
 
+test.afterAll(async () => {
+    // Close the channel this spec created. `/part` leaves the buffer and its
+    // history in WeeChat — only `/buffer close` removes it (measured against the
+    // live relay). A leftover deep unread channel is global state: it is what
+    // made KeyboardShortcuts-altA land on a paging spec's channel instead of the
+    // buffer that test was about.
+    if (!page) return;
+    await switchToBuffer(page, CHANNEL).catch(() => undefined);
+    await sendComposerLine(page, '/buffer close').catch(() => undefined);
+});
+
 /** Type a line into the composer and press Enter, so WeeChat runs it in the active buffer. */
 async function sendComposerLine(target: Page, text: string): Promise<void> {
     const input = target.getByTestId('message-input');
@@ -175,6 +186,34 @@ test('the legacy transport pages deeper without dropping what it already showed'
             rowWith(`${stamp} deep ${SEED - 1}`, legacy),
             'the newest planted line went away while paging upward',
         ).toBeVisible();
+    } finally {
+        await legacy.close();
+    }
+});
+
+test('the legacy transport keeps fetching on its own when the reader reaches the top', async ({ browser }) => {
+    // The gate that decides "nothing older arrived" is shared by both transports,
+    // but the legacy one answers a history request by replacing the buffer's whole
+    // window — the path where that gate could stop paging too early. The explicit
+    // control bypasses the gate, so the button test above proves nothing here.
+    const stamp = `scrollback-legacy-auto-${Date.now()}`;
+    await sendSequence(CHANNEL, Array.from({ length: SEED }, (_, i) => `${stamp} deep ${i}`));
+
+    const legacy = await createConnectedPage(browser, { port: '9001', settings: { protocol: 'legacy' } });
+    try {
+        await waitForTransport(legacy, 'legacy', 30000);
+        await waitForBuffer(legacy, CHANNEL, 15000);
+        await switchToBuffer(legacy, CHANNEL);
+        await waitForChatSettled(legacy);
+
+        const before = await stampedRows(stamp, legacy);
+        expect(before, 'the initial window should not already hold everything planted').toBeLessThan(SEED);
+
+        await scrollToTop(legacy);
+
+        await expect
+            .poll(() => stampedRows(stamp, legacy), { timeout: 15000 })
+            .toBeGreaterThan(before);
     } finally {
         await legacy.close();
     }

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { get } from 'svelte/store';
 import { flushSync, mount, unmount, type Component } from 'svelte';
 import ChatView from '#components/ChatView.svelte';
 import { activeBufferId, buffers, createBuffer, createBufferLine } from '#lib/stores/models.ts';
@@ -67,13 +68,30 @@ async function settleFrames() {
     flushSync();
 }
 
-// Hold a history response until the test explicitly releases it.
+// Hold a history response until the test explicitly releases it. A released page
+// delivers what a real page delivers — one older line at the top of the window.
+// The viewport's exhaustion gate keys on whether the top line moved, so a mock
+// that changed nothing would close that gate and hide the very request the later
+// steps are trying to have in flight.
 function deferHistory() {
     let finish!: () => void;
     const response = new Promise<void>(resolve => { finish = resolve; });
-    vi.mocked(fetchMoreLines).mockReturnValueOnce(response);
+    vi.mocked(fetchMoreLines).mockImplementationOnce(async () => {
+        await response;
+        const id = get(activeBufferId);
+        const store = get(buffers);
+        const buffer = id ? store[id] : undefined;
+        if (!buffer) return;
+        buffer.lines.unshift(createBufferLine({
+            buffer: buffer.id, date: 1_600_000_000, prefix: 'nick',
+            message: `${buffer.id} older ${buffer.lines.length}`,
+            tags_array: ['irc_privmsg'], displayed: 1, highlight: 0,
+        }));
+        buffers.set({ ...store });
+    });
     return finish;
 }
+
 
 beforeEach(() => {
     vi.clearAllMocks();

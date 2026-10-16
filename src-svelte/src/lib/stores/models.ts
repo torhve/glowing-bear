@@ -1070,14 +1070,15 @@ export function lineLimitFor(buffer: BufferData): number {
 }
 
 /**
- * True when a buffer sits at the depth ceiling with a window that already fills
- * it. The next deliberate page would ask for exactly the lines it already holds,
- * so it is provably a no-op — the one exhaustion signal the client has, since
- * neither relay reports running out of older content.
+ * True when a buffer has been paged to the depth ceiling, so no further page can
+ * widen its window. Deliberately a statement about the buffer's own cap and not
+ * about how many lines it holds: WeeChat's smart filter legitimately drops lines
+ * from a history page, so a buffer at the ceiling can hold fewer lines than the
+ * cap allows — 4,090 of 4,096 on the test fixture — and a line-count test would
+ * call that room to grow when there is none.
  */
 export function historyCappedFor(buffer: BufferData): boolean {
-    return (buffer.historyLimit ?? 0) >= HISTORY_LINE_CEILING
-        && buffer.lines.length >= HISTORY_LINE_CEILING;
+    return (buffer.historyLimit ?? 0) >= HISTORY_LINE_CEILING;
 }
 
 /**

@@ -157,6 +157,7 @@ describe('a clear gives the depth back', () => {
         expect(held().lines).toHaveLength(0);
         expect(held().historyLimit, 'the depth was earned by paging, and the window is gone').toBeUndefined();
         expect(lineLimitFor(held())).toBe(get(maxBufferLines));
+        expect(historyCappedFor(held()), 'a cleared buffer must not still claim the depth ceiling').toBe(false);
     });
 });
 
@@ -220,11 +221,18 @@ describe('a buffer paged to the ceiling', () => {
         expect(historyCappedFor(held())).toBe(true);
     });
 
-    it('keeps the control while a capped buffer still has room', () => {
-        // At the ceiling but holding less than it: a later page could still bring
-        // older lines, so this is not a capped buffer yet.
-        install(1200, { historyLimit: 4096, allLinesFetched: false });
-        expect(historyCappedFor(held())).toBe(false);
+    it('reports the ceiling when filtered lines leave the window short of it', () => {
+        // WeeChat's smart filter drops lines from a history page, so a buffer at
+        // the ceiling legitimately holds fewer lines than its cap allows — 4,090
+        // of 4,096 on the test fixture. A line-count test would read that as room
+        // to grow, and the app would re-request the same window on every scroll.
+        install(4090, { historyLimit: 4096, allLinesFetched: false });
+        expect(historyCappedFor(held())).toBe(true);
+    });
+
+    it('keeps the control while a paged buffer is still below the ceiling', () => {
+        install(1200, { historyLimit: 1680, allLinesFetched: false });
+        expect(historyCappedFor(held()), 'a buffer mid-ladder still has depth to gain').toBe(false);
     });
 
     it('does not call an unpaged buffer capped', () => {

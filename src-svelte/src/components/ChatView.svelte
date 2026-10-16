@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { BufferLine } from '#lib/types.ts';
   import { get } from 'svelte/store';
-  import { activeBufferId, bufferBottom, buffers, historyCappedFor, lineLimitFor, recalculateLinesPerScreen, getReadBoundaryIndex, isUserMessageLine, serverNick } from '#lib/stores/models.ts';
+  import { activeBufferId, bufferBottom, buffers, historyCappedFor, recalculateLinesPerScreen, getReadBoundaryIndex, isUserMessageLine, serverNick } from '#lib/stores/models.ts';
   import { chatDisplay } from '#lib/stores/chatPresentation.ts';
   import { historyOutcomes, historyUnavailable } from '#lib/stores/historyState.ts';
   import { settings } from '#lib/stores/settings.ts';
@@ -347,12 +347,14 @@
       await fetchMoreLines(0, buffer.id, true);
       const after = get(buffers)[buffer.id];
       const topAfter = after?.lines[0]?.lineId;
-      // Nothing was prepended while the buffer sits at its line cap: the
-      // displayed window already covers the server history.
-      const prependedNothing = !!after
-        && topAfter !== undefined
-        && topAfter === topLineBefore
-        && after.lines.length >= lineLimitFor(after);
+      // Nothing older arrived. A deliberate page already asks for the buffer's
+      // entire retainable window, so a page that left the top line where it was
+      // cannot be beaten by asking again — that window is as deep as it gets.
+      // Judging this by "the buffer filled its cap" instead is wrong: WeeChat's
+      // smart filter legitimately drops lines from a page, so a buffer can sit at
+      // its ceiling and still hold fewer lines than the cap allows. Measured on
+      // the fixture: 4,096 raw lines, 4,090 displayable.
+      const prependedNothing = !!after && topAfter !== undefined && topAfter === topLineBefore;
       viewport.finishHistory(token, { preserveScroll: !force, prependedNothing });
     } catch (err) {
       console.warn('[fetchMoreLines] fetch failed:', err);
