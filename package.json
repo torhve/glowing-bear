@@ -1,7 +1,7 @@
 {
   "name": "glowing-bear",
   "private": true,
-  "version": "0.24.0",
+  "version": "0.25.0",
   "description": "Glowing Bear \u2014 A web client for WeeChat",
   "type": "module",
   "workspaces": [
