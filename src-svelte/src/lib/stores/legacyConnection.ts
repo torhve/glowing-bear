@@ -151,18 +151,25 @@ function detectError(evt: CloseEvent): boolean {
 }
 
 // Decide what a closed socket means for this transport.
-// Handles user disconnect, first-connection failure, and a rejected credential.
-// Everything after that — retry or terminal — is one decision in the shared
-// scheduler, which also owns what the app says while it waits and what it says
-// when it stops waiting. The TOTP veto used to live here; it belongs with the
-// decision it modifies.
+// Handles user disconnect, a rejected credential, and everything else — which is
+// one retry-or-terminal decision in the shared scheduler, along with what the app
+// says while it waits and what it says when it stops waiting. The TOTP veto used
+// to live here; it belongs with the decision it modifies.
+//
+// Whether this attempt ever connected is deliberately not part of the decision.
+// `wasEverConnected` used to short-circuit here, which made auto-reconnect a
+// setting that only applied to sessions: a relay that was down when the app opened
+// was never retried at all, however the user had configured it, while the same
+// loss an hour later was retried. `detectError()` still names the cause, and the
+// scheduler still owns whether to try again — so `autoconnect` now means what the
+// settings screen says it means on the first attempt as well as the hundredth.
 function handleReconnectDecision(evt: CloseEvent) {
     const state = get(connectionState);
     if (state.userDisconnect) {
         connectionData = null;
-    } else if (!state.wasEverConnected) {
-        // First connection failed — errors already set by detectError
     } else if (evt.code === 403 || evt.code === 401) {
+        // Terminal on either transport: a rejected credential is not a fault the
+        // relay will recover from, and retrying it spends the same password again.
         setErrors({ passwordError: true });
         if (connectionData) showDisconnectToast(connectionData);
     } else if (connectionData) {
@@ -184,13 +191,20 @@ function handleAttemptLoss(evt: CloseEvent): void {
     if (get(connectionState).wasEverConnected) markCaptureIntent();
     resetAllState(connectionGeneration);
     setConnectionStatus('disconnected');
-    const shouldReject = detectError(evt);
+    const authRejected = detectError(evt);
+    // Read before the decision: scheduling a retry wipes the stores, and the reason
+    // this attempt died was established by `detectError()`, not by whatever survives.
+    const unreachable = get(connectionState).errors.serverUnreachable;
     handleReconnectDecision(evt);
-    if (shouldReject) {
-        const reject = pendingConnectReject;
-        pendingConnectReject = null;
-        reject?.(new Error('Authentication failed'));
-    }
+    // Last, after the retry decision, so a caller awaiting this attempt learns the
+    // outcome the app actually settled on rather than an early reading of one event.
+    // A live session has already resolved and cleared the handle, so this only ever
+    // settles an attempt that never produced a session.
+    const reject = pendingConnectReject;
+    pendingConnectReject = null;
+    reject?.(new Error(authRejected
+        ? 'Authentication failed'
+        : `Connection failed: ${unreachable ? 'the relay could not be reached' : `socket closed with code ${evt.code}`}`));
 }
 
 export async function connect(profile: ConnectionProfile) {
@@ -557,12 +571,19 @@ export async function connect(profile: ConnectionProfile) {
         };
 
         ws.onerror = (evt) => {
-            // The browser's WebSocket API does not expose the underlying failure
-            // (refused port, TLS, timeout) — log the attempted URL so the line is
-            // actionable.
+            // Log only. The browser's WebSocket API does not expose the underlying
+            // failure (refused port, TLS, timeout) — log the attempted URL so the
+            // line is actionable.
+            //
+            // This is deliberately not where the attempt is settled. `onerror` is
+            // always followed by `onclose`, and `onclose` is where the retry decision
+            // is made. Settling here would hand a caller a rejection before the app
+            // knows whether it is about to try again — which is how a first connect
+            // with auto-reconnect on ended up telling the user to "check settings and
+            // try again" in one toast while another toast said it was reconnecting in
+            // 30 seconds. `handleAttemptLoss()` settles it, after the decision, and
+            // the handshake deadline is the backstop if `onclose` never arrives.
             console.error(`Relay error: ${url}`, evt);
-            setConnectionStatus('error');
-            reject(new Error(`Connection failed: ${url}`));
         };
     });
 }

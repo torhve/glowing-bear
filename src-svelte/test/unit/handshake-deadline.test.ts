@@ -117,7 +117,12 @@ describe('the handshake deadline', () => {
 
         expect(attempt.outcome(), 'an await on a hung attempt must not outlive the page').toBe('rejected');
         expect(legacy.isAttemptInProgress(), 'the attempt may not stay in flight').toBe(false);
-        expect(get(connectionState).status, 'the transport\'s own outcome for a lost attempt').toBe('disconnected');
+        // 'error', not 'disconnected': autoconnect is off, so the shared scheduler
+        // declined the retry and declared the terminal outcome. The transport writes
+        // 'disconnected' when the attempt ends and the scheduler overwrites it with
+        // the outcome it decided — which is the same one the API transport produces
+        // for the same loss.
+        expect(get(connectionState).status, 'a loss the app will not retry is an error, on either transport').toBe('error');
         expect(get(connectionState).errors.serverUnreachable, 'a handshake timeout is an unreachable relay').toBe(true);
     });
 

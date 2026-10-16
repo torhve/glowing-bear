@@ -1,7 +1,7 @@
 <script lang="ts">
   import { get } from 'svelte/store';
   import { untrack } from 'svelte';
-  import { connect } from '#lib/stores/connectionManager.ts';
+  import { connect, pendingRetry } from '#lib/stores/connectionManager.ts';
   import { connectionState, setConnectionStatus, setErrors, clearErrors } from '#lib/stores/connectionStore.ts';
   import { settings, updateSettings, hashSyncVersion } from '#lib/stores/settings.ts';
   import { addToast } from '#lib/toast.ts';
@@ -163,6 +163,14 @@
       });
     } catch (e) {
       console.error('Connection failed:', e);
+      // A rejected `connect()` is not the same fact as a stopped connection. When
+      // the shared retry loop is armed, the app has already decided to try again and
+      // has said so: status 'reconnecting', a countdown, a toast with a Retry action.
+      // Restyling that as a dead 'error' is not cosmetic — the banner gates its
+      // countdown on the status being a looping one, so the countdown disappears
+      // while a retry is still ticking — and "check settings and try again" is a
+      // false instruction when an attempt is already scheduled.
+      if (pendingRetry().active) return;
       // The transport already named a failure it can explain (a clock that
       // disagrees with the relay, a wrong password, a WeeChat that is too old).
       // Stacking a generic "unable to connect" on top of that would show the user

@@ -19,6 +19,7 @@ const UI_ONLY_SPECS = [
     'ConnectionForm-password',
     'DisconnectReconnect',
     'FocusReconnect',
+    'FirstConnectRetry',
     'ErrorPage-unmatchedRoute',
     'Hash-params',
     'HashAlgorithmMismatch',
