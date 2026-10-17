@@ -60,6 +60,14 @@ jobs:
             - name: Install dependencies
               run: npm ci
 
+            # The bundle icons (static/*.png, *.ico, *.icns) are generated, not
+            # tracked. tauri-action invokes the Tauri CLI directly, so the npm
+            # pretauri:* hooks do not apply here.
+            - name: Generate bundle icons
+              run: |
+                npm run generate-icons && npm run generate-icns
+                # Fail early and legibly if a bundle icon is missing.
+                node -e "const{bundle}=require('./src-tauri/tauri.conf.json');const{existsSync}=require('fs');const{join}=require('path');const missing=bundle.icon.filter(f=>!existsSync(join('src-tauri',f)));if(missing.length){console.error('missing bundle icons:',missing);process.exit(1)};console.log('bundle icons present: '+bundle.icon.length)"
             - uses: tauri-apps/tauri-action@v0
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

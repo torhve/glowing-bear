@@ -28,6 +28,10 @@ function anyPngNeedsRegen() {
         if (needsRegen(resolve(__dirname, filename))) return true;
     }
     if (needsRegen(resolve(__dirname, 'glowing_bear_128x128.ico'))) return true;
+    // The manifest derives from this script (not the SVG); a missing file is
+    // the only staleness it can have — content drift is handled by a
+    // byte-compare at write time.
+    if (!existsSync(resolve(__dirname, 'manifest.webmanifest'))) return true;
     return false;
 }
 
@@ -101,40 +105,74 @@ if (needsRegen(icoPath) || needsRegen(png128Path)) {
     console.log('  ⊘ glowing_bear_128x128.ico — up to date');
 }
 
-// Regenerate webapp.manifest.json
+// Regenerate manifest.webmanifest — the file app.html links as the web app
+// manifest (the old script wrote webapp.manifest.json, which nothing read).
+// The icon list mirrors the `icons` array above. Formatting matches the
+// previously tracked file byte-for-byte, so an unchanged regeneration is a no-diff.
 const manifest = {
-    lang: 'en-US',
     name: 'Glowing Bear',
     short_name: 'Glowing Bear',
-    icons: [
-        { src: '/favicon.png', sizes: '32x32', type: 'image/png' },
-        { src: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
-        { src: '/glowing_bear_60x60.png', sizes: '60x60', type: 'image/png' },
-        { src: '/glowing_bear_90x90.png', sizes: '90x90', type: 'image/png' },
-        { src: '/glowing_bear_128x128.png', sizes: '128x128', type: 'image/png' },
-        { src: '/glowing_bear_192x192.png', sizes: '192x192', type: 'image/png' },
-        { src: '/glowing_bear_512x512.png', sizes: '512x512', type: 'image/png' },
-        { src: '/glowing_bear_1024x1024.png', sizes: '1024x1024', type: 'image/png' },
-    ],
-    splash_screens: [
-        { src: '/glowing_bear_512x512.png', sizes: '512x512' },
-    ],
-    scope: '/',
-    start_url: '/',
+    lang: 'en-US',
+    description: 'A weechat-websocket frontend',
+    theme_color: '#181818',
+    background_color: '#0a0a0a',
     display: 'standalone',
     orientation: 'portrait-primary',
-    theme_color: '#0a0a0a',
-    background_color: '#0a0a0a',
+    scope: '.',
+    start_url: '.',
+    icons: [
+        { src: 'favicon.png', sizes: '32x32', type: 'image/png' },
+        { src: 'apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+        { src: 'glowing_bear_60x60.png', sizes: '60x60', type: 'image/png' },
+        { src: 'glowing_bear_90x90.png', sizes: '90x90', type: 'image/png' },
+        { src: 'glowing_bear_128x128.png', sizes: '128x128', type: 'image/png' },
+        { src: 'glowing_bear_192x192.png', sizes: '192x192', type: 'image/png' },
+        { src: 'glowing_bear_512x512.png', sizes: '512x512', type: 'image/png' },
+        { src: 'glowing_bear_1024x1024.png', sizes: '1024x1024', type: 'image/png' },
+    ],
     prefer_related_applications: false,
-    chrome_related_applications: [
-        { platform: 'web' },
+    related_applications: [
         {
             platform: 'android',
-            location: 'https://play.google.com/store/apps/details?id=com.glowing_bear',
+            url: 'https://play.google.com/store/apps/details?id=com.glowing_bear',
         },
     ],
 };
 
-writeFileSync(resolve(__dirname, 'webapp.manifest.json'), JSON.stringify(manifest, null, 4) + '\n');
-console.log(`  \u2713 webapp.manifest.json regenerated`);
+const manifestIconLines = manifest.icons
+    .map((i) => `    { "src": "${i.src}", "sizes": "${i.sizes}", "type": "${i.type}" }`)
+    .join(',\n');
+const manifestJson = [
+    '{',
+    '  "name": "Glowing Bear",',
+    '  "short_name": "Glowing Bear",',
+    '  "lang": "en-US",',
+    '  "description": "A weechat-websocket frontend",',
+    '  "theme_color": "#181818",',
+    '  "background_color": "#0a0a0a",',
+    '  "display": "standalone",',
+    '  "orientation": "portrait-primary",',
+    '  "scope": ".",',
+    '  "start_url": ".",',
+    '  "icons": [',
+    manifestIconLines,
+    '  ],',
+    '  "prefer_related_applications": false,',
+    '  "related_applications": [',
+    '    {',
+    '      "platform": "android",',
+    '      "url": "https://play.google.com/store/apps/details?id=com.glowing_bear"',
+    '    }',
+    '  ]',
+    '}',
+].join('\n');
+
+const manifestPath = resolve(__dirname, 'manifest.webmanifest');
+const currentManifest = existsSync(manifestPath) ? readFileSync(manifestPath, 'utf8') : null;
+if (currentManifest === manifestJson + '\n') {
+    console.log(`  \u2298 manifest.webmanifest \u2014 up to date`);
+} else {
+    writeFileSync(manifestPath, manifestJson + '\n');
+    console.log(`  \u2713 manifest.webmanifest regenerated`);
+}
 console.log('Done.');
