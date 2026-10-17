@@ -65,6 +65,12 @@ App-layout and KeyboardShortcuts. A release requires a full clean run of both pa
 rerun the whole suite before believing an isolated failure, and never release on a run
 that had a failure even if the failing spec passes on its own.
 
+`npm run tauri build` can fail at its last step — `failed to run bundle_dmg.sh` — after
+the Rust build and `Glowing Bear.app` both succeeded. That is the DMG bundler tripping
+over volumes an earlier build left mounted: `ls /Volumes/ | grep '^dmg\.'` showed four
+of them here, and ejecting each with `hdiutil detach /Volumes/dmg.XXXX -force` made the
+same command produce both bundles. Eject them before reading it as a platform defect.
+
 ---
 
 ## Step 3: Commit and push
