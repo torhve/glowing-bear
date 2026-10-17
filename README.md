@@ -1,5 +1,10 @@
 # Glowing Bear
 
+[![CI](https://github.com/torhve/glowing-bear/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/torhve/glowing-bear/actions/workflows/ci.yml?query=branch%3Amain)
+[![Release](https://img.shields.io/github/v/release/torhve/glowing-bear?label=release)](https://github.com/torhve/glowing-bear/releases/latest)
+[![License](https://img.shields.io/github/license/torhve/glowing-bear)](./COPYING)
+![WeeChat](https://img.shields.io/badge/WeeChat-4.10.1%2B_API_or_3.x%2B_legacy-blue)
+
 A web frontend for the [WeeChat](https://weechat.org) IRC client. Connects directly to WeeChat through the relay plugin — no backend service required.
 
 Glowing Bear speaks two relay protocols and picks one automatically: the JSON **Relay API** (HTTP + WebSocket, WeeChat >= 4.10.1, API 0.6.0) when the relay supports it, and the legacy WebSocket protocol for older WeeChat versions. You can pin the choice in settings (`auto` / `api` / `legacy`). Password authentication supports plain, SHA-256/SHA-512, and PBKDF2+SHA-256/SHA-512 on both paths. Relays that require TOTP (`relay.network.totp`) work on the legacy path (the code is requested interactively); the API path cannot deliver TOTP over a browser WebSocket and will report it clearly.
