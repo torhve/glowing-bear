@@ -13,7 +13,7 @@ import {
     connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, beginSessionStats,
     setNextReconnectAt,
 } from '#lib/stores/connectionStore.ts';
-import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, weechatVersion, relayApiVersion, hasNoHistoryToFetch, markHistoryComplete, historyWindowEstablished, historyPageSize, growHistoryLimit, initialHistoryWindow } from '#lib/stores/models.ts';
+import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, weechatVersion, relayApiVersion, historyWindowEstablished, historyPageSize, growHistoryLimit, initialHistoryWindow } from '#lib/stores/models.ts';
 
 import { resolveApiEndpoint } from '#lib/api/api-endpoint.ts';
 import { ApiOrchestrator, type OrchestratorStatus } from '#lib/api/api-orchestrator.ts';
@@ -499,13 +499,6 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
 
     if (buffer.allLinesFetched) return;
 
-    // Free buffers (/exec -nf, plugin output) have no older history — their rows
-    // are live-only, so asking for history would re-deliver the current rows as
-    // duplicates. Mark them complete instead of issuing a lines request.
-    if (hasNoHistoryToFetch(buffer)) {
-        markHistoryComplete(bufferId);
-        return;
-    }
     if (pendingFetchBuffers.has(buffer.id)) return;
     pendingFetchBuffers.add(buffer.id);
 

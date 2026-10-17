@@ -38,7 +38,9 @@ const EXEC_NAME = 'gbtest-free-history';
 const SHORT_NAME = 'exec.gbtest-free-history';
 
 test('a free buffer shows its rows without a fetch-more affordance', async () => {
-    // A free buffer (/exec -nf) has live-only rows: there is no older history.
+    // The two planted rows fit the initial window, so the buffer is complete on
+    // the first fetch and no page is offered. A deep free buffer pages like a
+    // channel — that case lives in FreeBufferPaging.test.ts.
     await typeCommand(`/exec -nf -name ${EXEC_NAME} echo free-row-1`);
     // Stop the timer so the row set stays stable while we assert on it.
     await typeCommand(`/exec -stop ${EXEC_NAME}`);

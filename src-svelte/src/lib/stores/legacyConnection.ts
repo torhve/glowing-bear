@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
 import { setConnectionStatus, setErrors, clearErrors, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, beginSessionStats } from '#lib/stores/connectionStore.ts';
-import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, weechatVersion, hasNoHistoryToFetch, markHistoryComplete, historyWindowEstablished, historyPageSize, growHistoryLimit, initialHistoryWindow } from '#lib/stores/models.ts';
+import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, weechatVersion, historyWindowEstablished, historyPageSize, growHistoryLimit, initialHistoryWindow } from '#lib/stores/models.ts';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist, flushLineBatch, setOnUpgrade, setOnUpgradeEnded } from '#lib/stores/handlers.ts';
 import { addToast, removeToast, clearToasts, toastStore } from '#lib/toast.ts';
 
@@ -1091,13 +1091,6 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
         return;
     }
 
-    // Free buffers (/exec -nf, plugin output) have no older history — their rows
-    // are live-only, so asking for history would re-deliver the current rows as
-    // duplicates. Mark them complete instead of issuing a line request.
-    if (hasNoHistoryToFetch(buffer)) {
-        markHistoryComplete(bufferId);
-        return;
-    }
 
     const bufferIdStr = '0x' + buffer.id;
     if (pendingFetchBuffers.has(bufferIdStr)) {
@@ -1125,6 +1118,13 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
     numLines = deliberate
         ? historyPageSize(numLines, growHistoryLimit(bufferId))
         : historyPageSize(numLines, Math.max(initialHistoryWindow(), buffer.lines.length));
+    // The response is applied as a wholesale replacement of the buffer's lines
+    // (see handleLineInfo), so it is only safe to apply while the buffer still
+    // holds what this request was built against. WeeChat re-renders its own
+    // buffers — relay.list on every client connect/disconnect — and a clear that
+    // lands mid-request would otherwise reinstate the pre-clear window next to
+    // the fresh rows that arrive after it.
+    const clearEpochBefore = buffer.clearEpoch ?? 0;
 
     const msg = Protocol.formatHdata({
         path: `buffer:0x${buffer.id}/own_lines/last_line(-${numLines})/data`,
@@ -1168,6 +1168,11 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
         // created a new store copy during the async wait, so our captured reference is stale.
         const freshBuffer = getBuffer(bufferId);
         if (!freshBuffer) return;
+        // A clear landed while this request was in flight: the window it carries
+        // is the pre-clear one and the fresh rows are still to come. Drop it
+        // rather than replacing the buffer with stale content, and leave the
+        // history gate open so the next visit asks again.
+        if ((freshBuffer.clearEpoch ?? 0) !== clearEpochBefore) return;
         // handleLineInfo remaps a known boundary by stable line identity. If the
         // previous anchor is absent, it deliberately leaves the boundary unknown.
         // This avoids deriving a false position from hotlist totals or row counts.

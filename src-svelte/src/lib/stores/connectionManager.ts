@@ -15,7 +15,6 @@
 //  - 'api' / 'legacy': skip probing and connect directly on the choice.
 
 import { get } from 'svelte/store';
-import { getBuffer, activeBufferId, hasNoHistoryToFetch, markHistoryComplete } from '#lib/stores/models.ts';
 import { settings } from '#lib/stores/settings.ts';
 import { activeTransport, connectionState } from '#lib/stores/connectionStore.ts';
 import { resolveApiEndpoint } from '#lib/api/api-endpoint.ts';
@@ -240,15 +239,11 @@ export async function requestNicklist(bufferId: string): Promise<void> {
 }
 
 export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: string, deliberate = false): Promise<void> {
-    // Free buffers (/exec -nf, plugin output) have no older history: gate them
-    // here as well as inside each transport, because each transport also calls
-    // its own fetchMoreLines when you switch to a buffer.
-    const bufferId = explicitBufferId ?? get(activeBufferId);
-    const buffer = getBuffer(bufferId);
-    if (buffer && hasNoHistoryToFetch(buffer)) {
-        markHistoryComplete(bufferId);
-        return;
-    }
+    // No buffer-type rule belongs here. A free buffer (`/exec -nf`, plugin
+    // output, `relay.list`) answers a wider newest-N window with more of its
+    // content exactly like a channel does — see each transport's fetchMoreLines
+    // and api-dossier `probes/probe-free-buffer-depth.mjs`. Refusing every
+    // request for type 1 is what left `relay.list` rendering empty (issue #11).
     // `deliberate` says this page was asked for by the reader, which is what
     // lets a buffer retain more than the screen cap. See each transport's
     // fetchMoreLines.

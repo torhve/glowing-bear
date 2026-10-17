@@ -1004,21 +1004,7 @@ export function findBufferByShortName(
     });
 }
 
-/** Whether a buffer has no older history to ask for. Free buffers (`/exec -nf`,
- * plugin output) hold live-only rows: a history request would re-deliver the
- * current rows as duplicates rather than older content. */
-export function hasNoHistoryToFetch(buffer: BufferData): boolean {
-    return buffer.bufferType === 1;
-}
 
-/** Mark a buffer's history complete so no further history request is issued. */
-export function markHistoryComplete(bufferId: string): void {
-    buffers.update((current) => {
-        const buf = current[bufferId];
-        if (!buf || buf.allLinesFetched) return current;
-        return { ...current, [bufferId]: { ...buf, allLinesFetched: true } };
-    });
-}
 
 /**
  * Did this history response actually establish the buffer's newest window?

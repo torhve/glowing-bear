@@ -7,6 +7,8 @@ import {
 import { createApiStoreReducers } from '#lib/api/api-store-reducers.ts';
 import type { BufferSnapshot } from '#lib/api/api-contracts.ts';
 import type { ApiBufferId } from '#lib/api/api-ids.ts';
+import { handleBufferCleared } from '#lib/stores/handlers.ts';
+import type { ProtocolMessage } from '#lib/types.ts';
 
 /**
  * What the one-shot history gate is allowed to treat as "already fetched".
@@ -76,5 +78,48 @@ describe('a cleared buffer has fetched nothing', () => {
         expect(after.requestedLines, 'nothing has been asked for since the clear').toBe(0);
         expect(after.newestWindowFetched, 'the reused buffer must ask for its own newest window').toBe(false);
         expect(after.allLinesFetched, 'completeness did not survive the clear').toBe(false);
+    });
+});
+
+/**
+ * The other half of the same rule: a clear must also invalidate a window that is
+ * already on its way. fetchMoreLines captures the epoch before asking and re-reads
+ * it after the await, because the response is applied as a wholesale replacement of
+ * the buffer's lines. WeeChat re-renders its own buffers — relay.list on every
+ * client connect and disconnect — so the clear can land mid-request with no user
+ * action, and applying the older window would reinstate content WeeChat had just
+ * thrown away beside the fresh rows that arrive after it.
+ */
+describe('a clear invalidates a window already on its way', () => {
+    const RELAY_LIST_ID = 1759000000000088 as ApiBufferId;
+
+    beforeEach(() => { buffers.set({}); });
+
+    function seedFetchedBuffer(): number {
+        const reducers = createApiStoreReducers();
+        reducers.buffers([snapshot(RELAY_LIST_ID, 'relay.list')]);
+        const key = String(RELAY_LIST_ID);
+        buffers.update((current) => ({
+            ...current,
+            [key]: { ...current[key]!, newestWindowFetched: true, allLinesFetched: true },
+        }));
+        return get(buffers)[key]!.clearEpoch ?? 0;
+    }
+
+    it('the API reducer bumps the epoch a pending response is checked against', () => {
+        const before = seedFetchedBuffer();
+        createApiStoreReducers().bufferCleared(RELAY_LIST_ID);
+        expect(get(buffers)[String(RELAY_LIST_ID)]!.clearEpoch, 'a response built before the clear must not match').toBe(before + 1);
+    });
+
+    it('the legacy handler bumps the same epoch and forgets the same freshness', () => {
+        const before = seedFetchedBuffer();
+
+        handleBufferCleared({ objects: [{ content: [{ pointers: [RELAY_LIST_ID] }] }] } as unknown as ProtocolMessage);
+
+        const after = get(buffers)[String(RELAY_LIST_ID)]!;
+        expect(after.clearEpoch, 'the legacy path guards its wholesale line replacement too').toBe(before + 1);
+        expect(after.newestWindowFetched, 'a re-rendered buffer must ask for its window again').toBe(false);
+        expect(after.allLinesFetched).toBe(false);
     });
 });

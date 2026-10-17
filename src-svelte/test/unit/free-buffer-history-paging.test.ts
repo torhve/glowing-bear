@@ -1,6 +1,8 @@
-// The relay transport facade must not ask either transport for history on a
-// free buffer (/exec -nf, plugin output): those rows are live-only, so a
-// history request re-delivers the current rows instead of older content.
+// Free buffers (/exec -nf, plugin output, relay.list) page history exactly like
+// channels: the relay answers a wider newest-N window with more of the buffer's
+// content, so nothing may be refused on account of buffer type. Issue #11 is
+// what happened when "free" was read as "no history to fetch" — `relay.list`,
+// whose rows predate the connection, rendered empty (issue #11).
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import { activeBufferId, buffers, createBuffer } from '#lib/stores/models.ts';
@@ -11,7 +13,7 @@ import { fetchMoreLines as legacyFetchMoreLines } from '#lib/stores/legacyConnec
 
 // The facade registers each transport's adapter when it loads, so a mock of a
 // transport has to carry one or the facade throws before the test runs. Kept
-// inert: this spec is about the history gate, not about retry state.
+// inert: this spec is about history paging, not about retry state.
 const inertAdapter = vi.hoisted(() => (kind: 'api' | 'legacy') => ({
     kind,
     open: () => Promise.resolve(),
@@ -54,22 +56,34 @@ beforeEach(() => {
     activeBufferId.set(CHANNEL_ID);
 });
 
-describe('connectionManager history gate', () => {
-    it('a free buffer never reaches either transport', async () => {
+describe('connectionManager history paging', () => {
+    it('a free buffer reaches the transport for its initial window', async () => {
+        // `relay.list` is a free buffer whose rows exist before this connection,
+        // so the window request is the only thing that can deliver them.
         await fetchMoreLines(100, FREE_ID);
 
-        expect(apiFetchMoreLines).not.toHaveBeenCalled();
+        expect(apiFetchMoreLines).toHaveBeenCalledTimes(1);
         expect(legacyFetchMoreLines).not.toHaveBeenCalled();
-        expect(get(buffers)[FREE_ID]!.allLinesFetched).toBe(true);
     });
 
-    it('the active buffer is gated too, without an explicit id', async () => {
+    it('a reader page on a free buffer reaches the transport too', async () => {
+        // Live probe (api-dossier `probes/probe-free-buffer-depth.mjs`): a free
+        // buffer holding 501 rows answers `lines=-40` with 40 and `lines=-1000`
+        // with all 501, so a page is not a no-op. Completeness is the transport's
+        // answer to make, not the buffer type's.
+        await fetchMoreLines(0, FREE_ID, true);
+
+        expect(apiFetchMoreLines).toHaveBeenCalledTimes(1);
+        expect(legacyFetchMoreLines).not.toHaveBeenCalled();
+        expect(get(buffers)[FREE_ID]!.allLinesFetched, 'the facade must not close the gate on its own').not.toBe(true);
+    });
+
+    it('the active buffer is asked without an explicit id', async () => {
         activeBufferId.set(FREE_ID);
 
         await fetchMoreLines(100);
 
-        expect(apiFetchMoreLines).not.toHaveBeenCalled();
-        expect(legacyFetchMoreLines).not.toHaveBeenCalled();
+        expect(apiFetchMoreLines).toHaveBeenCalledTimes(1);
     });
 
     it('a channel buffer still asks the active transport', async () => {

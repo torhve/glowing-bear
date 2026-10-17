@@ -1152,8 +1152,16 @@ export function handleBufferCleared(message: ProtocolMessage) {
         readBoundaryId: null,
         pendingReadBoundaryUnread: 0,
         lastSeen: -1,
+        // Nothing is held any more, so this session has fetched nothing either —
+        // the same rule the API reducer applies, and what lets a buffer WeeChat
+        // re-renders (relay.list) be asked for its window again.
+        newestWindowFetched: false,
+        allLinesFetched: false,
     });
     if (!updated) return;
+    // A delayed history response is validated against this epoch: bumping it is
+    // what makes fetchMoreLines drop a window built before this clear.
+    updated.clearEpoch = (updated.clearEpoch ?? 0) + 1;
     // Use update() to merge with current store state, preventing overwrites
     // of concurrent changes from other handlers.
     buffers.update((current) => ({ ...current, [bufferId]: updated }));

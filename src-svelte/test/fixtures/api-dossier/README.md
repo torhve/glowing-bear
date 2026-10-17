@@ -190,7 +190,29 @@ No PUT/DELETE resources exist despite the CORS Allow header.
   widening N. Upstream glowing-bear does exactly that, doubling the window per page
   (`src-angular/js/connection.js:601`, `last_line(-numLines)` at `:609`) and treating
   `linesReceivedCount < numLines` as exhaustion (`:635`). The legacy claim rests on
-  that source and the relay protocol's `line` hdata query, not on a captured frame.
+  that source and the relay protocol's `line` hdata query, not on a captured
+  frame — though the free-buffer case is now proven against the live legacy relay
+  by `e2e/specs/relay-list-rows.test.ts`.
+- **Free buffers answer a window request (live, `probes/probe-free-buffer-window.mjs`).**
+  WeeChat's own status buffers are free buffers: `relay.relay.list` reports
+  `type:"free"`, `short_name:"relay.list"`, and `lines=-100` answers it with its
+  whole current window — sampled 2026-10-17 as 6 rows, ids 0..5 oldest-first, the
+  `Actions (letter+enter):` header first and a blank separator row after it. The
+  line object carries `message`, not `text`. At `lines=0` the buffer object omits
+  `lines_total`, `first_line_id` and `last_line_id` entirely, so a client cannot
+  learn the window exists without asking for it. The row count is churn-dependent
+  (relay.list lists every client WeeChat has seen), so nothing may assert a fixed
+  number.
+- **A free buffer's window is not its whole content (live, `probes/probe-free-buffer-depth.mjs`).**
+  Planting 300 rows into an `/exec -nf` free buffer (`seq 1 300`, rows render
+  `N. N`) and asking `lines=-40` returns 40 rows; `lines=-1000` and the unbounded
+  form return all 301, ids 0..300 oldest-first. Widening the newest-N window
+  reaches older free-buffer content exactly as it does on a channel, so
+  "nothing older" is false for deep free buffers and a reader page on one is not
+  a no-op. What issue #11 was: treating `type:"free"` as a ban on *every* line
+  request, which left `relay.list` — a free buffer whose rows predate the
+  connection — rendering empty. Completeness is the response's answer (returned
+  fewer lines than requested), never the buffer type's.
 
 ### G1 notify experiment (live)
 
@@ -641,13 +663,16 @@ upstream has not moved.
 
 Recorded here so the gaps survive in tracked history, not only in local notes:
 
-- **Free-buffer history gate.** `hasNoHistoryToFetch`/`markHistoryComplete` stop
-  `fetchMoreLines` for `bufferType === 1` buffers. The gate is proven by
-  `test/unit/free-buffer-history-gate.test.ts` (transport spies: disabling it
-  fails 2 tests). `e2e/specs/FreeBuffer-history.test.ts` only proves row
-  stability and the absent "Fetch more lines" affordance — that affordance is
-  absent with or without the guard, so it is **not** regression coverage for the
-  gate.
+- **Free buffers page like channels.** The pre-fix code refused every history
+  request for `bufferType === 1` buffers, which rendered `relay.list` empty
+  (issue #11). A deep free buffer provably answers a wider window with older
+  content (`probes/probe-free-buffer-depth.mjs`), so no type-based gate exists
+  any more: `free-buffer-history-paging.test.ts` pins that both a window fetch
+  and a reader page reach the transport, and `e2e/specs/FreeBufferPaging.test.ts`
+  pages a 300-row `/exec` buffer to the top on both live relays without
+  duplicates. `e2e/specs/relay-list-rows.test.ts` pins the original symptom on
+  both transports, and `e2e/specs/FreeBuffer-history.test.ts` pins the
+  small-buffer case (complete on the first fetch, no page offered).
 - **`/grep` freshness.** `waitForFreshBuffer` resolves on the first change
   (newly opened buffer, `clearEpoch` bump, or changed line count). A clear
   precedes the result lines, so the switch can land on an empty buffer whose
