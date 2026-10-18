@@ -22,7 +22,7 @@
     "pretauri:build": "npm run generate-icons && npm run generate-icns",
     "preview": "vite preview",
     "check": "npm run check:app && npm run check:sw && npm run check:weechat-format",
-    "precheck": "node scripts/check-nested-deps.mjs && npm run sync",
+    "precheck": "node scripts/check-nested-deps.mjs && npm run generate-icons && npm run sync",
     "check:app": "svelte-check --tsconfig ./tsconfig.app.json",
     "check:sw": "tsc --noEmit -p src-svelte/src/service-worker/tsconfig.json",
     "check:weechat-format": "npm run typecheck --workspace @glowingbear/weechat-format",
