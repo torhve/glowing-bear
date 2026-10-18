@@ -19,9 +19,11 @@ The API surface is not guessed: `api-dossier/README.md` records what a real WeeC
 
 ### Relay transports (dual protocol — never regress)
 
-The app is a **dual-protocol client**. `connectionManager.ts` chooses one transport per connection profile (`host:port:tls`): `api` when the address answers the API probe, `legacy` otherwise; settings can pin `protocol: "api" | "legacy" | "auto"`. The choice is cached until an explicit disconnect, so reconnects do not re-probe.
+The app is a **dual-protocol client**. `connectionManager.ts` chooses one transport per connection profile (`host:port:tls`): `api` when the address answers the API probe, `legacy` otherwise; settings can pin `protocol: "api" | "legacy" | "auto"`. The choice is cached per profile and holds only what a session proved, so reconnects do not re-probe; the rules and where each is tested are in `test/unit/transport-choice-recovery.test.ts` and `e2e/specs/Dual-protocol.test.ts`.
 
 - Exactly one transport is active per connection. Never add a mid-connection fallback: a failed API connection must not silently switch to legacy, and a legacy connection must not be re-tried over the API.
+
+- `transportByProfile` is written only when an attempt reaches `connected`, and an attempt that never reached one clears the entry for that address. Caching a choice before it connected is how a pinned protocol outlives its own failure (issue #12): the user puts Settings → Relay protocol back on `auto` and auto replays the transport that just failed, with no way out except editing localStorage. A session that later dropped keeps its entry — a dropped session is a transport loss, not a protocol fact. `api`/`legacy` are preferences, not guarantees: when nothing answers as the pinned protocol the failure is named `protocolUnansweredError` and the connection form offers the way back (Auto, or the other protocol), because the settings modal belongs to a chat shell a failed connection never opens.
 
 - The phase-13 items that removed binary decoding, decompression and the legacy frame grammar from the API path are **deliberate**; do not re-tick them. `fflate` stays in the app because the legacy transport still needs zlib — deleting it breaks the legacy path, not the API path.
 

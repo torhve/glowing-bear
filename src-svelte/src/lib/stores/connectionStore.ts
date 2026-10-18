@@ -34,7 +34,8 @@ const initialState: ConnectionState = {
         clockSkewError: false,
         errorMessage: false,
         uploadError: false,
-        serverUnreachable: false
+        serverUnreachable: false,
+        protocolUnansweredError: false
     },
     userDisconnect: false,
     wasEverConnected: false,

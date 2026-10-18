@@ -299,7 +299,24 @@ export interface ConnectionError {
     errorMessage: boolean;
     uploadError: boolean;
     serverUnreachable: boolean;
+    /**
+     * A pinned relay protocol was tried and nothing on the port answered as that
+     * protocol. It names what the app saw, not a verdict: the port may speak the
+     * other relay, or nothing may be listening on it, and from here those two
+     * look identical. What it buys is the distinction that matters to the user —
+     * the first is fixable from the connection form, and the pin is the only part
+     * of it the user chose. Distinct from serverUnreachable, which it replaces
+     * for this case so the failure is explained once. Only an attempt that never
+     * established a session may set it: a session that later dropped has already
+     * proved its transport.
+     */
+    protocolUnansweredError: boolean;
 }
+
+/** What the user asked for in Settings → Relay protocol. `auto` means "probe
+ *  the address and let the relay decide"; 'api' and 'legacy' pin the transport
+ *  and skip the probe. */
+export type ProtocolPreference = 'auto' | 'api' | 'legacy';
 
 // ---- Settings ----
 
@@ -337,7 +354,7 @@ export interface Settings {
     enableFormatting: boolean;
     /** Relay transport selection: 'auto' probes the API handshake and falls
      *  back to the legacy WebSocket protocol for WeeChat < 4.10.1. */
-    protocol: 'auto' | 'api' | 'legacy';
+    protocol: ProtocolPreference;
     angularTimeFormat?: string;
     supports_formatting_date?: boolean;
 }

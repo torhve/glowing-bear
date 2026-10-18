@@ -67,6 +67,10 @@ function reasonFor(errors: ConnectionError, status: ConnectionState['status']): 
     if (errors.tlsError) return 'The TLS connection failed.';
     if (errors.securityError) return 'WeeChat refused the connection for security reasons.';
     if (errors.oldWeechatError) return 'This WeeChat is too old for the API transport.';
+    // Only ever set for an attempt that never established a session, so this is
+    // never said about a session that was lost — that is a transport loss, and the
+    // transport was already proved by the session it held.
+    if (errors.protocolUnansweredError) return 'Nothing on this port answered as the relay protocol you selected.';
     if (errors.serverUnreachable) return 'The relay could not be reached.';
     if (errors.uploadError) return 'WeeChat rejected the initialization data.';
     if (errors.errorMessage) return 'WeeChat reported an error.';

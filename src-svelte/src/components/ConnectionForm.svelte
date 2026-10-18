@@ -26,6 +26,7 @@
   import List from '@lucide/svelte/icons/list';
   import Save from '@lucide/svelte/icons/save';
   import Loader2 from '@lucide/svelte/icons/loader-2';
+  import type { ProtocolPreference } from '#lib/types.ts';
   import FormInput from './FormInput.svelte';
   import TauriTitlebar from './TauriTitlebar.svelte';
   import { DEBUG_FORM } from '#lib/debug.ts';
@@ -187,6 +188,27 @@
 
   function handlePortChange() {
     updateSettings({ port });
+  }
+
+  // What the failure block can offer. `protocolUnansweredError` is only ever set
+  // for a pinned preference, but the labels stay total rather than assuming it.
+  const pinnedLabel = $derived(
+    $settings.protocol === 'api' ? 'the new Relay API'
+      : $settings.protocol === 'legacy' ? 'the legacy WebSocket'
+      : 'the relay protocol you selected');
+  const otherProtocol = $derived<ProtocolPreference>($settings.protocol === 'api' ? 'legacy' : 'api');
+  const otherLabel = $derived(otherProtocol === 'api' ? 'the new Relay API' : 'the legacy WebSocket');
+
+  // A pin is a stored setting, so these buttons say exactly what they do: rewrite
+  // Settings → Relay protocol, then start a new attempt. They live on the failure
+  // screen because that is the only screen a user with a bad pin can reach — the
+  // settings modal belongs to the chat shell, and a connection that never
+  // produced one has no shell. handleConnect() quiesces both transports before it
+  // connects, which also ends a retry loop spending its attempts on a transport
+  // that cannot work on this port.
+  function switchProtocol(protocol: ProtocolPreference) {
+    updateSettings({ protocol });
+    void handleConnect();
   }
 
   function toggleTLS() {
@@ -356,7 +378,37 @@
             </ul>
           </div>
         {/if}
-        {#if $connectionState.errors.serverUnreachable}
+        {#if $connectionState.errors.protocolUnansweredError}
+          <div data-testid="error-message" data-error-type="protocol-unanswered" class="connection-error bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
+            <p class="font-medium">Nothing at {hostField}:{port} answered as {pinnedLabel} relay.</p>
+            <p class="mt-2">
+              Settings → Relay protocol is pinned to <code class="font-mono">{$settings.protocol}</code>, so Glowing Bear
+              connected that way without probing this address. Either this port runs the other relay, or nothing is
+              listening on it — from here those two look the same, and only the first is fixable from this screen.
+            </p>
+            <div class="connection-error-actions mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                data-testid="protocol-recovery-auto"
+                onclick={() => switchProtocol('auto')}
+                disabled={$connectionState.status === 'connecting'}
+                class="rounded border border-border px-2.5 py-1 text-text-secondary hover:text-white hover:bg-surface-raised transition-colors disabled:opacity-40"
+              >
+                Switch to Auto and reconnect
+              </button>
+              <button
+                type="button"
+                data-testid="protocol-recovery-other"
+                onclick={() => switchProtocol(otherProtocol)}
+                disabled={$connectionState.status === 'connecting'}
+                class="rounded border border-border px-2.5 py-1 text-text-secondary hover:text-white hover:bg-surface-raised transition-colors disabled:opacity-40"
+              >
+                Switch to {otherLabel} and reconnect
+              </button>
+            </div>
+          </div>
+        {/if}
+        {#if $connectionState.errors.serverUnreachable && !$connectionState.errors.protocolUnansweredError}
           <div data-testid="error-message" data-error-type="server-unreachable" class="connection-error bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
             Unable to reach WeeChat relay at {hostField}:{port} — check that it is running and reachable{#if tls} — a TLS toggle that does not match the relay also shows up as "unreachable"{/if}
           </div>

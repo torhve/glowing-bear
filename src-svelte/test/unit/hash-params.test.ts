@@ -63,6 +63,24 @@ describe('applyHashParams', () => {
         expect(get(settings).autoconnect).toBe(false);
     });
 
+    // The protocol pin is the setting a user with a bad pin has to change, and the
+    // hash is the only way to change it without the settings modal — which belongs
+    // to a chat shell a failed connection never opens.
+    it('parses protocol=auto, api and legacy', () => {
+        for (const protocol of ['auto', 'api', 'legacy'] as const) {
+            setHash(`protocol=${protocol}`);
+            applyHashParams();
+            expect(get(settings).protocol, protocol).toBe(protocol);
+        }
+    });
+
+    it('ignores a protocol value the app cannot act on', () => {
+        updateSettings({ protocol: 'auto' });
+        setHash('protocol=weechat');
+        applyHashParams();
+        expect(get(settings).protocol, 'a value that skips probing or does not skip it must not be guessed').toBe('auto');
+    });
+
     it('parses multiple parameters together', () => {
         setHash('host=localhost&port=9001&password=testpass&autoconnect=true');
         applyHashParams();

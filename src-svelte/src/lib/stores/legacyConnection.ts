@@ -100,6 +100,29 @@ export { setHotlistPollInterval } from '#lib/stores/connectionLifecycle.ts';
  *  `ws.onclose`, which also declares capture intent. */
 export const __resetAllStateForTest = resetAllState;
 
+/**
+ * One attempt generation is wiped once.
+ *
+ * The loss path and the retry decision both reach for a wipe, and for one attempt
+ * they are the same wipe: `handleAttemptLoss()` tears the transport down and wipes,
+ * then a declined retry declares the terminal outcome and wipes again. The stores
+ * are already empty by the second run, but it is still a second `onDisconnect()`,
+ * a second capture-intent drain, and it makes "one loss, one wipe" untestable —
+ * which is why the deadline test only passed while a leftover `userDisconnect` kept
+ * the decision from ever reaching its terminal branch.
+ *
+ * Scoped to the generation, not to a boolean: a new attempt bumps
+ * `connectionGeneration`, so the next loss is entitled to its own wipe.
+ */
+let wipedGeneration: number | null = null;
+
+function wipeOnce(retainGeneration?: number): void {
+    const generation = retainGeneration ?? connectionGeneration;
+    if (wipedGeneration === generation) return;
+    wipedGeneration = generation;
+    resetAllState(retainGeneration);
+}
+
 function resetAllState(retainGeneration?: number) {
     // Flush any pending line batches before clearing state to avoid losing data.
     flushLineBatch();
@@ -189,7 +212,7 @@ function handleReconnectDecision(evt: CloseEvent) {
 function handleAttemptLoss(evt: CloseEvent): void {
     clearHandshakeDeadline();
     if (get(connectionState).wasEverConnected) markCaptureIntent();
-    resetAllState(connectionGeneration);
+    wipeOnce(connectionGeneration);
     setConnectionStatus('disconnected');
     const authRejected = detectError(evt);
     // Read before the decision: scheduling a retry wipes the stores, and the reason
@@ -721,7 +744,7 @@ function scheduleReconnect() {
             error: 'connection closed',
             // The transport's own loss path, not an approximation of it: the drain
             // and the protocol teardown are what make the shared wipe safe here.
-            wipe: () => resetAllState(),
+            wipe: () => wipeOnce(),
             // Handled for the same reason as the manual path, and this one is the
             // site that produced a real unhandled rejection: a scheduled retry whose
             // handshake failed had nobody listening for it.

@@ -10,12 +10,12 @@
  * fine.
  */
 import { describe, expect, it } from 'vitest';
-import { classifyConnectionFailure, hasNamedConnectionError } from '#lib/utils/connectionFailure.ts';
+import { classifyConnectionFailure, hasNamedConnectionError, pinIsUnverified } from '#lib/utils/connectionFailure.ts';
 
 const noErrors = {
     passwordError: false, tlsError: false, securityError: false, oldWeechatError: false,
     hashAlgorithmDisagree: false, clockSkewError: false, errorMessage: false,
-    uploadError: false, serverUnreachable: false,
+    uploadError: false, serverUnreachable: false, protocolUnansweredError: false,
 };
 
 describe('classifyConnectionFailure', () => {
@@ -51,6 +51,18 @@ describe('classifyConnectionFailure', () => {
     it('leaves the caller with nothing to overwrite when there is no cause to name', () => {
         expect(classifyConnectionFailure('session closed', false)).toBeNull();
     });
+
+    it('never reads a transport-level failure as an answer from the relay', () => {
+        // `errorMessage` is the one flag that suppresses the pin claim without
+        // naming a credential, so what produces it matters: only a TOTP refusal,
+        // which is a reply the pinned relay itself sent. A local abort or a failed
+        // fetch is still "nothing answered", and stays classified that way.
+        for (const message of ['signal is aborted without reason', 'Failed to fetch', 'Connection closed']) {
+            expect(classifyConnectionFailure(message, true), message).toEqual({ serverUnreachable: true });
+        }
+        expect(classifyConnectionFailure('This WeeChat requires TOTP, which the browser client cannot provide', true))
+            .toEqual({ errorMessage: true });
+    });
 });
 
 describe('hasNamedConnectionError', () => {
@@ -63,5 +75,51 @@ describe('hasNamedConnectionError', () => {
         // named anything.
         expect(hasNamedConnectionError({ ...noErrors, errorMessage: true })).toBe(false);
         expect(hasNamedConnectionError(noErrors)).toBe(false);
+    });
+});
+
+/**
+ * When a failed attempt may blame the user's protocol pin.
+ *
+ * The pin means "connect as api / as legacy without probing", so the claim is
+ * only honest when the failure carries no answer that the pinned protocol alone
+ * could have produced. Each suppressing flag below is a reply a relay can only
+ * send by speaking that protocol — the bodies are the live ones recorded in
+ * test/fixtures/api-dossier/README.md.
+ */
+describe('pinIsUnverified', () => {
+    it('says nothing about a connection the user did not pin', () => {
+        // 'auto' chose the transport; blaming it would blame the app's own probe
+        // for a relay that may simply be down.
+        expect(pinIsUnverified('auto', { ...noErrors, serverUnreachable: true })).toBe(false);
+    });
+
+    it('is the honest remaining explanation when nothing answered', () => {
+        expect(pinIsUnverified('api', { ...noErrors, serverUnreachable: true })).toBe(true);
+        expect(pinIsUnverified('legacy', { ...noErrors, serverUnreachable: true })).toBe(true);
+    });
+
+    it('steps back when the relay answered in the pinned protocol', () => {
+        // A relay that refuses a password, a timestamp, a hash algorithm, a
+        // version, or the initialization data has already proved which protocol
+        // this port speaks. The failure is somewhere else.
+        for (const flag of ['passwordError', 'clockSkewError', 'hashAlgorithmDisagree', 'oldWeechatError', 'uploadError'] as const) {
+            expect(pinIsUnverified('api', { ...noErrors, [flag]: true }), flag).toBe(false);
+        }
+    });
+
+    it('steps back for a failure that happens before either protocol is spoken', () => {
+        // TLS and origin refusals say nothing about the pin and are already their
+        // own explanation.
+        expect(pinIsUnverified('api', { ...noErrors, tlsError: true })).toBe(false);
+        expect(pinIsUnverified('legacy', { ...noErrors, securityError: true })).toBe(false);
+    });
+
+    it('counts a TOTP refusal as an answer from the pinned relay', () => {
+        expect(pinIsUnverified('legacy', { ...noErrors, errorMessage: true })).toBe(false);
+    });
+
+    it('is a named error, so no generic failure message is stacked on top', () => {
+        expect(hasNamedConnectionError({ ...noErrors, protocolUnansweredError: true })).toBe(true);
     });
 });

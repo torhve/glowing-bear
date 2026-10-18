@@ -71,10 +71,17 @@ Then enter your WeeChat host, port, and password in Glowing Bear's connection fo
 
 Add one relay, not both: Glowing Bear probes the address you enter and talks to it over
 one transport — the API relay when the address answers the API probe, the legacy relay
-otherwise. The choice is remembered per `host:port:tls` until you disconnect, so a
-reconnect does not re-probe; disconnecting clears it and lets you change the relay
-configuration. Settings → Relay protocol can pin the transport (`Auto`, `API` or `Legacy`)
-instead of probing.
+otherwise. The choice is remembered per `host:port:tls` and holds only what a session
+proved: a reconnect reuses it without re-probing, while an attempt that never connected
+leaves nothing behind, so a failure cannot pin an address to a transport. Disconnecting
+clears it and lets you change the relay configuration. Settings → Relay protocol can pin
+the transport (`Auto`, `API` or `Legacy`) instead of probing.
+
+A pin is a preference, not a guarantee. If nothing on the port answers as the protocol you
+pinned, the connection form says so and offers the way back — switch to Auto, or switch to
+the other protocol — because the settings that hold the pin belong to the chat shell a
+failed connection never opens. `#protocol=auto|api|legacy` in the URL sets the same setting
+without the form.
 
 Options worth knowing (all under `relay.network.*` unless noted):
 

@@ -101,7 +101,7 @@ beforeEach(() => {
         errors: {
             passwordError: false, tlsError: false, securityError: false, oldWeechatError: false,
             hashAlgorithmDisagree: false, clockSkewError: false, errorMessage: false,
-            uploadError: false, serverUnreachable: false,
+            uploadError: false, serverUnreachable: false, protocolUnansweredError: false,
         },
         userDisconnect: false,
         wasEverConnected: false,

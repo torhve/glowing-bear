@@ -153,6 +153,51 @@ test.describe('Dual-protocol transport selection', () => {
         await page.close();
     });
 
+    // The trap the reporter hit: a pin is set in Settings, the connection fails,
+    // and the only screen left is the connection form — which has no protocol
+    // control, because the settings modal belongs to the chat shell this attempt
+    // never produced. Before, the way out was editing localStorage by hand.
+    // These two specs are the way out, each against the real relay the pin got
+    // wrong, and each finishing on a working connection rather than on a message.
+    test('a pinned API failure offers the way back and recovers onto legacy', async ({ browser }) => {
+        const page = await freshPage(browser);
+        await setSettings(page, { protocol: 'api' });
+        await connectExpectError(page, '9001');
+
+        await expect(page.getByTestId('protocol-recovery-auto')).toBeVisible();
+        await expect(page.getByTestId('protocol-recovery-other')).toBeVisible();
+        // Explained once. The generic "unable to reach" block is the same failure
+        // read less honestly, and it would sit on top of this one.
+        await expect(page.locator('[data-error-type="server-unreachable"]')).toHaveCount(0);
+
+        await page.getByTestId('protocol-recovery-auto').click();
+        await page.getByTestId('chat-view').waitFor({ state: 'visible', timeout: 60_000 });
+        await waitForTransport(page, 'legacy');
+        // The button says "switch", and it means it: this is the setting the next
+        // page load will use, not a one-off override for this attempt.
+        const stored = await page.evaluate(
+            () => JSON.parse(localStorage.getItem('gb-settings') ?? '{}').protocol);
+        expect(stored).toBe('auto');
+        await page.close();
+    });
+
+    test('a pinned legacy failure offers the other relay and recovers onto the API', async ({ browser }) => {
+        const page = await freshPage(browser);
+        await setSettings(page, { protocol: 'legacy' });
+        await connectExpectError(page, '9010');
+
+        // The other-relay button, not Auto: the reporter's own case is an address
+        // that speaks the other protocol, and that is the one thing this screen can
+        // actually fix.
+        await page.getByTestId('protocol-recovery-other').click();
+        await page.getByTestId('chat-view').waitFor({ state: 'visible', timeout: 60_000 });
+        await waitForTransport(page, 'api');
+        const stored = await page.evaluate(
+            () => JSON.parse(localStorage.getItem('gb-settings') ?? '{}').protocol);
+        expect(stored).toBe('api');
+        await page.close();
+    });
+
     test('legacy transport survives a dropped socket and reconnects on legacy', async ({ browser }) => {
         test.setTimeout(120_000); // 3s probe + 30s backoff + reconnect + wire check
         const page = await freshPage(browser);

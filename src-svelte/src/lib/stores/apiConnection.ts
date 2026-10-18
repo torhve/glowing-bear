@@ -387,11 +387,15 @@ function pendingRetry(): PendingRetry {
 /**
  * Cancel everything this transport might still do, without wiping app stores and
  * without recording a user-initiated disconnect. See the legacy transport for the
- * full reasoning; the API transport is the easy case because the orchestrator
- * already owns its retry timer and its abort controller, so stopping it cancels
- * both.
+ * full reasoning.
+ * The API transport's ladder is NOT an orchestrator-owned timer:
+ * `scheduleRetry` arms the shared one in `connectionLifecycle`, whose callback
+ * calls back into this transport, so stopping the orchestrator alone leaves a
+ * replaced transport able to fire a reconnect for a relay the user has moved on
+ * from. Cancelling that timer is the whole point of quiescing this one.
  */
 function quiesce(): void {
+    cancelPendingRetry();
     // The hotlist poll is shared now; stopping it here is the only thing that
     // keeps a replaced transport from polling a relay the user has left.
     stopHotlistPoll();

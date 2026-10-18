@@ -12,11 +12,16 @@
 //    handshake is attempted against an API listener). Any other outcome
 //    (non-200, network/TLS error, timeout — a legacy listener waits for the
 //    binary handshake and never answers HTTP) → legacy path.
-//  - 'api' / 'legacy': skip probing and connect directly on the choice.
+//  - 'api' / 'legacy': a preference, not a guarantee. Skip probing and connect
+//    directly on the choice; if that attempt fails without ever reaching a
+//    session, the failure is named as a protocol mismatch so the connection form
+//    can offer the way back to 'auto'. Switching transports mid-connection is
+//    still forbidden — see docs and the dual-protocol rule.
 
 import { get } from 'svelte/store';
 import { settings } from '#lib/stores/settings.ts';
-import { activeTransport, connectionState } from '#lib/stores/connectionStore.ts';
+import { activeTransport, connectionState, setErrors } from '#lib/stores/connectionStore.ts';
+import { pinIsUnverified } from '#lib/utils/connectionFailure.ts';
 import { resolveApiEndpoint } from '#lib/api/api-endpoint.ts';
 import * as api from '#lib/stores/apiConnection.ts';
 import * as legacy from '#lib/stores/legacyConnection.ts';
@@ -112,15 +117,27 @@ async function probeApiRelay(host: string, port: number, path: string, tls: bool
     }
 }
 
-// Transport chosen per relay profile (host:port:tls). Reconnects to the same
-// relay reuse it without re-probing; an explicit disconnect clears it so a
-// re-connect sees any relay configuration change.
+// Transport chosen per relay profile (host:port:tls), and it holds only what a
+// session proved: an entry is written when an attempt reaches 'connected', so a
+// reconnect to the same relay reuses it without re-probing. A failed attempt
+// writes nothing and clears any entry for that address — a probe is a guess and
+// a pinned preference is an instruction, and neither is evidence. An explicit
+// disconnect clears the map so a re-connect sees any relay configuration change.
 //
 // This key is deliberately narrower than the draft identity in
 // `lib/connectionProfile.ts`: it caches which protocol answers on an address and
 // ignores the reverse-proxy path. Drafts must not share it — two proxy paths on
 // one address are two relays.
 const transportByProfile = new Map<string, RelayTransport>();
+
+// Which attempt is the newest for a given address. A superseded attempt still
+// settles — quiesced by the connect that replaced it — and what it learned
+// describes an attempt the app already discarded. Only the newest attempt may
+// write, erase or comment on what an address proved: otherwise a discarded
+// attempt could clear the proof a live session holds, or name a protocol problem
+// beside a session that just disproved it.
+const attemptSeqByProfile = new Map<string, number>();
+let attemptSeq = 0;
 
 function profileKey(host: string, port: number, tls: boolean): string {
     return `${host}:${port}:${tls ? 'tls' : 'plain'}`;
@@ -133,6 +150,26 @@ export async function connect(target: ConnectionProfile): Promise<void> {
     // which transport serves an address; the parameter is the address itself. The
     // old code called both `profile`, which made the two meanings indistinguishable.
     const key = profileKey(host, port, tls);
+    const seq = ++attemptSeq;
+    attemptSeqByProfile.set(key, seq);
+    // Read at settlement, not at start: by the time this attempt settles, a newer
+    // one for the same address may already own the description of it.
+    const isCurrentAttempt = () => attemptSeqByProfile.get(key) === seq;
+    // A connect the user asked for ends the departure a Leave recorded. Left set,
+    // the shared classifier reads this attempt's failure as the user having left,
+    // and names nothing at all: no "wrong password" after a Leave and a typo, no
+    // "unreachable" after a Leave and a wrong port. Only reaching a session clears
+    // the marker otherwise, and an attempt that never reached one is exactly the
+    // case that has to say what went wrong.
+    // The rule this rests on: `connect()` has exactly two callers, and both are a
+    // fresh intent — `ConnectionForm.handleConnect` (a Connect click, including the
+    // recovery buttons that re-run it) and `+page.svelte`'s mount-time autoconnect,
+    // which only runs on a page load where the marker was never set. A Leave does
+    // not re-run it, and focus reconnect reaches the transport adapter through
+    // `retryAvailability()`, never this function.
+    if (get(connectionState).userDisconnect) {
+        connectionState.update((current) => ({ ...current, userDisconnect: false }));
+    }
     // Capture the endpoint this attempt targets. Per-conversation state keys on
     // it, so it comes from the arguments of the attempt rather than from settings,
     // which stay editable while disconnected.
@@ -162,17 +199,60 @@ export async function connect(target: ConnectionProfile): Promise<void> {
     if (preference === 'auto') {
         transport = transportByProfile.get(key)
             ?? (await probeApiRelay(host, port, path, tls) ? 'api' : 'legacy');
-        transportByProfile.set(key, transport);
     } else {
         transport = preference;
-        transportByProfile.set(key, transport);
     }
     activeTransport.set(transport);
-    return transport === 'api'
-        ? api.connect(target)
-        // The legacy relay only completes the WebSocket upgrade under the
-        // '/weechat' path; an empty path would hang the socket forever.
-        : legacy.connect({ ...target, path: target.path || 'weechat' });
+
+    // The fact worth remembering about an attempt is whether it ever reached a
+    // session, and only the status store can say so: both transports resolve on
+    // 'connected', but they also resolve on a teardown and reject after a session
+    // was already established, so the settled promise is not the evidence.
+    //
+    // `lastStatus` makes this a transition rather than a reading. A connect
+    // started from "Edit connection" over a live session would otherwise see the
+    // leftover 'connected' and credit this attempt with a session it never
+    // produced. Both transports write 'connecting' synchronously before any
+    // await, so the transition is always observable.
+    let reachedSession = false;
+    let lastStatus = get(connectionState).status;
+    const watchAttempt = connectionState.subscribe((state) => {
+        if (state.status === 'connected' && lastStatus !== 'connected') reachedSession = true;
+        lastStatus = state.status;
+    });
+
+    try {
+        await (transport === 'api'
+            ? api.connect(target)
+            // The legacy relay only completes the WebSocket upgrade under the
+            // '/weechat' path; an empty path would hang the socket forever.
+            : legacy.connect({ ...target, path: target.path || 'weechat' }));
+    } catch (error) {
+        if (!reachedSession && isCurrentAttempt()) {
+            // Nothing about this attempt proved which protocol answers on this
+            // address, so nothing may be kept as if it had. Remembering a
+            // transport that just failed is how a pinned choice outlives its own
+            // failure: the user puts Settings → Relay protocol back on Auto, and
+            // Auto replays the transport that never connected.
+            // `isCurrentAttempt()` keeps a superseded attempt out of this: it settles
+            // too, but what it saw describes an attempt the app already threw away.
+            transportByProfile.delete(key);
+            // The pin is the one variable the user can change here, and saying so
+            // is what makes the connection form able to offer the way back.
+            if (pinIsUnverified(preference, get(connectionState).errors)) {
+                setErrors({ protocolUnansweredError: true });
+            }
+        }
+        throw error;
+    } finally {
+        watchAttempt();
+        // Only a session is evidence about an address. A probe is a guess and a
+        // pinned preference is an instruction; neither earns an entry until an
+        // attempt on it has connected. An attempt that did connect keeps that
+        // proof even when this promise settled on the loss that followed it — a
+        // dropped session is a transport loss, not a protocol fact.
+        if (reachedSession && isCurrentAttempt()) transportByProfile.set(key, transport);
+    }
 }
 
 export function disconnect(): void {

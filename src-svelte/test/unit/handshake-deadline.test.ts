@@ -196,6 +196,24 @@ describe('the handshake deadline', () => {
         expect(secondSocket.readyState).toBe(FakeSocket.CLOSED);
         expect(legacy.isAttemptInProgress(), 'and it ends as an attempt, not as a hang').toBe(false);
     });
+
+    it('wipes a dropped session once when the app will not retry it', async () => {
+        vi.useFakeTimers();
+        const attempt = track(facadeConnect(PROFILE));
+        const socket = lastSocket();
+        // A session, then the relay drops it. The transport's loss path tears the
+        // transport down and wipes; the declined retry then declares the terminal
+        // outcome, and the two used to wipe the same generation twice — a second
+        // `onDisconnect()` and a second capture-intent drain for one loss.
+        connectionState.update((current) => ({ ...current, status: 'connected', wasEverConnected: true }));
+        socket.deliverCloseOnClose = true;
+        socket.close();
+
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(attempt.outcome(), 'the caller learns the outcome').toBe('rejected');
+        expect(onDisconnect.mock.calls.length, 'one loss is one wipe').toBe(1);
+    });
 });
 
 function lastSocketAfterConnect(): FakeSocket {

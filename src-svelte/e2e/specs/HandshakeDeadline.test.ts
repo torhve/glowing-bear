@@ -42,7 +42,7 @@ function startBlackhole(): Promise<{ port: number; close: () => Promise<void> }>
     });
 }
 
-for (const protocol of ['legacy', 'api'] as const) {
+for (const protocol of ['legacy', 'api', 'auto'] as const) {
     test(`a relay that never finishes the handshake does not hold the app hostage (${protocol})`, async ({ page }) => {
         setupEffectOrphanFilter(page);
         const sink = await startBlackhole();
@@ -68,9 +68,17 @@ for (const protocol of ['legacy', 'api'] as const) {
 
             // And told what happened, with the explanation that matches what the
             // app can actually know: a handshake that never completed is an
-            // unreachable relay, not a password problem and not a generic fault.
+            // unreachable relay, not a password problem and not a generic fault —
+            // and the exact type depends on whether the user pinned a protocol.
+            // A pinned attempt names the pin, because the pin is the part the user
+            // chose and the form has to offer the way out of it; an unpinned
+            // attempt says "unreachable", because blaming a pin the user never set
+            // would be a guess.
             await expect(page.getByTestId('error-message')).toBeVisible();
-            await expect(page.getByTestId('error-message')).toHaveAttribute('data-error-type', 'server-unreachable');
+            await expect(page.getByTestId('error-message')).toHaveAttribute(
+                'data-error-type',
+                protocol === 'auto' ? 'server-unreachable' : 'protocol-unanswered',
+            );
 
             // No retry loop was invented behind the user's back: autoconnect is
             // off, so this is one bounded attempt.

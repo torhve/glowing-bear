@@ -1,5 +1,6 @@
 <script lang="ts">
   import { settings, updateSettings } from '#lib/stores/settings.ts';
+  import type { ProtocolPreference } from '#lib/types.ts';
   import { get } from 'svelte/store';
   import { requestNotificationPermission, isNotificationSupported } from '#lib/notifications.ts';
   import { themeStore, setTheme, themes, themeLabels } from '#lib/stores/theme.ts';
@@ -485,7 +486,7 @@
               data-testid="protocol-selector"
               class="bg-surface-raised text-text text-sm border border-border rounded px-2 py-1"
               value={$settings.protocol}
-              onchange={(e) => updateSettings({ protocol: (e.target as HTMLSelectElement).value as 'auto' | 'api' | 'legacy' })}
+              onchange={(e) => updateSettings({ protocol: (e.target as HTMLSelectElement).value as ProtocolPreference })}
             >
               <option value="auto">Auto (API for WeeChat ≥4.10.1, legacy for older)</option>
               <option value="api">New API relay (WeeChat ≥4.10.1 only)</option>
