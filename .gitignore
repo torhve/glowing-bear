@@ -89,3 +89,7 @@ static/glowing-bear.icns
 static/glowing_bear_*.png
 static/glowing_bear_*.ico
 static/manifest.webmanifest
+
+# Scratch directory the Tauri icon generator writes its full bundle into (android/,
+# ios/, Windows tiles) before the scripts copy out the one file they need.
+static/.tauri-icon-temp/

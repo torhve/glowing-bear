@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync, existsSync, rmSync, statSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Resvg } from '@resvg/resvg-js';
@@ -86,19 +86,41 @@ for (const [filename, size] of icons) {
     }
 }
 
-// Generate .ico from 128x128 PNG (only if source PNG or .ico needs updating)
+// Generate the .ico with the Tauri CLI's cross-platform icon generator — the same
+// route generate-icns.mjs takes for the .icns. This step used to shell out to
+// ImageMagick (`magick convert`), which the GitHub ubuntu-24.04 runner does not
+// ship at all, and the call discarded the child's stderr, so CI could only ever
+// say "Failed". @tauri-apps/cli is already a devDependency, its generator needs no
+// system package, and the .ico it writes carries several sizes instead of one.
 const png128Path = resolve(__dirname, 'glowing_bear_128x128.png');
 const icoPath = resolve(__dirname, 'glowing_bear_128x128.ico');
+const iconTempDir = resolve(__dirname, '.tauri-icon-temp');
+
+// The generator writes a whole bundle (android/, ios/, Windows tiles); only the
+// .ico is kept, because the PNG set above is this script's own job.
+function dropIconTempDir() {
+    if (existsSync(iconTempDir)) rmSync(iconTempDir, { recursive: true, force: true });
+}
+
 if (needsRegen(icoPath) || needsRegen(png128Path)) {
     try {
-        execSync(
-            `magick convert "${png128Path}" -depth 8 "${icoPath}"`,
-            { stdio: ['inherit', 'inherit', 'ignore'] }
-        );
+        dropIconTempDir();
+        mkdirSync(iconTempDir, { recursive: true });
+        execSync(`npx tauri icon --fit contain "${svgInput}" --output "${iconTempDir}"`, {
+            stdio: ['inherit', 'inherit', 'inherit'],
+        });
+        const generatedIco = resolve(iconTempDir, 'icon.ico');
+        if (!existsSync(generatedIco)) {
+            throw new Error('tauri icon did not produce icon.ico');
+        }
+        copyFileSync(generatedIco, icoPath);
         const icoSize = statSync(icoPath).size;
-        console.log(`  \u2713 glowing_bear_128x128.ico \u2014 ${(icoSize / 1024).toFixed(0)} KB`);
+        console.log(`  ✓ glowing_bear_128x128.ico — ${(icoSize / 1024).toFixed(0)} KB`);
+        dropIconTempDir();
     } catch (e) {
-        console.error('  \u2717 Failed to generate .ico file');
+        // process.exit() does not run a finally block, so the temp dir goes here too.
+        dropIconTempDir();
+        console.error('  ✗ Failed to generate .ico file: ' + e.message);
         process.exit(1);
     }
 } else {
