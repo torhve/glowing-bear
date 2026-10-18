@@ -16,7 +16,8 @@ import { readdirSync, writeFileSync } from 'node:fs';
 //     start script uses) empties the hotlist and it stays empty.
 //
 // So commands that must take effect globally go through the FIFO; the API is used
-// for reading.
+// for reading, and for a command that is only valid on one kind of buffer it is used
+// with that buffer named explicitly (`relayInputOnBuffer`).
 
 const API_PORT = 9010;
 const WEECHAT_HOME = '/tmp/gbtest-weechat';
@@ -35,6 +36,29 @@ async function relayJson(path: string): Promise<unknown> {
     });
     if (!response.ok) throw new Error(`relay ${path} → ${response.status}`);
     return response.json();
+}
+
+/**
+ * Run one command in one buffer's context through `POST /api/input`.
+ *
+ * Why a spec needs this: WeeChat refuses commands outside a matching buffer, and
+ * both other routes to the fixture execute in the core buffer — the FIFO always,
+ * and the app's own `sendWeeChatCommand` deliberately when no buffer is given. So
+ * `/join`, which is only valid on an irc buffer, can only be issued here, with a
+ * channel the fixture already has named as its target. 204 means accepted, not
+ * executed; the spec proves the effect by waiting for the buffer to appear.
+ */
+export async function relayInputOnBuffer(bufferName: string, command: string): Promise<void> {
+    const response = await fetch(`http://127.0.0.1:${API_PORT}/api/input`, {
+        method: 'POST',
+        headers: { Authorization: authHeader(), 'content-type': 'application/json' },
+        body: JSON.stringify({ buffer_name: bufferName, command }),
+    });
+    if (response.status !== 204 && response.status !== 200) {
+        throw new Error(
+            `relay input on ${bufferName} (${command}) → ${response.status}: ${await response.text()}`,
+        );
+    }
 }
 
 /** The fixture WeeChat's FIFO, or null when no instance is running. */
