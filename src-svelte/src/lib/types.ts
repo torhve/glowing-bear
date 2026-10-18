@@ -1,3 +1,7 @@
+// `lib/themes.ts` is dependency-free data, so this type import cannot close a cycle
+// with the store modules that import Settings.
+import type { Theme } from '#lib/themes.ts';
+
 // WeeChat protocol color types
 export type ColorType = 'option' | 'weechat' | 'ext';
 
@@ -335,7 +339,11 @@ export interface Settings {
     savepassword: boolean;
     autoconnect: boolean;
     useTotp: boolean;
-    theme: string;
+    // Issue #13: the palette used when the system is in dark mode, and the one used
+    // when it is in light mode. Either slot may hold any palette, so picking two
+    // dark palettes is how a user pins the app to dark regardless of the OS.
+    themeDark: Theme;
+    themeLight: Theme;
     fontfamily: string;
     fontsize: string;
     customCSS: string;

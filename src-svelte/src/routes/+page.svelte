@@ -12,7 +12,7 @@
   import ContentSearchModal from '#components/ContentSearchModal.svelte';
   import X from '@lucide/svelte/icons/x';
   import { settings, updateSettings, applyHashParams } from '#lib/stores/settings.ts';
-  import { initTheme } from '#lib/stores/theme.ts';
+  import { applyConfiguredTheme, startThemeFollow, themeSlotsKey, themeStore } from '#lib/stores/theme.ts';
   import { get } from 'svelte/store';
   import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig, sortedVisibleBuffers, checkAndNavigatePendingNotificationBuffer } from '#lib/stores/models.ts';
   import { sidebarOrder } from '#lib/stores/bufferProjections.ts';
@@ -85,9 +85,24 @@
   // Apply hash params synchronously before any component effects run
   applyHashParams();
 
+  // Issue #13: settings holds one palette per OS scheme and the OS picks which one is
+  // on screen. This is the only writer of the applied palette, so a slot edit, a
+  // settings reset and an OS flip all reach the document through the same code.
+  // Declared before the mount effect below, because that effect is what unhides
+  // <body> and the palette has to be on the document before the first visible frame.
   $effect(() => {
-    // Initialize theme, notifications, touch gestures, and attempt auto-connect on mount
-    initTheme();
+    void $themeSlotsKey;
+    applyConfiguredTheme();
+  });
+
+  // A live light/dark flip in the OS re-resolves through that same writer. Owned here
+  // so a reconnect or a re-mounted page cannot stack a second listener.
+  $effect(() => {
+    return startThemeFollow();
+  });
+
+  $effect(() => {
+    // Initialize notifications, touch gestures, and attempt auto-connect on mount
     void initNotifications();
     initTouchGestures();
     initFocusReconnect();
@@ -142,7 +157,7 @@
   // alter the badge palette without changing any count, and a store that
   // compares values cannot see that the picture it produced is now different.
   $effect(() => {
-    void $settings.theme;
+    void $themeStore;
     void $settings.customCSS;
     void $settings.useFavico;
     refreshIndicators();

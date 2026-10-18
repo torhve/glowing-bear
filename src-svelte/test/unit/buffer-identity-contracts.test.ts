@@ -53,7 +53,7 @@ const settingsMock = vi.hoisted(() => {
     let value: Record<string, unknown> = {
         hostField: '', port: '9001', tls: false, password: '',
         savepassword: false, autoconnect: false, useTotp: false,
-        theme: 'dark', fontfamily: '', fontsize: '', customCSS: '',
+        themeDark: 'dark', themeLight: 'light', fontfamily: '', fontsize: '', customCSS: '',
         iToken: '', iAlb: '', onlyUnread: false, noembed: false,
         alwaysnicklist: false, orderbyserver: false,
         readlineBindings: false, useFavico: false, soundnotification: false,

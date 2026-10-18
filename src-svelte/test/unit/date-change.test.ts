@@ -12,7 +12,7 @@ vi.mock('#lib/stores/settings.ts', () => ({
                 savepassword: false,
                 autoconnect: false,
                 useTotp: false,
-                theme: 'dark',
+                themeDark: 'dark', themeLight: 'light',
                 fontfamily: '',
                 fontsize: '',
                 customCSS: '',

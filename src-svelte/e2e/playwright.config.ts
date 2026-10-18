@@ -90,6 +90,10 @@ export default defineConfig({
         screenshot: 'only-on-failure',
         video: 'off',
         actionTimeout: 2000,
+        // Issue #13: the app now follows the system light/dark scheme. The e2e suite
+        // was written against the dark palette, so pin the scheme it resolves to.
+        // A spec that wants the other side emulates it with page.emulateMedia().
+        colorScheme: 'dark',
     },
     projects: [
         {

@@ -22,7 +22,7 @@ vi.mock('#lib/stores/settings.ts', () => ({
             fn({
                 hostField: '', port: '9001', tls: false, password: '',
                 savepassword: false, autoconnect: false, useTotp: false,
-                theme: 'dark', fontfamily: '', fontsize: '', customCSS: '',
+                themeDark: 'dark', themeLight: 'light', fontfamily: '', fontsize: '', customCSS: '',
                 iToken: '', iAlb: '', onlyUnread: false, noembed: false,
                 notifyDMs: true, notifyHighlights: true, notificationSoundMode: 'off',
                 notificationSoundCustom: null, notificationVolume: 50,

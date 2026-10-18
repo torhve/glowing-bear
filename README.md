@@ -227,8 +227,7 @@ npm run irc:server      # Run the IRC server fixture directly via tsx
 
 ### Themes
 
-Glowing Bear ships with built-in themes (Dark, Light, Black, Catppuccin variants, Base16 variants, and more).
-Custom CSS injection is also available in settings for personalization.
+Glowing Bear follows the system's light/dark setting and picks a built-in palette (Dark, Light, Black, Catppuccin variants, Base16 variants, and more) to match it, and updates live when the OS preference changes. Settings lets you pin a specific palette for the light and dark modes independently. Custom CSS injection is also available in settings for personalization.
 
 ### Key Features
 

@@ -189,23 +189,27 @@ test.describe('favicon badge repaint identity', () => {
         const t = await stableTotal(page, 'theme');
 
         await waitForUnreadSettled(page);
-        const darkHref = await href(page);
-        expect(darkHref).not.toBe('/favicon.png');
+        const hrefBefore = await href(page);
+        expect(hrefBefore).not.toBe('/favicon.png');
 
-        await page.evaluate(() => {
-            document.documentElement.setAttribute('data-theme', 'light');
-        });
+        // Follow the app wherever it started — it may sit on the light slot when
+        // the system is in light mode — and flip to the other palette.
+        const current = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+        const other = current === 'dark' ? 'light' : 'dark';
+        await page.evaluate((theme) => {
+            document.documentElement.setAttribute('data-theme', theme);
+        }, other);
 
         // The theme change alone does not call the renderer; make the app update
         // the badge the way an incoming message would, at the same label.
         await sendSequence(FLOOD, msgs('theme+', 1));
         await unreadAbove(page, t);
 
-        const lightHref = await href(page);
-        await page.evaluate(() => {
-            document.documentElement.setAttribute('data-theme', 'dark');
-        });
+        const hrefAfter = await href(page);
+        await page.evaluate((theme) => {
+            document.documentElement.setAttribute('data-theme', theme);
+        }, current);
 
-        expect(lightHref).not.toBe(darkHref);
+        expect(hrefAfter).not.toBe(hrefBefore);
     });
 });

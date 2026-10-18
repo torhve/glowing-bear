@@ -1,12 +1,40 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { themes, themeLabels, setTheme, loadTheme, themeStore } from '#lib/stores/theme.ts';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { get } from 'svelte/store';
+import { themes, themeLabels, isTheme } from '#lib/themes.ts';
+import {
+    applyConfiguredTheme,
+    applyTheme,
+    configuredSlots,
+    prefersDark,
+    resolveTheme,
+    startThemeFollow,
+    themeSlotsKey,
+    themeStore,
+} from '#lib/stores/theme.ts';
+import { updateSettings } from '#lib/stores/settings.ts';
 
 // jsdom already provides a real localStorage and document, so tests drive those
-// directly instead of stubbing globals.
+// directly instead of stubbing globals. The fake matchMedia installed by
+// test/unit/setup.ts is flipped through the handle it exposes.
+function setSystemDark(dark: boolean) {
+    const flip = (window as Window & { __setPrefersColorSchemeDark?: (dark: boolean) => void })
+        .__setPrefersColorSchemeDark;
+    if (!flip) throw new Error('matchMedia shim missing from test/unit/setup.ts');
+    flip(dark);
+}
+
 beforeEach(() => {
     localStorage.clear();
     document.documentElement.removeAttribute('data-theme');
+    document.documentElement.style.removeProperty('--gb-bg');
+    setSystemDark(false);
+    updateSettings({ themeDark: 'dark', themeLight: 'light' });
+});
+
+afterEach(() => {
+    // The fake query lists live on a window a worker reuses across test files: leave
+    // the scheme where the app's own default puts it.
+    setSystemDark(false);
 });
 
 describe('themes array', () => {
@@ -56,52 +84,138 @@ describe('themeLabels', () => {
     });
 });
 
-describe('get theme from store', () => {
-    it('returns current theme from store', () => {
-        const theme = get(themeStore);
-        expect(themes).toContain(theme);
+describe('isTheme', () => {
+    it('accepts a shipped palette', () => {
+        expect(isTheme('catppuccin-mocha')).toBe(true);
+    });
+
+    it('rejects anything else, including a non-string', () => {
+        expect(isTheme('not-a-real-theme')).toBe(false);
+        expect(isTheme('')).toBe(false);
+        expect(isTheme(undefined)).toBe(false);
+        expect(isTheme(7)).toBe(false);
     });
 });
 
-describe('setTheme', () => {
-    it('updates the store value for a valid theme', () => {
-        setTheme('catppuccin-mocha');
+describe('resolveTheme', () => {
+    const slots = { dark: 'catppuccin-mocha', light: 'base16-solarized-light' } as const;
+
+    it('selects the dark slot when the system prefers dark', () => {
+        expect(resolveTheme(slots, true)).toBe('catppuccin-mocha');
+    });
+
+    it('selects the light slot otherwise', () => {
+        expect(resolveTheme(slots, false)).toBe('base16-solarized-light');
+    });
+
+    it('pins one look when both slots hold the same palette', () => {
+        const pinned = { dark: 'black', light: 'black' } as const;
+        expect(resolveTheme(pinned, true)).toBe('black');
+        expect(resolveTheme(pinned, false)).toBe('black');
+    });
+});
+
+describe('configuredSlots', () => {
+    it('reads the pair settings currently holds', () => {
+        updateSettings({ themeDark: 'blue', themeLight: 'base16-light' });
+        expect(configuredSlots()).toEqual({ dark: 'blue', light: 'base16-light' });
+    });
+});
+
+describe('prefersDark', () => {
+    it('reports the scheme the system reports', () => {
+        expect(prefersDark()).toBe(false);
+        setSystemDark(true);
+        expect(prefersDark()).toBe(true);
+    });
+});
+
+describe('applyConfiguredTheme', () => {
+    it('applies the slot the system selects, to the store and to the document', () => {
+        updateSettings({ themeDark: 'catppuccin-mocha', themeLight: 'base16-solarized-light' });
+
+        setSystemDark(true);
+        expect(applyConfiguredTheme()).toBe('catppuccin-mocha');
         expect(get(themeStore)).toBe('catppuccin-mocha');
+        expect(document.documentElement.getAttribute('data-theme')).toBe('catppuccin-mocha');
+
+        setSystemDark(false);
+        expect(applyConfiguredTheme()).toBe('base16-solarized-light');
+        expect(get(themeStore)).toBe('base16-solarized-light');
+        expect(document.documentElement.getAttribute('data-theme')).toBe('base16-solarized-light');
+    });
+});
+
+describe('startThemeFollow', () => {
+    it('re-applies the matching slot on a system flip with no settings change', () => {
+        updateSettings({ themeDark: 'black', themeLight: 'light' });
+        setSystemDark(true);
+        applyConfiguredTheme();
+        expect(document.documentElement.getAttribute('data-theme')).toBe('black');
+
+        const stop = startThemeFollow();
+        try {
+            setSystemDark(false);
+            expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+            expect(get(themeStore)).toBe('light');
+        } finally {
+            stop();
+        }
     });
 
-    it('cycles through all Catppuccin themes', () => {
-        for (const t of ['catppuccin-mocha', 'catppuccin-macchiato', 'catppuccin-frappe']) {
-            setTheme(t);
-            expect(get(themeStore)).toBe(t);
+    it('stops writing the document once its owner stops it', () => {
+        setSystemDark(true);
+        applyConfiguredTheme();
+
+        const stop = startThemeFollow();
+        stop();
+
+        setSystemDark(false);
+        expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    });
+});
+
+describe('themeSlotsKey', () => {
+    it('notifies only when a palette slot changes', () => {
+        const seen: string[] = [];
+        const unsub = themeSlotsKey.subscribe((value) => seen.push(value));
+        try {
+            expect(seen).toEqual(['dark|light']);
+
+            // An unrelated setting must not look like an appearance change.
+            updateSettings({ fontfamily: 'monospace' });
+            expect(seen.length).toBe(1);
+
+            updateSettings({ themeLight: 'cendre' });
+            expect(seen).toEqual(['dark|light', 'dark|cendre']);
+        } finally {
+            unsub();
         }
     });
 });
 
-describe('loadTheme', () => {
-    it('returns "dark" when no stored theme', () => {
-        expect(loadTheme()).toBe('dark');
-    });
+describe('theme-color meta tag', () => {
+    it('follows the palette that was applied', () => {
+        const meta = document.createElement('meta');
+        meta.name = 'theme-color';
+        meta.content = '#181818';
+        document.head.appendChild(meta);
 
-    it('returns stored Catppuccin theme when available', () => {
-        localStorage.setItem('gb_theme', 'catppuccin-mocha');
-        expect(loadTheme()).toBe('catppuccin-mocha');
-    });
+        try {
+            document.documentElement.style.setProperty('--gb-bg', '#abcdef');
+            applyTheme('light');
+            expect(meta.getAttribute('content')).toBe('#abcdef');
 
-    it('returns "dark" for unknown stored theme', () => {
-        localStorage.setItem('gb_theme', 'not-a-real-theme');
-        expect(loadTheme()).toBe('dark');
-    });
-
-    it('returns each Catppuccin variant correctly', () => {
-        for (const t of ['catppuccin-mocha', 'catppuccin-macchiato', 'catppuccin-frappe']) {
-            localStorage.setItem('gb_theme', t);
-            expect(loadTheme()).toBe(t);
+            document.documentElement.style.setProperty('--gb-bg', '#000000');
+            applyTheme('black');
+            expect(meta.getAttribute('content')).toBe('#000000');
+        } finally {
+            meta.remove();
         }
     });
 
-    it('setTheme persists the choice to localStorage and the document', () => {
-        setTheme('catppuccin-frappe');
-        expect(localStorage.getItem('gb_theme')).toBe('catppuccin-frappe');
-        expect(document.documentElement.getAttribute('data-theme')).toBe('catppuccin-frappe');
+    it('leaves the document alone when there is no theme-color tag', () => {
+        expect(document.querySelector('meta[name="theme-color"]')).toBeNull();
+        expect(() => applyTheme('dark')).not.toThrow();
     });
 });

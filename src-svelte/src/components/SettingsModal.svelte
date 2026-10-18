@@ -3,7 +3,8 @@
   import type { ProtocolPreference } from '#lib/types.ts';
   import { get } from 'svelte/store';
   import { requestNotificationPermission, isNotificationSupported } from '#lib/notifications.ts';
-  import { themeStore, setTheme, themes, themeLabels } from '#lib/stores/theme.ts';
+  import { type ThemeSlot } from '#lib/stores/theme.ts';
+  import { themes, themeLabels, isTheme } from '#lib/themes.ts';
   import { weechatVersion, relayApiVersion } from '#lib/stores/models.ts';
   import { activeTransport } from '#lib/stores/connectionStore.ts';
   import BaseDialog from '#components/BaseDialog.svelte';
@@ -68,16 +69,13 @@
     }
   });
 
-  function handleThemeChange(theme: string) {
-    setTheme(theme as typeof $themeStore);
-    updateSettings({ theme });
+  // The slots are settings and `+page.svelte` is the only writer of the applied
+  // palette, so the modal never touches `data-theme` itself: a reset, a slot edit and
+  // an OS flip all reach the document through the same code.
+  function handleThemeSlotChange(slot: ThemeSlot, value: string) {
+    if (!isTheme(value)) return;
+    updateSettings(slot === 'dark' ? { themeDark: value } : { themeLight: value });
   }
-
-  $effect(() => {
-    if ($settings.theme && $settings.theme !== $themeStore) {
-      setTheme($settings.theme as typeof $themeStore);
-    }
-  });
 
   function handleNotificationPermission() {
     requestNotificationPermission();
@@ -85,7 +83,8 @@
 
   function resetSettings() {
     updateSettings({
-      theme: 'dark',
+      themeDark: 'dark',
+      themeLight: 'light',
       fontsize: '14px',
       fontfamily: 'Inconsolata, Consolas, Monaco, Ubuntu Mono, monospace',
       customCSS: '',
@@ -106,7 +105,6 @@
       enableEmojify: true,
       enableFormatting: true
     });
-    setTheme('dark');
   }
 
   // Toggle save-password checkbox: when unchecked, clear stored password from settings.
@@ -142,18 +140,37 @@
         <h3 class="settings-section-header text-base font-bold text-accent uppercase tracking-wide mb-3 flex items-center gap-2"><Palette size={14} />Appearance</h3>
         <div class="space-y-3">
           <div>
-            <label for="theme-selector" class="block text-sm text-text-secondary mb-1">Theme</label>
+            <label for="theme-dark-selector" class="block text-sm text-text-secondary mb-1">Theme for dark mode</label>
             <select
-              id="theme-selector"
-              data-testid="theme-selector"
-              value={$themeStore}
-              onchange={(e) => handleThemeChange(e.currentTarget.value)}
+              id="theme-dark-selector"
+              data-testid="theme-dark-selector"
+              value={$settings.themeDark}
+              onchange={(e) => handleThemeSlotChange('dark', e.currentTarget.value)}
               class="w-full px-3 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent"
             >
               {#each themes as theme (theme)}
                 <option value={theme}>{themeLabels[theme]}</option>
               {/each}
             </select>
+          </div>
+
+          <div>
+            <label for="theme-light-selector" class="block text-sm text-text-secondary mb-1">Theme for light mode</label>
+            <select
+              id="theme-light-selector"
+              data-testid="theme-light-selector"
+              value={$settings.themeLight}
+              onchange={(e) => handleThemeSlotChange('light', e.currentTarget.value)}
+              class="w-full px-3 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent"
+            >
+              {#each themes as theme (theme)}
+                <option value={theme}>{themeLabels[theme]}</option>
+              {/each}
+            </select>
+            <p class="mt-1 text-xs text-text-muted">
+              Glowing Bear follows the system's light/dark setting and uses the matching theme.
+              Pick the same theme in both to keep one look whatever the system does.
+            </p>
           </div>
 
           <div>

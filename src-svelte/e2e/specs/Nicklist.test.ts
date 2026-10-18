@@ -74,11 +74,12 @@ test('should close settings modal when clicking close button', async () => {
     await expect(page.getByTestId('settings-modal')).not.toBeVisible({ timeout: 5000 });
 });
 
-test('should have theme selector in settings', async () => {
+test('should have theme selectors in settings', async () => {
     await closeSettings(page).catch(() => {});
     await page.getByTestId('settings-button').click();
     await expect(page.getByTestId('settings-modal')).toBeVisible();
-    await expect(page.getByTestId('theme-selector')).toBeAttached();
+    await expect(page.getByTestId('theme-dark-selector')).toBeAttached();
+    await expect(page.getByTestId('theme-light-selector')).toBeAttached();
 });
 
 test('should have nicklist toggle in settings', async () => {

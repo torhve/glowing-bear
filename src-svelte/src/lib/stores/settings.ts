@@ -1,5 +1,6 @@
 import { writable, get } from 'svelte/store';
 import type { Settings } from '#lib/types.ts';
+import { isTheme, type Theme } from '#lib/themes.ts';
 
 export const settings = writable<Settings>({
     hostField: '',
@@ -9,7 +10,9 @@ export const settings = writable<Settings>({
     savepassword: false,
     autoconnect: false,
     useTotp: false,
-    theme: 'dark',
+    // Issue #13: one palette per OS scheme. `theme.ts` picks which one is on screen.
+    themeDark: 'dark',
+    themeLight: 'light',
     fontfamily: '',
     fontsize: '14px',
     customCSS: '',
@@ -39,15 +42,64 @@ export const settings = writable<Settings>({
     bufferSearchSort: 'number'
 });
 
+// The key the theme store wrote before issue #13 introduced the two slots.
+const LEGACY_THEME_KEY = 'gb_theme';
+
+/**
+ * Read the pre-slot theme key and remove it.
+ *
+ * The settings blob owns the theme from #13 on, so this is a one-way move rather
+ * than a second source the app keeps consulting.
+ */
+function takeLegacyThemeKey(): Theme | null {
+    const raw = localStorage.getItem(LEGACY_THEME_KEY);
+    if (raw === null) return null;
+    localStorage.removeItem(LEGACY_THEME_KEY);
+    return isTheme(raw) ? raw : null;
+}
+
+/**
+ * Fold a pre-#13 profile into the two theme slots.
+ *
+ * An older profile had one explicit palette, so it pins both slots: upgrading must
+ * not repaint someone's app just because the OS sits in the other scheme. The palette
+ * may come from the settings blob's `theme` or from the standalone key the old theme
+ * store wrote, the key winning as the later write. A slot naming a palette that no
+ * longer exists is dropped so the default applies, and the obsolete `theme` key is
+ * removed instead of being carried in the store forever.
+ */
+function migrateThemeSlots(saved: Record<string, unknown>, legacyThemeKey: Theme | null): Partial<Settings> {
+    const migrated: Record<string, unknown> = { ...saved };
+    const blobTheme = isTheme(saved.theme) ? saved.theme : null;
+    const legacy = legacyThemeKey ?? blobTheme;
+    delete migrated.theme;
+
+    if (legacy && !isTheme(migrated.themeDark) && !isTheme(migrated.themeLight)) {
+        migrated.themeDark = legacy;
+        migrated.themeLight = legacy;
+    }
+    if (!isTheme(migrated.themeDark)) delete migrated.themeDark;
+    if (!isTheme(migrated.themeLight)) delete migrated.themeLight;
+
+    return migrated as Partial<Settings>;
+}
+
 // Load from localStorage on init
 if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+    const legacyTheme = takeLegacyThemeKey();
     const saved = localStorage.getItem('gb-settings');
     if (saved) {
         try {
-            settings.set({ ...get(settings), ...JSON.parse(saved) });
+            const parsed: unknown = JSON.parse(saved);
+            if (parsed && typeof parsed === 'object') {
+                settings.set({ ...get(settings), ...migrateThemeSlots(parsed as Record<string, unknown>, legacyTheme) });
+            }
         } catch (e) {
             console.error('Failed to parse settings from localStorage', e);
         }
+    } else if (legacyTheme) {
+        // A profile that only ever wrote the old theme key still keeps its palette.
+        settings.set({ ...get(settings), themeDark: legacyTheme, themeLight: legacyTheme });
     }
 }
 

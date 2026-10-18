@@ -28,7 +28,7 @@ vi.mock('#lib/tauriWindow.ts', () => ({
 vi.mock('#lib/stores/settings.ts', () => ({
     settings: {
         subscribe: (fn: (val: any) => void) => {
-            fn({ useFavico: true, theme: 'dark', customCSS: '' });
+            fn({ useFavico: true, themeDark: 'dark', themeLight: 'light', customCSS: '' });
             return () => {};
         },
     },

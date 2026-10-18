@@ -1,14 +1,16 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { asset, resolve } from '$app/paths';
-  import { initTheme } from '#lib/stores/theme.ts';
+  import { applyConfiguredTheme } from '#lib/stores/theme.ts';
 
   // app.css hides <body> until the app marks itself ready
   // (body:not([data-app-ready])). Only +page.svelte sets that attribute, and an
   // unmatched URL never mounts it, so this page renders fully hidden unless it
   // opts in the same way.
   $effect(() => {
-    initTheme();
+    // No follow listener here: this page renders without the app mounted, and the
+    // route back is a full reload, which re-resolves the palette anyway.
+    applyConfiguredTheme();
     document.body.setAttribute('data-app-ready', 'true');
   });
 </script>
