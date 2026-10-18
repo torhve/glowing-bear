@@ -37,7 +37,11 @@ it('lets users hide automatic embeds and keeps manual toggles until the setting 
     const area = target.querySelector<HTMLElement>('.embed-area')!;
     expect(getComputedStyle(area).display).not.toBe('none');
 
-    button(target, 'Hide Image').click();
+
+    // Collapsed state must not fetch anything: no preview <img> in the button.
+    expect(target.querySelector('[data-testid="show-embed"] img')).toBeNull();
+
+    button(target, 'Collapse').click();
     flushSync();
     expect(getComputedStyle(area).display).toBe('none');
 
@@ -50,13 +54,16 @@ it('lets users hide automatic embeds and keeps manual toggles until the setting 
     flushSync();
     expect(getComputedStyle(area).display).not.toBe('none');
 
+    // The expanded state exposes the collapse affordance.
+    expect(target.querySelector('[data-testid="hide-embed"]')).not.toBeNull();
+
     plugin.update(value => ({ ...value, visible: false }));
     flushSync();
     expect(getComputedStyle(area).display).toBe('none');
     button(target, 'Show Image').click();
     flushSync();
     expect(getComputedStyle(area).display).not.toBe('none');
-    button(target, 'Hide Image').click();
+    button(target, 'Collapse').click();
     flushSync();
     expect(getComputedStyle(area).display).toBe('none');
 

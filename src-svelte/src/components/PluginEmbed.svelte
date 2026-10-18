@@ -5,7 +5,9 @@
   import { imageExts, videoExts, audioExts } from '#lib/utils/mediaExtensions.ts';
   import { youtubeVideoPattern } from '#lib/utils/urlEmbeds.ts';
   import Play from '@lucide/svelte/icons/play';
-  import X from '@lucide/svelte/icons/x';
+  import ImageIcon from '@lucide/svelte/icons/image';
+  import AudioLines from '@lucide/svelte/icons/audio-lines';
+  import ChevronUp from '@lucide/svelte/icons/chevron-up';
   import { DEBUG_PLUGIN } from '#lib/debug.ts';
 
   let { plugin }: { plugin: PluginMetadata } = $props();
@@ -33,6 +35,10 @@
   let isString = $derived(typeof content === 'string');
   let isFunction = $derived(typeof content === 'function');
 
+  // Media kind drives the collapsed-state icon: an image glyph for images,
+  // play for video, a waveform for audio. Nothing is fetched until the user
+  // clicks — the collapsed state stays a plain button.
+  let kind = $derived(plugin.name === 'Image' ? 'image' : plugin.name === 'Video' ? 'video' : plugin.name === 'Audio' ? 'audio' : 'other');
   function injectImage(url: string) {
     if (!embedRef) {
       console.warn('[PluginEmbed] injectImage: embedRef is null, URL:', url);
@@ -340,9 +346,17 @@
     data-testid="show-embed"
     class="embed-show-btn show-btn m-1 px-3 py-1.5 rounded text-sm font-medium transition-colors {(!plugin.nsfw ? 'text-[var(--gb-link)] hover:text-[var(--gb-link-hover)]' : 'bg-warning/20 text-warning hover:bg-warning/30 hover:text-warning/90')}"
     class:hidden={visible}
+    title={`Show ${plugin.name}`}
+    aria-label={`Show ${plugin.name}`}
     onclick={showContent}
   >
-    <Play size={16} class="inline-block mr-1" />
+    {#if kind === 'image'}
+      <ImageIcon size={16} class="inline-block mr-1" />
+    {:else if kind === 'audio'}
+      <AudioLines size={16} class="inline-block mr-1" />
+    {:else}
+      <Play size={16} class="inline-block mr-1" />
+    {/if}
     <span class="show-btn-text">Show {plugin.name}</span>
   </button>
   <div class="embed-area" class:visible>
@@ -351,19 +365,26 @@
         ⚠️ NSFW content hidden.
       </div>
     {:else}
-      <button
-        data-testid="hide-embed"
-        class="embed-hide-btn absolute top-1 right-1 z-10 px-2 py-1 rounded text-sm font-medium transition-colors bg-surface-raised text-text-secondary hover:text-text hover:bg-surface"
-        onclick={hideContent}
-      >
-        <X size={14} class="inline-block mr-1" />
-        Hide {plugin.name}
-      </button>
       <div
         data-testid="plugin-embed"
         bind:this={embedRef}
         class="embed-container rounded overflow-hidden bg-surface my-1"
       ></div>
+      <!-- Below the media, not overlaid on it. The wrapping div matters:
+           .embed-container is inline-block for image embeds, so an inline-level
+           button would otherwise flow beside the media instead of below it. -->
+      <div>
+        <button
+          data-testid="hide-embed"
+          class="embed-hide-btn mb-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors bg-surface-raised text-text-secondary hover:text-text hover:bg-surface"
+          title="Collapse"
+          aria-label="Collapse"
+          onclick={hideContent}
+        >
+          <ChevronUp size={16} class="inline-block mr-1" />
+          Collapse
+        </button>
+      </div>
     {/if}
   </div>
 </div>
@@ -390,6 +411,7 @@
     display: none;
   }
 
+
   .embed-area:not(.visible) {
     display: none;
   }
@@ -398,6 +420,7 @@
     .show-btn-text {
       display: none;
     }
+
     .show-btn {
       padding: 0.375rem;
     }

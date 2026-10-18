@@ -38,6 +38,9 @@ test('shows "Show Image" button when noembed is enabled', async () => {
     await botSay('https://picsum.photos/200/300.jpg?1');
     const row = rowForMessage('picsum.photos/200/300.jpg?1');
     await expect(row.locator('[data-testid="show-embed"]')).toBeVisible({ timeout: 10000 });
+
+    // No preview while collapsed: nothing loads until the user clicks.
+    await expect(row.locator('[data-testid="show-embed"] img')).toHaveCount(0);
 });
 
 test('clicking Show Image reveals the embed', async () => {
@@ -64,6 +67,39 @@ test('clicking Hide Image hides the embed again', async () => {
     // After hiding, the embed should be hidden and show button reappears
     await expect(row.locator('.embed-area')).not.toBeVisible({ timeout: 5000 });
     await expect(row.locator('[data-testid="show-embed"]')).toBeVisible();
+});
+
+// Issue #18: after expanding, the collapse affordance must be obvious, and
+// collapsing returns the item to its collapsed state.
+test('expanded media shows an obvious Collapse button and returns to the collapsed state', async () => {
+    await botSay('https://picsum.photos/200/300.jpg?8');
+    const row = rowForMessage('picsum.photos/200/300.jpg?8');
+    const showBtn = row.locator('[data-testid="show-embed"]');
+    await expect(showBtn).toBeVisible({ timeout: 10000 });
+    await expect(showBtn.locator('img')).toHaveCount(0);
+    await showBtn.click();
+
+    // The collapse control is visible while the media is expanded.
+    const collapseBtn = row.locator('[data-testid="hide-embed"]');
+    await expect(collapseBtn).toBeVisible({ timeout: 10000 });
+    await expect(collapseBtn).toHaveAttribute('title', 'Collapse');
+
+    // The collapse control sits below the media, not overlaid on it.
+    // Measure both boxes in one task, after the image has decoded, so the
+    // container height cannot change between the two reads.
+    await row.locator('[data-testid="plugin-embed"] img').evaluate((img) => img.decode());
+    const boxes = await row.locator('[data-testid="plugin-embed"]').evaluate((el) => {
+        const media = el.getBoundingClientRect();
+        const btn = el.parentElement!.querySelector<HTMLElement>('[data-testid="hide-embed"]')!.getBoundingClientRect();
+        return { mediaBottom: media.bottom, btnTop: btn.top };
+    });
+    expect(boxes.btnTop).toBeGreaterThanOrEqual(boxes.mediaBottom - 1);
+
+    // Collapsing brings the Show button back.
+    await collapseBtn.click();
+    await expect(row.locator('.embed-area')).not.toBeVisible({ timeout: 5000 });
+    await expect(showBtn).toBeVisible();
+    await expect(showBtn.locator('img')).toHaveCount(0);
 });
 
 test('handles multiple images in one message', async () => {

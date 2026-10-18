@@ -240,7 +240,7 @@ Glowing Bear follows the system's light/dark setting and picks a built-in palett
 - **Keyboard shortcuts** — Alt+1-9 quick keys, Alt+J two-digit jump-to-buffer, type-to-focus, PageUp/PageDown scroll, Alt+< previous buffer, Alt+L focus input, Alt+n toggle nicklist, Alt+A jump to most urgent buffer, Alt+↑/↓ adjacent buffer, Alt+h clear all unread, double-Escape disconnect
 - **Mobile touch gestures** — tap the logo → toggle buffer list (also swipe right), swipe left → nicklist, vertical swipe → switch buffer
 - **Image upload** — drag-and-drop or click to upload images via Imgur
-- **URL embeds** — rich previews for links
+- **URL embeds** — rich previews for links; media expands from a button and collapses with a one-click button below the media
 - **Emoji shortcodes** — optional `:beer:` → 🍺 replacement while typing
 - **Desktop notifications** — system notifications and favicon badge for mentions and highlights
 - **KaTeX math rendering** — optional LaTeX math support
