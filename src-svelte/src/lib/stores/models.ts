@@ -322,6 +322,30 @@ export function sortBuffers<T extends BufferPresentation>(
     return sorted;
 }
 
+/**
+ * WeeChat's hotlist order: highlights first, then any unread, then buffer number.
+ *
+ * Reads the raw `notification`/`unread` counts, never `getEffectiveUnread`: the
+ * hotlist is the server's unread policy, while the sidebar badge merges in the
+ * local tally, and those are different questions. Shared by `hotlistEntries` and
+ * the buffer-search dialog's "Unread first" mode so the two cannot drift apart.
+ *
+ * Pinned buffers are deliberately not hoisted — that is the sidebar's rule, and a
+ * mode that claims to be the hotlist has to rank by activity alone.
+ */
+export function compareBuffersHotlist<T extends BufferPresentation>(
+    a: T,
+    b: T,
+): number {
+    const aHighlight = a.notification > 0 ? 2 : 0;
+    const bHighlight = b.notification > 0 ? 2 : 0;
+    if (aHighlight !== bHighlight) return bHighlight - aHighlight;
+    const aUnread = a.unread > 0 ? 1 : 0;
+    const bUnread = b.unread > 0 ? 1 : 0;
+    if (aUnread !== bUnread) return bUnread - aUnread;
+    return a.number - b.number;
+}
+
 // ---- Buffer creation ----
 // Accepts either a full BufferMessage from the protocol or a minimal shape
 // with just { bufferId, fullName, shortName }. The latter is used for

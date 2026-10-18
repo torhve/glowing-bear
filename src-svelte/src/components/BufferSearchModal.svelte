@@ -1,6 +1,7 @@
 <script lang="ts">
-  import type { BufferPresentation } from '#lib/types.ts';
-  import { visibleBuffers, sortBuffers } from '#lib/stores/models.ts';
+  import type { BufferPresentation, BufferSearchSort } from '#lib/types.ts';
+  import { visibleBuffers, sortBuffers, compareBuffersHotlist } from '#lib/stores/models.ts';
+  import { settings, updateSettings } from '#lib/stores/settings.ts';
   import { switchBuffer } from '#lib/stores/connectionManager.ts';
 
   import BaseDialog from '#components/BaseDialog.svelte';
@@ -31,9 +32,24 @@
     })
   );
 
-  // Group merged buffers by their shared number, sorted by first buffer's priority
+  // Which order the dialog shows. 'number' is the sidebar's own order — pinned
+  // first, and server-grouped exactly when the sidebar is server-grouped — so the
+  // dialog and the list beside it stop disagreeing. 'unread' is the hotlist's
+  // order, shared with the hotlist strip through compareBuffersHotlist: highlights,
+  // then unread buffers, then the rest by WeeChat's buffer number, with no pinned
+  // tier, because a mode named after activity has to rank by activity.
+  let sortMode = $derived($settings.bufferSearchSort ?? 'number');
+
+  let orderedBuffers = $derived(
+    sortMode === 'unread'
+      ? [...filteredBuffers].sort(compareBuffersHotlist)
+      : sortBuffers(filteredBuffers, $settings.orderbyserver)
+  );
+
+  // Group merged buffers by their shared number. A group lands where its first
+  // member ranks, so a merged pair surfaces as high as its most active buffer.
   let groupedBuffers = $derived(
-    sortBuffers(filteredBuffers, false).reduce<BufferGroup[]>((groups, buf) => {
+    orderedBuffers.reduce<BufferGroup[]>((groups, buf) => {
       const existing = groups.find(g => g.number === buf.number);
       if (existing) {
         existing.buffers.push(buf);
@@ -110,6 +126,14 @@
     }
   }
 
+  // Changing the order re-ranks every row, so the highlight restarts at the top
+  // instead of following a buffer that has moved somewhere else in the list.
+  function setSortMode(mode: BufferSearchSort) {
+    if (mode === sortMode) return;
+    updateSettings({ bufferSearchSort: mode });
+    selectedIndex = 0;
+  }
+
   // Scroll the highlighted result into view while the dialog is open.
   //
   // Gated on the dialog being open. `activeIndex` derives from
@@ -134,6 +158,26 @@
   <div class="buffer-search-content flex flex-col max-h-[85vh]">
     <div class="buffer-search-header px-4 py-3 border-b border-border flex items-center justify-between">
       <h2 id="buffer-search-title" class="text-sm font-bold text-text">Search Buffers</h2>
+      <div class="buffer-search-sort flex items-center gap-1" role="group" aria-label="Search result order">
+        <button
+          type="button"
+          data-testid="buffer-search-sort-number"
+          aria-pressed={sortMode === 'number'}
+          onclick={() => setSortMode('number')}
+          class="px-2 py-1 text-xs rounded border {sortMode === 'number' ? 'bg-surface-raised border-border text-text' : 'border-border text-text-muted hover:text-text'}"
+        >
+          Buffer order
+        </button>
+        <button
+          type="button"
+          data-testid="buffer-search-sort-unread"
+          aria-pressed={sortMode === 'unread'}
+          onclick={() => setSortMode('unread')}
+          class="px-2 py-1 text-xs rounded border {sortMode === 'unread' ? 'bg-surface-raised border-border text-text' : 'border-border text-text-muted hover:text-text'}"
+        >
+          Unread first
+        </button>
+      </div>
       <button
         data-testid="buffer-search-close"
         type="button"

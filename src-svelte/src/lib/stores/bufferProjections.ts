@@ -22,6 +22,7 @@ import { get } from 'svelte/store';
 import {
     activeBufferId,
     buffers,
+    compareBuffersHotlist,
     getEffectiveUnread,
     sortBuffers,
 } from '#lib/stores/models.ts';
@@ -221,8 +222,8 @@ export function resetBufferProjections(): void {
 }
 
 /**
- * Hotlist entries: buffers with unread activity, ordered by highlight → unread →
- * number.
+ * Hotlist entries: buffers with unread activity, ordered by `compareBuffersHotlist`
+ * (highlight → unread → number).
  *
  * A separate projection rather than a filter over `sidebarRows`, because the
  * hotlist deliberately uses the raw `notification`/`unread` counts while the
@@ -243,15 +244,7 @@ export const hotlistEntries = selectiveDerived(
             if (buffer.hidden || buffer.id === activeId) continue;
             if (buffer.notification > 0 || buffer.unread > 0) entries.push(rowFor(buffer));
         }
-        return entries.sort((a, b) => {
-            const aHighlight = a.notification > 0 ? 2 : 0;
-            const bHighlight = b.notification > 0 ? 2 : 0;
-            if (aHighlight !== bHighlight) return bHighlight - aHighlight;
-            const aUnread = a.unread > 0 ? 1 : 0;
-            const bUnread = b.unread > 0 ? 1 : 0;
-            if (aUnread !== bUnread) return bUnread - aUnread;
-            return a.number - b.number;
-        });
+        return entries.sort(compareBuffersHotlist);
     },
     sameArrayByReference,
 );

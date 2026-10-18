@@ -33,7 +33,10 @@ export const settings = writable<Settings>({
     stylizePrivateChats: false,
     enableEmojify: true,
     enableFormatting: true,
-    protocol: 'auto'
+    protocol: 'auto',
+    // 'number' is the order the sidebar already shows; the buffer-search dialog
+    // is the only consumer.
+    bufferSearchSort: 'number'
 });
 
 // Load from localStorage on init

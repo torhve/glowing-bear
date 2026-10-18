@@ -318,6 +318,13 @@ export interface ConnectionError {
  *  and skip the probe. */
 export type ProtocolPreference = 'auto' | 'api' | 'legacy';
 
+/** How the buffer-search dialog orders its results.
+ *  'number' is the sidebar's own order (pinned first, then server grouping when
+ *  the sidebar groups by server, then WeeChat's buffer number); 'unread' is
+ *  `compareBuffersHotlist` — highlights, then unread, then buffer number, with no
+ *  pinned tier. Only the dialog reads it: the sidebar is not re-sortable. */
+export type BufferSearchSort = 'number' | 'unread';
+
 // ---- Settings ----
 
 export interface Settings {
@@ -355,6 +362,9 @@ export interface Settings {
     /** Relay transport selection: 'auto' probes the API handshake and falls
      *  back to the legacy WebSocket protocol for WeeChat < 4.10.1. */
     protocol: ProtocolPreference;
+    /** Sort mode for the buffer-search dialog only. Absent from settings saved
+     *  before this option existed, so readers must fall back to 'number'. */
+    bufferSearchSort?: BufferSearchSort;
     angularTimeFormat?: string;
     supports_formatting_date?: boolean;
 }
