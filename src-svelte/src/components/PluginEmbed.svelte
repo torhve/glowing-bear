@@ -3,7 +3,7 @@
   import { untrack } from 'svelte';
   import type { EmbedCallbackContext, PluginMetadata } from '#lib/types.ts';
   import { imageExts, videoExts, audioExts, normalizeImageUrl } from '#lib/utils/mediaExtensions.ts';
-  import { youtubeVideoPattern } from '#lib/utils/urlEmbeds.ts';
+  import { buildEmbed, type EmbedRender } from '#lib/utils/urlEmbeds.ts';
   import Play from '@lucide/svelte/icons/play';
   import ImageIcon from '@lucide/svelte/icons/image';
   import AudioLines from '@lucide/svelte/icons/audio-lines';
@@ -92,24 +92,53 @@
     embedRef.appendChild(audio);
   }
 
-  // Create a sandboxed iframe for third-party embeds.
-  // allow-scripts lets the embed player execute; allow-popups enables
-  // YouTube fullscreen and similar features. allow-same-origin is required:
-  // players such as YouTube and Twitch read their own cookies and storage, so
-  // without it they never initialize. Safe because these src documents are
-  // cross-origin to the app, so the frame cannot reach the parent's DOM.
-  function injectIframe(src: string, width = '100%', height = '315px') {
+  // Put the embed table's answer into the page.
+  // The permission attributes belong here and not in the table, because they are
+  // how this app frames someone else's page, not what the embed is:
+  //   player  — sandboxed, but allowed its own origin. Players such as YouTube and
+  //             Twitch read their own cookies and storage, so without it they never
+  //             initialize. Safe because their documents are cross-origin to ours,
+  //             so the frame cannot reach our DOM. allow-popups and the media
+  //             permissions are what fullscreen needs.
+  //   script  — the gist and asciinema embeds call document.write(), which is
+  //             ignored when their script is loaded into this document. They get a
+  //             srcdoc frame with allow-scripts only: no allow-same-origin, so the
+  //             document they write stays away from ours.
+  //   plain   — Pastebin's embed page is written to be framed directly, which is
+  //             how upstream has always had it. It is the one frame here with no
+  //             sandbox.
+  function injectEmbed(render: EmbedRender) {
     if (!embedRef) return;
+    embedRef.innerHTML = '';
+
+    if (render.kind === 'img') {
+      const img = document.createElement('img');
+      img.className = 'embed';
+      img.src = render.src ?? '';
+      img.alt = render.alt ?? '';
+      embedRef.appendChild(img);
+      return;
+    }
+
     const iframe = document.createElement('iframe');
     iframe.className = 'embed';
-    iframe.src = src;
-    iframe.width = width;
-    iframe.height = height;
+    iframe.width = render.width ?? '100%';
+    iframe.height = render.height ?? '315px';
     iframe.frameBorder = '0';
-    iframe.sandbox = 'allow-scripts allow-same-origin allow-popups';
-    iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
-    iframe.allowFullscreen = true;
-    embedRef.innerHTML = '';
+    if (render.frame === 'script') {
+      iframe.sandbox = 'allow-scripts';
+    } else if (render.frame === 'plain') {
+      iframe.allowFullscreen = true;
+    } else {
+      iframe.sandbox = 'allow-scripts allow-same-origin allow-popups';
+      iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+      iframe.allowFullscreen = true;
+    }
+    if (render.srcdoc) {
+      iframe.srcdoc = render.srcdoc;
+    } else {
+      iframe.src = render.src ?? '';
+    }
     embedRef.appendChild(iframe);
   }
 
@@ -157,153 +186,11 @@
       return;
     }
 
-    const ytMatch = url.match(youtubeVideoPattern);
-    if (ytMatch) {
-      injectIframe(`https://www.youtube.com/embed/${ytMatch[1]}`);
-      return;
-    }
-
-    const twitchClipMatch = url.match(/clips\.twitch\.tv\/(\w+)/);
-    if (twitchClipMatch) {
-      // Use dynamic hostname so Twitch embed works on any deployed instance, not just localhost.
-      const parent = window.location.hostname;
-      injectIframe(`https://clips.twitch.tv/embed?clip=${twitchClipMatch[1]}&parent=${parent}`, '640px', '277px');
-      return;
-    }
-
-    const twitchVideoMatch = url.match(/twitch\.tv\/videos\/(\d+)/);
-    if (twitchVideoMatch) {
-      const parent = window.location.hostname;
-      injectIframe(`https://player.twitch.tv/?video=${twitchVideoMatch[1]}&parent=${parent}`);
-      return;
-    }
-
-    const twitchChannelMatch = url.match(/twitch\.tv\/([a-zA-Z0-9_]+)/);
-    if (twitchChannelMatch && !twitchClipMatch) {
-      const parent = window.location.hostname;
-      injectIframe(`https://player.twitch.tv/?channel=${twitchChannelMatch[1]}&parent=${parent}`);
-      return;
-    }
-
-    const dmMatch = url.match(/dailymotion\.com\/video\/([a-zA-Z0-9]+)|dai\.ly\/([a-zA-Z0-9]+)/);
-    if (dmMatch) {
-      const id = dmMatch[1] || dmMatch[2];
-      injectIframe(`https://www.dailymotion.com/embed/video/${id}`);
-      return;
-    }
-
-    const streamableMatch = url.match(/streamable\.com\/([a-zA-Z0-9]+)/);
-    if (streamableMatch) {
-      injectIframe(`https://streamable.com/o/${streamableMatch[1]}`, '100%', '100%');
-      return;
-    }
-
-    const spotifyMatch = url.match(/open\.spotify\.com\/(track|album|playlist|artist)\/([a-zA-Z0-9]+)/);
-    if (spotifyMatch) {
-      const type = spotifyMatch[1];
-      const id = spotifyMatch[2];
-      injectIframe(`https://open.spotify.com/embed/${type}/${id}`, '100%', '380px');
-      return;
-    }
-
-    const scMatch = url.match(/soundcloud\.com\/([^?]+)/);
-    if (scMatch) {
-      injectIframe(`https://w.soundcloud.com/player/?url=${encodeURIComponent(url)}&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false`, '100%', '166px');
-      return;
-    }
-
-    const mcMatch = url.match(/mixcloud\.com\/([^?]+)/);
-    if (mcMatch) {
-      injectIframe(`https://www.mixcloud.com/widgets/player/?url=${encodeURIComponent(url)}&light=1`, '100%', '100%');
-      return;
-    }
-
-    const mapsMatch = url.match(/(?:maps\.google\.)|(?:google\..*\/maps)/);
-    if (mapsMatch) {
-      injectIframe(`https://www.google.com/maps?q=${encodeURIComponent(url)}&output=embed`, '100%', '250px');
-      return;
-    }
-
-    const giphyMatch = url.match(/giphy\.com\/gifs\/[^/]*-([a-zA-Z0-9]+)?/);
-    if (giphyMatch) {
-      injectIframe(`https://giphy.com/embed/${giphyMatch[1]}`, '100%', '100%');
-      return;
-    }
-
-    const yrMatch = url.match(/yr\.no\/place\/[^/]+\/[^/]+\/[^/]+\/#/);
-    if (yrMatch) {
-      const parts = url.split('/');
-      if (parts.length >= 7) {
-        const lat = parts[5];
-        const lon = parts[6];
-        const img = document.createElement('img');
-        img.className = 'embed';
-        img.src = `https://api.met.no/weatherapi/weathericon/2.0/legacymeteogram?lat=${lat}&lon=${lon}`;
-        img.alt = 'Weather meteogram';
-        embedRef.innerHTML = '';
-        embedRef.appendChild(img);
-      }
-      return;
-    }
-
-    const gistMatch = url.match(/gist\.github\.com\/([^/]+)\/([a-zA-Z0-9]+)/);
-    if (gistMatch) {
-      // Gist embed scripts use document.write() which is ignored when loaded
-      // asynchronously into the parent. A sandboxed iframe with srcdoc gives
-      // the script a fresh document context where document.write() works.
-      // Only allow-scripts (no allow-same-origin) keeps the iframe isolated
-      // from the parent window.
-      const iframe = document.createElement('iframe');
-      iframe.className = 'embed';
-      iframe.width = '100%';
-      iframe.height = '300px';
-      iframe.frameBorder = '0';
-      iframe.sandbox = 'allow-scripts';
-      // Break up the <script> tag string to prevent Svelte parser from
-      // confusing it with an actual script block.
-      const gistScriptSrc = `https://gist.github.com/${gistMatch[1]}/${gistMatch[2]}.js`;
-      iframe.srcdoc = `<scr` + `ipt src="${gistScriptSrc}"></scr` + `ipt>`;
-      embedRef.innerHTML = '';
-      embedRef.appendChild(iframe);
-      return;
-    }
-
-    const pastebinMatch = url.match(/pastebin\.com\/([a-zA-Z0-9]+)/);
-    if (pastebinMatch) {
-      const iframe = document.createElement('iframe');
-      iframe.className = 'embed';
-      iframe.src = `https://pastebin.com/embed/${pastebinMatch[1]}`;
-      iframe.width = '100%';
-      iframe.height = '350';
-      iframe.frameBorder = '0';
-      iframe.allowFullscreen = true;
-      embedRef.innerHTML = '';
-      embedRef.appendChild(iframe);
-      return;
-    }
-
-    const allocineMatch = url.match(/allocine\.fr\/videokast\/video-([a-zA-Z0-9]+)/);
-    if (allocineMatch) {
-      injectIframe(`https://www.allocine.fr/_iframe/videokast/?video=${allocineMatch[1]}&result=media`, '100%', '100%');
-      return;
-    }
-
-    // Asciinema terminal recordings use document.write() embed scripts,
-    // so we load them inside a sandboxed iframe with srcdoc.
-    const asciinemaMatch = url.match(/asciinema\.org\/a\/([0-9a-z]+)/);
-    if (asciinemaMatch) {
-      const iframe = document.createElement('iframe');
-      iframe.className = 'embed';
-      iframe.width = '100%';
-      iframe.height = '300px';
-      iframe.frameBorder = '0';
-      iframe.sandbox = 'allow-scripts';
-      // Break up <script> tag to prevent Svelte parser confusion.
-      const scriptSrc = `https://asciinema.org/a/${asciinemaMatch[1]}.js`;
-      iframe.srcdoc = `<scr` + `ipt src="${scriptSrc}"></scr` + `ipt>`;
-
-      embedRef.innerHTML = '';
-      embedRef.appendChild(iframe);
+    // One table decides both what this URL is called and what it becomes, so the
+    // label on the "Show …" button and the frame under it cannot disagree.
+    const embed = buildEmbed(url);
+    if (embed) {
+      injectEmbed(embed);
       return;
     }
 

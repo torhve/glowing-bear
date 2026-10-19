@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectEmbedUrl, youtubeVideoPattern } from '#lib/utils/urlEmbeds.ts';
+import { buildEmbed, detectEmbedUrl } from '#lib/utils/urlEmbeds.ts';
 
 describe('detectEmbedUrl', () => {
     it('detects YouTube watch URLs', () => {
@@ -30,15 +30,16 @@ describe('detectEmbedUrl', () => {
         }
     });
 
-    // PluginEmbed rebuilds the embed src from group 1, so the id must be exact:
-    // a truncated or overlong run must not be accepted.
-    it('extracts the video id from every accepted form', () => {
+    // The id has to survive intact into the player URL, so it is checked where it
+    // is used rather than by reaching into the pattern: a truncated or overlong
+    // run must not be accepted, and every accepted form must reach the same player.
+    it('builds the same player from every accepted form', () => {
         for (const url of [
             'https://www.youtube.com/watch?app=desktop&v=dQw4w9WgXcQ',
             'https://www.youtube.com/shorts/dQw4w9WgXcQ',
             'https://youtu.be/dQw4w9WgXcQ?si=abc',
         ]) {
-            expect(youtubeVideoPattern.exec(url)?.[1]).toBe('dQw4w9WgXcQ');
+            expect(buildEmbed(url)?.src, url).toBe('https://www.youtube.com/embed/dQw4w9WgXcQ');
         }
     });
 
