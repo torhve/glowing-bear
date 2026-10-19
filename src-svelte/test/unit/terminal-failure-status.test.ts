@@ -1,25 +1,27 @@
 /**
- * Characterization tests for B4: what a rejected password leaves the connection
- * status set to.
+ * A rejected password lands on the same status whichever transport carried it.
  *
  * A credential rejection is terminal on both transports — neither relay recovers
- * from it, and retrying spends the same password again. But the two transports
- * arrive at that decision by different routes, and the status they land on is
- * part of what the user sees:
+ * from it, and retrying spends the same password again — so both must say so the
+ * same way. The status is what the top bar turns into a word, and it used to be
+ * the one place where the two transports disagreed:
  *
- *   legacy  handleAttemptLoss (legacyConnection.ts:208) writes 'disconnected'
- *           at :214, and handleReconnectDecision's 403/401 branch never changes
- *           it — it names the error and shows a toast, then returns.
- *   API     handleOrchestratorStatus 'failed' (apiConnection.ts:320) writes
- *           'error'.
+ *   legacy  handleAttemptLoss wrote 'disconnected', and handleReconnectDecision's
+ *           403/401 branch named the error, showed a toast, and returned without
+ *           touching it — so a refusal read as "you pressed Leave".
+ *   API     handleOrchestratorStatus 'failed' wrote 'error'.
  *
- * The shared terminal-failure helper (connectionLifecycle.ts declareTerminalFailure)
- * does write 'error' for both, but the legacy auth path never reaches it: it is
- * terminal *without* going through scheduleRetry, which is the only caller.
+ * The legacy transport contradicted itself as well: a loss it would not retry
+ * already ended at 'error' through the retry loop's terminal declaration, and
+ * `first-connect-retry.test.ts` asserts exactly that. The auth branch was the
+ * outlier, not the transport.
  *
- * These tests pin the two statuses as they are today. They are the bug report for
- * the §13 decision about which status is correct; they are not a claim that
- * 'disconnected' is wrong.
+ * The rule now written down: 'error' is a failure the app has named and will not
+ * retry; 'disconnected' is a session that ended or a user who left. Nothing was
+ * folded into 'disconnected' to be lost — a user-initiated departure has its own
+ * `userDisconnect` field, and the banner reads the cause from `errors`, so its
+ * wording never changed. What changed is the top bar: see
+ * `connection-status-word.test.ts` for the words each status produces.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { get } from 'svelte/store';
@@ -64,12 +66,6 @@ class FakeSocket {
     removeEventListener() {}
 }
 
-/**
- * A stand-in for the API transport's orchestrator. It reports one status on
- * start(), which is all the app-level handler needs in order to run the branch
- * under test. Everything the real orchestrator owns — generation, abort, session
- * teardown — stays out of the picture.
- */
 /**
  * A stand-in for the API transport's orchestrator. It reports one status on
  * start(), which is all the app-level handler needs in order to run the branch
@@ -137,8 +133,8 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
-describe('B4 characterization: a rejected password lands on two different statuses', () => {
-    it('legacy: 403 leaves the status at "disconnected" while naming the cause', async () => {
+describe('a rejected password lands on the same status whichever transport carried it', () => {
+    it('legacy: 403 names the cause and reports a failure', async () => {
         const attempt = facadeConnect(PROFILE);
         await Promise.resolve();
 
@@ -147,8 +143,9 @@ describe('B4 characterization: a rejected password lands on two different status
 
         const state = get(connectionState);
         expect(state.errors.passwordError, 'the cause is named').toBe(true);
-        // The status the attempt wrote before the decision, unchanged by it.
-        expect(state.status, 'a terminal legacy auth failure reads as a plain disconnect').toBe('disconnected');
+        // handleAttemptLoss wrote 'disconnected' on the way in; this branch is the
+        // one that knows the attempt was refused rather than merely ended.
+        expect(state.status, 'a failure the app will not retry reads as a failure').toBe('error');
         expect(legacy.isAttemptInProgress()).toBe(false);
         expect(pendingRetryState().active, 'a rejected credential is not retried').toBe(false);
     });
@@ -163,7 +160,7 @@ describe('B4 characterization: a rejected password lands on two different status
         expect(state.status, 'the API transport names a terminal failure an error').toBe('error');
     });
 
-    it('the same event, two statuses — this is the divergence, recorded', async () => {
+    it('the same rejection reads the same way on both transports', async () => {
         updateSettings({ protocol: 'legacy' });
         const legacyAttempt = facadeConnect(PROFILE);
         await Promise.resolve();
@@ -177,7 +174,7 @@ describe('B4 characterization: a rejected password lands on two different status
         const apiStatus = get(connectionState).status;
 
         expect({ legacy: legacyStatus, api: apiStatus }).toEqual({
-            legacy: 'disconnected',
+            legacy: 'error',
             api: 'error',
         });
     });

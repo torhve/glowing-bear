@@ -229,6 +229,16 @@ function handleReconnectDecision(evt: CloseEvent) {
         // Terminal on either transport: a rejected credential is not a fault the
         // relay will recover from, and retrying it spends the same password again.
         setErrors({ passwordError: true });
+        // The status has to say that too. `handleAttemptLoss()` wrote 'disconnected'
+        // before asking for this decision, which is right for every branch that ends
+        // here except this one: a refusal is a failure the app has named and will not
+        // retry, and that is what 'error' means everywhere else — the retry loop's own
+        // terminal declaration writes it, and so does the API transport's 'failed'.
+        // Leaving it 'disconnected' made the same rejection read as "you left" on this
+        // transport and as "Error" on the other, and 'disconnected' carries no private
+        // meaning that would have been lost: a user-initiated departure is the
+        // `userDisconnect` branch above, and it has its own field.
+        setConnectionStatus('error');
         if (connectionData) showDisconnectToast(connectionData);
     } else if (connectionData) {
         scheduleReconnect();
