@@ -9,7 +9,6 @@ import { sha256, pbkdf2 as nativePbkdf2, toHexString } from '#lib/utils/crypto.t
 import type { ProtocolMessage } from '#lib/types.ts';
 import {
     beginManualReconnect,
-    cleanupFocusReconnect as sharedCleanupFocusReconnect,
     cancelPendingRetry,
     pendingRetryState,
     HANDSHAKE_TIMEOUT_MS,
@@ -81,9 +80,6 @@ function clearHandshakeDeadline(): void {
 let manualReconnectRequested = false;
 let connectionGeneration = 0;
 
-/** Hotlist poll interval is shared configuration; re-exported so callers that
- * import this transport keep working unchanged. */
-export { setHotlistPollInterval } from '#lib/stores/connectionLifecycle.ts';
 
 // Comprehensive cleanup for any disconnection path.
 // Clears all app state (buffers, unread tracking, timers, callbacks).
@@ -812,11 +808,9 @@ export const transportAdapter: TransportAdapter = {
     quiesce,
 };
 
-// Remove the visibilitychange listener (called on page unmount).
-export const cleanupFocusReconnect = sharedCleanupFocusReconnect;
 
 // Fetch a single WeeChat config option via infolist and update wconfig store.
-export async function fetchConfValue(name: string) {
+async function fetchConfValue(name: string) {
     const msg = Protocol.formatInfolist({
         name: 'option',
         pointer: 0,
@@ -990,7 +984,7 @@ function sendWs(data: string | ArrayBuffer, label = ''): boolean {
 }
 
 // Handle incoming messages
-export async function onMessage(data: ArrayBuffer) {
+async function onMessage(data: ArrayBuffer) {
     const generation = connectionGeneration;
     recordBytesReceived(data.byteLength);
     const message = await protocolInstance.parse(data);

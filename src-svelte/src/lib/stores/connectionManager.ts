@@ -288,10 +288,10 @@ export const retryAvailability = sharedRetryAvailability;
  */
 export const retryNow = sharedRetryNow;
 
-export function setHotlistPollInterval(ms: number): void {
-    api.setHotlistPollInterval(ms);
-    legacy.setHotlistPollInterval(ms);
-}
+/** Shared configuration, not per-transport: the poll interval lives in
+ *  connectionLifecycle. Re-exported once rather than routed to both transports —
+ *  both aliases pointed at this same function, so the old wrapper set it twice. */
+export { setHotlistPollInterval } from '#lib/stores/connectionLifecycle.ts';
 
 // Registered ONCE, for whichever transport is active when the handler runs.
 // Registering both transports' listeners was a bug, not belt-and-braces: the
@@ -397,9 +397,3 @@ export async function requestLegacyCompletion(
     return legacy.requestLegacyCompletion(bufferId, position, data);
 }
 
-/** Legacy config read: sends a confinfo request whose response lands in the
- *  wconfig store via the handlers (the API transport has no config endpoint
- *  until the WeeChat 5.0 options resource). No-op on the API path. */
-export async function fetchConfValue(name: string): Promise<void> {
-    if (transport === 'legacy') return legacy.fetchConfValue(name);
-}

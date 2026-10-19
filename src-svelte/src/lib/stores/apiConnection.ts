@@ -24,7 +24,6 @@ import { validateScript } from '#lib/api/api-validation.ts';
 import { applyRetainedHandoff, markCaptureIntent } from '#lib/stores/retainedChat.ts';
 import {
     cancelPendingRetry,
-    cleanupFocusReconnect as sharedCleanupFocusReconnect,
     beginManualReconnect,
     clearDisconnectToast,
     HANDSHAKE_TIMEOUT_MS,
@@ -56,9 +55,6 @@ let manualReconnectRequested = false;
 let lastRecordedSent = 0;
 let lastRecordedReceived = 0;
 
-/** Hotlist poll interval is shared configuration; re-exported so callers that
- *  import this transport keep working unchanged. */
-export { setHotlistPollInterval } from '#lib/stores/connectionLifecycle.ts';
 
 /** Central store-key → API id conversion. Components pass store keys
  *  (String(apiBufferId)); nothing else may parse ids. */
@@ -427,7 +423,6 @@ export const transportAdapter: TransportAdapter = {
     quiesce,
 };
 
-export const cleanupFocusReconnect = sharedCleanupFocusReconnect;
 
 export async function requestNicklist(bufferId: string) {
     const session = currentSession();

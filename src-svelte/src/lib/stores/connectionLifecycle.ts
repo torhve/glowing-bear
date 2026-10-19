@@ -201,7 +201,7 @@ export function transportAdapterFor(kind: RelayTransportKind | null): TransportA
 }
 
 /** The adapter for the transport the facade currently serves. */
-export function activeTransportAdapter(): TransportAdapter | null {
+function activeTransportAdapter(): TransportAdapter | null {
     return transportAdapterFor(get(activeTransport));
 }
 
@@ -551,7 +551,7 @@ export function debounceHotlistQuery(run: () => void): void {
     }, HOTLIST_DEBOUNCE_MS);
 }
 
-export function cancelPendingHotlistQuery(): void {
+function cancelPendingHotlistQuery(): void {
     if (hotlistDebounceTimer) {
         clearTimeout(hotlistDebounceTimer);
         hotlistDebounceTimer = null;
