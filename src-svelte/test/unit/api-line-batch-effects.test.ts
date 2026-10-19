@@ -3,14 +3,14 @@
  *
  * These pin the observable contract of `flushApiLineBatch`: the per-line
  * bookkeeping (unread tallies, sounds) still happens per line, while the
- * derived indicators — document title and favicon badge — and the two global
- * store writes (local unread ids, server unread deltas) are applied once for
+ * derived indicators — document title and favicon badge — and the global
+ * store write (local unread ids) are applied once for
  * the whole batch. The legacy transport has had this shape since
  * 5f5520c7; the API path is the same contract.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { buffers, servers, activeBufferId, localUnreadBuffers, recalculateLinesPerScreen } from '#lib/stores/models.ts';
+import { buffers, activeBufferId, localUnreadBuffers, recalculateLinesPerScreen } from '#lib/stores/models.ts';
 import { createApiStoreReducers, flushApiLineBatch } from '#lib/api/api-store-reducers.ts';
 import { updateTitle, updateFavico, playNotificationSound, createHighlight } from '#lib/notifications.ts';
 import { badgeState, documentTitle, type BadgeState } from '#lib/stores/indicatorState.ts';
@@ -29,7 +29,6 @@ vi.mock('#lib/windowFocus.ts', () => ({ isWindowFocused: () => true }));
 
 const BUFFER_ID = 1759000000000021 as ApiBufferId;
 const KEY = String(BUFFER_ID);
-const SERVER_KEY = 'irc.glowing-bear';
 
 function bufferSnap(): BufferSnapshot {
     return {
@@ -84,7 +83,6 @@ const buffer = () => get(buffers)[KEY]!;
 
 beforeEach(() => {
     buffers.set({});
-    servers.set({ [SERVER_KEY]: { id: SERVER_KEY, unread: 0 } });
     activeBufferId.set('');
     recalculateLinesPerScreen(500);
     vi.clearAllMocks();
@@ -146,10 +144,6 @@ describe('API line batch effects', () => {
         expect(get(localUnreadBuffers).has(buffer().id)).toBe(true);
     });
 
-    it('applies the server unread delta as one total, not one write per line', () => {
-        addLines(12);
-        expect(get(servers)[SERVER_KEY]!.unread).toBe(12);
-    });
 
     it('leaves the indicators alone when nothing in the batch may alert', () => {
         // notify_level 0 lines (logged backlog, joins) never badge or ring.
@@ -159,7 +153,6 @@ describe('API line batch effects', () => {
         expect(updateFavico).not.toHaveBeenCalled();
         expect(playNotificationSound).not.toHaveBeenCalled();
         expect(buffer().localUnread).toBe(0);
-        expect(get(servers)[SERVER_KEY]!.unread).toBe(0);
     });
 
     it('rings per highlight line but still publishes the badge once', () => {
@@ -172,7 +165,6 @@ describe('API line batch effects', () => {
             expect(seen.badges()).toBe(1);
             expect(seen.lastBadge()).toEqual({ count: 4, kind: 'notification' });
             expect(buffer().notification).toBe(4);
-            expect(get(servers)[SERVER_KEY]!.unread).toBe(4);
         } finally {
             seen.stop();
         }
@@ -185,6 +177,5 @@ describe('API line batch effects', () => {
         expect(updateTitle).not.toHaveBeenCalled();
         expect(updateFavico).not.toHaveBeenCalled();
         expect(buffer().localUnread).toBe(0);
-        expect(get(servers)[SERVER_KEY]!.unread).toBe(0);
     });
 });

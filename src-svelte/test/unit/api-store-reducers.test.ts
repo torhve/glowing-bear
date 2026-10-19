@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import {
-    buffers, servers, activeBufferId, previousBufferId, localUnreadBuffers,
+    buffers, activeBufferId, previousBufferId, localUnreadBuffers,
     beginSyncPhase, endSyncPhase, isSyncing, getEffectiveUnread, getReadBoundaryIndex,
 } from '#lib/stores/models.ts';
 import { createApiStoreReducers, storeKeyForBufferId, flushApiLineBatch } from '#lib/api/api-store-reducers.ts';
@@ -94,7 +94,6 @@ function addLine(bufferId: ApiBufferId, line: LineSnapshot): void {
 
 beforeEach(() => {
     buffers.set({});
-    servers.set({});
     activeBufferId.set('');
     previousBufferId.set('');
     localUnreadBuffers.update(() => new Set());
@@ -404,7 +403,7 @@ describe('line tally gates (ported legacy rules)', () => {
         expect(buf.notification).toBe(0);
     });
 
-    it('notify_level 1 increments unread and server totals; >=2 with highlight increments notification', () => {
+    it('notify_level 1 increments unread; >=2 with highlight increments notification', () => {
         reducers.buffers([bufferSnap()]);
         activeBufferId.set('');
         addLine(BUFFER_ID, lineSnap(1));
@@ -413,7 +412,6 @@ describe('line tally gates (ported legacy rules)', () => {
         expect(buf.unread).toBe(1);
         expect(buf.notification).toBe(1);
         expect(buf.localUnread).toBe(2);
-        expect(get(servers)['irc.glowing-bear']!.unread).toBe(2);
     });
 
     it('lineDataChanged replaces the line in place by weechat:<id>', () => {
@@ -484,7 +482,6 @@ describe('buffer notify level (WeeChat >= 5.0.0)', () => {
         const buf = get(buffers)[KEY]!;
         expect(buf.unread).toBe(0);
         expect(buf.notification).toBe(0);
-        expect(get(servers)['irc.glowing-bear']?.unread ?? 0).toBe(0); // no server totals at all
     });
 
     it('highlight-notify buffer counts highlights but not plain messages', () => {

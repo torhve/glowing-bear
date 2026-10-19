@@ -15,7 +15,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import {
     buffers,
-    servers,
     activeBufferId,
     previousBufferId,
     currentBuffer,
@@ -189,7 +188,6 @@ beforeEach(() => {
     vi.useFakeTimers();
     endSyncPhase();
     buffers.set({});
-    servers.set({});
     activeBufferId.set('');
     previousBufferId.set('');
     localUnreadBuffers.set(new Set());
@@ -437,20 +435,6 @@ describe('known identity costs (must be fixed before selectors rely on reference
         expect(published.lineIdsSeen!.size).toBe(2);
     });
 
-    it('handleHotlistInfo mutates the published servers entries in place', () => {
-        const b = makeBuffer('0x2');
-        buffers.set({ '0x2': b });
-        const serverEntry = { id: '0x2', unread: 0 };
-        servers.set({ 'irc.server': serverEntry });
-        activeBufferId.set('');
-
-        handleHotlistInfo(hotlistMessage([{ buffer: '0x2', unread: 7 }]));
-
-        const after = get(servers)['irc.server']!;
-        expect(after).toBe(serverEntry);
-        expect(after.unread).toBe(7);
-        expect(serverEntry.unread).toBe(7);
-    });
 });
 
 /**

@@ -13,7 +13,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { buffers, servers, activeBufferId, localUnreadBuffers, recalculateLinesPerScreen } from '#lib/stores/models.ts';
+import { buffers, activeBufferId, localUnreadBuffers, recalculateLinesPerScreen } from '#lib/stores/models.ts';
 import { createApiStoreReducers, flushApiLineBatch } from '#lib/api/api-store-reducers.ts';
 import { updateTitle, updateFavico, playNotificationSound } from '#lib/notifications.ts';
 import { badgeState, documentTitle } from '#lib/stores/indicatorState.ts';
@@ -34,7 +34,6 @@ const CHAN_ID = 1759000000000021 as ApiBufferId;
 const OTHER_ID = 1759000000000022 as ApiBufferId;
 const CHAN = String(CHAN_ID);
 const OTHER = String(OTHER_ID);
-const SERVER_KEY = 'irc.glowing-bear';
 
 function chanSnap(): BufferSnapshot {
     return {
@@ -112,7 +111,6 @@ function stateSnapshot(indicators: { count(): { titles: number; badges: number }
         chanUnread: b[CHAN]?.unread ?? 0,
         chanNotification: b[CHAN]?.notification ?? 0,
         chanLocalUnread: b[CHAN]?.localUnread ?? 0,
-        serverUnread: get(servers)[SERVER_KEY]?.unread ?? 0,
         localUnreadIds: [...get(localUnreadBuffers)].sort(),
         titleWrites: indicators.count().titles,
         badgeWrites: indicators.count().badges,
@@ -131,7 +129,6 @@ function seedBuffers(): void {
 
 beforeEach(() => {
     buffers.set({});
-    servers.set({ [SERVER_KEY]: { id: SERVER_KEY, unread: 0 } });
     activeBufferId.set('');
     localUnreadBuffers.update(() => new Set());
     recalculateLinesPerScreen(500);
@@ -210,7 +207,6 @@ describe('API line batch ordering', () => {
         batchCounters.stop();
 
         buffers.set({});
-        servers.set({ [SERVER_KEY]: { id: SERVER_KEY, unread: 0 } });
         activeBufferId.set('');
         localUnreadBuffers.update(() => new Set());
         vi.clearAllMocks();

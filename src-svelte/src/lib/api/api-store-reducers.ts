@@ -15,7 +15,7 @@
 
 import { get } from 'svelte/store';
 import {
-    buffers, servers, activeBufferId, previousBufferId, localUnreadBuffers,
+    buffers, activeBufferId, previousBufferId, localUnreadBuffers,
     createBuffer, createBufferLine, createNick, createNickGroup,
     parseRichText, removeBuffer, isSyncing, isRelayStatusBuffer,
     maxBufferLines, lineLimitFor, lineLimitWith, setReadBoundary, setReadBoundaryUnknown, applyServerReadMarker, markHotlistBaselineApplied,
@@ -137,8 +137,8 @@ export function flushApiLineBatch(): void {
     // A buffer that has been paged deeper carries its own cap on the buffer.
     const screenCap = get(maxBufferLines);
     // One accumulator for the whole flush, not per buffer: several buffers can
-    // be flooded in one frame and the Set and servers map are global.
-    const effects: LineBatchEffects = { localUnreadIds: new Set(), serverDeltas: {} };
+    // be flooded in one frame and the Set is global.
+    const effects: LineBatchEffects = { localUnreadIds: new Set() };
     const byBuffer = new Map<string, { items: { line: LineSnapshot; activeId: string }[] }>();
     for (const item of batch) {
         const key = storeKeyForBufferId(item.bufferId);
@@ -177,29 +177,22 @@ function registerGroupKey(bufferKey: string, groupId: number, name: string): str
     return key;
 }
 
-function serverKey(buffer: BufferData): string {
-    return `${buffer.plugin}.${buffer.server}`;
-}
 
 /**
  * Store writes a line batch can coalesce.
  *
  * Every one of these used to run per line: a full Set copy for the local
- * unread ids, a full servers-map copy for the unread delta, and a title and
- * favicon pass per alerting line. None of the stores they write is read inside
+ * unread ids, and a title and favicon pass per alerting line. None of the
+ * stores they write is read inside
  * the batch loop, so accumulating and applying once leaves the final state
  * identical. The legacy transport already batches this way (flushLineBatch);
  * this is the same contract on the API path.
  */
 interface LineBatchEffects {
     localUnreadIds: Set<string>;
-    serverDeltas: Record<string, number>;
 
 }
 
-function noteServerUnread(effects: LineBatchEffects, key: string, delta: number): void {
-    effects.serverDeltas[key] = (effects.serverDeltas[key] || 0) + delta;
-}
 
 /**
  * Apply the accumulated effects once. Order matters: the title and the favicon
@@ -212,19 +205,6 @@ function applyLineBatchEffects(effects: LineBatchEffects): void {
             const next = new Set(current);
             for (const id of effects.localUnreadIds) next.add(id);
             return next;
-        });
-    }
-    const keys = Object.keys(effects.serverDeltas);
-    if (keys.length > 0) {
-        servers.update((current) => {
-            const copy = { ...current };
-            for (const key of keys) {
-                const delta = effects.serverDeltas[key]!;
-                const entry = copy[key];
-                if (entry) copy[key] = { ...entry, unread: entry.unread + delta };
-                else copy[key] = { id: key, unread: delta };
-            }
-            return copy;
         });
     }
 }
@@ -471,13 +451,11 @@ function tallyLine(buffer: BufferData, line: LineSnapshot, activeId: string, eff
 
     if (buffer.notify > 1 && line.notifyLevel === 1) {
         buffer.unread++;
-        noteServerUnread(effects, serverKey(buffer), 1);
     }
     if (line.notifyLevel >= 2) {
         const isPrivate = buffer.type === 'private' || buffer.type === 'query';
         if (buffer.notify !== 0 && (line.highlight || isPrivate)) {
             buffer.notification++;
-            noteServerUnread(effects, serverKey(buffer), 1);
         }
     }
 }

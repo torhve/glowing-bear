@@ -24,7 +24,6 @@ import {
     activeBufferId,
     recalculateLinesPerScreen,
     localUnreadBuffers,
-    servers,
 } from '#lib/stores/models.ts';
 import type { BufferData, BufferLine } from '#lib/types.ts';
 import type { BufferSnapshot, LineSnapshot } from '#lib/api/api-contracts.ts';
@@ -184,7 +183,7 @@ function coreSnapshot(): BufferSnapshot {
 
 /**
  * Extra sidebar buffers for the 'unread' scenario. Coalescing the local-unread
- * id Set and the servers map only costs anything when they hold more than one
+ * id Set only costs anything when it holds more than one
  * entry — a real client has dozens of buffers and several of them unread.
  */
 function sideSnapshots(count: number): BufferSnapshot[] {
@@ -245,7 +244,6 @@ describe('perf: API reducer flood benchmark', () => {
             buffers.set({});
             activeBufferId.set('');
             localUnreadBuffers.set(new Set());
-            servers.set({ 'irc.bench': { id: 'irc.bench', unread: 0 } });
             recalculateLinesPerScreen(500); // maxBufferLines = 1000 → no trimming in bench
 
             const rng = makeRng(seed);

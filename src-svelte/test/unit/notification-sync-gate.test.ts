@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import {
     buffers,
-    servers,
     activeBufferId,
     beginSyncPhase,
     endSyncPhase,
@@ -154,7 +153,6 @@ describe('Notification gate vs. read-boundary gate', () => {
         // Each test starts with the hotlist baseline already applied.
         endSyncPhase();
         buffers.set({});
-        servers.set({ 'irc.server': { id: '0x100', unread: 0 } });
         activeBufferId.set('');
         setWindowFocused(false);
     });

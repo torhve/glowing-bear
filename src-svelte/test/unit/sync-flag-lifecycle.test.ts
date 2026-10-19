@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import {
     buffers,
-    servers,
     activeBufferId,
     previousBufferId,
     hotlistClearedBuffers,
@@ -209,7 +208,6 @@ describe('Sync phase lifecycle', () => {
         vi.clearAllMocks();
         endSyncPhase();
         buffers.set({});
-        servers.set({ 'irc.server': { id: '0x100', unread: 0 } });
         activeBufferId.set('');
         previousBufferId.set('');
         // setActiveBuffer parks an id here so a stale hotlist cannot restore its unread;

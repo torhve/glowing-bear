@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import {
     buffers,
-    servers,
     activeBufferId,
     previousBufferId,
     localUnreadBuffers,
@@ -153,7 +152,6 @@ describe('relay status buffers (issue #8)', () => {
             '0x900': { ...RELAY_BUFFER },
             '0x901': { ...RELAY_RAW_BUFFER },
         });
-        servers.set({ 'irc.server': { id: '0x100', unread: 0 } });
         activeBufferId.set('');
         previousBufferId.set('');
         localUnreadBuffers.set(new Set());
@@ -215,14 +213,6 @@ describe('relay status buffers (issue #8)', () => {
         expect(get(buffers)['0x100']!.localUnread).toBe(4);
     });
 
-    it('excludes relay.list from server unread totals', () => {
-        handleHotlistInfo(createHotlistMessage([
-            { buffer: '0x900', count: [0, 5, 5, 5] },
-            { buffer: '0x100', count: [0, 2, 0, 1] },
-        ]));
-
-        expect(get(servers)['irc.server']!.unread).toBe(3);
-    });
 
     it('treats relay.raw as a status buffer as well', () => {
         handleBufferLineAdded(createLineMessage('0x901', 3, ['notify_private'], 1));

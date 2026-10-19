@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import {
     buffers,
-    servers,
     activeBufferId,
     endSyncPhase,
     localUnreadBuffers,
@@ -139,7 +138,6 @@ describe('per-batch indicators and local-unread tally', () => {
         vi.clearAllMocks();
         endSyncPhase();
         buffers.set({});
-        servers.set({ 'irc.server': { id: '0x100', unread: 0 } });
         activeBufferId.set('');
         localUnreadBuffers.set(new Set());
         setWindowFocused(false);

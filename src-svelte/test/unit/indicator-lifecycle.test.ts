@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import {
     buffers,
-    servers,
     activeBufferId,
     endSyncPhase,
     localUnreadBuffers,
@@ -143,7 +142,6 @@ describe('indicator lifecycle', () => {
     beforeEach(() => {
         endSyncPhase();
         buffers.set({});
-        servers.set({ 'irc.server': { id: '0x100', unread: 0 } });
         activeBufferId.set('');
         localUnreadBuffers.set(new Set());
     });

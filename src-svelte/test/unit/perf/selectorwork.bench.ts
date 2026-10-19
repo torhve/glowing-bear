@@ -31,7 +31,6 @@ import { get } from 'svelte/store';
 import fs from 'node:fs';
 import {
     buffers,
-    servers,
     activeBufferId,
     previousBufferId,
     currentBuffer,
@@ -241,7 +240,6 @@ function seed(count: number): { activeId: string; backgroundIds: string[] } {
         ids.push(id);
     }
     buffers.set(map);
-    servers.set({ 'irc.gbtest': { id: '0x0', unread: 0 } });
     activeBufferId.set(ids[0]!);
     previousBufferId.set('');
     localUnreadBuffers.set(new Set());

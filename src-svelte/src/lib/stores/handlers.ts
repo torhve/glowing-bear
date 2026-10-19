@@ -1,7 +1,6 @@
 import { get } from "svelte/store";
 import {
     buffers,
-    servers,
     activeBufferId,
     previousBufferId,
     localUnreadBuffers,
@@ -239,8 +238,6 @@ export function handleBufferInfo(message: ProtocolMessage) {
     // boundary is still unknown is not tallied locally, because the hotlist baseline
     // that is about to arrive already accounts for it.
 
-    // Track pending server unread adjustments for batch update.
-    const serverDeltas: Record<string, number> = {};
 
     // Track the buffer ID that should be active after publish.
     // We mutate workingBuffers directly during the loop (avoiding race conditions
@@ -271,19 +268,6 @@ export function handleBufferInfo(message: ProtocolMessage) {
         } else {
             // Create new buffer
             const buffer = createBuffer(bufferMsg);
-            if (buffer.type === "server") {
-                // Register server
-                const key = `${buffer.plugin}.${buffer.server}`;
-                servers.update((current) => ({
-                    ...current,
-                    [key]: { id: buffer.id, unread: 0 },
-                }));
-            } else {
-                // Track server unread delta for batch apply after the loop.
-                const serverKey = `${buffer.plugin}.${buffer.server}`;
-                serverDeltas[serverKey] =
-                  (serverDeltas[serverKey] || 0) + buffer.unread + buffer.notification;
-            }
             workingBuffers[bufferId] = buffer;
             console.debug(
                 "[handler]   created buffer:",
@@ -304,17 +288,6 @@ export function handleBufferInfo(message: ProtocolMessage) {
     // baseline is applied (handleHotlistInfo): that is the moment WeeChat's counts
     // become authoritative and local tallying can safely resume.
 
-    // Apply pending server unread deltas immutably.
-    if (Object.keys(serverDeltas).length > 0) {
-        servers.update((current) => {
-            const next = { ...current };
-            for (const [key, delta] of Object.entries(serverDeltas)) {
-                const srv = next[key];
-                if (srv) next[key] = { ...srv, unread: srv.unread + delta };
-            }
-            return next;
-        });
-    }
 
     // Fallback: match by fullName for cases where the per-buffer check didn't fire
     // (e.g., buffers already existed from a prior _buffer_info call within this connection).
@@ -470,8 +443,6 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
     // Window focus state tracked by windowFocus module (web listeners + Tauri native events).
     const focused = isWindowFocused();
 
-    // Accumulate server unread deltas for batch-apply at the end.
-    const serverDeltas: Record<string, number> = {};
 
     // Same batching for the two per-batch side effects below. `buffers`,
     // `settings` and the derived `currentBuffer` are not written until the very
@@ -610,8 +581,6 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                         buffer.id !== activeId
                     ) {
                         buffer.unread++;
-                        const serverKey = `${buffer.plugin}.${buffer.server}`;
-                        serverDeltas[serverKey] = (serverDeltas[serverKey] || 0) + 1;
                     }
 
                     // Increment notification count for highlights/privates (notify_level >= 2).
@@ -622,8 +591,6 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
                           buffer.type === "private" || buffer.type === "query";
                         if (buffer.notify !== 0 && (lineMsg.highlight || isPrivate)) {
                             buffer.notification++;
-                            const serverKey = `${buffer.plugin}.${buffer.server}`;
-                            serverDeltas[serverKey] = (serverDeltas[serverKey] || 0) + 1;
                         }
                     }
                 }
@@ -691,17 +658,6 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
         if (buf) trimBufferLines(buf, lineLimitFor(buf));
     }
 
-    // Apply server unread deltas immutably.
-    if (Object.keys(serverDeltas).length > 0) {
-        servers.update((current) => {
-            const next = { ...current };
-            for (const [key, delta] of Object.entries(serverDeltas)) {
-                const srv = next[key];
-                if (srv) next[key] = { ...srv, unread: srv.unread + delta };
-            }
-            return next;
-        });
-    }
 
     // Update stores using update() to merge with current state.
     // This prevents overwriting concurrent changes from other handlers
@@ -937,26 +893,6 @@ export function handleBufferOpened(message: ProtocolMessage) {
         addBuffer(newBuffer);
     }
 
-    if (newBuffer.type === "server") {
-        const key = `${newBuffer.plugin}.${newBuffer.server}`;
-        servers.update((current) => ({
-            ...current,
-            [key]: { id: newBuffer.id, unread: 0 },
-        }));
-    } else {
-        const serverKey = `${newBuffer.plugin}.${newBuffer.server}`;
-        const delta = newBuffer.unread + newBuffer.notification;
-        if (delta > 0) {
-            servers.update((current) => {
-                const server = current[serverKey];
-                if (!server) return current;
-                return {
-                    ...current,
-                    [serverKey]: { ...server, unread: server.unread + delta },
-                };
-            });
-        }
-    }
 
     // Check if this buffer matches a pending switch request from /q or a nicklist
     // click; the server context disambiguates same-nick queries on different servers.
@@ -1185,7 +1121,6 @@ export function handleHotlistInfo(message: ProtocolMessage) {
     const currentBuffers = get(buffers);
     const activeId = get(activeBufferId);
     const previousId = get(previousBufferId);
-    const currentServers = get(servers);
     const hotlistCleared = get(hotlistClearedBuffers);
 
     const hotlist = message.objects[0]?.content as HotlistEntry[];
@@ -1203,12 +1138,11 @@ export function handleHotlistInfo(message: ProtocolMessage) {
         );
     }
 
-    // Build immutable copies of affected buffers and servers to ensure
+    // Build immutable copies of affected buffers to ensure
     // Svelte reactivity triggers correctly when unread counts change.
     // Skip active and previous buffers — they are managed separately by
     // setActiveBuffer and should not be overwritten by hotlist data.
     const updatedBuffers = {} as Record<string, BufferData>;
-    const updatedServers = { ...currentServers };
 
     for (const id in currentBuffers) {
         if (id === activeId || id === previousId) continue;
@@ -1285,11 +1219,6 @@ export function handleHotlistInfo(message: ProtocolMessage) {
         buf.notification = 0;
     }
 
-    // Reset all server unread totals before recalculating from hotlist entries.
-    for (const key in updatedServers) {
-        const srv = updatedServers[key];
-        if (srv) srv.unread = 0;
-    }
 
     for (const entry of hotlist) {
         if (entry.buffer === activeId || entry.buffer === previousId) continue;
@@ -1339,11 +1268,6 @@ export function handleHotlistInfo(message: ProtocolMessage) {
             });
         }
 
-        const serverKey = `${buffer.plugin}.${buffer.server}`;
-        const server = updatedServers[serverKey];
-        if (server) {
-            server.unread += buffer.unread + buffer.notification;
-        }
     }
 
     // Use update() instead of set() to merge with current store state.
@@ -1358,7 +1282,6 @@ export function handleHotlistInfo(message: ProtocolMessage) {
         }
         return merged;
     });
-    servers.set(updatedServers);
     // Baseline applied. Closing the phase is the connection init's job — it holds the
     // generation token — so that a superseded attempt can never close a newer
     // connection's phase.

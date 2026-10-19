@@ -58,7 +58,6 @@ vi.mock('#lib/stores/models.ts', () => ({
     buffers: { subscribe: (fn: (v: any) => void) => bufferStore.subscribe(fn) },
     currentBuffer: { subscribe: (fn: (v: any) => void) => { fn(null); return () => {}; } },
     setActiveBuffer: vi.fn(),
-    servers: { subscribe: (fn: (v: any) => void) => fn({}) },
 }));
 
 import { updateFavico } from '#lib/notifications.ts';

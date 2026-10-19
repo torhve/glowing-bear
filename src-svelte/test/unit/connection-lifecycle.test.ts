@@ -31,7 +31,6 @@ import {
     pendingBufferSwitch,
     previousBufferId,
     relayApiVersion,
-    servers,
     weechatVersion,
 } from '#lib/stores/models.ts';
 import { connectionState, setNextReconnectAt } from '#lib/stores/connectionStore.ts';
@@ -133,7 +132,6 @@ function seedBufferWithLine() {
 
 beforeEach(() => {
     buffers.set({});
-    servers.set({});
     clearToasts();
     clearCaptureIntent();
     releaseRetainedSnapshot('explicit-leave');
@@ -199,7 +197,6 @@ describe('resetAppState — the shared wipe', () => {
         resetAppState();
 
         expect(Object.keys(get(buffers))).toEqual([]);
-        expect(Object.keys(get(servers))).toEqual([]);
         expect(get(activeBufferId)).toBe('');
         expect(get(previousBufferId)).toBe('');
         expect(get(pendingBufferSwitch)).toBeNull();
@@ -334,19 +331,16 @@ describe('the drain-before-wipe contract', () => {
         const lines = get(buffers)[String(API_ID)]?.lines ?? [];
         expect(lines.map((l) => l.text).join('')).not.toContain('from the dead session');
         expect(get(localUnreadBuffers).size).toBe(0);
-        expect(Object.keys(get(servers))).toEqual([]);
     });
 
     it('leaves no store a drain can write untouched by the wipe', () => {
         // The wipe must cover every store a drain can write, in BOTH orderings, or
         // the ordering becomes load-bearing in a way no test would notice until a
         // dropped connection left dead-session rows on screen.
-        servers.update(() => ({ 'irc.gbtest': { id: 'irc.gbtest', unread: 3 } }));
         localUnreadBuffers.update(() => new Set(['1791000000000901']));
 
         resetAppState();
 
-        expect(Object.keys(get(servers))).toEqual([]);
         expect(get(localUnreadBuffers).size).toBe(0);
     });
 });

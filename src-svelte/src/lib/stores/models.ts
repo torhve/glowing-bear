@@ -728,10 +728,6 @@ export function createNickGroup(message: {
 
 export const buffers = writable<Record<string, BufferData>>({});
 
-export const servers = writable<Record<string, { id: string; unread: number }>>(
-    {},
-);
-
 export const activeBufferId = writable<string>("");
 
 export const weechatVersion = writable<number[]>([]);
@@ -1381,15 +1377,6 @@ export function clearAllUnread() {
     localUnreadBuffers.update(() => new Set());
     hotlistClearedBuffers.update(() => new Set());
 
-    const currentServers = get(servers);
-    const updatedServers: Record<string, { id: string; unread: number }> = {};
-    for (const key in currentServers) {
-        const srv = currentServers[key];
-        if (srv) {
-            updatedServers[key] = { ...srv, unread: 0 };
-        }
-    }
-    servers.set(updatedServers);
 }
 
 export function closeBuffer(bufferId: string) {

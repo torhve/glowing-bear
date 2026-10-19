@@ -86,7 +86,7 @@ let connectionGeneration = 0;
 export { setHotlistPollInterval } from '#lib/stores/connectionLifecycle.ts';
 
 // Comprehensive cleanup for any disconnection path.
-// Clears all app state (buffers, servers, unread tracking, timers, callbacks).
+// Clears all app state (buffers, unread tracking, timers, callbacks).
 // Does NOT touch connectionData (needed by scheduleReconnect / handleReconnectDecision)
 // and does NOT set connection status (caller decides based on context).
 //
@@ -1065,7 +1065,7 @@ function teardownSession() {
         webSockets.clear();
         ws = null;
     }
-    // Clear all app state — buffers, servers, timers, callbacks, notifications.
+    // Clear all app state — buffers, timers, callbacks, notifications.
     resetAllState();
 }
 

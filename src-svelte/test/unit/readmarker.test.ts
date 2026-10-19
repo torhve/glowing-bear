@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { buffers, servers, activeBufferId, setActiveBuffer, hotlistClearedBuffers, createBufferLine, getReadBoundaryIndex, isUserMessageLine, setReadBoundary, setReadBoundaryUnknown, endSyncPhase } from '#lib/stores/models.ts';
+import { buffers, activeBufferId, setActiveBuffer, hotlistClearedBuffers, createBufferLine, getReadBoundaryIndex, isUserMessageLine, setReadBoundary, setReadBoundaryUnknown, endSyncPhase } from '#lib/stores/models.ts';
 import type { BufferData, ProtocolMessage, HotlistEntry } from '#lib/types.ts';
 
 // Mock settings store to avoid localStorage access at module load time
@@ -136,7 +136,6 @@ describe('Readmarker behavior', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         buffers.set({});
-        servers.set({});
         activeBufferId.set('');
         // Reset document.hidden to visible for focused test scenarios.
         Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
@@ -148,7 +147,6 @@ describe('Readmarker behavior', () => {
             const buf = makeBuffer('0x100', { lines: [{ prefix: [], content: [], date: now, shortTime: '', buffer: '0x100', tags: [], highlight: false, displayed: true, prefixtext: '', text: 'line1', showHiddenBrackets: false }] as any, lastSeen: 0, active: true });
             buffers.set({ '0x100': buf });
             activeBufferId.set('0x100');
-            servers.set({ 'irc.server': { id: '0x100', unread: 0 } });
 
             handleBufferLineAdded(createLineMessage('0x100', [], 0, 1, 0, now));
 
@@ -164,7 +162,6 @@ describe('Readmarker behavior', () => {
             const buf = makeBuffer('0x200', { lines: [{ prefix: [], content: [], date: 0, shortTime: '', buffer: '0x200', tags: [], highlight: false, displayed: true, prefixtext: '', text: 'line1', showHiddenBrackets: false }] as any, lastSeen: 0, active: false });
             buffers.set({ '0x200': buf });
             activeBufferId.set('0x999'); // different buffer active
-            servers.set({ 'irc.server': { id: '0x200', unread: 0 } });
 
             handleBufferLineAdded(createLineMessage('0x200', [], 0, 1, 1));
 
@@ -177,7 +174,6 @@ describe('Readmarker behavior', () => {
             const buf = makeBuffer('0x200', { lines: [{ prefix: [], content: [], date: 0, shortTime: '', buffer: '0x200', tags: [], highlight: false, displayed: true, prefixtext: '', text: 'line1', showHiddenBrackets: false }] as any, lastSeen: 5, active: false });
             buffers.set({ '0x200': buf });
             activeBufferId.set('0x999');
-            servers.set({ 'irc.server': { id: '0x200', unread: 0 } });
 
             handleBufferLineAdded(createLineMessage('0x200', [], 1, 1, 3));
 
@@ -190,7 +186,6 @@ describe('Readmarker behavior', () => {
             const buf = makeBuffer('0x100', { lines: [] as any, lastSeen: -1, active: true });
             buffers.set({ '0x100': buf });
             activeBufferId.set('0x100');
-            servers.set({ 'irc.server': { id: '0x100', unread: 0 } });
 
             // Simulate window focused
             document.hasFocus = () => true;
@@ -212,7 +207,6 @@ describe('Readmarker behavior', () => {
                 active: false
             });
             buffers.set({ '0x300': buf });
-            servers.set({ 'irc.server': { id: '0x300', unread: 0 } });
 
             handleHotlistInfo(createHotlistInfo([{ buffer: '0x300', count: [0, 3, 1, 0] }]));
 
@@ -233,7 +227,6 @@ describe('Readmarker behavior', () => {
                 active: false
             });
             buffers.set({ '0x200': buf });
-            servers.set({ 'irc.server': { id: '0x200', unread: 7 } });
 
             setActiveBuffer('0x200');
 
@@ -272,7 +265,6 @@ describe('Readmarker behavior', () => {
                 active: false
             });
             buffers.set({ '0x200': buf });
-            servers.set({ 'irc.server': { id: '0x200', unread: 19 } });
 
             setActiveBuffer('0x200');
 
@@ -292,7 +284,6 @@ describe('Readmarker behavior', () => {
                 active: false
             });
             buffers.set({ '0x200': buf });
-            servers.set({ 'irc.server': { id: '0x200', unread: 15 } });
 
             setActiveBuffer('0x200');
 
@@ -340,7 +331,6 @@ describe('Readmarker behavior', () => {
             // Set requestedLines to match actual line count so pruning subtraction is consistent.
             buf.requestedLines = 250;
             buffers.set({ '0x300': buf });
-            servers.set({ 'irc.server': { id: '0x300', unread: 0 } });
 
             setActiveBuffer('0x300');
 
@@ -374,7 +364,6 @@ describe('Readmarker behavior', () => {
             });
             buffers.set({ '0x200': bufB, '0x100': bufA });
             activeBufferId.set('0x200');
-            servers.set({ 'irc.server': { id: '0x200', unread: 0 }, 'irc.server2': { id: '0x100', unread: 0 } });
 
             // User switches to Buffer A
             setActiveBuffer('0x100');
@@ -426,11 +415,6 @@ describe('Readmarker behavior', () => {
             });
             buffers.set({ '0x100': bufA, '0x200': bufB, '0x300': bufC });
             activeBufferId.set('0x100');
-            servers.set({
-                'irc.server': { id: '0x100', unread: 0 },
-                'irc.server2': { id: '0x200', unread: 0 },
-                'irc.server3': { id: '0x300', unread: 0 }
-            });
 
             // User switches A→B
             setActiveBuffer('0x200');
@@ -466,7 +450,6 @@ describe('Readmarker behavior', () => {
         it('does NOT increment unread when buffer notify is 0 (never)', () => {
             const buf = makeBuffer('0x400', { lines: [] as any, lastSeen: -1, active: false, notify: 0 });
             buffers.set({ '0x400': buf });
-            servers.set({ 'irc.server': { id: '0x400', unread: 0 } });
             activeBufferId.set('0x999');
 
             handleBufferLineAdded(createLineMessage('0x400', [], 0, 1, 1));
@@ -478,7 +461,6 @@ describe('Readmarker behavior', () => {
         it('does NOT increment unread when buffer notify is 1 (highlight only)', () => {
             const buf = makeBuffer('0x500', { lines: [] as any, lastSeen: -1, active: false, notify: 1 });
             buffers.set({ '0x500': buf });
-            servers.set({ 'irc.server': { id: '0x500', unread: 0 } });
             activeBufferId.set('0x999');
 
             handleBufferLineAdded(createLineMessage('0x500', [], 0, 1, 1));
@@ -490,7 +472,6 @@ describe('Readmarker behavior', () => {
         it('increments unread when buffer notify is 2 (message)', () => {
             const buf = makeBuffer('0x600', { lines: [] as any, lastSeen: -1, active: false, notify: 2 });
             buffers.set({ '0x600': buf });
-            servers.set({ 'irc.server': { id: '0x600', unread: 0 } });
             activeBufferId.set('0x999');
 
             handleBufferLineAdded(createLineMessage('0x600', [], 0, 1, 1));
@@ -502,7 +483,6 @@ describe('Readmarker behavior', () => {
         it('increments unread when buffer notify is 3 (all)', () => {
             const buf = makeBuffer('0x700', { lines: [] as any, lastSeen: -1, active: false, notify: 3 });
             buffers.set({ '0x700': buf });
-            servers.set({ 'irc.server': { id: '0x700', unread: 0 } });
             activeBufferId.set('0x999');
 
             handleBufferLineAdded(createLineMessage('0x700', [], 0, 1, 1));
@@ -516,7 +496,6 @@ describe('Readmarker behavior', () => {
         it('does NOT increment notification for highlight on active+focused buffer', () => {
             const buf = makeBuffer('0x800', { lines: [] as any, lastSeen: 0, active: true, notify: 3 });
             buffers.set({ '0x800': buf });
-            servers.set({ 'irc.server': { id: '0x800', unread: 0 } });
             activeBufferId.set('0x800');
 
             handleBufferLineAdded(createLineMessage('0x800', [], 1, 1, 3));
@@ -528,7 +507,6 @@ describe('Readmarker behavior', () => {
         it('does NOT increment notification for highlight on active buffer even when window unfocused', () => {
             const buf = makeBuffer('0x900', { lines: [] as any, lastSeen: 0, active: true, notify: 3 });
             buffers.set({ '0x900': buf });
-            servers.set({ 'irc.server': { id: '0x900', unread: 0 } });
             activeBufferId.set('0x900');
 
             // Simulate hidden tab - notifications should still be suppressed for active buffer.
@@ -543,7 +521,6 @@ describe('Readmarker behavior', () => {
         it('does NOT increment unread for message on active+focused buffer', () => {
             const buf = makeBuffer('0xA00', { lines: [] as any, lastSeen: 0, active: true, notify: 3 });
             buffers.set({ '0xA00': buf });
-            servers.set({ 'irc.server': { id: '0xA00', unread: 0 } });
             activeBufferId.set('0xA00');
 
             handleBufferLineAdded(createLineMessage('0xA00', [], 0, 1, 1));

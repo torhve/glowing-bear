@@ -52,7 +52,6 @@ import {
     pendingBufferSwitch,
     previousBufferId,
     relayApiVersion,
-    servers,
     weechatVersion,
 } from '#lib/stores/models.ts';
 
@@ -402,7 +401,6 @@ export function resetAppState(retainGeneration?: number): void {
 
     // No stale entries accumulate across reconnects.
     buffers.set({});
-    servers.set({});
     localUnreadBuffers.update(() => new Set());
     hotlistClearedBuffers.update(() => new Set());
     activeBufferId.set('');
