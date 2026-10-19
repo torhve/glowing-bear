@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
 import { setConnectionStatus, setErrors, clearErrors, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, beginSessionStats } from '#lib/stores/connectionStore.ts';
-import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, weechatVersion, historyWindowEstablished, historyPageSize, growHistoryLimit, initialHistoryWindow } from '#lib/stores/models.ts';
+import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, weechatVersion, historyWindowEstablished, historyPageSize, growHistoryLimit, initialHistoryWindow, shouldFetchOnBufferSwitch, SWITCH_FETCH_REQUEST_LINES } from '#lib/stores/models.ts';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist, flushLineBatch, setOnUpgrade, setOnUpgradeEnded } from '#lib/stores/handlers.ts';
 import { addToast, removeToast, clearToasts, toastStore } from '#lib/toast.ts';
 
@@ -34,6 +34,27 @@ const protocolInstance = new Protocol();
 // Track all WebSocket instances (including stale ones from previous connections)
 // so that disconnect() can close them all — prevents orphaned connections.
 const webSockets = new Set<WebSocket>();
+
+/**
+ * WebSocket close code 1000 — normal closure.
+ *
+ * Every close in this file is deliberate: a manual reconnect, a superseded
+ * attempt, a transport being handed over, an auth handshake that gave up. None
+ * of them is a failure the peer caused, and the code is what says so. Writing
+ * `1000` inline nine times reads like a magic number when it is actually the
+ * one claim each of those closes makes about itself.
+ */
+const CLOSE_NORMAL = 1000;
+
+/**
+ * Pause after firing an `init` that is not awaited.
+ *
+ * The password-handshake `init` messages are fire-and-forget because WeeChat
+ * increments its callback id for them without answering, so waiting for a reply
+ * would time out. The pause is what keeps the *next* write from overtaking an
+ * init that WeeChat has not consumed yet.
+ */
+const INIT_SETTLE_MS = 5;
 
 /**
  * Decide the TOTP code to send in `init` from the handshake response.
@@ -237,7 +258,7 @@ export async function connect(profile: ConnectionProfile) {
         manualReconnectRequested = false;
         if (connecting) {
             // Close all tracked WebSocket instances (including stale ones)
-            for (const w of webSockets) w.close(1000, 'manual reconnect');
+            for (const w of webSockets) w.close(CLOSE_NORMAL, 'manual reconnect');
             webSockets.clear();
             ws = null;
         }
@@ -266,7 +287,7 @@ export async function connect(profile: ConnectionProfile) {
     if (DEBUG_CONNECTION) console.log('Connecting to:', `${proto}://${formattedHost}:${port}`);
 
     // Close all existing WebSocket instances before starting new connection
-    for (const w of webSockets) w.close(1000, 'new connection');
+    for (const w of webSockets) w.close(CLOSE_NORMAL, 'new connection');
     webSockets.clear();
     ws = null;
     connectionData = profile;
@@ -275,7 +296,7 @@ export async function connect(profile: ConnectionProfile) {
     // Register upgrade callbacks so handlers can trigger disconnect/reconnect.
     setOnUpgrade(() => {
         for (const w of webSockets) {
-            if (w.readyState === WebSocket.OPEN) w.close(1000, 'WeeChat upgrading');
+            if (w.readyState === WebSocket.OPEN) w.close(CLOSE_NORMAL, 'WeeChat upgrading');
         }
     });
     setOnUpgradeEnded(() => {
@@ -404,7 +425,7 @@ export async function connect(profile: ConnectionProfile) {
                 if (nonce.length === 0 && needsNonce) {
                     setErrors({ hashAlgorithmDisagree: true });
                     reject(new Error('Server did not provide a nonce for PBKDF2 authentication'));
-                    if (ws) ws.close(1000, 'Missing nonce');
+                    if (ws) ws.close(CLOSE_NORMAL, 'Missing nonce');
                     return;
                 }
 
@@ -416,7 +437,7 @@ export async function connect(profile: ConnectionProfile) {
                         // Server wants pbkdf2+sha512 but we only support sha256 variants natively → error
                         setErrors({ hashAlgorithmDisagree: true });
                         reject(new Error('Unsupported hash algorithm: pbkdf2+sha512 (needs crypto.subtle)'));
-                        if (ws) ws.close(1000, 'Unsupported hash algorithm');
+                        if (ws) ws.close(CLOSE_NORMAL, 'Unsupported hash algorithm');
                         return;
                     }
                 } else if (passwordMethod === 'pbkdf2+sha256') {
@@ -438,7 +459,7 @@ export async function connect(profile: ConnectionProfile) {
                         // No native SHA-512 — report error
                         setErrors({ hashAlgorithmDisagree: true });
                         reject(new Error('Unsupported hash algorithm: sha512 (needs crypto.subtle)'));
-                        if (ws) ws.close(1000, 'Unsupported hash algorithm');
+                        if (ws) ws.close(CLOSE_NORMAL, 'Unsupported hash algorithm');
                         return;
                     }
                 } else if (passwordMethod === 'plain') {
@@ -447,7 +468,7 @@ export async function connect(profile: ConnectionProfile) {
                     if (ws && ws.readyState === WebSocket.OPEN) {
                         sendWs(initMsg, 'init(plain)');
                     }
-                    await new Promise(r => setTimeout(r, 5));
+                    await new Promise(r => setTimeout(r, INIT_SETTLE_MS));
                 } else if (!passwordMethod || passwordMethod === '') {
                     // Empty password_hash_algo = WeeChat using non-default algo (pbkdf2+sha256).
                     // Default to pbkdf2+sha256 when server doesn't explicitly report the algo.
@@ -460,7 +481,7 @@ export async function connect(profile: ConnectionProfile) {
                     // Unsupported algorithm — report error and abort
                     setErrors({ hashAlgorithmDisagree: true });
                     reject(new Error('Unsupported hash algorithm: ' + passwordMethod));
-                    if (ws) ws.close(1000, 'Unsupported hash algorithm');
+                    if (ws) ws.close(CLOSE_NORMAL, 'Unsupported hash algorithm');
                     return;
                 }
 
@@ -639,7 +660,7 @@ async function initializePBKDF2(password: string, nonce: Uint8Array, iterations:
     if (ws && ws.readyState === WebSocket.OPEN) {
         sendWs(initMsg, `init(pbkdf2+${algoLabel})`);
     }
-    await new Promise(r => setTimeout(r, 5));
+    await new Promise(r => setTimeout(r, INIT_SETTLE_MS));
 }
 
 // Compute SHA-256 or SHA-512 password digest for authentication.
@@ -654,7 +675,7 @@ async function initializeSHA(password: string, method: 'sha256' | 'sha512', totp
     if (ws && ws.readyState === WebSocket.OPEN) {
         sendWs(initMsg, `init(${method})`);
     }
-    await new Promise(r => setTimeout(r, 5));
+    await new Promise(r => setTimeout(r, INIT_SETTLE_MS));
 }
 
 // Native TypeScript SHA-256 fallback (no crypto.subtle required).
@@ -666,7 +687,7 @@ async function initializeSHANative(password: string, totp: string | null = null)
     if (ws && ws.readyState === WebSocket.OPEN) {
         sendWs(initMsg, 'init(sha256-native)');
     }
-    await new Promise(r => setTimeout(r, 5));
+    await new Promise(r => setTimeout(r, INIT_SETTLE_MS));
 }
 
 // Native TypeScript PBKDF2-SHA256 fallback (no crypto.subtle required).
@@ -686,7 +707,7 @@ async function initializePBKDF2Native(password: string, nonce: Uint8Array, itera
     if (ws && ws.readyState === WebSocket.OPEN) {
         sendWs(initMsg, 'init(pbkdf2+sha256-native)');
     }
-    await new Promise(r => setTimeout(r, 5));
+    await new Promise(r => setTimeout(r, INIT_SETTLE_MS));
 }
 
 // Show a persistent disconnect toast with reconnect button.
@@ -780,7 +801,7 @@ function quiesce(): void {
     connectionGeneration++;
     const reject = pendingConnectReject;
     pendingConnectReject = null;
-    for (const w of webSockets) w.close(1000, 'superseded by another transport');
+    for (const w of webSockets) w.close(CLOSE_NORMAL, 'superseded by another transport');
     webSockets.clear();
     ws = null;
     connecting = false;
@@ -1054,7 +1075,7 @@ function teardownSession() {
     // to send on a Leave, and it read as if Leave quit WeeChat when it did not.
     if (webSockets.size > 0) {
         for (const w of webSockets) {
-            w.close(1000, 'user disconnect');
+            w.close(CLOSE_NORMAL, 'user disconnect');
         }
         webSockets.clear();
         ws = null;
@@ -1255,11 +1276,11 @@ export async function switchBuffer(bufferId: string): Promise<boolean> {
     // with a held-line count, which a retained handoff, a clear, or a trim can all
     // change for reasons that have nothing to do with freshness. newestWindowFetched
     // is the one answer to that question on both transports.
-    if (buffer && (buffer.lastSeen < 0 || buffer.lines.length < 20) && !buffer.newestWindowFetched) {
+    if (buffer && shouldFetchOnBufferSwitch(buffer)) {
         // Line identity, rather than an array offset, preserves a known boundary when
         // a switch fetch replaces the cached snapshot. An absent identity remains unknown.
         try {
-            await fetchMoreLines(100, bufferId);
+            await fetchMoreLines(SWITCH_FETCH_REQUEST_LINES, bufferId);
         } catch (err) {
             console.error('[setActiveBuffer] fetchMoreLines failed:', err);
             // Silently ignore fetch failures on buffer switch

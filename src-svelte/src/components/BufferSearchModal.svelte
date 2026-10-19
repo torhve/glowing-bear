@@ -3,6 +3,8 @@
   import { visibleBuffers, sortBuffers, compareBuffersHotlist } from '#lib/stores/models.ts';
   import { settings, updateSettings } from '#lib/stores/settings.ts';
   import { switchBuffer } from '#lib/stores/connectionManager.ts';
+  import { clamp } from '#lib/num.ts';
+  import { focusWhenPopoverOpens } from '#lib/dialogFocus.ts';
 
   import BaseDialog from '#components/BaseDialog.svelte';
   import FormInput from '#components/FormInput.svelte';
@@ -68,7 +70,7 @@
   let activeIndex = $derived.by(() => {
     const count = groupedBuffers.length;
     if (count === 0) return -1;
-    return Math.min(Math.max(selectedIndex, 0), count - 1);
+    return clamp(selectedIndex, 0, count - 1);
   });
 
   async function handleBufferClick(buffer: BufferPresentation) {
@@ -104,18 +106,10 @@
     }
   }
 
-  // Chromium dispatches `toggle` a frame after the popover becomes visible, which
-  // delays auto-focus enough to swallow a fast first keystroke. `beforetoggle`
-  // fires synchronously inside showPopover(), so focus from there — deferred one
-  // microtask, by which time the popover is shown and the input is focusable.
   function handleBeforeToggle(event: ToggleEvent) {
     if (event.newState !== 'open') return;
     isOpen = true;
-    queueMicrotask(() => {
-      const input = document.getElementById('buffer-search') as HTMLInputElement;
-      input?.focus();
-      input?.select();
-    });
+    focusWhenPopoverOpens('buffer-search', { select: true });
   }
 
   function handleToggle(event: ToggleEvent) {

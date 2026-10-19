@@ -3,6 +3,7 @@ import { writable, get, derived } from "svelte/store";
 export const activeBufferChanged = writable(0);
 import { recordLastBuffer } from "#lib/stores/bufferResume.ts";
 import { settings } from "#lib/stores/settings.ts";
+import { clamp } from "#lib/num.ts";
 import type {
     BufferData,
     BufferLine,
@@ -199,7 +200,7 @@ export function setReadBoundary(buffer: BufferData, index: number): void {
         setReadBoundaryUnknown(buffer);
         return;
     }
-    const clamped = Math.max(-1, Math.min(index, buffer.lines.length - 1));
+    const clamped = clamp(index, -1, buffer.lines.length - 1);
     const boundaryLineId = clamped >= 0 ? buffer.lines[clamped]?.lineId : undefined;
     if (boundaryLineId !== undefined && findUniqueLineIndex(buffer.lines, boundaryLineId) === null) {
         setReadBoundaryUnknown(buffer);
@@ -552,6 +553,26 @@ export function createBufferLine(message: {
 
 // ---- Date-change separator injection (moved from the legacy handlers at
 // cutover; pure model logic used by both history and live line paths) ----
+
+/**
+ * Weekday names for the day-change separator, indexed by Date.getDay().
+ *
+ * Hoisted because it was rebuilt on every separator, which is the only reason it
+ * was worth noticing at all. The names are English while the date next to them is
+ * formatted with `toLocaleDateString(undefined, …)`, so a non-English reader sees
+ * "Monday (janvier 12, 2026)". That inconsistency is real and left alone here:
+ * making the weekday follow the locale would change rendered text, which is a
+ * decision rather than a cleanup.
+ */
+const DATE_CHANGE_WEEKDAYS = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+];
 /**
  * Inject a "day changed" separator when the new line falls on a different local
  * day than the buffer's last line.
@@ -626,16 +647,7 @@ export function injectDateChangeMessageIfNeeded(
     let content = `\u001943\u2500`; // Day change color (code 43 = chat_day_change) + box drawing
 
     // Add day of week
-    const weekdays = [
-        "Sunday",
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-    ];
-    content += weekdays[newDay.getDay()] + " (";
+    content += DATE_CHANGE_WEEKDAYS[newDay.getDay()] + " (";
     content += newDay.toLocaleDateString(undefined, {
         month: "long",
         day: "numeric",
@@ -1156,6 +1168,22 @@ const INITIAL_WINDOW_HEADROOM = 10;
  */
 export function initialHistoryWindow(): number {
     return get(linesPerScreen) + INITIAL_WINDOW_HEADROOM;
+}
+
+/**
+ * Whether switching to a buffer should first pull more of its history.
+ *
+ * Both transports ask this the same question of the same buffer state, and both
+ * ask it for the same reason: a buffer with no read position, or one holding
+ * less than a screenful, has nothing for the read marker to sit against. Only
+ * the fetch itself differs between them, and it must — that half is transport.
+ */
+export const SWITCH_FETCH_BELOW_LINES = 20;
+export const SWITCH_FETCH_REQUEST_LINES = 100;
+
+export function shouldFetchOnBufferSwitch(buffer: BufferData): boolean {
+    return (buffer.lastSeen < 0 || buffer.lines.length < SWITCH_FETCH_BELOW_LINES)
+        && !buffer.newestWindowFetched;
 }
 
 

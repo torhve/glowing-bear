@@ -106,6 +106,17 @@ export const RECONNECT_BACKOFF = { baseMs: 30_000, maxMs: 300_000, factor: 1.5 }
 export const HANDSHAKE_TIMEOUT_MS = 10_000;
 
 /**
+ * How long to wait after WeeChat says an upgrade has ended before reconnecting.
+ *
+ * One number for both transports on purpose. The relay is gone when
+ * `_upgrade_ended` arrives — it is restarting — and the delay is patience for
+ * it to listen again, not a backoff step. The API orchestrator's own comment
+ * calls its timer "legacy parity", which is a claim about two files agreeing;
+ * naming the value once is what makes it true rather than hopeful.
+ */
+export const UPGRADE_RECONNECT_DELAY_MS = 2000;
+
+/**
  * Delay before a retry, where `attempt` is the number of retries that have
  * ALREADY failed — the first retry is `attempt 0` and waits `baseMs`.
  *

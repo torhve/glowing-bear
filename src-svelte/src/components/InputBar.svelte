@@ -28,21 +28,11 @@
     type DraftRef,
   } from '#lib/stores/conversationDrafts.ts';
   import { readChatScrollCommands } from '#lib/chatScrollContext.ts';
+  import type { PreviewItem } from '#lib/imageUpload.ts';
 
   // The chat viewport of this page, reached through context rather than a
   // document query: the composer expresses intent, the view moves the viewport.
   const chatScrollCommands = readChatScrollCommands();
-  interface PreviewItem {
-    id: number;
-    name: string;
-    size: number;
-    dataUrl: string;
-    file?: File;
-    progress: number;
-    status: 'loading' | 'preview' | 'uploading' | 'success' | 'error';
-    result?: { link: string; deletehash: string };
-    error?: string;
-  }
 
   let {
     onInsertUrls = () => {},

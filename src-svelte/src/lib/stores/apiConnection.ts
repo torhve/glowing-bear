@@ -13,7 +13,7 @@ import {
     connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, beginSessionStats,
     setNextReconnectAt,
 } from '#lib/stores/connectionStore.ts';
-import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, weechatVersion, relayApiVersion, historyWindowEstablished, historyPageSize, growHistoryLimit, initialHistoryWindow } from '#lib/stores/models.ts';
+import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, weechatVersion, relayApiVersion, historyWindowEstablished, historyPageSize, growHistoryLimit, initialHistoryWindow, shouldFetchOnBufferSwitch, SWITCH_FETCH_REQUEST_LINES } from '#lib/stores/models.ts';
 
 import { resolveApiEndpoint } from '#lib/api/api-endpoint.ts';
 import { ApiOrchestrator, type OrchestratorStatus } from '#lib/api/api-orchestrator.ts';
@@ -590,9 +590,9 @@ export async function switchBuffer(bufferId: string): Promise<boolean> {
     // Fetch lines for buffers that need historical context before switching.
     // Freshness, not line count: a buffer can hold a full retained window and
     // still have fetched nothing in this session.
-    if (buffer && (buffer.lastSeen < 0 || buffer.lines.length < 20) && !buffer.newestWindowFetched) {
+    if (buffer && shouldFetchOnBufferSwitch(buffer)) {
         try {
-            await fetchMoreLines(100, bufferId);
+            await fetchMoreLines(SWITCH_FETCH_REQUEST_LINES, bufferId);
         } catch {
             // Silently ignore fetch failures on buffer switch
         }

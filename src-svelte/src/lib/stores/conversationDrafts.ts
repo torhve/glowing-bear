@@ -21,6 +21,7 @@
 import { get } from 'svelte/store';
 import { activeConnectionProfile } from '#lib/connectionProfile.ts';
 import type { BufferPresentation } from '#lib/types.ts';
+import { clamp } from '#lib/num.ts';
 
 /** Which conversation a draft belongs to. Both halves are required: two relays
  *  can each carry a buffer named `irc.libera.#foo`, and one relay can carry the
@@ -73,7 +74,7 @@ const drafts = new Map<string, Map<string, ConversationDraft>>();
 
 function clampCaret(value: string, raw: number | undefined, fallback: number): number {
     const candidate = Number.isFinite(raw) ? Math.trunc(raw as number) : fallback;
-    return Math.min(Math.max(candidate, 0), value.length);
+    return clamp(candidate, 0, value.length);
 }
 
 /** Read one conversation's draft, or null when it has none. */

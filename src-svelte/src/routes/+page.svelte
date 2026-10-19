@@ -23,6 +23,7 @@
   import { setHistoryOutcome } from '#lib/stores/historyState.ts';
   import { initNotifications, onDisconnect, refreshIndicators, startIndicatorOwner } from '#lib/notifications.ts';
   import { parseRelayUrl, isPopoverOpen, bufferHasNicklist, modifyTextareaValue, captureBufferAppearance, waitForFreshBuffer, scriptInstalled } from '#lib/utils.ts';
+  import { isTypingTarget } from '#lib/domFocus.ts';
   import { addToast, toastStore } from '#lib/toast.ts';
   import { showWindow } from '#lib/tauriWindow.ts';
   import { setChatScrollCommands } from '#lib/chatScrollContext.ts';
@@ -259,10 +260,7 @@
 
   function handleQuickKeys(e: KeyboardEvent) {
     // Skip when focus is in an input field so Alt-combinations like Alt+7 (pipe on Norwegian layout) work for typing
-    const activeEl = document.activeElement;
-    const tag = activeEl?.tagName || '';
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-    if ((activeEl as HTMLElement)?.isContentEditable) return;
+    if (isTypingTarget()) return;
 
     // Use get() to avoid $effect dependency on $settings/$sortedVisibleBuffers (prevents listener re-registration)
     const s = get(settings);
@@ -294,10 +292,7 @@
   let _jumpTens: number | null = $state(null);
   function handleJumpToBuffer(e: KeyboardEvent) {
     // Skip when focus is in an input field so user can type normally
-    const activeEl = document.activeElement;
-    const tag = activeEl?.tagName || '';
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-    if ((activeEl as HTMLElement)?.isContentEditable) return;
+    if (isTypingTarget()) return;
     // Alt+J -> arm jump mode (tens place reset)
     if (e.altKey && !e.ctrlKey && !e.shiftKey && e.code === 'KeyJ') {
       e.preventDefault();
@@ -371,10 +366,7 @@
     // PageUp/PageDown -> scroll chat (skip when focus is in an input field)
     if (!e.ctrlKey && !e.altKey && !e.shiftKey && (code === 33 || code === 34)) {
       // Don't scroll chat when user is typing in the input bar
-      const activeEl = document.activeElement;
-      const tag = activeEl?.tagName || '';
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      if ((activeEl as HTMLElement)?.isContentEditable) return;
+      if (isTypingTarget()) return;
       e.preventDefault();
       // The chat view decides the step and owns the write; a reader who just
       // navigated by wheel or touch keeps the position they chose.
@@ -554,10 +546,7 @@
     if (!get(currentBuffer)) return;
     if (e.key.length !== 1) return;
     if (e.ctrlKey || e.altKey || e.metaKey) return;
-    const activeEl = document.activeElement;
-    const tag = activeEl?.tagName || '';
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-    if ((activeEl as HTMLElement)?.isContentEditable) return;
+    if (isTypingTarget()) return;
     if (isPopoverOpen()) return;
     const input = document.querySelector<HTMLTextAreaElement>('[data-testid="message-input"]');
     if (!input) return;

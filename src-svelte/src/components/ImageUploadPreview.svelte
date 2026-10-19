@@ -6,18 +6,8 @@
   import AlertCircle from '@lucide/svelte/icons/alert-circle';
   import { uploadImage, deleteImage } from '#lib/imgur.ts';
   import { addToast } from '#lib/toast.ts';
+  import type { PreviewItem } from '#lib/imageUpload.ts';
 
-  interface PreviewItem {
-    id: number;
-    name: string;
-    size: number;
-    dataUrl: string;
-    file?: File;
-    progress: number;
-    status: 'loading' | 'preview' | 'uploading' | 'success' | 'error';
-    result?: { link: string; deletehash: string };
-    error?: string;
-  }
 
   let {
     images = [] as PreviewItem[],

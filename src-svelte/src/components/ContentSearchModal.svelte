@@ -3,6 +3,7 @@
   import FormInput from '#components/FormInput.svelte';
   import Search from '@lucide/svelte/icons/search';
   import X from '@lucide/svelte/icons/x';
+  import { focusWhenPopoverOpens } from '#lib/dialogFocus.ts';
 
   interface Props {
     onSearch(query: string): void;
@@ -29,16 +30,9 @@
     }
   }
 
-  // Chromium dispatches `toggle` a frame after the popover becomes visible, which
-  // delays auto-focus enough to swallow a fast first keystroke. `beforetoggle`
-  // fires synchronously inside showPopover(), so focus from there — deferred one
-  // microtask, by which time the popover is shown and the input is focusable.
   function handleBeforeToggle(event: ToggleEvent) {
     if (event.newState !== 'open') return;
-    queueMicrotask(() => {
-      const input = document.getElementById('content-search-input') as HTMLInputElement;
-      input?.focus();
-    });
+    focusWhenPopoverOpens('content-search-input');
   }
 
   export { dialogRef as dialog };

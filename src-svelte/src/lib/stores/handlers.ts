@@ -42,6 +42,7 @@ import {
 import { isWindowFocused } from "#lib/windowFocus.ts";
 import { DEBUG_NICKLIST, DEBUG_HANDLERS, DEBUG_HOTLIST } from "#lib/debug.ts";
 import { toPlainText } from "#lib/weechat-colors.ts";
+import { UPGRADE_RECONNECT_DELAY_MS } from "#lib/stores/connectionLifecycle.ts";
 import type {
     ProtocolMessage,
     BufferLine,
@@ -837,7 +838,7 @@ export function handleUpgradeEnded() {
     upgradeReconnectTimer = setTimeout(() => {
         upgradeReconnectTimer = null;
         onUpgradeEndedCallback?.();
-    }, 2000);
+    }, UPGRADE_RECONNECT_DELAY_MS);
 }
 
 // ---- Date change injection ----

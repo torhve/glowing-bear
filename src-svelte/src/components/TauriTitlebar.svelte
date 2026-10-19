@@ -10,12 +10,20 @@
   let macosTauri = $derived(isMacOSTauri());
 </script>
 
+<!-- The three macOS buttons are the same three in both layouts; only the wrapper
+     around them differs. Each colour is written once here rather than twice, which
+     is the point: the pair for each light is a fill and its own border tint, and
+     editing one half alone is how they drift apart. -->
+{#snippet trafficLights()}
+  <button data-tauri-drag-region="false" onclick={() => closeWindow()} class="w-3 h-3 rounded-full bg-[#ff5f57] border border-[#e54b3f]/30 cursor-pointer" title="Close" data-testid="traffic-light-close"></button>
+  <button data-tauri-drag-region="false" onclick={() => minimizeWindow()} class="w-3 h-3 rounded-full bg-[#febc26] border border-[#dfca1d]/30 cursor-default" title="Minimize" data-testid="traffic-light-minimize"></button>
+  <button data-tauri-drag-region="false" onclick={() => toggleMaximizeWindow()} class="w-3 h-3 rounded-full bg-[#27c93f] border border-[#1aab29]/30 cursor-default" title="Full Screen" data-testid="traffic-light-maximize"></button>
+{/snippet}
+
 {#if variant === 'inline'}
   {#if macosTauri}
     <div class="flex items-center gap-1 mr-1">
-      <button data-tauri-drag-region="false" onclick={() => closeWindow()} class="w-3 h-3 rounded-full bg-[#ff5f57] border border-[#e54b3f]/30 cursor-pointer" title="Close" data-testid="traffic-light-close"></button>
-      <button data-tauri-drag-region="false" onclick={() => minimizeWindow()} class="w-3 h-3 rounded-full bg-[#febc26] border border-[#dfca1d]/30 cursor-default" title="Minimize" data-testid="traffic-light-minimize"></button>
-      <button data-tauri-drag-region="false" onclick={() => toggleMaximizeWindow()} class="w-3 h-3 rounded-full bg-[#27c93f] border border-[#1aab29]/30 cursor-default" title="Full Screen" data-testid="traffic-light-maximize"></button>
+      {@render trafficLights()}
     </div>
   {/if}
 {:else}
@@ -35,9 +43,7 @@
   {#if macosTauri}
     <div class="tauri-titlebar h-8 bg-surface-raised border-b border-border flex items-center px-4 flex-shrink-0" data-tauri-drag-region>
       <div class="flex items-center gap-1.5">
-        <button data-tauri-drag-region="false" onclick={() => closeWindow()} class="w-3 h-3 rounded-full bg-[#ff5f57] border border-[#e54b3f]/30 cursor-pointer" title="Close" data-testid="traffic-light-close"></button>
-        <button data-tauri-drag-region="false" onclick={() => minimizeWindow()} class="w-3 h-3 rounded-full bg-[#febc26] border border-[#dfca1d]/30 cursor-default" title="Minimize" data-testid="traffic-light-minimize"></button>
-        <button data-tauri-drag-region="false" onclick={() => toggleMaximizeWindow()} class="w-3 h-3 rounded-full bg-[#27c93f] border border-[#1aab29]/30 cursor-default" title="Full Screen" data-testid="traffic-light-maximize"></button>
+        {@render trafficLights()}
       </div>
     </div>
   {/if}

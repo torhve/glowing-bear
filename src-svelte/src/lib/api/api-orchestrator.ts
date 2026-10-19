@@ -17,6 +17,7 @@ import type { VersionResponse } from '#lib/weechat-rest-types.ts';
 import { ApiSession, ApiSessionError, type ApiSessionClose, type ApiSessionResponse } from '#lib/api/api-session.ts';
 import { dispatchEvent, mapBufferList, mapHotlist } from '#lib/api/api-mapping.ts';
 import type { ApiReducers } from '#lib/api/api-contracts.ts';
+import { UPGRADE_RECONNECT_DELAY_MS } from '#lib/stores/connectionLifecycle.ts';
 
 /** Mirrors models.ts beginSyncPhase/endSyncPhase generation-token API. */
 export interface SyncPhaseTokens {
@@ -369,7 +370,7 @@ export class ApiOrchestrator {
         this.upgradeTimer = setTimeout(() => {
             this.upgradeTimer = null;
             if (!this.stopped) this.reconnectNow(true);
-        }, 2000);
+        }, UPGRADE_RECONNECT_DELAY_MS);
     }
 
     private supersedeCurrent(): void {
