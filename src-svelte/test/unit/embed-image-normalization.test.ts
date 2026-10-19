@@ -1,5 +1,5 @@
 /**
- * Image-URL normalization, and the embed path that still bypasses it.
+ * Image-URL normalization, on both embed paths that display an image.
  *
  *   BufferLineRow.svelte:116   content = normalizeImageUrl(url)
  *   PluginEmbed.svelte:142     processUrlContent(url) -> injectImage(url)
@@ -10,10 +10,9 @@
  * becomes `https://` because Imgur will not serve an image over plain HTTP.
  *
  * PluginEmbed imports the same extension tables that decide a URL is an image,
- * but never calls the normalizer, so the same Dropbox or Imgur URL arriving
- * through the plugin-metadata path is handed to the browser unchanged. That half
- * is still open, and the last three tests keep it visible rather than approving
- * it.
+ * but used to skip the normalizer entirely, so a Dropbox or Imgur URL arriving
+ * through the plugin-metadata path reached the browser unchanged and rendered a
+ * share page or a broken image. It now calls the same function.
  *
  * The normalizer itself is covered directly here, including the Dropbox case
  * that used to emit a stray separator.
@@ -68,29 +67,27 @@ describe('image URL normalization', () => {
             .toBe('https://example.com/photo.png');
     });
 
-    it('the plugin path renders an Imgur image over plain http', () => {
+    it('the plugin path upgrades an http Imgur image to https', () => {
         const url = 'http://i.imgur.com/photo.png';
         const target = render(imagePlugin(url));
 
-        expect(embedImageSrc(target), 'PluginEmbed injects the URL exactly as it arrived')
-            .toBe(url);
-        // The other path would not have rendered this at all in a browser that
-        // blocks mixed content.
-        expect(normalizeImageUrl(url)).toBe('https://i.imgur.com/photo.png');
+        // Imgur does not serve an image over plain http, so the raw URL rendered a
+        // broken image wherever the page itself was https.
+        expect(embedImageSrc(target), 'PluginEmbed normalizes the way BufferLineRow does')
+            .toBe('https://i.imgur.com/photo.png');
     });
 
-    it('the plugin path renders a Dropbox shared link without dl=1', () => {
+    it('the plugin path asks Dropbox for the file, not the share page', () => {
         const url = 'https://www.dropbox.com/s/abc123/photo.png';
         const target = render(imagePlugin(url));
 
-        expect(embedImageSrc(target)).toBe(url);
-        expect(normalizeImageUrl(url)).toBe('https://www.dropbox.com/s/abc123/photo.png?dl=1');
+        expect(embedImageSrc(target)).toBe('https://www.dropbox.com/s/abc123/photo.png?dl=1');
     });
 
-    it('the plugin path does classify the URL as an image, so the omission is not a missed branch', () => {
-        // Same extension table BufferLineRow uses (mediaExtensions.ts:4) decided
-        // this was an image and an <img> was injected. The normalizer was simply
-        // never called on the way there.
+    it('the plugin path still classifies the URL as an image', () => {
+        // Classification was never the problem: the same extension table
+        // BufferLineRow uses (mediaExtensions.ts:4) already decided this was an
+        // image and injected an <img>. Only the normalization was missing.
         const target = render(imagePlugin('https://www.dropbox.com/s/abc123/photo.png'));
         expect(embedImageSrc(target), 'an image was injected').not.toBeNull();
     });

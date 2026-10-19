@@ -2,7 +2,7 @@
   /* eslint-disable svelte/no-dom-manipulating */
   import { untrack } from 'svelte';
   import type { EmbedCallbackContext, PluginMetadata } from '#lib/types.ts';
-  import { imageExts, videoExts, audioExts } from '#lib/utils/mediaExtensions.ts';
+  import { imageExts, videoExts, audioExts, normalizeImageUrl } from '#lib/utils/mediaExtensions.ts';
   import { youtubeVideoPattern } from '#lib/utils/urlEmbeds.ts';
   import Play from '@lucide/svelte/icons/play';
   import ImageIcon from '@lucide/svelte/icons/image';
@@ -140,7 +140,10 @@
     if (DEBUG_PLUGIN) console.log('[PluginEmbed] processUrlContent: processing URL:', url);
 
     if (imageExts.test(url)) {
-      injectImage(url);
+      // The same normalization BufferLineRow applies before it renders an image:
+      // a Dropbox shared link has to ask for the file rather than Dropbox's own
+      // page, and an http Imgur link is not served over plain http at all.
+      injectImage(normalizeImageUrl(url));
       return;
     }
 
