@@ -2,7 +2,8 @@
 
   import { weechatVersion } from '#lib/stores/models.ts';
   import { connectionBanner } from '#lib/stores/connectionPresentation.ts';
-  import { connectionState, connectionStats, formatBytes, timeAgo, formatDuration } from '#lib/stores/connectionStore.ts';
+  import { connectionState, connectionStats, timeAgo, formatDuration } from '#lib/stores/connectionStore.ts';
+  import { formatBytes } from '#lib/format.ts';
   import { settings } from '#lib/stores/settings.ts';
   import { disconnect } from '#lib/stores/connectionManager.ts';
   import SettingsModal from '#components/SettingsModal.svelte';

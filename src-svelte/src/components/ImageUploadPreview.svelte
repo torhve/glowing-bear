@@ -7,6 +7,7 @@
   import { uploadImage, deleteImage } from '#lib/imgur.ts';
   import { addToast } from '#lib/toast.ts';
   import type { PreviewItem } from '#lib/imageUpload.ts';
+  import { formatBytes } from '#lib/format.ts';
 
 
   let {
@@ -26,13 +27,6 @@
 
   let isUploading = $state(false);
   let currentUploadIndex = $state(0);
-
-  // Format file size for display
-  function formatSize(bytes: number): string {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
 
   // Remove a single image from the preview list, revoking object URL if it came from a File
   function removeImage(id: number) {
@@ -171,7 +165,7 @@
               <!-- Meta info -->
               <div class="preview-meta px-3 py-2 text-xs space-y-1">
                 <p class="preview-file-name text-text truncate" title={img.name}>{img.name}</p>
-                <p class="preview-file-size text-text-muted">{formatSize(img.size)}</p>
+                <p class="preview-file-size text-text-muted">{formatBytes(img.size)}</p>
 
                 <!-- Status indicator -->
                 {#if img.status === 'success' && img.result}

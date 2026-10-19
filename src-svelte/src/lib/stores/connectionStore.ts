@@ -135,11 +135,6 @@ export function beginSessionStats() {
     connectionStats.set(initialStats);
 }
 
-export function formatBytes(bytes: number): string {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
-}
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- part of public API, called with tick param by TopBar
 export function timeAgo(timestamp: number, _tick?: number): string {
