@@ -14,7 +14,10 @@ export function normalizeImageUrl(url: string): string {
         const dbox_url = document.createElement("a");
         dbox_url.href = url;
         const base_url = dbox_url.protocol + '//' + dbox_url.host + dbox_url.pathname + '?';
-        const dbox_params = (dbox_url.search || '').substring(1).split('&');
+        // split('&') on an empty query yields [''], which used to join into
+        // '?&dl=1'. Dropping empty entries keeps the first parameter from being
+        // preceded by a stray separator.
+        const dbox_params = (dbox_url.search || '').substring(1).split('&').filter(Boolean);
         let dl_added = false;
         for (let i = 0; i < dbox_params.length; i++) {
             const param = dbox_params[i];

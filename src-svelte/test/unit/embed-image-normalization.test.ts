@@ -1,6 +1,5 @@
 /**
- * Characterization tests for B9: image-URL normalization exists on one embed path
- * and not the other.
+ * Image-URL normalization, and the embed path that still bypasses it.
  *
  *   BufferLineRow.svelte:116   content = normalizeImageUrl(url)
  *   PluginEmbed.svelte:142     processUrlContent(url) -> injectImage(url)
@@ -10,13 +9,14 @@
  * returns the file instead of Dropbox's own page, and an `http://` Imgur link
  * becomes `https://` because Imgur will not serve an image over plain HTTP.
  *
- * PluginEmbed imports the same extension tables that decide an URL is an image,
- * but never calls the normalizer. So the same Dropbox or Imgur URL arriving
- * through the plugin-metadata path is handed to the browser unchanged.
+ * PluginEmbed imports the same extension tables that decide a URL is an image,
+ * but never calls the normalizer, so the same Dropbox or Imgur URL arriving
+ * through the plugin-metadata path is handed to the browser unchanged. That half
+ * is still open, and the last three tests keep it visible rather than approving
+ * it.
  *
- * These pin which path normalizes today. The fix (stage S6) is to normalize once
- * in the shared classifier; until then this is the difference a reviewer has to
- * be able to see.
+ * The normalizer itself is covered directly here, including the Dropbox case
+ * that used to emit a stray separator.
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
@@ -49,15 +49,15 @@ afterEach(async () => {
     document.body.replaceChildren();
 });
 
-describe('B9 characterization: normalizeImageUrl runs on one embed path only', () => {
+describe('image URL normalization', () => {
     it('what the normalizer does, on its own', () => {
-        // A Dropbox link with no query string gets `?&dl=1`: the function builds
-        // the URL as `pathname + '?'` and then joins a parameter list that started
-        // as ['']. Browsers accept it, so nothing user-visible depends on it — but
-        // it is what the function returns, and the shared classifier in stage S6
-        // will inherit it unless someone decides to clean it up.
+        // A Dropbox link with no query string used to come out as `?&dl=1`: the
+        // function builds the URL as `pathname + '?'` and joins a parameter list,
+        // and splitting an empty query gives ['']. The empty entry is dropped now.
+        // Nothing user-visible depended on the stray separator — browsers accept
+        // it — but it is the kind of thing a second caller would have inherited.
         expect(normalizeImageUrl('https://www.dropbox.com/s/abc123/photo.png'))
-            .toBe('https://www.dropbox.com/s/abc123/photo.png?&dl=1');
+            .toBe('https://www.dropbox.com/s/abc123/photo.png?dl=1');
         expect(normalizeImageUrl('https://www.dropbox.com/s/abc123/photo.png?raw=1'))
             .toBe('https://www.dropbox.com/s/abc123/photo.png?raw=1&dl=1');
         expect(normalizeImageUrl('https://www.dropbox.com/s/abc123/photo.png?dl=0'))
@@ -84,7 +84,7 @@ describe('B9 characterization: normalizeImageUrl runs on one embed path only', (
         const target = render(imagePlugin(url));
 
         expect(embedImageSrc(target)).toBe(url);
-        expect(normalizeImageUrl(url)).toBe('https://www.dropbox.com/s/abc123/photo.png?&dl=1');
+        expect(normalizeImageUrl(url)).toBe('https://www.dropbox.com/s/abc123/photo.png?dl=1');
     });
 
     it('the plugin path does classify the URL as an image, so the omission is not a missed branch', () => {
