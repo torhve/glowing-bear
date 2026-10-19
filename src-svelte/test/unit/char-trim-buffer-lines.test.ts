@@ -253,8 +253,13 @@ describe('B2 characterization: three copies of the line trim, three counter rule
     });
 
     it('a capped buffer that keeps receiving reports the same unread count forever', () => {
-        // The clearest consequence of the overlap formula, and the reason B2 is not
-        // only a tidiness problem.
+        // The clearest consequence of the overlap formula. Measured on its own it
+        // looked like the reason B2 was more than tidiness — and it is not. The
+        // badge this tally feeds is max(localUnread, unread + notification), and
+        // e2e/specs/UnreadBadge-cappedBuffer.test.ts measured a buffer trimmed to
+        // its cap and a buffer left shallow reporting the same count for the same
+        // unread traffic. This test pins the frozen local tally; that spec pins
+        // that nobody can see it.
         //
         // `localUnread` counts the NEWEST lines: a live line is pushed to the end of
         // `lines` and the counter is incremented immediately after (handlers.ts:549
