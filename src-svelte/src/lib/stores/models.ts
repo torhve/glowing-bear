@@ -231,6 +231,48 @@ export function resolvePendingReadBoundary(buffer: BufferData): boolean {
 }
 
 /**
+ * Drop the oldest lines past a buffer's cap, re-anchoring what the trim moved.
+ *
+ * This was written twice, byte for byte: a private copy in the legacy line
+ * handler and an exported copy in the API reducers. Both transports already
+ * take their read-boundary primitives from here, so this is where the one copy
+ * belongs. `char-trim-buffer-lines.test.ts` pins what a trim owes the counters.
+ *
+ * - `localUnread` counts the newest lines and a trim removes the oldest, so the
+ *   compensation only bites when the removed prefix reaches the unread tail.
+ * - The read boundary survives as an anchor line id where it can: an id still
+ *   inside the retained window re-anchors exactly, and only a buffer with no
+ *   anchor falls back to shifting the index by the number of rows removed.
+ * - `allLinesFetched` is cleared because the retained window is no longer the
+ *   whole buffer.
+ */
+export function trimBufferLines(buffer: BufferData, limit: number): void {
+    if (buffer.lines.length <= limit) return;
+    const linesToRemove = buffer.lines.length - limit;
+    // Adjust localUnread for removed lines — it tracks real-time messages
+    // received while this buffer was inactive.
+    if (buffer.localUnread > 0) {
+        const unreadStartIndex = Math.max(0, buffer.lines.length - buffer.localUnread);
+        const overlap = Math.max(0, Math.min(linesToRemove, unreadStartIndex));
+        buffer.localUnread = Math.max(0, buffer.localUnread - overlap);
+    }
+    const boundaryId = buffer.readBoundaryId;
+    const wasKnown = buffer.readBoundaryKnown !== false;
+    const oldLastSeen = buffer.lastSeen;
+    buffer.lines.splice(0, linesToRemove);
+    if (wasKnown) {
+        if (boundaryId === null) {
+            setReadBoundary(buffer, -1);
+        } else if (boundaryId !== undefined) {
+            setReadBoundaryFromAnchorId(buffer, boundaryId);
+        } else {
+            setReadBoundary(buffer, oldLastSeen - linesToRemove);
+        }
+    }
+    buffer.allLinesFetched = false;
+}
+
+/**
  * Index of WeeChat's own read marker among the retained lines, or null when the
  * transport never reported one, reported none (-1), or the marked line is not
  * in the retained window.

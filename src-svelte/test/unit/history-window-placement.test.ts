@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { insertHistoryLines } from '#lib/api/api-features.ts';
-import { trimBufferLines } from '#lib/api/api-store-reducers.ts';
+import { trimBufferLines } from '#lib/stores/models.ts';
 import { createBuffer, createBufferLine } from '#lib/stores/models.ts';
 import type { BufferData, BufferLine } from '#lib/types.ts';
 

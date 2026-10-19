@@ -9,15 +9,15 @@ import {
     setReadBoundary,
     getReadBoundaryIndex,
 } from '#lib/stores/models.ts';
-import { trimBufferLines as apiTrim } from '#lib/api/api-store-reducers.ts';
+import { trimBufferLines as apiTrim } from '#lib/stores/models.ts';
 import type { BufferData, ProtocolMessage } from '#lib/types.ts';
 
-// Characterization tests for B2: dropping the oldest lines past a buffer's cap is
-// written three times, and the three copies disagree about what a trim owes the
-// counters.
+// Characterization tests for the line trim: what dropping the oldest rows past a
+// buffer's cap owes the counters.
 //
-//   legacy  handlers.ts trimBufferLines()                    localUnread compensated
-//   API     api-store-reducers.ts trimBufferLines()          localUnread compensated
+//   shared  models.ts trimBufferLines()                      localUnread compensated
+//           — reached here through the legacy line handler and through the API
+//             reducers, which each used to carry a byte-identical copy of it
 //   inline  models.ts setActiveBuffer (inlined, no function) no localUnread code at all
 //
 // A fourth disagreement used to be recorded here: the copies also differed about
@@ -152,7 +152,7 @@ function legacyTrim(id: string, buf: BufferData): BufferData {
     return get(buffers)[id]!;
 }
 
-describe('B2 characterization: three copies of the line trim, three counter rules', () => {
+describe('the line trim and what it owes the counters', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         buffers.set({});

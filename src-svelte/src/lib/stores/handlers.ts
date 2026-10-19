@@ -26,11 +26,11 @@ import {
     lineLimitFor,
     setReadBoundary,
     setReadBoundaryUnknown,
-    setReadBoundaryFromAnchorId,
     resolvePendingReadBoundary,
     markHotlistBaselineApplied,
     isRelayStatusBuffer,
     injectDateChangeMessageIfNeeded,
+    trimBufferLines,
 } from "#lib/stores/models.ts";
 import { tallyUnreadLine } from "#lib/unreadTally.ts";
 import { shouldResume, getLastBuffer, recordLastBuffer } from "#lib/stores/bufferResume.ts";
@@ -118,36 +118,6 @@ export function flushLineBatch(): void {
             });
         }
     }
-}
-
-/**
- * Trim old rows while preserving the stable read boundary when it is retained.
- * If the anchor is removed from the front, all remaining rows are after the boundary.
- */
-function trimBufferLines(buffer: BufferData, limit: number) {
-    if (buffer.lines.length <= limit) return;
-    const linesToRemove = buffer.lines.length - limit;
-    // Adjust localUnread for removed lines — it tracks real-time messages
-    // received while this buffer was inactive.
-    if (buffer.localUnread > 0) {
-        const unreadStartIndex = Math.max(0, buffer.lines.length - buffer.localUnread);
-        const overlap = Math.max(0, Math.min(linesToRemove, unreadStartIndex));
-        buffer.localUnread = Math.max(0, buffer.localUnread - overlap);
-    }
-    const boundaryId = buffer.readBoundaryId;
-    const wasKnown = buffer.readBoundaryKnown !== false;
-    const oldLastSeen = buffer.lastSeen;
-    buffer.lines.splice(0, linesToRemove);
-    if (wasKnown) {
-        if (boundaryId === null) {
-            setReadBoundary(buffer, -1);
-        } else if (boundaryId !== undefined) {
-            setReadBoundaryFromAnchorId(buffer, boundaryId);
-        } else {
-            setReadBoundary(buffer, oldLastSeen - linesToRemove);
-        }
-    }
-    buffer.allLinesFetched = false;
 }
 
 // ---- Version handler ----

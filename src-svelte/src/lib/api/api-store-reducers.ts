@@ -17,8 +17,8 @@ import { get } from 'svelte/store';
 import {
     buffers, activeBufferId, previousBufferId, localUnreadBuffers,
     createBuffer, createBufferLine, createNick, createNickGroup,
-    parseRichText, removeBuffer, isRelayStatusBuffer,
-    maxBufferLines, lineLimitFor, lineLimitWith, setReadBoundary, setReadBoundaryFromAnchorId, applyServerReadMarker, markHotlistBaselineApplied,
+    parseRichText, removeBuffer, isRelayStatusBuffer, trimBufferLines,
+    maxBufferLines, lineLimitFor, lineLimitWith, applyServerReadMarker, markHotlistBaselineApplied,
     injectDateChangeMessageIfNeeded, pendingBufferSwitch, setActiveBuffer, matchesPendingSwitch,
 } from '#lib/stores/models.ts';
 import { shouldResume } from '#lib/stores/bufferResume.ts';
@@ -113,7 +113,7 @@ function applyLineAdded(target: BufferData, line: LineSnapshot, activeId: string
         }
     }
     appendLines(target, [line], limit);
-    trimToLimit(target, limit);
+    trimBufferLines(target, limit);
     if (line.displayed) {
         tallyUnreadLine(target, line, activeId, (id) => effects.localUnreadIds.add(id));
         alertForLine(target, line, activeId);
@@ -312,40 +312,6 @@ function appendLines(buffer: BufferData, lines: LineSnapshot[], limit: number): 
     }
 }
 
-/** Drop oldest lines beyond the dynamic memory limit, mirroring the legacy
- *  buffer-info/line-add trim: localUnread and the read boundary are both
- *  re-anchored for the removed prefix. */
-export function trimBufferLines(buffer: BufferData, limit: number): void {
-    if (buffer.lines.length <= limit) return;
-    const linesToRemove = buffer.lines.length - limit;
-    // Adjust localUnread for removed lines — it tracks real-time messages
-    // received while this buffer was inactive.
-    if (buffer.localUnread > 0) {
-        const unreadStartIndex = Math.max(0, buffer.lines.length - buffer.localUnread);
-        const overlap = Math.max(0, Math.min(linesToRemove, unreadStartIndex));
-        buffer.localUnread = Math.max(0, buffer.localUnread - overlap);
-    }
-    const boundaryId = buffer.readBoundaryId;
-    const wasKnown = buffer.readBoundaryKnown !== false;
-    const oldLastSeen = buffer.lastSeen;
-    buffer.lines.splice(0, linesToRemove);
-    if (wasKnown) {
-        if (boundaryId === null) {
-            setReadBoundary(buffer, -1);
-        } else if (boundaryId !== undefined) {
-            setReadBoundaryFromAnchorId(buffer, boundaryId);
-        } else {
-            setReadBoundary(buffer, oldLastSeen - linesToRemove);
-        }
-    }
-    buffer.allLinesFetched = false;
-}
-
-/** Apply the memory-limit trim after any append (history, live, opened). */
-function trimToLimit(buffer: BufferData, limit: number): void {
-    trimBufferLines(buffer, limit);
-}
-
 // Prefix display rank for nick sorting: '@' op, '%' halfop, '+' voice,
 // everything else (no prefix) last.
 const NICK_PREFIX_RANK: Record<string, number> = { '@': 0, '%': 1, '+': 2 };
@@ -487,7 +453,7 @@ export function createApiStoreReducers(): ApiReducers {
             if (lines && lines.length) {
                 const lineLimit = lineLimitFor(buffer);
                 appendLines(buffer, lines, lineLimit);
-                trimToLimit(buffer, lineLimit);
+                trimBufferLines(buffer, lineLimit);
             }
             if (groups && groups.length) buildNicklist(buffer, groups, nicks ?? []);
             if (lines && lines.length) applyServerReadMarker(buffer, snap.lastReadLineId);

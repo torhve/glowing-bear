@@ -5,7 +5,7 @@ import {
     historyCappedFor, historyPageSize, initialHistoryWindow, maxBufferLines, linesPerScreen, setActiveBuffer,
 } from '#lib/stores/models.ts';
 import { handleBufferCleared } from '#lib/stores/handlers.ts';
-import { trimBufferLines } from '#lib/api/api-store-reducers.ts';
+import { trimBufferLines } from '#lib/stores/models.ts';
 import type { BufferData, ProtocolMessage } from '#lib/types.ts';
 
 /**

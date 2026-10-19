@@ -9,7 +9,7 @@ import {
     setReadBoundary,
     getReadBoundaryIndex,
 } from '#lib/stores/models.ts';
-import { trimBufferLines as apiTrim } from '#lib/api/api-store-reducers.ts';
+import { trimBufferLines as apiTrim } from '#lib/stores/models.ts';
 import type { BufferData, ProtocolMessage } from '#lib/types.ts';
 
 // "Find the one line this anchor points at" is answered by models.ts
