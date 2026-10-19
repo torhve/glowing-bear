@@ -81,16 +81,6 @@ export interface HotlistEntry {
     count: number[]; // [index0, message, private, highlight]
 }
 
-// Version info from WeeChat
-export interface VersionInfo {
-    value: string;
-}
-
-// Configuration value
-export interface ConfigValue {
-    full_name: string;
-    value: string;
-}
 
 // Completion result
 export interface CompletionResult {
@@ -155,10 +145,6 @@ export interface NickGroup {
     nicks: Nick[];
 }
 
-export interface ServerInfo {
-    id: string;
-    unread: number;
-}
 
 /**
  * The fields presentation reads: names, ordering keys, counts, and tooltip
@@ -275,14 +261,6 @@ export interface PendingQuery {
 }
 // ---- Connection ----
 
-export interface ConnectionConfig {
-    host: string;
-    port: number;
-    path: string;
-    password: string;
-    tls: boolean;
-    noCompression: boolean;
-}
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error';
 

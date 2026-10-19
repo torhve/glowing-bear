@@ -8,10 +8,6 @@
 
 export type HashAlgorithm = 'plain' | 'sha256' | 'sha512' | 'pbkdf2+sha256' | 'pbkdf2+sha512';
 
-export interface HandshakeRequest {
-    password_hash_algo?: HashAlgorithm[];
-}
-
 export interface HandshakeResponse {
     password_hash_algo: string | null;
     password_hash_iterations: number;
@@ -56,13 +52,6 @@ export interface RestBuffer {
     nicklist_root?: RestNickGroup;
 }
 
-export interface BufferQueryOptions {
-    lines?: number;
-    lines_free?: number;
-    nicks?: boolean;
-    colors?: 'ansi' | 'weechat' | 'strip';
-}
-
 // --- Lines ---
 
 export interface RestLine {
@@ -77,11 +66,6 @@ export interface RestLine {
     prefix: string;
     message: string;
     tags: string[];
-}
-
-export interface LineQueryOptions {
-    lines?: number;
-    colors?: 'ansi' | 'weechat' | 'strip';
 }
 
 // --- Nicks ---
@@ -109,17 +93,6 @@ export interface RestNick {
     visible: boolean;
 }
 
-export interface RestNickGroupRoot {
-    id: number;
-    parent_group_id: number;
-    name: string;
-    color_name: string;
-    color: string;
-    visible: boolean;
-    groups: RestNickGroup[];
-    nicks: RestNick[];
-}
-
 // --- Hotlist ---
 
 export interface RestHotlistEntry {
@@ -139,22 +112,7 @@ export interface RestScript {
     license: string;
 }
 
-// --- Input ---
-
-export interface InputRequest {
-    buffer_id?: number;
-    buffer_name?: string;
-    command: string;
-}
-
 // --- Completion ---
-
-export interface CompletionRequest {
-    buffer_id?: number;
-    buffer_name?: string;
-    command: string;
-    position?: number;
-}
 
 export interface CompletionResponse {
     context: string;
@@ -162,25 +120,6 @@ export interface CompletionResponse {
     position_replace: number;
     add_space: boolean;
     list: string[];
-}
-
-// --- Ping ---
-
-export interface PingRequest {
-    data?: string;
-}
-
-export interface PingResponse {
-    data: string;
-}
-
-// --- Sync (WebSocket only) ---
-
-export interface SyncRequest {
-    sync?: boolean;
-    nicks?: boolean;
-    input?: boolean;
-    colors?: 'ansi' | 'weechat' | 'strip';
 }
 
 // --- Error Response ---
@@ -198,12 +137,6 @@ export type ApiBodyType =
     | 'nick_group' | 'nick' | 'hotlist' | 'completion' | 'scripts' | 'json';
 
 // --- WebSocket Frame Types (for reference, not used in REST) ---
-
-export interface WebSocketRequest {
-    request: string;
-    body?: unknown;
-    request_id?: string;
-}
 
 export interface WebSocketResponse {
     code: number;
