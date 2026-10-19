@@ -20,6 +20,7 @@
   import Eye from '@lucide/svelte/icons/eye';
   import EyeOff from '@lucide/svelte/icons/eye-off';
   import { Kbd, KbdGroup, Sep } from '#components';
+  import ErrorBox from '#components/ErrorBox.svelte';
   import Lock from '@lucide/svelte/icons/lock';
   import Key from '@lucide/svelte/icons/key';
   import Monitor from '@lucide/svelte/icons/monitor';
@@ -360,7 +361,7 @@
         {/if}
 
         {#if $connectionState.errors.clockSkewError}
-          <div data-testid="error-message" data-error-type="clock-skew" class="connection-error bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
+          <ErrorBox errorType="clock-skew">
             <p class="font-medium">WeeChat rejected the login timestamp — not the password.</p>
             <p class="mt-2">
               So that your password never travels in the clear, Glowing Bear hashes it together with the
@@ -376,10 +377,10 @@
                 <code class="font-mono">/set relay.network.time_window 60</code> (up to 256 seconds).</li>
               <li>A wider window means a captured login stays usable for longer, so prefer fixing the clock.</li>
             </ul>
-          </div>
+          </ErrorBox>
         {/if}
         {#if $connectionState.errors.protocolUnansweredError}
-          <div data-testid="error-message" data-error-type="protocol-unanswered" class="connection-error bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
+          <ErrorBox errorType="protocol-unanswered">
             <p class="font-medium">Nothing at {hostField}:{port} answered as {pinnedLabel} relay.</p>
             <p class="mt-2">
               Settings → Relay protocol is pinned to <code class="font-mono">{$settings.protocol}</code>, so Glowing Bear
@@ -406,37 +407,37 @@
                 Switch to {otherLabel} and reconnect
               </button>
             </div>
-          </div>
+          </ErrorBox>
         {/if}
         {#if $connectionState.errors.serverUnreachable && !$connectionState.errors.protocolUnansweredError}
-          <div data-testid="error-message" data-error-type="server-unreachable" class="connection-error bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
+          <ErrorBox errorType="server-unreachable">
             Unable to reach WeeChat relay at {hostField}:{port} — check that it is running and reachable{#if tls} — a TLS toggle that does not match the relay also shows up as "unreachable"{/if}
-          </div>
+          </ErrorBox>
         {/if}
         {#if $connectionState.errors.errorMessage}
-          <div data-testid="error-message" data-error-type="connection-error" class="connection-error bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
+          <ErrorBox errorType="connection-error">
             Connection error: The client was unable to connect to the WeeChat relay
-          </div>
+          </ErrorBox>
         {/if}
         {#if $connectionState.errors.passwordError}
-          <div data-testid="error-message" data-error-type="password-error" class="connection-error bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
+          <ErrorBox errorType="password-error">
             Error: wrong password or token
-          </div>
+          </ErrorBox>
         {/if}
         {#if $connectionState.errors.tlsError}
-          <div data-testid="error-message" data-error-type="tls-error" class="connection-error bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
+          <ErrorBox errorType="tls-error">
             Secure connection error: Could not establish TLS connection
-          </div>
+          </ErrorBox>
         {/if}
         {#if $connectionState.errors.oldWeechatError}
-          <div data-testid="error-message" data-error-type="old-weechat" class="connection-error bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
+          <ErrorBox errorType="old-weechat">
             WeeChat version error: WeeChat version must be 3.x or later
-          </div>
+          </ErrorBox>
         {/if}
         {#if $connectionState.errors.hashAlgorithmDisagree}
-          <div data-testid="error-message" data-error-type="hash-algorithm" class="connection-error bg-danger/10 border border-danger rounded p-3 text-sm text-danger">
+          <ErrorBox errorType="hash-algorithm">
             Hash algorithm mismatch: server requires an auth method this client cannot use. Set relay.network.password_hash_algo to "pbkdf2+sha512", "pbkdf2+sha256", "sha256", "sha512", or "plain". If using Tauri, enable TLS for secure context access.
-          </div>
+          </ErrorBox>
         {/if}
 
         <button
