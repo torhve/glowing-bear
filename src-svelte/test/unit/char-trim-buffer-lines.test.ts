@@ -15,10 +15,12 @@ import type { BufferData, ProtocolMessage } from '#lib/types.ts';
 // Characterization tests for the line trim: what dropping the oldest rows past a
 // buffer's cap owes the counters.
 //
-//   shared  models.ts trimBufferLines()                      localUnread compensated
-//           — reached here through the legacy line handler and through the API
-//             reducers, which each used to carry a byte-identical copy of it
-//   inline  models.ts setActiveBuffer (inlined, no function) no localUnread code at all
+// One copy is left: `trimBufferLines` in models.ts, reached here through the
+// legacy line handler and through the API reducers — which each used to carry a
+// byte-identical copy of it — and through `setActiveBuffer`, which used to carry
+// a third, worded differently, with no `localUnread` compensation at all.
+// `trim-boundary-outcomes.test.ts` is where that third copy was measured before
+// it was folded in.
 //
 // A fourth disagreement used to be recorded here: the copies also differed about
 // `requestedLines` — two subtracted the removed lines, one only clamped. That
@@ -27,7 +29,7 @@ import type { BufferData, ProtocolMessage } from '#lib/types.ts';
 // harmonised.
 //
 // Each test runs the same scenario — a buffer holding more lines than its own cap
-// — through one of the three, and records where the counters land. These pin
+// — through one of the paths, and records where the counters land. These pin
 // today's behaviour; they are not a claim that it is correct. Two of them record
 // arithmetic that looks wrong on purpose, so that a later change is measured
 // against something instead of against a guess.
@@ -159,7 +161,7 @@ describe('the line trim and what it owes the counters', () => {
         activeBufferId.set('');
     });
 
-    it('16 lines against a cap of 10: all three copies land on the cap', () => {
+    it('16 lines against a cap of 10: all three paths land on the cap', () => {
         // The part they agree on, and the reason the disagreement below was worth
         // measuring at all: same scenario, same retained window.
         const apiBuf = fixture('0xA00', 16);
@@ -194,16 +196,14 @@ describe('the line trim and what it owes the counters', () => {
         expect(legacyAfter.localUnread).toBe(4);
     });
 
-    it('the inline copy has no localUnread compensation at all — and today nothing can see it', () => {
+    it('activating a buffer zeroes localUnread, so the trim there compensates nothing', () => {
         // setActiveBuffer zeroes localUnread for the buffer it activates, and the
-        // inline trim only ever runs on that same buffer. So the missing
-        // compensation is masked: the inline path reaches the same 0 for a reason
-        // that has nothing to do with the trim.
+        // trim inside it only ever runs on that same buffer. So a missing
+        // compensation is masked: the activation path reaches the same 0 for a
+        // reason that has nothing to do with the trim.
         //
-        // This is the single most important thing S2a learned about B2. Fixing the
-        // inline copy's compensation would change no observable number today,
-        // which is a material input to the §13 decision about whether B2 is worth
-        // fixing at all.
+        // That is what made folding the inlined copy into the shared one safe
+        // instead of something to fix first — it changed no observable number.
         const buf = fixture('0xA05', 11, 5);
         buffers.set({ '0xA05': buf });
         setActiveBuffer('0xA05');
@@ -213,13 +213,13 @@ describe('the line trim and what it owes the counters', () => {
         expect(after.localUnread).toBe(0);
 
         // Proof that the zero came from activation and not from the trim: the
-        // same buffer, same counters, trimmed by the API copy instead, keeps 4.
+        // same buffer, same counters, trimmed directly instead, keeps 4.
         const control = fixture('0xA06', 11, 5);
         apiTrim(control, CAP);
         expect(control.localUnread).toBe(4);
     });
 
-    it('all three re-anchor a surviving boundary to the same index', () => {
+    it('all three paths re-anchor a surviving boundary to the same index', () => {
         // The part they agree on: when the anchor line survives the trim, the
         // boundary follows it to its new index rather than drifting.
         const apiBuf = fixture('0xB00', 11);
@@ -248,7 +248,7 @@ describe('the line trim and what it owes the counters', () => {
 
     it('a capped buffer that keeps receiving reports the same unread count forever', () => {
         // The clearest consequence of the overlap formula. Measured on its own it
-        // looked like the reason B2 was more than tidiness — and it is not. The
+        // looked like the reason the trim was more than tidiness — and it is not. The
         // badge this tally feeds is max(localUnread, unread + notification), and
         // e2e/specs/UnreadBadge-cappedBuffer.test.ts measured a buffer trimmed to
         // its cap and a buffer left shallow reporting the same count for the same

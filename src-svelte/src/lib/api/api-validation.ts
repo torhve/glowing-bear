@@ -1,6 +1,6 @@
 // Runtime validation at the network boundary for WeeChat Relay API payloads.
 //
-// Policy (migration contract §5/§7): validate required fields, enums, flags,
+// Policy: validate required fields, enums, flags,
 // arrays and numeric ID boundaries; ALLOW unknown additive fields (WeeChat may
 // extend payloads); collect diagnostics instead of throwing so one malformed
 // payload cannot crash the session. A validator returns the typed value or

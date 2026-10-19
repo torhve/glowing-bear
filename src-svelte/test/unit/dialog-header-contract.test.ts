@@ -221,7 +221,8 @@ describe('the six close buttons are three buttons, not one', () => {
             const button = closeOf(headerOf(target, headingId));
             const dialog = button.closest('dialog');
             // All six hide via the popover attribute; none of them implements its own
-            // Escape or backdrop handling, which §5 must not reintroduce.
+            // Escape or backdrop handling. A shared header must not add either: the
+            // native popover already owns both, and a second handler would fire twice.
             expect(button.getAttribute('popovertarget'), headingId).toBe(dialog?.getAttribute('id'));
             expect(button.getAttribute('popovertargetaction'), headingId).toBe('hide');
         }
