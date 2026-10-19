@@ -70,7 +70,6 @@ function makeBuffer(id: string, opts: Partial<BufferData> = {}): BufferData {
         title: [],
         rtitle: '',
         lines: [],
-        requestedLines: 0,
         allLinesFetched: false,
         lastSeen: -1,
         localUnread: 0,
@@ -328,8 +327,6 @@ describe('Readmarker behavior', () => {
                 notification: 0,
                 active: false
             });
-            // Set requestedLines to match actual line count so pruning subtraction is consistent.
-            buf.requestedLines = 250;
             buffers.set({ '0x300': buf });
 
             setActiveBuffer('0x300');
@@ -339,8 +336,6 @@ describe('Readmarker behavior', () => {
             expect(result!.lines.length).toBe(210);
             // The boundary moves with the retained line identity/index.
             expect(result!.lastSeen).toBe(160);
-            // requestedLines reduced by same amount: 250 - 40 = 210
-            expect(result!.requestedLines).toBe(210);
             // allLinesFetched reset to allow refetching pruned lines
             expect(result!.allLinesFetched).toBe(false);
         });

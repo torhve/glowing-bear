@@ -137,7 +137,6 @@ function trimBufferLines(buffer: BufferData, limit: number) {
     const wasKnown = buffer.readBoundaryKnown !== false;
     const oldLastSeen = buffer.lastSeen;
     buffer.lines.splice(0, linesToRemove);
-    buffer.requestedLines -= linesToRemove;
     if (wasKnown) {
         if (boundaryId === null) {
             setReadBoundary(buffer, -1);
@@ -254,7 +253,6 @@ export function handleBufferInfo(message: ProtocolMessage) {
                 ...workingBuffers[bufferId],
                 ...updates,
                 lines: [],
-                requestedLines: 0,
                 historyLimit: undefined,
                 allLinesFetched: false,
                 lastSeen: -1,
@@ -523,7 +521,6 @@ export function handleBufferLineAdded(message: ProtocolMessage) {
         }
 
         const line = createBufferLine({ ...lineMsg, bufferType: buffer.type });
-        buffer.requestedLines++;
         createdLines.push({ buffer: lineMsg.buffer, line });
 
         if (DEBUG_HANDLERS)
@@ -871,7 +868,6 @@ export function handleBufferOpened(message: ProtocolMessage) {
             [newBuffer.id]: {
                 ...newBuffer,
                 lines: existingBuffer.lines,
-                requestedLines: existingBuffer.requestedLines,
                 allLinesFetched: existingBuffer.allLinesFetched,
                 newestWindowFetched: existingBuffer.newestWindowFetched,
                 lastSeen: existingBuffer.lastSeen,
@@ -1072,14 +1068,13 @@ export function handleBufferLocalvarChanged(message: ProtocolMessage) {
 }
 
 // ---- Buffer cleared ----
-// Clear lines and requestedLines immutably using deep copy for the lines array.
+// Clear a buffer's lines immutably, with a deep copy for the lines array.
 export function handleBufferCleared(message: ProtocolMessage) {
     const bufferMsg = message.objects[0]?.content[0];
     if (!bufferMsg) return;
     const bufferId = bufferMsg.pointers[0];
     const updated = updateBufferDeep(bufferId, {
         lines: [],
-        requestedLines: 0,
         historyLimit: undefined,
         localUnread: 0,
         readBoundaryKnown: true,
@@ -1761,9 +1756,8 @@ export function handleLineInfo(
 
     // trimBufferLines drops lines older than each buffer's own cap. Lines are
     // appended oldest-first, so only the newest (limit - existingCount) per buffer
-    // can survive. Creating (rich-text parsing) the guaranteed-trimmed ones is
-    // wasted work on large histories, so count them in requestedLines (which
-    // gates history re-fetches) and skip the rest.
+    // can survive. Building the guaranteed-trimmed ones is wasted work on large
+    // histories — rich-text parsing is the cost — so they are skipped here.
     const perBufferSkip = new Map<string, number>();
     const perBufferCount = new Map<string, number>();
     for (const lineMsg of reversed) {
@@ -1782,7 +1776,6 @@ export function handleLineInfo(
     for (const lineMsg of reversed) {
         const buffer = updatedBuffers[lineMsg.buffer];
         if (!buffer) continue;
-        buffer.requestedLines++;
         const skip = perBufferSkip.get(lineMsg.buffer) ?? 0;
         if (skip > 0) {
             // Oldest line of this buffer in this message: it will be trimmed.

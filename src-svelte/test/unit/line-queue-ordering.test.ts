@@ -3,9 +3,8 @@
  *  1. Non-line events dispatched via handleEvent see queued lines committed
  *     first (edits/clears must not be lost to the queue — the pre-coalescing
  *     ordering guarantee).
- *  2. handleLineInfo's skip of guaranteed-trimmed lines keeps requestedLines
- *     counting ALL received lines, which is what the history re-fetch gates
- *     (requestedLines < 100) rely on.
+ *  2. handleLineInfo's window when a batch is larger than the buffer's cap: only
+ *     the newest lines survive.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
@@ -148,8 +147,10 @@ describe('line queue ordering + history skip semantics', () => {
         expect(get(buffers)['0xord']!.lines.length).toBe(0);
     });
 
-    it('handleLineInfo counts skipped (guaranteed-trimmed) lines in requestedLines', () => {
-        // 3000 lines > maxBufferLines (1000 here): oldest 2000 will be trimmed.
+    it('a history batch larger than the cap keeps the newest lines', () => {
+        // 3000 lines > maxBufferLines (1000 here). The handler skips the ones that
+        // cannot survive rather than building them for the trim to drop, so this
+        // pins which thousand of the three survive — the observable half of that.
         const content = [];
         for (let i = 0; i < 3000; i++) content.push(linePayload(3000 - i)); // newest first
         const msg = { objects: [{ pointer: '0xord', content }] } as unknown as ProtocolMessage;
@@ -157,14 +158,15 @@ describe('line queue ordering + history skip semantics', () => {
         handleLineInfo(msg, true);
 
         const buf = get(buffers)['0xord']!;
-        expect(buf.lines.length).toBeLessThanOrEqual(1000);
-        // Re-fetch gate is `requestedLines < 100`: a fully-synced large buffer
-        // must NOT look like it has little history.
-        expect(buf.requestedLines).toBe(3000);
-        expect(buf.requestedLines < 100).toBe(false);
+        expect(buf.lines.length, 'a batch over the cap lands exactly at the cap')
+            .toBe(1000);
+        // The survivors are the newest ones: skipping the rest is only correct if
+        // what is kept is the end of the range, not an arbitrary thousand.
+        expect(buf.lines[0].text).toBe('line message 2001');
+        expect(buf.lines[999].text).toBe('line message 3000');
     });
 
-    it('small histories keep the re-fetch gate reachable (requestedLines < 100)', () => {
+    it('a history below the cap is kept whole', () => {
         const content = [];
         for (let i = 0; i < 50; i++) content.push(linePayload(50 - i));
         const msg = { objects: [{ pointer: '0xord', content }] } as unknown as ProtocolMessage;
@@ -173,7 +175,6 @@ describe('line queue ordering + history skip semantics', () => {
 
         const buf = get(buffers)['0xord']!;
         expect(buf.lines.length).toBe(50);
-        expect(buf.requestedLines).toBe(50);
-        expect(buf.requestedLines < 100).toBe(true);
+        expect(buf.lines[0].text).toBe('line message 1');
     });
 });

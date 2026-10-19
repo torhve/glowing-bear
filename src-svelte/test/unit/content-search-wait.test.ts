@@ -21,7 +21,6 @@ function grepBuffer(id: string, clearEpoch: number): BufferData {
         title: [],
         rtitle: '',
         lines: [],
-        requestedLines: 0,
         allLinesFetched: true,
         lastSeen: -1,
         localUnread: 0,

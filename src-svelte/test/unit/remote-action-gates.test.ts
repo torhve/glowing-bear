@@ -201,6 +201,6 @@ describe('retainedRows: the sidebar describes the retained view', () => {
         const row = get(retainedRows)[0] as BufferData;
         expect(row.apiBufferId, 'a sidebar row must not be addressable').toBeUndefined();
         expect(row.clearEpoch).toBeUndefined();
-        expect(row.requestedLines, 'the history gate stays inert for a frozen buffer').toBe(row.lines.length);
+        expect(row.newestWindowFetched, 'the history gate stays inert for a frozen buffer').toBe(true);
     });
 });

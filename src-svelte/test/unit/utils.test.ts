@@ -18,7 +18,6 @@ describe('sortBuffers with pinned', () => {
             title: [],
             rtitle: '#test',
             lines: [],
-            requestedLines: 0,
             allLinesFetched: false,
             lastSeen: -1,
             unread: 0,

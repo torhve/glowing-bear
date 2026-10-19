@@ -109,7 +109,6 @@ function fixture(id: string, lineCount: number, anchorIndex: number): BufferData
     const buf: BufferData = {
         ...base,
         historyLimit: CAP,
-        requestedLines: 20,
         lines: Array.from({ length: lineCount }, (_, i) => line(id, i)),
     };
     setReadBoundary(buf, anchorIndex);

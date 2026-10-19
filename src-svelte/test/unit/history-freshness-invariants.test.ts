@@ -67,7 +67,7 @@ describe('a cleared buffer has fetched nothing', () => {
 
         buffers.update((current) => ({
             ...current,
-            [key]: { ...current[key]!, requestedLines: 200, newestWindowFetched: true, allLinesFetched: true },
+            [key]: { ...current[key]!, newestWindowFetched: true, allLinesFetched: true },
         }));
         expect(get(buffers)[key]!.newestWindowFetched).toBe(true);
 
@@ -75,7 +75,6 @@ describe('a cleared buffer has fetched nothing', () => {
 
         const after = get(buffers)[key]!;
         expect(after.lines).toHaveLength(0);
-        expect(after.requestedLines, 'nothing has been asked for since the clear').toBe(0);
         expect(after.newestWindowFetched, 'the reused buffer must ask for its own newest window').toBe(false);
         expect(after.allLinesFetched, 'completeness did not survive the clear').toBe(false);
     });

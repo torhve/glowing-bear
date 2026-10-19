@@ -68,7 +68,6 @@ function makeBuffer(id: string, overrides: Partial<BufferData> = {}): BufferData
         title: [],
         rtitle: overrides.rtitle ?? '',
         lines: [],
-        requestedLines: 0,
         allLinesFetched: false,
         lastSeen: -1,
         localUnread: 0,

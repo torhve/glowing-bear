@@ -84,7 +84,6 @@ describe('handleBufferLineDataChanged', () => {
                     showHiddenBrackets: false
                 }
             ],
-            requestedLines: 2,
             allLinesFetched: false,
             lastSeen: 1,
             localUnread: 0,

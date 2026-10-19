@@ -260,13 +260,13 @@
     });
   });
 
-  // Clear all messages from a buffer, resetting lines and requestedLines count.
+  // Clear all messages from a buffer, resetting its retained window.
   function clearBufferMessages(bufferId: string) {
     const current = get(buffers);
     const buf = current[bufferId];
     if (!buf) return;
     const updated = { ...current };
-    updated[bufferId] = { ...buf, lines: [], requestedLines: 0, historyLimit: undefined };
+    updated[bufferId] = { ...buf, lines: [], historyLimit: undefined };
     buffers.set(updated);
   }
 

@@ -64,7 +64,6 @@ describe('Date change injection', () => {
             bufferType: 0,
             lines: [] as any[],
             lastSeen: 0,
-            requestedLines: 0,
             plugin: 'irc',
             server: 'test'
         } as any;
@@ -91,7 +90,6 @@ describe('Date change injection', () => {
             bufferType: 1,
             lines: [] as any[],
             lastSeen: 0,
-            requestedLines: 0,
             plugin: 'irc',
             server: 'test'
         } as any;
@@ -110,7 +108,6 @@ describe('Date change injection', () => {
             bufferType: 0,
             lines: [] as any[],
             lastSeen: 0,
-            requestedLines: 0,
             plugin: 'irc',
             server: 'test'
         } as any;
@@ -129,7 +126,6 @@ describe('Date change injection', () => {
             bufferType: 0,
             lines: [] as any[],
             lastSeen: 0,
-            requestedLines: 0,
             plugin: 'irc',
             server: 'test'
         } as any;
@@ -149,7 +145,6 @@ describe('Date change injection', () => {
             bufferType: 0,
             lines: [] as any[],
             lastSeen: 42,
-            requestedLines: 0,
             plugin: 'irc',
             server: 'test'
         } as any;
@@ -168,7 +163,6 @@ describe('Date change injection', () => {
             bufferType: 0,
             lines: [] as any[],
             lastSeen: 42,
-            requestedLines: 0,
             plugin: 'irc',
             server: 'test'
         } as any;

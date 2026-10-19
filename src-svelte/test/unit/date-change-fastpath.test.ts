@@ -42,7 +42,6 @@ function makeBuffer(): any {
         bufferType: 0,
         lines: [] as any[],
         lastSeen: 0,
-        requestedLines: 0,
         plugin: 'irc',
         server: 'test',
     };

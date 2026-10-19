@@ -121,9 +121,9 @@ export async function fetchHistory(session: ApiSession, req: HistoryRequest): Pr
     return { lines: mapped, applied: true, complete: mapped.length < req.count };
 }
 // Smart-filtered lines never land in buffer.lines, so overlapping history
-// windows would re-count them in requestedLines. Remember their ids per
-// buffer, reset when the buffer is cleared (epoch bump) so a refetch after
-// /clear starts from a clean slate.
+// windows would treat them as unseen every time. Remember their ids per buffer,
+// reset when the buffer is cleared (epoch bump) so a refetch after /clear starts
+// from a clean slate.
 const hiddenLineIds = new Map<string, { epoch: number; ids: Set<number> }>();
 
 // Drop all per-buffer tracking. Called on disconnect (resetAllState) so a
@@ -221,12 +221,10 @@ function applyHistory(buffer: BufferData, lines: LineSnapshot[]): void {
         .slice()
         .sort((a, b) => a.id - b.id)
         .filter((l) => !existing.has(`weechat:${l.id}`) && !hiddenSeen.has(l.id));
-    // Count every received server line — smart-filtered joins/parts included —
-    // so the requested window (requestedLines * 2) advances past hidden-line
-    // regions; only displayed lines are rendered. Counting only displayed
-    // lines stalls the window: a fetch of newest-N raw lines where all N are
-    // hidden keeps requestedLines at 0 and the same N lines refetch forever.
-    buffer.requestedLines += unseen.length;
+    // Hidden lines are remembered by id rather than counted. A window whose rows
+    // are all smart-filtered away renders nothing, and without that record the same
+    // N raw lines would be treated as new on every page. Only displayed lines are
+    // rendered.
     const fresh = unseen
         .filter((l) => !isServerHiddenLine(l))
         .map((l) => lineSnapshotToBufferLine(buffer, l));

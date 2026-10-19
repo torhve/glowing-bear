@@ -19,6 +19,7 @@ import {
     activeBufferId,
     recalculateLinesPerScreen,
     createBuffer,
+    maxBufferLines,
 } from '#lib/stores/models.ts';
 import type { BufferData, ProtocolMessage, BufferLine } from '#lib/types.ts';
 
@@ -140,7 +141,6 @@ function snapshotTail(buf: BufferData, tail = 200): string {
         lastSeen: buf.lastSeen,
         readBoundaryKnown: buf.readBoundaryKnown,
         readBoundaryId: buf.readBoundaryId,
-        requestedLines: buf.requestedLines,
         active: buf.active
     });
 }
@@ -189,12 +189,10 @@ describe('perf: history load benchmark', () => {
             reps.push(performance.now() - t0);
 
             const finalBuf = get(buffers)[buffer.id]!;
-            // The store trims to maxBufferLines (1000 here); all 5000 are still processed.
-            expect(finalBuf.lines.length).toBeLessThanOrEqual(1000);
-            expect(finalBuf.lines.length).toBeGreaterThan(0);
-            // requestedLines counts all lines RECEIVED (skipped-but-trimmed ones included),
-            // which is what the history re-fetch gates (requestedLines < 100) rely on.
-            expect(finalBuf.requestedLines).toBe(HISTORY_LINES);
+            // The batch is 5000 lines; what survives is the cap, and the lines that
+            // could not survive are skipped before rich-text parsing — which is part
+            // of what this bench measures.
+            expect(finalBuf.lines.length).toBe(get(maxBufferLines));
 
             finalRows = finalBuf.lines.length;
             snap = snapshotTail(finalBuf);

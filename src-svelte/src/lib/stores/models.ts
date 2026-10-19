@@ -416,7 +416,6 @@ export function createBuffer(message: {
         title,
         rtitle: title.map((t) => t.text).join(""),
         lines: [],
-        requestedLines: 0,
         allLinesFetched: false,
         newestWindowFetched: false,
         lastSeen: -1,
@@ -1327,7 +1326,6 @@ export function setActiveBuffer(bufferId: string): boolean {
         const boundaryIndexBeforeTrim = getReadBoundaryIndex(target);
         const boundaryId = target.readBoundaryId;
         target.lines.splice(0, linesToRemove);
-        target.requestedLines -= linesToRemove;
         if (target.readBoundaryKnown !== false) {
             if (boundaryId) {
                 setReadBoundaryFromAnchorId(target, boundaryId);

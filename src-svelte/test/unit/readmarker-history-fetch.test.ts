@@ -79,7 +79,6 @@ function makeBuffer(id: string, lines: BufferLine[], hotlistTotal: number = 0): 
         unread: hotlistTotal,
         hotlistInfo: hotlistTotal > 0 ? { number: 10, name: '#test', priority: 1, count: hotlistTotal } : null,
         allLinesFetched: false,
-        requestedLines: lines.length,
         contentType: 'channel',
         type: 'channel',
     } as BufferData;

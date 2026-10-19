@@ -66,7 +66,6 @@ it('keeps embedded media with its message when the line cap trims the buffer fro
     const buf: BufferData = {
         ...createBuffer({ pointers: [id], full_name: `irc.${id}`, short_name: id, number: 1,
             local_variables: { type: 'channel' } }),
-        requestedLines: 100,
         lines: [first, second, third],
     };
     showBuffer(buf);

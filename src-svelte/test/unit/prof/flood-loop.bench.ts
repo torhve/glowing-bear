@@ -20,6 +20,7 @@ import {
     activeBufferId,
     recalculateLinesPerScreen,
     createBuffer,
+    maxBufferLines,
 } from '#lib/stores/models.ts';
 import type { BufferData, ProtocolMessage } from '#lib/types.ts';
 import { startCpuProfile } from './cpu-profile.ts';
@@ -185,7 +186,8 @@ describe('prof: flood loop', () => {
             handleLineInfo(message, true);
             const elapsed = performance.now() - t0;
             if (iter >= WARMUP) times.push(elapsed);
-            expect(get(buffers)[buffer.id]!.requestedLines).toBe(HISTORY_LINES);
+            // The whole 5000-line batch is handled; what survives is the cap.
+            expect(get(buffers)[buffer.id]!.lines.length).toBe(get(maxBufferLines));
         }
         await stop();
         times.sort((a, b) => a - b);

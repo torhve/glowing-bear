@@ -38,7 +38,6 @@ function channel(id: string, number: number, lineCount = 0): BufferData {
             pointers: [id], full_name: `irc.${id}`, short_name: id, number,
             local_variables: { type: 'channel' },
         }),
-        requestedLines: 100,
         lines: Array.from({ length: lineCount }, (_, i) => createBufferLine({
             buffer: id, date: 1_700_000_000 + i, prefix: 'nick', message: `${id} message ${i}`,
             tags_array: ['irc_privmsg'], displayed: 1, highlight: 0,

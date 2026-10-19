@@ -193,7 +193,6 @@ export interface BufferData extends BufferPresentation {
      *  under an older epoch must be rejected. */
     clearEpoch?: number;
     lines: BufferLine[];
-    requestedLines: number;
     allLinesFetched: boolean;
     /** Line cap this buffer is allowed to retain. Absent means the screen-derived
      *  maxBufferLines; each deliberate page upward raises it toward a ceiling, so

@@ -164,9 +164,10 @@ describe('chatDisplay: what the chat renders', () => {
         const rebuilt = get(chatDisplay).buffer!;
         expect(rebuilt.apiBufferId, 'a frozen view must not look addressable').toBeUndefined();
         expect(rebuilt.clearEpoch, 'a retained buffer has no epoch to validate against').toBeUndefined();
-        // requestedLines drives the page's history gate. Reporting the real line
-        // count is what keeps a retained buffer from triggering a fetch.
-        expect(rebuilt.requestedLines).toBe(rebuilt.lines.length);
+        // newestWindowFetched is the field the page's history gate reads. Reporting
+        // the window as already fetched is what keeps a retained buffer from
+        // triggering a fetch it has nowhere to write.
+        expect(rebuilt.newestWindowFetched).toBe(true);
     });
 });
 

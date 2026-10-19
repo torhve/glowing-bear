@@ -1284,10 +1284,10 @@ export async function switchBuffer(bufferId: string): Promise<boolean> {
     // Buffers with sufficient cached lines should not be refetched — that would
     // destroy the preserved lastSeen value and localUnread state.
     const buffer = getBuffer(bufferId);
-    // `requestedLines < 100` was answering "has this buffer been fetched yet?"
-    // with a held-line count, which a retained handoff, a clear, or a trim can all
-    // change for reasons that have nothing to do with freshness. newestWindowFetched
-    // is the one answer to that question on both transports.
+    // An old `requestedLines < 100` test used to answer "has this buffer been
+    // fetched yet?" with a held-line count, which a retained handoff, a clear, or a
+    // trim can all change for reasons that have nothing to do with freshness.
+    // newestWindowFetched is the one answer to that question on both transports.
     if (buffer && shouldFetchOnBufferSwitch(buffer)) {
         // Line identity, rather than an array offset, preserves a known boundary when
         // a switch fetch replaces the cached snapshot. An absent identity remains unknown.

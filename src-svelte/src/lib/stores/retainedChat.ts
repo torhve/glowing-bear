@@ -617,7 +617,6 @@ export function applyRetainedHandoff(): HandoffOutcome | null {
                     // the gate read that as "already requested enough", and the
                     // messages that arrived while the app was away were never asked
                     // for. A pure handoff claims nothing about this session.
-                    requestedLines: target.requestedLines ?? 0,
                     newestWindowFetched: target.newestWindowFetched ?? false,
                     // Completeness describes this session's fetch, not the frozen
                     // window. Claiming the retained window was complete would
@@ -673,13 +672,8 @@ export function retainedBufferData(retained: RetainedBuffer): BufferData {
     return {
         ...retained.presentation,
         lines: retained.lines,
-        // A stale `requestedLines` would make the page's history gate fetch more
-        // for a buffer that is frozen. Reporting the lines actually held keeps the
-        // retained view inert.
-        requestedLines: retained.lines.length,
-        // Same reason, in the field the gate now actually reads: a frozen snapshot
-        // cannot fetch, so it reports its window as already fetched rather than
-        // inviting a request it would have nowhere to write.
+        // A frozen snapshot cannot fetch, so it reports its window as already
+        // fetched rather than inviting a request it would have nowhere to write.
         newestWindowFetched: true,
         allLinesFetched: retained.allLinesFetched,
         lastSeen: 0,

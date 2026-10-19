@@ -150,9 +150,6 @@ describe('fetchHistory', () => {
         expect(res.applied).toBe(true);
         const buf = get(buffers)[KEY]!;
         expect(buf.lines.map((l) => l.text)).toEqual(['visible']);
-        // requestedLines counts every line the server sent (hidden included)
-        // so the paging window advances past smart-filtered regions.
-        expect(buf.requestedLines).toBe(3);
     });
 
     it('a fully hidden fetch still advances the window (blank-buffer regression)', async () => {
@@ -167,13 +164,12 @@ describe('fetchHistory', () => {
         expect(res.applied).toBe(true);
         const buf = get(buffers)[KEY]!;
         expect(buf.lines).toHaveLength(0);
-        // The window must advance (requestedLines) and NOT be marked complete,
-        // otherwise the buffer stays blank with no way to page further.
-        expect(buf.requestedLines).toBe(2);
+        // Nothing was rendered, so the buffer must not be declared complete: a
+        // blank buffer marked finished has no way to page further.
         expect(res.complete).toBe(false);
     });
 
-    it('deduped lines are not counted twice in requestedLines', async () => {
+    it('an overlapping refetch of the same window adds nothing', async () => {
         const session = fakeSession(() => ({
             code: 200,
             body: [wireLine(1, 'a'), { ...wireLine(2, 'join'), displayed: false }],
@@ -185,7 +181,7 @@ describe('fetchHistory', () => {
             body: [wireLine(1, 'a'), { ...wireLine(2, 'join'), displayed: false }],
         }));
         await fetchHistory(session2, { bufferId: BUFFER_ID, count: 2 });
-        expect(get(buffers)[KEY]!.requestedLines).toBe(2);
+        expect(get(buffers)[KEY]!.lines.map((l) => l.text)).toEqual(['a']);
     });
 
     it('pages past a hidden-only window into visible history', async () => {
@@ -212,9 +208,9 @@ describe('fetchHistory', () => {
         const res = await fetchHistory(session2, { bufferId: BUFFER_ID, count: 4 });
         expect(res.applied).toBe(true);
         const buf = get(buffers)[KEY]!;
-        // The visible line renders; window counts all 4 raw lines (no double-count).
+        // The older visible line renders; the three smart-filtered rows around it
+        // do not, and none of them are re-added on a second pass.
         expect(buf.lines.map((l) => l.text)).toEqual(['hello']);
-        expect(buf.requestedLines).toBe(4);
     });
 
     it('an entirely hidden history completes at the start of history', async () => {
@@ -226,7 +222,6 @@ describe('fetchHistory', () => {
         const buf = get(buffers)[KEY]!;
         expect(res.complete).toBe(true); // caller sets allLinesFetched → paging stops
         expect(buf.lines).toHaveLength(0);
-        expect(buf.requestedLines).toBe(1);
     });
 
     it('reconnect clears hidden-id tracking so ids are not deduped against a previous session', async () => {
@@ -241,9 +236,11 @@ describe('fetchHistory', () => {
             contentType: 'formatted', semanticType: 'channel', hidden: false, title: '',
             localVariables: { type: 'channel', plugin: 'irc', server: 'glowing-bear' }, lastReadLineId: -1,
         }]);
-        const session2 = fakeSession(() => ({ code: 200, body: [hidden] }));
+        // The same id, now displayed. Without the reset it would still be held
+        // against the buffer as a known-hidden line and never rendered.
+        const session2 = fakeSession(() => ({ code: 200, body: [wireLine(1, 'join')] }));
         await fetchHistory(session2, { bufferId: BUFFER_ID, count: 1 });
-        expect(get(buffers)[KEY]!.requestedLines).toBe(1);
+        expect(get(buffers)[KEY]!.lines.map((l) => l.text)).toEqual(['join']);
     });
 
     // The reported bug, driven through the real bootstrap + paging path.

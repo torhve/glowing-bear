@@ -221,7 +221,6 @@ function snapshotBuffer(buf: BufferData): string {
         lastSeen: buf.lastSeen,
         readBoundaryKnown: buf.readBoundaryKnown,
         readBoundaryId: buf.readBoundaryId,
-        requestedLines: buf.requestedLines,
         active: buf.active,
         pendingReadBoundaryUnread: buf.pendingReadBoundaryUnread
     });

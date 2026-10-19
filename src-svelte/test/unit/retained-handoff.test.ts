@@ -212,11 +212,11 @@ describe('seeding: only an instance the new session actually has', () => {
 
         const buffer = get(buffers)[KEY_CHANNEL];
         expect(buffer.lines, 'the transcript continues across the outage').toHaveLength(4);
-        // Counting the seeded window as this session's fetch is what closed the
-        // history gate after an overnight outage: the buffer held a full stale
-        // window, the gate read it as "already requested enough", and the lines
-        // that arrived while the app was away were never asked for.
-        expect(buffer.requestedLines, 'holding lines is not the same as fetching them').toBe(0);
+        // Holding a stale window is not the same as this session having fetched
+        // it. Reading the two flags off the frozen window is what closed the
+        // history gate after an overnight outage: the buffer looked like it had
+        // already been asked for, and the lines that arrived while the app was
+        // away were never requested.
         expect(buffer.newestWindowFetched, 'the frozen window is the window as of the outage').toBe(false);
         expect(buffer.allLinesFetched, 'completeness belongs to this session, not the frozen window').toBe(false);
     });

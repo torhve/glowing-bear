@@ -16,9 +16,15 @@ import type { BufferData, ProtocolMessage } from '#lib/types.ts';
 // written three times, and the three copies disagree about what a trim owes the
 // counters.
 //
-//   legacy  handlers.ts:123 trimBufferLines()          requestedLines -= n,  localUnread compensated
-//   API     api-store-reducers.ts:318 trimBufferLines() requestedLines clamped only, localUnread compensated
-//   inline  models.ts setActiveBuffer (inlined, no function) requestedLines -= n, no localUnread code at all
+//   legacy  handlers.ts trimBufferLines()                    localUnread compensated
+//   API     api-store-reducers.ts trimBufferLines()          localUnread compensated
+//   inline  models.ts setActiveBuffer (inlined, no function) no localUnread code at all
+//
+// A fourth disagreement used to be recorded here: the copies also differed about
+// `requestedLines` — two subtracted the removed lines, one only clamped. That
+// field turned out to be write-only: nothing read it, and a page is sized from the
+// request argument and the buffer's own history limit. It was removed rather than
+// harmonised.
 //
 // Each test runs the same scenario — a buffer holding more lines than its own cap
 // — through one of the three, and records where the counters land. These pin
@@ -89,7 +95,6 @@ function fixture(id: string, lineCount: number, localUnread = 3): BufferData {
     const buf: BufferData = {
         ...base,
         historyLimit: CAP,
-        requestedLines: 20,
         localUnread,
         lines: Array.from({ length: lineCount }, (_, i) =>
             createBufferLine({
@@ -136,9 +141,7 @@ function lineAdded(id: string, message: string): ProtocolMessage {
 /**
  * The legacy trim is module-private and runs at the end of handleBufferLineAdded,
  * so the scenario has to arrive the way the transport delivers it: a buffer that
- * is already over its cap receives one more live line. The handler counts that
- * line in requestedLines too (handlers.ts:528), which is why the legacy numbers
- * below are `start + 1 - removed` and not `start - removed`.
+ * is already over its cap receives one more live line.
  */
 function legacyTrim(id: string, buf: BufferData): BufferData {
     buffers.set({ [id]: buf });
@@ -156,15 +159,16 @@ describe('B2 characterization: three copies of the line trim, three counter rule
         activeBufferId.set('');
     });
 
-    it('16 lines against a cap of 10: the three copies land on three different requestedLines', () => {
-        // API: 16 -> 10, requestedLines untouched.
+    it('16 lines against a cap of 10: all three copies land on the cap', () => {
+        // The part they agree on, and the reason the disagreement below was worth
+        // measuring at all: same scenario, same retained window.
         const apiBuf = fixture('0xA00', 16);
         apiTrim(apiBuf, CAP);
 
-        // Legacy: 15 -> +1 live line -> 16 -> 10, requestedLines 20 + 1 - 6.
+        // Legacy arrives as the transport delivers it: 15 held, one live line, 16
+        // against a cap of 10.
         const legacyAfter = legacyTrim('0xA01', fixture('0xA01', 15));
 
-        // Inline: 16 -> 10, requestedLines 20 - 6.
         const inlineBuf = fixture('0xA02', 16);
         buffers.set({ '0xA02': inlineBuf });
         setActiveBuffer('0xA02');
@@ -172,16 +176,6 @@ describe('B2 characterization: three copies of the line trim, three counter rule
 
         expect([apiBuf.lines.length, legacyAfter.lines.length, inlineAfter.lines.length])
             .toEqual([CAP, CAP, CAP]);
-
-        // requestedLines counts what the session ASKED the server for, and the
-        // scroll-up page size is derived from it (requestedLines * 2). The API
-        // copy deliberately refuses to spend it on a display trim; the other two
-        // spend it. Same trim, three answers.
-        expect({
-            api: apiBuf.requestedLines,
-            legacy: legacyAfter.requestedLines,
-            inline: inlineAfter.requestedLines,
-        }).toEqual({ api: 20, legacy: 15, inline: 14 });
     });
 
     it('legacy and API compensate localUnread for the removed prefix — and subtract more lines than were unread', () => {

@@ -50,7 +50,6 @@ describe('handleBufferMoved', () => {
             title: [],
             rtitle: '',
             lines: [],
-            requestedLines: 0,
             allLinesFetched: false,
             lastSeen: -1,
             unread: 0,

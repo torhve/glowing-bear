@@ -15,7 +15,6 @@ function createBuffer(opts: Partial<BufferData> = {}): BufferData {
         title: [],
         rtitle: '',
         lines: [],
-        requestedLines: 0,
         allLinesFetched: true,
         lastSeen: Date.now(),
         unread: 0,

@@ -120,6 +120,13 @@ describe('a history page is sized to the window it may retain', () => {
         expect(historyPageSize(0, 0)).toBe(100);
     });
 
+    it('never asks for a negative page either', () => {
+        // A limit that was never set, or one read off an empty window, can arrive
+        // non-positive — and `last_line(-0)` is answered with an empty array that
+        // is indistinguishable from "no older history exists".
+        expect(historyPageSize(0, -140)).toBe(100);
+    });
+
     it('honours a larger explicit request', () => {
         expect(historyPageSize(2000, 1200)).toBe(2000);
     });
