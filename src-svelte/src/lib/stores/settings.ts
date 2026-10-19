@@ -1,6 +1,7 @@
 import { writable, get } from 'svelte/store';
 import type { Settings } from '#lib/types.ts';
 import { isTheme, type Theme } from '#lib/themes.ts';
+import { parseJSON, readString, remove, writeJSON } from '#lib/storage.ts';
 
 export const settings = writable<Settings>({
     hostField: '',
@@ -44,6 +45,7 @@ export const settings = writable<Settings>({
 
 // The key the theme store wrote before issue #13 introduced the two slots.
 const LEGACY_THEME_KEY = 'gb_theme';
+const SETTINGS_KEY = 'gb-settings';
 
 /**
  * Read the pre-slot theme key and remove it.
@@ -52,9 +54,9 @@ const LEGACY_THEME_KEY = 'gb_theme';
  * than a second source the app keeps consulting.
  */
 function takeLegacyThemeKey(): Theme | null {
-    const raw = localStorage.getItem(LEGACY_THEME_KEY);
+    const raw = readString(LEGACY_THEME_KEY);
     if (raw === null) return null;
-    localStorage.removeItem(LEGACY_THEME_KEY);
+    remove(LEGACY_THEME_KEY);
     return isTheme(raw) ? raw : null;
 }
 
@@ -84,18 +86,22 @@ function migrateThemeSlots(saved: Record<string, unknown>, legacyThemeKey: Theme
     return migrated as Partial<Settings>;
 }
 
-// Load from localStorage on init
-if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+/**
+ * Read the stored profile once, at import, and fold it into the store.
+ *
+ * A present-but-unreadable blob is *not* treated as a fresh profile: it logs and
+ * leaves the defaults alone, so a half-written settings file cannot silently
+ * discard a legacy palette that the absent-key branch would apply.
+ */
+function loadStoredSettings(): void {
     const legacyTheme = takeLegacyThemeKey();
-    const saved = localStorage.getItem('gb-settings');
+    const saved = readString(SETTINGS_KEY);
     if (saved) {
-        try {
-            const parsed: unknown = JSON.parse(saved);
-            if (parsed && typeof parsed === 'object') {
-                settings.set({ ...get(settings), ...migrateThemeSlots(parsed as Record<string, unknown>, legacyTheme) });
-            }
-        } catch (e) {
-            console.error('Failed to parse settings from localStorage', e);
+        const parsed = parseJSON<Record<string, unknown>>(saved, (e) =>
+            console.error('Failed to parse settings from localStorage', e),
+        );
+        if (parsed && typeof parsed === 'object') {
+            settings.set({ ...get(settings), ...migrateThemeSlots(parsed, legacyTheme) });
         }
     } else if (legacyTheme) {
         // A profile that only ever wrote the old theme key still keeps its palette.
@@ -103,13 +109,13 @@ if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
     }
 }
 
+loadStoredSettings();
+
 export function updateSettings(partial: Partial<Settings>) {
     const current = get(settings);
     const updated = { ...current, ...partial };
     settings.set(updated);
-    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
-        localStorage.setItem('gb-settings', JSON.stringify(updated));
-    }
+    writeJSON(SETTINGS_KEY, updated);
 }
 
 // Monotonically-increasing store that increments whenever hash params are applied.

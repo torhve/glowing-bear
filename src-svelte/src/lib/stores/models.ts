@@ -16,6 +16,7 @@ import type {
 } from "#lib/types.ts";
 import { rawText2Rich, parseWeechatNickColor } from "#lib/weechat-colors.ts";
 import { DEBUG_BUFFERS } from "#lib/debug.ts";
+import { PENDING_NOTIFICATION_BUFFER_KEY, readString, remove } from "#lib/storage.ts";
 
 
 // ---- Utility: parse rich text (delegates to the standalone color parser) ----
@@ -1440,7 +1441,7 @@ export function removeBuffer(bufferId: string, wasActive: boolean) {
 
 export function checkAndNavigatePendingNotificationBuffer(): void {
     try {
-        const pendingRaw = localStorage.getItem("gb_pendingNotificationBuffer");
+        const pendingRaw = readString(PENDING_NOTIFICATION_BUFFER_KEY);
         if (!pendingRaw) return;
 
         const pending = JSON.parse(pendingRaw) as {
@@ -1460,17 +1461,17 @@ export function checkAndNavigatePendingNotificationBuffer(): void {
             if (DEBUG_BUFFERS)
                 console.log("[models] Buffer exists, navigating to:", pending.bufferId);
             setActiveBuffer(pending.bufferId);
-            localStorage.removeItem("gb_pendingNotificationBuffer");
+            remove(PENDING_NOTIFICATION_BUFFER_KEY);
         } else {
             console.warn(
                 "[models] Pending buffer not found in store, clearing stale entry",
             );
-            localStorage.removeItem("gb_pendingNotificationBuffer");
+            remove(PENDING_NOTIFICATION_BUFFER_KEY);
         }
     } catch (e) {
         console.error("[models] Error checking pending notification buffer:", e);
         try {
-            localStorage.removeItem("gb_pendingNotificationBuffer");
+            remove(PENDING_NOTIFICATION_BUFFER_KEY);
         } catch {
             /* ignore */
         }

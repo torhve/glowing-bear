@@ -1,4 +1,5 @@
 import { writable, get } from 'svelte/store';
+import { parseJSON, readString, writeJSON } from '#lib/storage.ts';
 
 // Max entries per buffer's input history to prevent unbounded growth.
 const maxHistoryEntries = 50;
@@ -26,20 +27,17 @@ export interface BufferHistory {
 const history = writable<Record<string, BufferHistory>>({});
 
 // Load persisted history from localStorage on module init
-if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
-    try {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) history.set(JSON.parse(saved));
-    } catch {
-        /* Ignore corrupt data */
-    }
+const savedHistory = readString(STORAGE_KEY);
+if (savedHistory !== null) {
+    // Corrupt data is ignored rather than logged: an empty history is the
+    // correct answer either way, and this runs at import time.
+    const parsed = parseJSON<Record<string, BufferHistory>>(savedHistory);
+    if (parsed !== undefined) history.set(parsed);
 }
 
 // Persist every state mutation to localStorage
 history.subscribe(state => {
-    if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    }
+    writeJSON(STORAGE_KEY, state);
 });
 
 export function addToHistory(bufferId: string, line: string) {

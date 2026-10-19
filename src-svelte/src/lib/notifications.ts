@@ -10,6 +10,7 @@ import { initFavicon, drawBadge, resetBadge, invalidateFaviconBadge } from './fa
 import { isTauri, setBadgeCount } from './tauriWindow';
 import { initWindowFocusTracking } from './windowFocus';
 import { DEBUG_NOTIFICATIONS } from '#lib/debug.ts';
+import { PENDING_NOTIFICATION_BUFFER_KEY, writeJSON } from '#lib/storage.ts';
 
 // Notification permission state
 let notificationPermission: 'granted' | 'denied' | 'default' = 'default';
@@ -143,7 +144,7 @@ export async function createHighlight(buffer: BufferData, message: string): Prom
             if (!result) {
                 console.warn('[notification] setActiveBuffer failed for buffer.id:', buffer.id, '— storing in localStorage as fallback');
                 try {
-                    localStorage.setItem('gb_pendingNotificationBuffer', JSON.stringify({ bufferId: buffer.id, timestamp: Date.now() }));
+                    writeJSON(PENDING_NOTIFICATION_BUFFER_KEY, { bufferId: buffer.id, timestamp: Date.now() });
                 } catch (e) {
                     console.error('[notification] failed to store pending buffer:', e);
                 }
