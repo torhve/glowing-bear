@@ -130,7 +130,6 @@ export function flushApiLineBatch(): void {
     }
 
     // One map copy + one lines-array copy per affected buffer, not per line.
-    // One map copy + one lines-array copy per affected buffer, not per line.
     // Read the screen cap once per batch. `get()` on a Svelte store subscribes
     // and unsubscribes, and doing it twice per line measured 26% of the API
     // flood's store time — the cap cannot move inside one synchronous flush.
@@ -473,6 +472,30 @@ function alertForLine(buffer: BufferData, line: LineSnapshot, activeId: string):
     }
 }
 
+/**
+ * Apply one nick event to one buffer's group map.
+ *
+ * All four nick events used to open with the same four lines: flush the line
+ * batch the event may have queued, find the buffer, and hand back a new buffer
+ * carrying a new group map, because the store is a plain record and neither the
+ * buffer nor its nicklist may be mutated where a subscriber is still holding it.
+ * An event naming a buffer this session does not have is dropped rather than
+ * answered with a new one — the sidebar would then show a buffer the relay never
+ * sent. The store key is passed along because group-key bookkeeping is keyed by
+ * it, not by the buffer's own id.
+ */
+function updateNicklist(bufferId: ApiBufferId, apply: (buffer: BufferData, storeKey: string) => void): void {
+    flushApiLineBatch();
+    const key = storeKeyForBufferId(bufferId);
+    buffers.update((current) => {
+        const buffer = current[key];
+        if (!buffer) return current;
+        const copy = { ...current, [key]: { ...buffer, nicklist: { ...buffer.nicklist } } };
+        apply(copy[key]!, key);
+        return copy;
+    });
+}
+
 /** Create the ApiReducers bound to the live stores for one connection.
  *  The orchestrator already gates generations for events; the clear epoch
  *  guards delayed request responses against clears/closes. */
@@ -648,44 +671,25 @@ export function createApiStoreReducers(): ApiReducers {
         },
 
         nickGroupChanged(bufferId, group): void {
-            flushApiLineBatch();
-            const key = storeKeyForBufferId(bufferId);
-            buffers.update((current) => {
-                const buffer = current[key];
-                if (!buffer) return current;
-                const copy = { ...current, [key]: { ...buffer, nicklist: { ...buffer.nicklist } } };
-                const target = copy[key]!;
-                const key2 = registerGroupKey(target.id, group.id, group.name);
-                const existing = target.nicklist[key2];
+            updateNicklist(bufferId, (target) => {
+                const groupKey2 = registerGroupKey(target.id, group.id, group.name);
+                const existing = target.nicklist[groupKey2];
                 const entry = existing ?? createNickGroup({ name: group.name, visible: group.visible ? '1' : '0' });
-                target.nicklist[key2] = { ...entry, name: group.name, visible: group.visible ? '1' : '0' };
-                return copy;
+                target.nicklist[groupKey2] = { ...entry, name: group.name, visible: group.visible ? '1' : '0' };
             });
         },
 
         nickGroupRemoved(bufferId, groupId): void {
-            flushApiLineBatch();
-            const key = storeKeyForBufferId(bufferId);
-            buffers.update((current) => {
-                const buffer = current[key];
-                if (!buffer) return current;
-                const copy = { ...current, [key]: { ...buffer, nicklist: { ...buffer.nicklist } } };
-                delete copy[key]!.nicklist[groupKey(copy[key]!.id, groupId)];
-                groupKeys.get(key)?.delete(groupId);
-                return copy;
+            updateNicklist(bufferId, (target, storeKey) => {
+                delete target.nicklist[groupKey(target.id, groupId)];
+                groupKeys.get(storeKey)?.delete(groupId);
             });
         },
 
         nickChanged(bufferId, nick): void {
-            flushApiLineBatch();
-            const key = storeKeyForBufferId(bufferId);
-            buffers.update((current) => {
-                const buffer = current[key];
-                if (!buffer) return current;
-                const copy = { ...current, [key]: { ...buffer, nicklist: { ...buffer.nicklist } } };
-                const target = copy[key]!;
-                const key2 = groupKey(target.id, nick.parentGroupId);
-                const group = target.nicklist[key2] ?? createNickGroup({ name: key2 === 'root' ? '' : key2, visible: '1' });
+            updateNicklist(bufferId, (target) => {
+                const groupKey2 = groupKey(target.id, nick.parentGroupId);
+                const group = target.nicklist[groupKey2] ?? createNickGroup({ name: groupKey2 === 'root' ? '' : groupKey2, visible: '1' });
                 const existingIndex = group.nicks.findIndex((n) => n.nickId === nick.id);
                 const created = createNickFromApi(target, nick);
                 const nicks = existingIndex >= 0
@@ -694,24 +698,16 @@ export function createApiStoreReducers(): ApiReducers {
                 // A mode change (upsert with a new prefix) must re-rank the
                 // nick: ops, halfops, voices, rest — see sortGroupNicks.
                 sortGroupNicks(nicks);
-                target.nicklist[key2] = { ...group, nicks };
-                return copy;
+                target.nicklist[groupKey2] = { ...group, nicks };
             });
         },
 
         nickRemoved(bufferId, nickId): void {
-            flushApiLineBatch();
-            const key = storeKeyForBufferId(bufferId);
-            buffers.update((current) => {
-                const buffer = current[key];
-                if (!buffer) return current;
-                const copy = { ...current, [key]: { ...buffer, nicklist: { ...buffer.nicklist } } };
-                const target = copy[key]!;
+            updateNicklist(bufferId, (target) => {
                 const location = findNickLocation(target, nickId);
                 if (location) {
                     location.group.nicks = location.group.nicks.filter((n) => n.nickId !== nickId);
                 }
-                return copy;
             });
         },
 

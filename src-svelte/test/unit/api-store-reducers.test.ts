@@ -11,7 +11,7 @@ import { createApiStoreReducers, storeKeyForBufferId, flushApiLineBatch } from '
 import { dispatchEvent } from '#lib/api/api-mapping.ts';
 import type { ApiReducers, BufferSnapshot, LineSnapshot, HotlistSnapshot } from '#lib/api/api-contracts.ts';
 import type { ApiSessionEvent } from '#lib/api/api-session.ts';
-import type { ApiBufferId, ApiLineId } from '#lib/api/api-ids.ts';
+import type { ApiBufferId, ApiGroupId, ApiLineId, ApiNickId } from '#lib/api/api-ids.ts';
 import { createHighlight } from '#lib/notifications.ts';
 
 // The reducer's alert path must be observable without OS notifications:
@@ -325,13 +325,22 @@ describe('buffer_opened bootstrap', () => {
 
     it('bufferUpdated preserves nicklist entries', () => {
         reducers.buffers([bufferSnap()]);
+        // A wire-shaped object here would leave parentGroupId undefined and drop
+        // the nick into the root group, so the assertion would pass for the wrong
+        // reason. These are the shapes the reducer actually reads.
+        reducers.nickGroupChanged(BUFFER_ID, {
+            id: 7 as ApiGroupId, parentGroupId: -1, name: 'opers',
+            colorName: '', color: '', visible: true,
+        });
         reducers.nickChanged(BUFFER_ID, {
-            id: 300, group: 1, name: 'alice', prefix: '', suffix: '',
-            flags: 0, visible: true, color: null, tags: {},
+            id: 300 as ApiNickId, parentGroupId: 7 as ApiGroupId,
+            prefix: '@', prefixColorName: '', prefixColor: '',
+            name: 'alice', colorName: '', color: '', visible: true,
         });
         dispatchEvent(event('buffer_title_changed', { ...WIRE_BUFFER, title: 't' }, 'buffer'), reducers);
-        const nicks = Object.values(get(buffers)[KEY]!.nicklist).flatMap((g) => g.nicks);
-        expect(nicks.map((n) => n.nickId)).toEqual([300]);
+        const buf = get(buffers)[KEY]!;
+        expect(Object.keys(buf.nicklist)).toEqual(['opers']);
+        expect(buf.nicklist['opers']!.nicks.map((n) => n.nickId)).toEqual([300]);
     });
 });
 
