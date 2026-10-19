@@ -298,18 +298,31 @@
     const tag = activeEl?.tagName || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
     if ((activeEl as HTMLElement)?.isContentEditable) return;
-    const code = e.keyCode || e.which;
-    const digit = code - 48;
     // Alt+J -> arm jump mode (tens place reset)
-    if (e.altKey && !e.ctrlKey && !e.shiftKey && code === 74) {
+    if (e.altKey && !e.ctrlKey && !e.shiftKey && e.code === 'KeyJ') {
       e.preventDefault();
       _jumpArmed = true;
       _jumpTens = null;
       return;
     }
     if (!_jumpArmed) return;
-    // Digits while armed: first is tens, second completes the buffer number
-    if (digit >= 0 && digit <= 9 && !e.altKey && !e.ctrlKey && !e.shiftKey) {
+    // Digits while armed: first is tens, second completes the buffer number.
+    //
+    // This used to read e.keyCode, which reports the character a layout produces
+    // rather than the key that was pressed — a different number. The key at the
+    // QWERTY J position is 'h' on AZERTY (72, not 74), so the mode never armed
+    // there at all; the key labelled 1 is '&' (38, not 49), so no digit could be
+    // entered. It now reads e.code, the same physical-key reading the Alt+digit
+    // quick keys above already used, which makes the two halves of this shortcut
+    // agree.
+    //
+    // Shift is accepted because armed mode is exclusive — anything that is not a
+    // digit aborts anyway — and on AZERTY a digit is Shift plus a key. Numpad
+    // digits still work, and work better: with NumLock off those keys report
+    // keyCode 34-36 and the old check saw page navigation instead.
+    const digitMatch = e.code.match(/^(?:Digit|Numpad)(\d)$/);
+    const digit = digitMatch?.[1] ? parseInt(digitMatch[1], 10) : -1;
+    if (digit >= 0 && !e.altKey && !e.ctrlKey) {
       e.preventDefault();
       if (_jumpTens === null) {
         _jumpTens = digit;

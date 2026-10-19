@@ -1,24 +1,24 @@
 /**
- * Characterization tests for B6: two adjacent buffer-navigation handlers in the
- * same file read the same keys in two different ways.
+ * Buffer navigation keys in +page.svelte, read off the physical key.
  *
- *   +page.svelte:271  handleQuickKeys     e.code.match(/^Digit(\d)$/)
- *                     comment at :270: "Use e.code to extract digit — this works
- *                     on all keyboard layouts"
- *   +page.svelte:301  handleJumpToBuffer  const code = e.keyCode || e.which
- *                     digit = code - 48, and Alt+J is matched as code === 74
+ * The two adjacent handlers used to read the same keys two different ways:
  *
- * `e.code` names the physical key; `keyCode` names the value that key produced,
- * which depends on the layout. So the two handlers disagree on any keyboard where
- * a digit is not Shift-free, and on the numpad:
+ *   handleQuickKeys     e.code.match(/^Digit(\d)$/)   — names the physical key
+ *   handleJumpToBuffer  e.keyCode || e.which          — names the value that key
+ *                       produced: digit = code - 48, Alt+J matched as code === 74
  *
- *   - AZERTY's physical 1 key reports code 'Digit1' and keyCode 38 ('&').
- *     Quick keys switch buffers; the jump aborts instead.
- *   - The numpad reports code 'Numpad1' and keyCode 49.
- *     The jump switches buffers; quick keys ignore it entirely.
+ * keyCode depends on the layout, so the two disagreed wherever a digit is not
+ * Shift-free, and on the numpad:
  *
- * These pin today's behaviour on both sides of each pair. They are the baseline
- * the B6 fix is measured against, not a claim about which handler is right.
+ *   - AZERTY's physical 1 key is 'Digit1' but produces '&', so the jump could
+ *     never take a digit; and 'h' sits at the position QWERTY gives J, so the
+ *     mode never armed there either.
+ *   - The numpad is 'Numpad1'. keyCode only reported it as a digit while NumLock
+ *     was on; with NumLock off those keys report page navigation.
+ *
+ * Both handlers now read e.code. The quick-key half is unchanged by the fix and
+ * is kept here as the contrast; the jump half is checked on exactly the layouts
+ * the old reading failed.
  */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount, type Component } from 'svelte';
@@ -102,10 +102,11 @@ afterEach(async () => {
     vi.clearAllMocks();
 });
 
-describe('B6 characterization: the same digits, read two ways', () => {
-    it('Alt+J jump aborts on a layout where the 1 key does not produce a 1', () => {
+describe('buffer navigation reads the physical key, on both handlers', () => {
+    it('Alt+J jump takes a digit on a layout where the 1 key does not produce a 1', () => {
         render(Page, {});
         const list = Array.from({ length: 12 }, (_, i) => channel(`channel-${i + 1}`, i + 1));
+        const target = list[11]!;
         buffers.set(Object.fromEntries(list.map((b) => [b.id, b])));
         flushSync();
 
@@ -114,9 +115,10 @@ describe('B6 characterization: the same digits, read two ways', () => {
         key('Digit1', 38);
         key('Digit2', 50);
 
-        // The first key was not a digit as far as `keyCode` was concerned, which
-        // aborts the jump; the second key then has nothing armed.
-        expect(switchBuffer).not.toHaveBeenCalled();
+        // 1 then 2 -> buffer number 12. Reading the physical key is what makes
+        // this work at all: keyCode reported 38 and 50, so the old check saw
+        // neither as a digit and aborted the jump on the first one.
+        expect(switchBuffer).toHaveBeenCalledWith(target.id);
     });
 
     it('Alt+1 quick keys switch on that same key, because they read the physical one', () => {
@@ -157,20 +159,22 @@ describe('B6 characterization: the same digits, read two ways', () => {
         expect(switchBuffer).not.toHaveBeenCalled();
     });
 
-    it('Alt+J itself is matched by value too, so a layout that moves J moves the shortcut', () => {
+    it('Alt+J arms on the physical J key, not on the character it produces', () => {
         render(Page, {});
-        // 12 buffers, so that if arming had worked the following 1-2 would land
+        // 12 buffers, so that if arming worked the following 1-2 would land
         // on the 12th one.
         const list = Array.from({ length: 12 }, (_, i) => channel(`channel-${i + 1}`, i + 1));
+        const target = list[11]!;
         buffers.set(Object.fromEntries(list.map((b) => [b.id, b])));
         flushSync();
 
-        // Physical KeyJ, but reported as some other value: the arm test is
-        // `code === 74`, so arming depends on the character, not the key.
-        key('KeyJ', 106, true);
+        // AZERTY puts 'h' where QWERTY puts J, so the old `code === 74` test
+        // never armed the mode on that layout — the shortcut did not exist there.
+        // The physical key is KeyJ on both.
+        key('KeyJ', 72, true);
         key('Digit1', 49);
         key('Digit2', 50);
 
-        expect(switchBuffer).not.toHaveBeenCalled();
+        expect(switchBuffer).toHaveBeenCalledWith(target.id);
     });
 });
