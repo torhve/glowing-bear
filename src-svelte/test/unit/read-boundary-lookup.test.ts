@@ -12,19 +12,26 @@ import {
 import { trimBufferLines as apiTrim } from '#lib/api/api-store-reducers.ts';
 import type { BufferData, ProtocolMessage } from '#lib/types.ts';
 
-// Characterization tests for B3: "find the one line this anchor points at" is
-// answered by models.ts:142 findUniqueLineIndex (1 match -> index, 0 -> -1,
-// more than 1 -> null) and re-implemented by hand at four sites. Three of those
-// copies treat "no match" as a definite answer; the fourth treats it as unknown.
+// "Find the one line this anchor points at" is answered by models.ts
+// findUniqueLineIndex (1 match -> index, 0 matches -> -1, more than 1 -> null).
+// Three sites used to re-implement that lookup by hand, identically, inside their
+// own trim:
 //
-//   handlers.ts:142        legacy trim          0 matches -> boundary -1  (known)
-//   api-store-reducers.ts:343  API trim         0 matches -> boundary -1  (known)
-//   models.ts:1266         inline trim          0 matches -> boundary -1  (known)
-//   handlers.ts:1812       history re-anchor    0 matches -> UNKNOWN
+//   handlers.ts            legacy trim   0 matches -> boundary -1  (known)
+//   api-store-reducers.ts  API trim      0 matches -> boundary -1  (known)
+//   models.ts              inline trim   0 matches -> boundary -1  (known)
+//
+// They now share models.ts setReadBoundaryFromAnchorId(), which gives exactly
+// those three answers. The fourth site keeps its own copy on purpose:
+//
+//   handlers.ts            history re-anchor   0 matches -> UNKNOWN
 //
 // "Boundary -1" and "unknown" are not the same claim. -1 puts the read marker
-// above every retained line; unknown defers and lets the hotlist resolve it. The
-// tests below pin which site makes which claim today.
+// above every retained line; unknown defers and lets the hotlist resolve it. A
+// trim removes exactly the rows older than the marker, so there its absence is
+// evidence. A freshly loaded history page may simply not reach far enough back to
+// contain it, so there its absence proves nothing. These tests pin which site
+// makes which claim.
 
 vi.mock('#lib/stores/settings.ts', () => ({
     settings: {

@@ -26,6 +26,7 @@ import {
     lineLimitFor,
     setReadBoundary,
     setReadBoundaryUnknown,
+    setReadBoundaryFromAnchorId,
     resolvePendingReadBoundary,
     markHotlistBaselineApplied,
     isRelayStatusBuffer,
@@ -140,12 +141,7 @@ function trimBufferLines(buffer: BufferData, limit: number) {
         if (boundaryId === null) {
             setReadBoundary(buffer, -1);
         } else if (boundaryId !== undefined) {
-            const matches = buffer.lines.reduce<number[]>((found, line, index) => {
-                if (line.lineId === boundaryId) found.push(index);
-                return found;
-            }, []);
-            if (matches.length > 1) setReadBoundaryUnknown(buffer);
-            else setReadBoundary(buffer, matches.length === 1 ? matches[0]! : -1);
+            setReadBoundaryFromAnchorId(buffer, boundaryId);
         } else {
             setReadBoundary(buffer, oldLastSeen - linesToRemove);
         }
@@ -1810,6 +1806,13 @@ export function handleLineInfo(
         if (prior.id === null) {
             setReadBoundary(buf, -1);
         } else if (prior.id !== undefined) {
+            // Deliberately not models.ts setReadBoundaryFromAnchorId(), which the
+            // three trim sites use. There a missing anchor means the rows older
+            // than the marker were removed, so the marker sits above everything
+            // left. Here a freshly loaded history page may simply not reach far
+            // enough back to contain it, and answering -1 would mark the buffer
+            // read at a position the server never confirmed. Absence means
+            // unknown.
             const matches = buf.lines.reduce<number[]>((found, line, index) => {
                 if (line.lineId === prior.id) found.push(index);
                 return found;

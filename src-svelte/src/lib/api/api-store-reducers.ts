@@ -18,7 +18,7 @@ import {
     buffers, activeBufferId, previousBufferId, localUnreadBuffers,
     createBuffer, createBufferLine, createNick, createNickGroup,
     parseRichText, removeBuffer, isSyncing, isRelayStatusBuffer,
-    maxBufferLines, lineLimitFor, lineLimitWith, setReadBoundary, setReadBoundaryUnknown, applyServerReadMarker, markHotlistBaselineApplied,
+    maxBufferLines, lineLimitFor, lineLimitWith, setReadBoundary, setReadBoundaryFromAnchorId, applyServerReadMarker, markHotlistBaselineApplied,
     injectDateChangeMessageIfNeeded, pendingBufferSwitch, setActiveBuffer, matchesPendingSwitch,
 } from '#lib/stores/models.ts';
 import { shouldResume } from '#lib/stores/bufferResume.ts';
@@ -340,12 +340,7 @@ export function trimBufferLines(buffer: BufferData, limit: number): void {
         if (boundaryId === null) {
             setReadBoundary(buffer, -1);
         } else if (boundaryId !== undefined) {
-            const matches = buffer.lines.reduce<number[]>((found, line, index) => {
-                if (line.lineId === boundaryId) found.push(index);
-                return found;
-            }, []);
-            if (matches.length > 1) setReadBoundaryUnknown(buffer);
-            else setReadBoundary(buffer, matches.length === 1 ? matches[0]! : -1);
+            setReadBoundaryFromAnchorId(buffer, boundaryId);
         } else {
             setReadBoundary(buffer, oldLastSeen - linesToRemove);
         }

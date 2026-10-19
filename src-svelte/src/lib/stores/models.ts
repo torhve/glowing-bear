@@ -151,6 +151,30 @@ function findUniqueLineIndex(lines: BufferLine[], lineId: string): number | null
     return matches === 1 ? found : matches === 0 ? -1 : null;
 }
 
+/**
+ * Re-anchor a read boundary onto the row it was pinned to, after the lines above
+ * that row were removed.
+ *
+ * Three answers, in the order findUniqueLineIndex gives them: the anchor row was
+ * found once -> the boundary moves to it; the anchor row is gone -> -1, which is
+ * above every retained line, because the rows that were older than the last-read
+ * row are exactly the ones a trim removes; the anchor row is claimed by two rows
+ * -> no trustworthy position, so the boundary becomes unknown.
+ *
+ * The history re-anchor in handlers.ts deliberately does not use this. There the
+ * anchor's absence proves nothing: a freshly loaded page of history may simply
+ * not reach far enough back to contain it, and guessing -1 would mark a buffer
+ * read at a position the server never confirmed.
+ */
+export function setReadBoundaryFromAnchorId(buffer: BufferData, lineId: string): void {
+    const index = findUniqueLineIndex(buffer.lines, lineId);
+    if (index === null) {
+        setReadBoundaryUnknown(buffer);
+        return;
+    }
+    setReadBoundary(buffer, index);
+}
+
 /** Return the current boundary index, or null when reconnect made it uncertain. */
 export function getReadBoundaryIndex(buffer: BufferData): number | null {
     if (buffer.readBoundaryKnown === false) return null;
@@ -1277,12 +1301,7 @@ export function setActiveBuffer(bufferId: string): boolean {
         target.requestedLines -= linesToRemove;
         if (target.readBoundaryKnown !== false) {
             if (boundaryId) {
-                const matches = target.lines.reduce<number[]>((found, line, index) => {
-                    if (line.lineId === boundaryId) found.push(index);
-                    return found;
-                }, []);
-                if (matches.length > 1) setReadBoundaryUnknown(target);
-                else setReadBoundary(target, matches.length === 1 ? matches[0]! : -1);
+                setReadBoundaryFromAnchorId(target, boundaryId);
             } else {
                 const boundaryIndex = boundaryIndexBeforeTrim === null ? -1 : boundaryIndexBeforeTrim - linesToRemove;
                 setReadBoundary(target, boundaryIndex);
