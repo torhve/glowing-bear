@@ -1241,9 +1241,6 @@ export function sendWeeChatCommand(command: string, bufferId?: string): boolean 
     return sendWs(msg, 'cmd:' + command.substring(0, 50));
 }
 
-// Debounce hotlist queries: coalesce rapid buffer switches into a single request.
-
-
 export async function switchBuffer(bufferId: string): Promise<boolean> {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         return false;
@@ -1279,7 +1276,7 @@ export async function switchBuffer(bufferId: string): Promise<boolean> {
         // See apiConnection.switchBuffer: `/buffer set unread` (no argument) leaves a real
         // marker id; the `/input set_unread_current_buffer` alias is deprecated since 3.8.
         sendWeeChatCommand('/buffer set unread', bufferId);
-        scheduleHotlistQuery(bufferId);
+        scheduleHotlistQuery();
     });
     // Nicklist backfill is handled by $effect in +page.svelte (guarded: only fetches if empty).
     return true;
@@ -1288,8 +1285,7 @@ export async function switchBuffer(bufferId: string): Promise<boolean> {
 // Schedule a hotlist query with debounce — resets timer on each call so rapid
 // buffer switches coalesce into a single request after switching settles. The
 // timer itself is shared; only the query is legacy's.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function scheduleHotlistQuery(_bufferId: string) {
+function scheduleHotlistQuery() {
     debounceHotlistQuery(() => {
         // Request authoritative current hotlist state from WeeChat to ensure
         // stale counts are cleared (e.g., after scroll-to-bottom).

@@ -8,11 +8,11 @@
  * whether a retry is available.
  *
  * Note what is absent: there is no "attempts exhausted" state. Both transports
- * retry indefinitely — legacy caps the delay at 300 s (`maxReconnectDelay`), the
- * API orchestrator at `backoff.maxMs` 300 s — so a stalled session is never a
- * finished one. Showing "attempt 3 of 10" would invent a limit the code does not
- * have, so the banner reports the attempt count and the next attempt time, which
- * are both real.
+ * retry indefinitely on one shared ladder — `RECONNECT_BACKOFF` in
+ * `connectionLifecycle.ts` grows the delay by 1.5× from 30 s and caps it at
+ * 300 s — so a stalled session is never a finished one. Showing "attempt 3 of
+ * 10" would invent a limit the code does not have, so the banner reports the
+ * attempt count and the next attempt time, which are both real.
  */
 
 import { derived, type Readable } from 'svelte/store';

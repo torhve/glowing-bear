@@ -584,9 +584,6 @@ export async function sendWeeChatCommand(command: string, bufferId?: string): Pr
     return res?.accepted === true;
 }
 
-// Debounce hotlist queries: coalesce rapid buffer switches into a single request.
-
-
 export async function switchBuffer(bufferId: string): Promise<boolean> {
     if (!currentSession()) return false;
     const buffer = getBuffer(bufferId);

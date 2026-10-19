@@ -20,11 +20,6 @@ const config = {
         // Tauri backend config
         'src-tauri/**',
     ],
-    // Import alias resolution ($lib handled by SvelteKit plugin)
-    paths: {
-        '$components': ['./src-svelte/src/components'],
-        '$components/*': ['./src-svelte/src/components/*'],
-    },
     // Dependencies to skip (not statically imported in source)
     ignoreDependencies: [
         // Dynamic import at runtime only
@@ -40,12 +35,11 @@ const config = {
     ],
     // Unresolvable import specifiers
     ignoreUnresolved: [
-        'virtual:pwa-register',   // Vite PWA plugin virtual module
         '\\$app/.+',              // SvelteKit runtime modules
     ],
     // Plugin configuration — override default src/ paths for our src-svelte/ layout
     sveltekit: {
-        config: ['svelte.config.js', 'vite.config.{js,mjs,ts,cjs,mts,cts}'],
+        config: ['vite.config.{js,mjs,ts,cjs,mts,cts}'],
         entry: [
             'src-svelte/src/routes/**/+{page,server,page.server,error,layout,layout.server}{,@*}.{js,ts,svelte}',
             'src-svelte/src/hooks.{server,client}.{js,ts}',
