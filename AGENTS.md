@@ -55,6 +55,7 @@ npm run build                  # Production build (static output to build/)
 npm run check                  # svelte-check
 npm run lint                   # eslint src-svelte/src src-svelte/test src-svelte/e2e
 npm test                       # Vitest unit tests (runs `svelte-kit sync` first)
+npm run test:perf               # Perf benches (test/unit/perf/*.bench.ts) — NOT part of `npm test`
 npm run sync                   # Regenerate Kit 3's node_modules/$app tsconfig shims
 npm run test:weechat-format    # Standalone formatter package tests (packages/weechat-format)
 npm run check:weechat-format   # Formatter package typecheck

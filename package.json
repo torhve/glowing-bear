@@ -30,6 +30,7 @@
     "lint:weechat-format": "eslint packages/weechat-format/src packages/weechat-format/test",
     "knip": "knip",
     "test": "vitest run",
+    "test:perf": "vitest run --config vitest.perf.config.ts",
     "pretest": "node scripts/check-nested-deps.mjs && npm run sync",
     "test:weechat-format": "npm run test --workspace @glowingbear/weechat-format",
     "build:weechat-format": "npm run build --workspace @glowingbear/weechat-format",
