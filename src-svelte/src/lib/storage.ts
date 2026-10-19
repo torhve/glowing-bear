@@ -24,9 +24,23 @@
  */
 export const PENDING_NOTIFICATION_BUFFER_KEY = 'gb_pendingNotificationBuffer';
 
-/** Whether storage exists. Covers SSR and a browser that has storage disabled. */
+/**
+ * Are we in a client that has storage.
+ *
+ * Both halves are needed, and they answer different questions. `window` is what
+ * says "this is a browser", which matters because this app server-renders: a
+ * settings blob read during SSR would put one process's storage into everybody's
+ * page. `localStorage` is what says "storage actually works here", which
+ * `window` alone does not — `bufferResume.ts` used to check only `window` and
+ * then touch `localStorage`, and that is how it threw.
+ *
+ * Checking `localStorage` alone is not enough any more either: Node defines a
+ * `localStorage` global experimentally (it warns and stays undefined unless
+ * `--localstorage-file` is passed), so "does storage exist" is no longer a
+ * reliable way to ask "are we in a browser".
+ */
 function storageAvailable(): boolean {
-    return typeof localStorage !== 'undefined' && localStorage !== null;
+    return typeof window !== 'undefined' && typeof localStorage !== 'undefined' && localStorage !== null;
 }
 
 export function readString(key: string): string | null {
