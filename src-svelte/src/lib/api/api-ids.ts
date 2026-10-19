@@ -11,8 +11,6 @@ export type ApiLineId = number & { readonly __apiLineId: unique symbol };
 export type ApiNickId = number & { readonly __apiNickId: unique symbol };
 export type ApiGroupId = number & { readonly __apiGroupId: unique symbol };
 
-/** Root nick group is a fixed synthetic node, not a timestamp. */
-export const ROOT_GROUP_ID = 0 as ApiGroupId;
 /** "No parent group" for the root node. */
 export const NO_PARENT_GROUP = -1;
 /** "No read marker" — every retained line may be unread. */
@@ -61,7 +59,3 @@ export function asReadLineId(value: unknown): ApiLineId | typeof NO_READ_LINE | 
         : null;
 }
 
-/** Stable map-key form of any numeric ID (domain stores key on strings). */
-export function idKey(id: number): string {
-    return String(id);
-}

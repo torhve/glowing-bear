@@ -173,16 +173,6 @@ function getNicklistByTime(buffer: BufferData): Nick[] {
 
 
 
-// Check if buffer matches search
-export function bufferMatchesSearch(buffer: BufferPresentation, search: string): boolean {
-    if (!search) return true;
-    const searchLower = search.toLowerCase();
-    return (
-        (buffer.fullName || '').toLowerCase().includes(searchLower) ||
-        (buffer.shortName || '').toLowerCase().includes(searchLower) ||
-        (buffer.trimmedName || '').toLowerCase().includes(searchLower)
-    );
-}
 
 /**
  * Parse a relay URL string into host, port, and path. The path is an optional
@@ -290,14 +280,6 @@ export function getBufferIconName(buffer: BufferPresentation): 'hash' | 'user' |
     return 'square';
 }
 
-/**
- * Extract the channel prefix (#, ##, &, +, :, !) from a short name.
- * Mirrors WeeChat IRC channel prefix conventions.
- */
-export function getChannelPrefix(shortName: string): string {
-    const match = shortName.match(/^#+|^[&+:!]+/);
-    return match ? match[0] : '';
-}
 
 /**
  * Get the display name for a buffer (short name without prefix).

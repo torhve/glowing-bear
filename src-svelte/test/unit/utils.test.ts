@@ -1,45 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { bufferMatchesSearch } from '#lib/utils.ts';
 import { buffers, activeBufferId, wconfig, sortBuffers } from '#lib/stores/models.ts';
 import type { BufferData } from '#lib/types.ts';
 
-describe('bufferMatchesSearch', () => {
-    const mockBuffer = {
-        fullName: '#general',
-        shortName: '#general',
-        trimmedName: 'general',
-    };
-
-    it('matches on full name', () => {
-        expect(bufferMatchesSearch(mockBuffer, '#general')).toBe(true);
-    });
-
-    it('matches on short name', () => {
-        expect(bufferMatchesSearch(mockBuffer, '#general')).toBe(true);
-    });
-
-    it('matches on trimmed name', () => {
-        expect(bufferMatchesSearch(mockBuffer, 'general')).toBe(true);
-    });
-
-    it('is case-insensitive', () => {
-        expect(bufferMatchesSearch(mockBuffer, '#GENERAL')).toBe(true);
-        expect(bufferMatchesSearch(mockBuffer, 'General')).toBe(true);
-    });
-
-    it('returns false for non-matching search', () => {
-        expect(bufferMatchesSearch(mockBuffer, '#other')).toBe(false);
-    });
-
-    it('matches all when search is empty', () => {
-        expect(bufferMatchesSearch(mockBuffer, '')).toBe(true);
-    });
-
-    it('matches partial strings', () => {
-        expect(bufferMatchesSearch(mockBuffer, 'gene')).toBe(true);
-    });
-});
 
 describe('sortBuffers with pinned', () => {
     function makeBuffer(overrides: Partial<BufferData> = {}): BufferData {

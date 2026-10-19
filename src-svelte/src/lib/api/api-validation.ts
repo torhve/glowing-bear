@@ -107,7 +107,6 @@ const BODY_TYPES = new Set<string>([
     'hotlist', 'completion', 'scripts', 'json',
 ]);
 
-const COLOR_MODES = new Set(['ansi', 'weechat', 'strip']);
 
 // --- Top-level frames ---
 
@@ -509,8 +508,3 @@ export function validateCompletionResponse(raw: unknown): Validated<CompletionRe
     });
 }
 
-// --- Query parameter helpers ---
-
-export function isValidColorMode(mode: string): mode is 'ansi' | 'weechat' | 'strip' {
-    return COLOR_MODES.has(mode);
-}

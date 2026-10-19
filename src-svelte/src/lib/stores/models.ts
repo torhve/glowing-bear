@@ -16,26 +16,6 @@ import type {
 import { rawText2Rich, parseWeechatNickColor } from "#lib/weechat-colors.ts";
 import { DEBUG_BUFFERS } from "#lib/debug.ts";
 
-/**
- * Deep clone a BufferLine so that nested arrays (prefix, content) and their
- * classes sub-arrays are not shared with the original. Svelte 5 skips
- * re-rendering when array identity hasn't changed, so shallow clones break
- * reactivity for color classes.
- */
-export function deepCloneBufferLine(l: BufferLine): BufferLine {
-    return {
-        ...l,
-        prefix: l.prefix.map((p) => ({
-            ...p,
-            classes: p.classes ? [...p.classes] : undefined,
-        })),
-        content: l.content.map((p) => ({
-            ...p,
-            classes: p.classes ? [...p.classes] : undefined,
-        })),
-        metadata: l.metadata ? [...l.metadata] : undefined,
-    };
-}
 
 // ---- Utility: parse rich text (delegates to the standalone color parser) ----
 function buildClasses(part: {
@@ -229,7 +209,7 @@ export function resolvePendingReadBoundary(buffer: BufferData): boolean {
  * transport never reported one, reported none (-1), or the marked line is not
  * in the retained window.
  */
-export function findServerReadBoundaryIndex(buffer: BufferData): number | null {
+function findServerReadBoundaryIndex(buffer: BufferData): number | null {
     const marker = buffer.serverReadLineId;
     if (marker === undefined || marker < 0) return null;
     const index = findUniqueLineIndex(buffer.lines, `weechat:${marker}`);
@@ -237,7 +217,7 @@ export function findServerReadBoundaryIndex(buffer: BufferData): number | null {
 }
 
 /** Anchor the boundary to WeeChat's marker when the retained history contains it. */
-export function reanchorReadBoundaryFromServer(buffer: BufferData): boolean {
+function reanchorReadBoundaryFromServer(buffer: BufferData): boolean {
     const index = findServerReadBoundaryIndex(buffer);
     if (index === null) return false;
     setReadBoundary(buffer, index);
@@ -739,9 +719,6 @@ export const wconfig = writable<Record<string, string>>({});
 
 export const connected = writable<boolean>(false);
 
-export const reconnecting = writable<boolean>(false);
-
-export const lastError = writable<number>(0);
 
 // A pending auto-switch to a private/query buffer WeeChat has not opened yet. The
 // nick alone is not enough: two IRC servers can each open a query buffer for the
@@ -1178,9 +1155,6 @@ export function updateBufferDeep(
     };
 }
 
-export function getBuffers(): Record<string, BufferData> {
-    return get(buffers);
-}
 
 export function setActiveBuffer(bufferId: string): boolean {
     const currentBuffers = get(buffers);
@@ -1379,13 +1353,6 @@ export function clearAllUnread() {
 
 }
 
-export function closeBuffer(bufferId: string) {
-    const current = get(buffers);
-    const buffer = current[bufferId];
-    if (!buffer) return;
-
-    removeBuffer(bufferId, buffer.active);
-}
 
 export function removeBuffer(bufferId: string, wasActive: boolean) {
     const current = get(buffers);

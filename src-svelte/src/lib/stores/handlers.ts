@@ -427,7 +427,7 @@ function formatNotificationBody(lineMsg: BufferLineMessage): string {
 }
 
 // Builds immutable copies of affected buffers first, then mutates only those copies.
-// Line objects are immutable once created (see deepCloneBufferLine), so copies
+// Line objects are immutable once created, so copies
 // share line references: the new array reference is what Svelte's reactivity needs,
 // and stable line references keep row components from re-rendering unchanged rows.
 // This is required for readmarker rendering to work.
