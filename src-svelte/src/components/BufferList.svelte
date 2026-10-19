@@ -233,7 +233,7 @@
     {@const targetBuffer = $buffers[longPressBufferId]}
     <div
       onclick={(e) => { e.stopPropagation(); clearLongPress(); }}
-      onkeydown={(e) => { if (e.key === 'Escape' || e.key === 'Enter') clearLongPress(); }}
+      onkeydown={(e) => { if (e.key === 'Escape' || e.key === 'Enter') { e.stopPropagation(); clearLongPress(); } }}
       role="button"
       tabindex="0"
       aria-label="Dismiss menu"

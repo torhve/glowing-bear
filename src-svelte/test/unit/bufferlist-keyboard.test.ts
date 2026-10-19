@@ -1,24 +1,22 @@
 /**
- * Characterization tests for B5 and B7, both in BufferList.svelte.
+ * Keyboard handling in BufferList.svelte, at its two activatable surfaces.
  *
- * B5 — BufferList.svelte:171
- *   onkeydown Enter/Space -> handleBufferClick(buffer.id), with no
- *   preventDefault(). Space therefore activates the row AND is left to the
+ * The long-press menu — fixed, and this is its regression net.
+ *   BufferList.svelte:236 handles Escape and Enter on the menu's dismiss layer.
+ *   It now stops their propagation, the way its sibling onclick at :235 always
+ *   did. Before, the keypress that dismissed the menu also continued to
+ *   +page.svelte's global handler, which blurs the input and, on a second
+ *   Escape within 500 ms, disconnects. InputBar.svelte:1390 already stopped
+ *   propagation for exactly this reason; this layer was the one that did not.
+ *
+ * The buffer row — still characterizes today's behaviour, and is the next commit.
+ *   BufferList.svelte:171 handles Enter/Space -> handleBufferClick(buffer.id)
+ *   with no preventDefault(), so Space activates the row AND is left to the
  *   browser, which scrolls the list. BufferLineRow.svelte:298 handles the same
  *   pair for the same kind of activatable row and does call preventDefault(),
  *   and makeKeyboardActivatable() in utils.ts — the shared helper already used
  *   by Nicklist.svelte:143 and ConnectionForm.svelte:233 — does. BufferList's
  *   row is the one site that writes the pattern by hand and omits it.
- *
- * B7 — BufferList.svelte:236
- *   The long-press menu's dismiss layer handles Escape and Enter but does not
- *   stopPropagation(). Its sibling onclick at :235 does. Escape therefore
- *   dismisses the menu AND continues to +page.svelte's global handler, which
- *   blurs the input and, on a second Escape within 500 ms, disconnects.
- *   InputBar.svelte:1390 added stopPropagation for exactly this reason.
- *
- * These pin what happens today. They are the baseline the one-line fixes are
- * measured against.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
@@ -122,8 +120,8 @@ describe('B5 characterization: Space activates a buffer row and is not cancelled
     });
 });
 
-describe('B7 characterization: Escape in the long-press menu reaches the global handler', () => {
-    it('the dismiss layer clears the menu and lets the keypress continue', () => {
+describe('the long-press menu keeps its own Escape and Enter', () => {
+    it('the dismiss layer clears the menu and the keypress stops there', () => {
         const target = render(BufferList, {});
         openLongPress(target);
 
@@ -131,7 +129,7 @@ describe('B7 characterization: Escape in the long-press menu reaches the global 
         expect(dismiss, 'the long-press dismiss layer').not.toBeNull();
 
         // A document-level listener stands in for +page.svelte's global Escape
-        // handler, which is what the leak reaches.
+        // handler — where this keypress used to end up.
         const seenByGlobalHandler: KeyboardEvent[] = [];
         const listener = (e: KeyboardEvent) => seenByGlobalHandler.push(e);
         document.addEventListener('keydown', listener);
@@ -143,10 +141,10 @@ describe('B7 characterization: Escape in the long-press menu reaches the global 
         }
 
         expect(target.querySelector('[aria-label="Dismiss menu"]'), 'the menu was dismissed').toBeNull();
-        expect(seenByGlobalHandler, 'the same Escape also reached the document').toHaveLength(1);
+        expect(seenByGlobalHandler, 'the Escape that dismissed the menu never reached the document').toHaveLength(0);
     });
 
-    it('Enter on the dismiss layer leaks the same way', () => {
+    it('Enter on the dismiss layer stops there too', () => {
         const target = render(BufferList, {});
         openLongPress(target);
         const dismiss = target.querySelector<HTMLElement>('[aria-label="Dismiss menu"]')!;
@@ -161,7 +159,7 @@ describe('B7 characterization: Escape in the long-press menu reaches the global 
             document.removeEventListener('keydown', listener);
         }
 
-        expect(seen).toHaveLength(1);
+        expect(seen).toHaveLength(0);
     });
 
     it('a click on that same layer does stop, which is what makes the keydown an omission', () => {
