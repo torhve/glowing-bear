@@ -147,3 +147,26 @@ test('should remove injected CSS when custom CSS is cleared', async () => {
     });
     expect(tagExists).toBe(false);
 });
+
+test('custom CSS reaches the app\'s own dialog class names', async () => {
+    // These header class names appear in no stylesheet in this repository, which makes
+    // them look private. They are not: this setting is injected into the page, so a user
+    // stylesheet can target them and renaming one is a breaking change. Pinned here
+    // because this is the only place that can show the reachability, not just assert it.
+    await openSettings(page);
+    const textarea = page.getByTestId('custom-css-textarea');
+
+    await textarea.fill('.settings-header { border-top: 4px solid rgb(255, 0, 0); }');
+    await expect(textarea).toHaveValue('.settings-header { border-top: 4px solid rgb(255, 0, 0); }');
+
+    const header = page.locator('.settings-header');
+    await expect(header).toHaveCount(1);
+    await expect(header).toHaveCSS('border-top-width', '4px');
+    await expect(header).toHaveCSS('border-top-color', 'rgb(255, 0, 0)');
+
+    // Clear it again: this page is shared with the rest of the project, and a leftover
+    // red border is not something the next spec should inherit.
+    await textarea.clear();
+    await expect(header).toHaveCSS('border-top-width', '0px');
+    await closeSettings(page);
+});
