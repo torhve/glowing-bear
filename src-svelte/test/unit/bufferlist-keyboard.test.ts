@@ -9,14 +9,15 @@
  *   Escape within 500 ms, disconnects. InputBar.svelte:1390 already stopped
  *   propagation for exactly this reason; this layer was the one that did not.
  *
- * The buffer row — still characterizes today's behaviour, and is the next commit.
- *   BufferList.svelte:171 handles Enter/Space -> handleBufferClick(buffer.id)
- *   with no preventDefault(), so Space activates the row AND is left to the
+ * The buffer row — fixed, and this is its regression net.
+ *   Its keydown used to read Enter/Space and call handleBufferClick(buffer.id)
+ *   without cancelling either, so Space activated the row AND was left to the
  *   browser, which scrolls the list. BufferLineRow.svelte:298 handles the same
- *   pair for the same kind of activatable row and does call preventDefault(),
- *   and makeKeyboardActivatable() in utils.ts — the shared helper already used
- *   by Nicklist.svelte:143 and ConnectionForm.svelte:233 — does. BufferList's
- *   row is the one site that writes the pattern by hand and omits it.
+ *   pair for the same kind of activatable row and did cancel it, and
+ *   makeKeyboardActivatable() in utils.ts — the shared helper already used by
+ *   Nicklist.svelte:143 and ConnectionForm.svelte:233 — did too. BufferList's
+ *   row was the one site writing the pattern by hand, and the one that omitted
+ *   it. It now uses the helper.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
@@ -82,8 +83,8 @@ afterEach(async () => {
     vi.clearAllMocks();
 });
 
-describe('B5 characterization: Space activates a buffer row and is not cancelled', () => {
-    it('the row handles Space but leaves the default to the browser', () => {
+describe('the buffer row cancels the keys it acts on', () => {
+    it('Space activates the row and is cancelled', () => {
         const target = render(BufferList, {});
         const row = target.querySelector<HTMLElement>('[data-testid="buffer-item"]');
         expect(row, 'a buffer row').not.toBeNull();
@@ -99,11 +100,11 @@ describe('B5 characterization: Space activates a buffer row and is not cancelled
 
         // The activation happened...
         expect(switchBuffer, 'Space activated the row').toHaveBeenCalledWith('0x100');
-        // ...and the browser is still free to scroll, because nothing prevented it.
-        expect(event.defaultPrevented, 'Space is left to the browser, so it also scrolls').toBe(false);
+        // ...and the default was cancelled, so Space does not also scroll the list.
+        expect(event.defaultPrevented, 'Space is cancelled by the row that acted on it').toBe(true);
     });
 
-    it('Enter on the same row is also left uncancelled', () => {
+    it('Enter on the same row is cancelled too', () => {
         const target = render(BufferList, {});
         const row = target.querySelector<HTMLElement>('[data-testid="buffer-item"]')!;
 
@@ -116,7 +117,7 @@ describe('B5 characterization: Space activates a buffer row and is not cancelled
         row.dispatchEvent(event);
         flushSync();
 
-        expect(event.defaultPrevented).toBe(false);
+        expect(event.defaultPrevented).toBe(true);
     });
 });
 

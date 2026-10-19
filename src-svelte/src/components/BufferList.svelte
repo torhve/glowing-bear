@@ -6,7 +6,7 @@
   import { chatDisplay, retainedRows } from '#lib/stores/chatPresentation.ts';
   import { selectRetainedBuffer } from '#lib/stores/retainedChat.ts';
   import { settings, updateSettings } from '#lib/stores/settings.ts';
-  import { getBufferIconName, getDisplayName } from '#lib/utils.ts';
+  import { getBufferIconName, getDisplayName, makeKeyboardActivatable } from '#lib/utils.ts';
   import { get } from 'svelte/store';
   import { tooltipAttachment } from '#lib/utils/bufferTooltip.ts';
   import LayoutGrid from '@lucide/svelte/icons/layout-grid';
@@ -168,7 +168,7 @@
               role="button"
               tabindex="0"
               onclick={() => handleBufferClick(buffer.id)}
-              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleBufferClick(buffer.id); }}
+              onkeydown={makeKeyboardActivatable(() => handleBufferClick(buffer.id))}
               ontouchstart={(e) => handleLongPressStart(buffer.id, e)}
               ontouchend={handleLongPressEnd}
               ontouchcancel={handleLongPressEnd}
