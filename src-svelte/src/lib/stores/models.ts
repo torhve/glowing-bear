@@ -1358,26 +1358,11 @@ export function setActiveBuffer(bufferId: string): boolean {
         }
     }
 
-    // Discard old lines above the dynamic limit. Re-find the stable boundary after
-    // trimming; if its anchor was removed, all retained lines are known unread.
-    const maxLines = lineLimitFor(updatedBuffers[bufferId]!);
-    const targetLinesLength = updatedBuffers[bufferId]!.lines.length;
-    if (targetLinesLength > maxLines) {
-        const target = updatedBuffers[bufferId]!;
-        const linesToRemove = targetLinesLength - maxLines;
-        const boundaryIndexBeforeTrim = getReadBoundaryIndex(target);
-        const boundaryId = target.readBoundaryId;
-        target.lines.splice(0, linesToRemove);
-        if (target.readBoundaryKnown !== false) {
-            if (boundaryId) {
-                setReadBoundaryFromAnchorId(target, boundaryId);
-            } else {
-                const boundaryIndex = boundaryIndexBeforeTrim === null ? -1 : boundaryIndexBeforeTrim - linesToRemove;
-                setReadBoundary(target, boundaryIndex);
-            }
-        }
-        target.allLinesFetched = false;
-    }
+    // Discard old lines above the dynamic limit, with the same re-anchoring the
+    // transports apply after an append. `trimBufferLines` also compensates
+    // `localUnread` for the removed prefix; here that counter has just been
+    // zeroed for this buffer, so the compensation cannot fire.
+    trimBufferLines(updatedBuffers[bufferId]!, lineLimitFor(updatedBuffers[bufferId]!));
 
     activeBufferId.set(bufferId);
     activeBufferChanged.update((n) => n + 1);
