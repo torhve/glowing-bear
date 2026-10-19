@@ -25,7 +25,7 @@
 export const PENDING_NOTIFICATION_BUFFER_KEY = 'gb_pendingNotificationBuffer';
 
 /** Whether storage exists. Covers SSR and a browser that has storage disabled. */
-export function storageAvailable(): boolean {
+function storageAvailable(): boolean {
     return typeof localStorage !== 'undefined' && localStorage !== null;
 }
 
