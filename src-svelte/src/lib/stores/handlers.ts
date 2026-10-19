@@ -13,6 +13,7 @@ import {
     updateBufferDeep,
     setActiveBuffer,
     createBuffer,
+    bufferTypeIndents,
     createBufferLine,
     createNick,
     createNickGroup,
@@ -386,7 +387,7 @@ function handleBufferUpdate(
         ? { ...(buffer.localVariables || {}), ...message.local_variables }
         : buffer.localVariables;
     const type = (localVariables?.type as BufferType) ?? buffer.type;
-    const indent = ["channel", "private"].includes(type);
+    const indent = bufferTypeIndents(type);
     const plugin = localVariables?.plugin ?? buffer.plugin;
     const server = localVariables?.server ?? buffer.server;
     const pinned = localVariables?.pinned === "true";
@@ -1051,7 +1052,7 @@ export function handleBufferLocalvarChanged(message: ProtocolMessage) {
     const plugin = lv.plugin || buffer.plugin;
     const server = lv.server || buffer.server;
     const pinned = lv.pinned === "true";
-    const indent = ["channel", "private"].includes(type);
+    const indent = bufferTypeIndents(type);
     const serverSortKey =
       `${plugin}.${server}${type === "server" ? "" : "." + buffer.shortName}`.toLowerCase();
 

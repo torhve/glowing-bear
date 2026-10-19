@@ -3,18 +3,22 @@ import { get } from 'svelte/store';
 import { buffers, createBuffer } from '#lib/stores/models.ts';
 import type { BufferData, ProtocolMessage } from '#lib/types.ts';
 
-// Characterization tests for B1: `indent` is derived from the buffer type in
-// three places, and the three sets are not the same.
+// `indent` is derived from the buffer type, and it used to be derived three
+// times with two different answers:
 //
-//   models.ts  createBuffer            ["channel", "private", "query"]
-//   handlers.ts handleBufferUpdate     ["channel", "private"]
-//   handlers.ts handleBufferLocalvarChanged  ["channel", "private"]
+//   models.ts   createBuffer                 channel, private, query
+//   handlers.ts handleBufferUpdate           channel, private
+//   handlers.ts handleBufferLocalvarChanged  channel, private
 //
-// These tests pin what the code does TODAY. They are not an endorsement of it —
-// the second and third assertions describe a query buffer losing an indent it
-// was created with. They exist so that the eventual fix has something to be
-// measured against, and so a reviewer can see the divergence instead of being
-// told about it.
+// A query buffer therefore got its indent at creation and lost it at the first
+// `_buffer_*` or `_buffer_localvar_changed` that touched it: a PM buffer that
+// rendered correctly until something unrelated updated it. All three sites now
+// read models.ts bufferTypeIndents().
+//
+// The two middle tests are the regression net for that fix. They target the
+// query type specifically, because query is the one the handler-side lists left
+// out — and the localvar case carries no type at all, which is how the wrong
+// derivation reached a buffer nobody had re-typed.
 
 vi.mock('#lib/stores/settings.ts', () => ({
     settings: {
@@ -103,7 +107,7 @@ function buffer(id: string): BufferData {
     return b;
 }
 
-describe('B1 characterization: indent derivation disagrees between its three writers', () => {
+describe('indent derivation: one rule for all three writers', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         buffers.set({});
@@ -121,7 +125,7 @@ describe('B1 characterization: indent derivation disagrees between its three wri
         expect(created.indent).toBe(true);
     });
 
-    it('a _buffer_* update rewrites that query buffer to indent: false', () => {
+    it('a _buffer_* update keeps a query buffer indented', () => {
         const created = createBuffer({
             pointers: ['0x100'],
             full_name: 'irc.test.franky',
@@ -137,10 +141,10 @@ describe('B1 characterization: indent derivation disagrees between its three wri
         handleBufferInfo(bufferRow('0x100', 'franky', 'query'));
 
         expect(buffer('0x100').type).toBe('query');
-        expect(buffer('0x100').indent).toBe(false);
+        expect(buffer('0x100').indent).toBe(true);
     });
 
-    it('a localvar event rewrites it the same way, even when it carries no type at all', () => {
+    it('a localvar event keeps it indented even when it carries no type at all', () => {
         const created = createBuffer({
             pointers: ['0x101'],
             full_name: 'irc.test.franky',
@@ -155,7 +159,7 @@ describe('B1 characterization: indent derivation disagrees between its three wri
         handleBufferLocalvarChanged(localvarChanged('0x101', { pinned: 'true' }));
 
         expect(buffer('0x101').type).toBe('query');
-        expect(buffer('0x101').indent).toBe(false);
+        expect(buffer('0x101').indent).toBe(true);
     });
 
     it('channel and private agree across all three writers — only query diverges', () => {

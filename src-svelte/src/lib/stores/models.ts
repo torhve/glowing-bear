@@ -326,6 +326,20 @@ export function compareBuffersHotlist<T extends BufferPresentation>(
     return a.number - b.number;
 }
 
+/**
+ * Which buffer types render indented under their server.
+ *
+ * `query` belongs here. A query buffer is a one-to-one conversation with the
+ * same shape as a `private` one; WeeChat just marks it with its own type. The
+ * two handler-side copies of this list omitted it, so a query buffer created
+ * with indent:true was rewritten to indent:false by the next `_buffer_*` or
+ * `_buffer_localvar_changed` that touched it — the indent survived only until
+ * something updated the buffer.
+ */
+export function bufferTypeIndents(type: BufferData["type"]): boolean {
+    return type === "channel" || type === "private" || type === "query";
+}
+
 // ---- Buffer creation ----
 // Accepts either a full BufferMessage from the protocol or a minimal shape
 // with just { bufferId, fullName, shortName }. The latter is used for
@@ -356,7 +370,7 @@ export function createBuffer(message: {
             : [];
     const localVars = message.local_variables || {};
     const type = (localVars.type as BufferData["type"]) || "other";
-    const indent = ["channel", "private", "query"].includes(type);
+    const indent = bufferTypeIndents(type);
     const plugin = localVars.plugin || "";
     const server = localVars.server || "";
     const pinned = localVars.pinned === "true";
