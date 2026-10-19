@@ -17,7 +17,7 @@ import { get } from 'svelte/store';
 import {
     buffers, activeBufferId, previousBufferId, localUnreadBuffers,
     createBuffer, createBufferLine, createNick, createNickGroup,
-    parseRichText, removeBuffer, isSyncing, isRelayStatusBuffer,
+    parseRichText, removeBuffer, isRelayStatusBuffer,
     maxBufferLines, lineLimitFor, lineLimitWith, setReadBoundary, setReadBoundaryFromAnchorId, applyServerReadMarker, markHotlistBaselineApplied,
     injectDateChangeMessageIfNeeded, pendingBufferSwitch, setActiveBuffer, matchesPendingSwitch,
 } from '#lib/stores/models.ts';
@@ -34,6 +34,7 @@ import type {
 } from '#lib/api/api-contracts.ts';
 import type { ApiBufferId } from '#lib/api/api-ids.ts';
 import { isServerHiddenLine } from '#lib/api/api-mapping.ts';
+import { tallyUnreadLine } from '#lib/unreadTally.ts';
 
 /** Central conversion: store key for an API buffer id. */
 export function storeKeyForBufferId(bufferId: ApiBufferId): string {
@@ -114,7 +115,7 @@ function applyLineAdded(target: BufferData, line: LineSnapshot, activeId: string
     appendLines(target, [line], limit);
     trimToLimit(target, limit);
     if (line.displayed) {
-        tallyLine(target, line, activeId, effects);
+        tallyUnreadLine(target, line, activeId, (id) => effects.localUnreadIds.add(id));
         alertForLine(target, line, activeId);
     }
 }
@@ -403,48 +404,6 @@ function findNickLocation(buffer: BufferData, nickId: number): { group: NickGrou
         if (index >= 0) return { group, index };
     }
     return null;
-}
-
-/**
- * Ported tally rules from the legacy line handler (behavior, not wire code):
- * - relay status buffers never tally;
- * - the active buffer never tallies (the user is looking at it);
- * - notify_level ≥ 1 → localUnread (badge bookkeeping);
- * - notify_level = 1 with buffer.notify > 1 → unread;
- * - notify_level ≥ 2 with highlight/private → notification.
- * The server-count counters (unread/notification) are gated while syncing
- * with an unknown boundary: they are the input to read-boundary resolution,
- * and the hotlist baseline is authoritative for the sync snapshot. The badge
- * counter is never gated — alertForLine rings for these lines even while
- * syncing, and getEffectiveUnread max-merges server counts with the local
- * tally, so baseline-covered lines cannot inflate the badge while lines that
- * raced past the baseline still badge (alert ⇒ badge invariant).
- * buffer.notify defaults to 3 ('all'). WeeChat >= 5.0.0 reports the per-buffer
- * notify level in buffers and buffer_notify_changed events, which sets it; on
- * 4.10.1 it stays 'all' and hotlist baselines correct the counts.
- */
-function tallyLine(buffer: BufferData, line: LineSnapshot, activeId: string, effects: LineBatchEffects): void {
-    if (isRelayStatusBuffer(buffer)) return;
-    if (buffer.id === activeId) return;
-
-    if (line.notifyLevel >= 1) {
-        buffer.localUnread = (buffer.localUnread || 0) + 1;
-        effects.localUnreadIds.add(buffer.id);
-    }
-
-    // Boundary-resolution counters stay deferred to the hotlist baseline
-    // while the boundary is unknown (see comment above).
-    if (isSyncing() && buffer.readBoundaryKnown === false) return;
-
-    if (buffer.notify > 1 && line.notifyLevel === 1) {
-        buffer.unread++;
-    }
-    if (line.notifyLevel >= 2) {
-        const isPrivate = buffer.type === 'private' || buffer.type === 'query';
-        if (buffer.notify !== 0 && (line.highlight || isPrivate)) {
-            buffer.notification++;
-        }
-    }
 }
 
 /** User-facing alert path — deliberately independent of sync/boundary state
