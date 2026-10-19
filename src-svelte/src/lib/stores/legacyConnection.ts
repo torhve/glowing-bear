@@ -57,6 +57,24 @@ const CLOSE_NORMAL = 1000;
 const INIT_SETTLE_MS = 5;
 
 /**
+ * Close every tracked socket, forget the set, drop the current socket.
+ *
+ * These three steps are one operation and were always written out together. A
+ * socket left in `webSockets` can be closed again by a later teardown with a
+ * later attempt's reason on it; a `ws` left pointing at a closed socket is what
+ * the close handlers compare against to decide "this is still my connection", so
+ * forgetting it is part of closing it, not a separate chore.
+ *
+ * The reason is a parameter because it is the only thing that ever differed — and
+ * it is the part a person reading a relay log needs.
+ */
+function closeAllSockets(reason: string): void {
+    for (const w of webSockets) w.close(CLOSE_NORMAL, reason);
+    webSockets.clear();
+    ws = null;
+}
+
+/**
  * Decide the TOTP code to send in `init` from the handshake response.
  * A legacy relay reports totp:"on" when it requires a token; the user is
  * prompted interactively (the Angular client's flow). Cancel or empty input
@@ -257,10 +275,7 @@ export async function connect(profile: ConnectionProfile) {
     if (manualReconnectRequested) {
         manualReconnectRequested = false;
         if (connecting) {
-            // Close all tracked WebSocket instances (including stale ones)
-            for (const w of webSockets) w.close(CLOSE_NORMAL, 'manual reconnect');
-            webSockets.clear();
-            ws = null;
+            closeAllSockets('manual reconnect');
         }
     }
     if (connecting) {
@@ -286,10 +301,7 @@ export async function connect(profile: ConnectionProfile) {
     const url = `${proto}://${formattedHost}:${port}/${path}`;
     if (DEBUG_CONNECTION) console.log('Connecting to:', `${proto}://${formattedHost}:${port}`);
 
-    // Close all existing WebSocket instances before starting new connection
-    for (const w of webSockets) w.close(CLOSE_NORMAL, 'new connection');
-    webSockets.clear();
-    ws = null;
+    closeAllSockets('new connection');
     connectionData = profile;
     setConnectionStatus('connecting');
 
@@ -801,9 +813,7 @@ function quiesce(): void {
     connectionGeneration++;
     const reject = pendingConnectReject;
     pendingConnectReject = null;
-    for (const w of webSockets) w.close(CLOSE_NORMAL, 'superseded by another transport');
-    webSockets.clear();
-    ws = null;
+    closeAllSockets('superseded by another transport');
     connecting = false;
     reject?.(new Error('Connection attempt superseded'));
 }
@@ -1073,13 +1083,7 @@ function teardownSession() {
     // client connect and disconnect with no command executed and no error, and
     // stayed up — so on 4.10.1 the frame was inert. It is still the wrong thing
     // to send on a Leave, and it read as if Leave quit WeeChat when it did not.
-    if (webSockets.size > 0) {
-        for (const w of webSockets) {
-            w.close(CLOSE_NORMAL, 'user disconnect');
-        }
-        webSockets.clear();
-        ws = null;
-    }
+    closeAllSockets('user disconnect');
     // Clear all app state — buffers, timers, callbacks, notifications.
     resetAllState();
 }
@@ -1170,9 +1174,7 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
     });
 
     // Set up callback for this request
-    currentCallbackId++;
-    if (currentCallbackId > 1000) currentCallbackId = 0;
-    const cbId = currentCallbackId;
+    const cbId = getNextCallbackId();
 
     let message: ProtocolMessage;
     try {
