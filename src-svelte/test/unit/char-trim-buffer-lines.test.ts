@@ -1,0 +1,254 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { get } from 'svelte/store';
+import {
+    buffers,
+    activeBufferId,
+    createBuffer,
+    createBufferLine,
+    setActiveBuffer,
+    setReadBoundary,
+    getReadBoundaryIndex,
+} from '#lib/stores/models.ts';
+import { trimBufferLines as apiTrim } from '#lib/api/api-store-reducers.ts';
+import type { BufferData, ProtocolMessage } from '#lib/types.ts';
+
+// Characterization tests for B2: dropping the oldest lines past a buffer's cap is
+// written three times, and the three copies disagree about what a trim owes the
+// counters.
+//
+//   legacy  handlers.ts:123 trimBufferLines()          requestedLines -= n,  localUnread compensated
+//   API     api-store-reducers.ts:318 trimBufferLines() requestedLines clamped only, localUnread compensated
+//   inline  models.ts setActiveBuffer (inlined, no function) requestedLines -= n, no localUnread code at all
+//
+// Each test runs the same scenario — a buffer holding more lines than its own cap
+// — through one of the three, and records where the counters land. These pin
+// today's behaviour; they are not a claim that it is correct. Two of them record
+// arithmetic that looks wrong on purpose, so that a later change is measured
+// against something instead of against a guess.
+
+vi.mock('#lib/stores/settings.ts', () => ({
+    settings: {
+        subscribe: (fn: (val: any) => void) => {
+            fn({
+                hostField: '', port: '9001', tls: false, password: '',
+                savepassword: false, autoconnect: false, useTotp: false,
+                themeDark: 'dark', themeLight: 'light', fontfamily: '', fontsize: '', customCSS: '',
+                iToken: '', iAlb: '', onlyUnread: false, noembed: false,
+                notifyDMs: true, notifyHighlights: true, notificationSoundMode: 'off',
+                notificationSoundCustom: null, notificationVolume: 50,
+                joinPartsTTL: 30, joinPartsThreshold: 50, joinPartsBufferLimit: 100,
+                joinPartsHide: false, joinPartsHideCore: false, joinPartsHideQueries: false,
+                joinPartsHideOther: false, joinPartsHideAll: false,
+                joinPartsHideAllTemp: false, joinPartsHideTempTimer: null,
+                joinPartsHideTempRestore: null,
+                hotkeyList: [],
+                openNewBufferTab: true, autocolor: true, colorNicks: true,
+                timestamp: true, timestampFormat: '%H:%M',
+                bufferLineTimes: false, hideJoinParts: false,
+                embedLinks: false, autoplay: false, showNickList: true,
+                testSetting: false,
+            });
+            return () => {};
+        },
+        set: () => {},
+        update: () => {},
+    },
+}));
+
+vi.mock('#lib/notifications.ts', () => ({
+    playNotificationSound: vi.fn(),
+    createHighlight: vi.fn(),
+    createDM: vi.fn(),
+    createMention: vi.fn(),
+    onDisconnect: vi.fn(),
+    updateTitle: vi.fn(),
+    updateFavico: vi.fn(),
+    startIndicatorOwner: () => () => {},
+    refreshIndicators: vi.fn(),
+}));
+
+vi.mock('#lib/stores/bufferResume.ts', () => ({
+    shouldResume: vi.fn(() => false),
+    getLastBuffer: vi.fn(() => null),
+    recordLastBuffer: vi.fn(),
+}));
+
+const { handleBufferLineAdded } = await import('#lib/stores/handlers.ts');
+
+const CAP = 10;
+
+/** A channel whose own cap is CAP, with the counters a real buffer would carry. */
+function fixture(id: string, lineCount: number, localUnread = 3): BufferData {
+    const base = createBuffer({
+        pointers: [id],
+        full_name: `irc.test.${id}`,
+        short_name: id,
+        number: 1,
+        local_variables: { plugin: 'irc', server: 'test', type: 'channel' },
+    });
+    const buf: BufferData = {
+        ...base,
+        historyLimit: CAP,
+        requestedLines: 20,
+        localUnread,
+        lines: Array.from({ length: lineCount }, (_, i) =>
+            createBufferLine({
+                buffer: id,
+                date: 1_700_000_000 + i,
+                prefix: 'nick',
+                message: `line ${i}`,
+                tags_array: ['irc_privmsg'],
+                displayed: 1,
+                notify_level: 1,
+                highlight: 0,
+            }),
+        ),
+    };
+    // Anchor the boundary on a line that survives a one-line trim, so the
+    // boundary tests are about re-anchoring and not about losing the anchor.
+    setReadBoundary(buf, 5);
+    return buf;
+}
+
+function lineAdded(id: string, message: string): ProtocolMessage {
+    return {
+        objects: [
+            {
+                pointer: id,
+                content: [
+                    {
+                        buffer: id,
+                        date: 1_700_001_000,
+                        date_long: 0,
+                        prefix: 'nick',
+                        message,
+                        tags_array: ['irc_privmsg'],
+                        displayed: 1,
+                        notify_level: 1,
+                        highlight: 0,
+                    },
+                ],
+            },
+        ],
+    } as unknown as ProtocolMessage;
+}
+
+/**
+ * The legacy trim is module-private and runs at the end of handleBufferLineAdded,
+ * so the scenario has to arrive the way the transport delivers it: a buffer that
+ * is already over its cap receives one more live line. The handler counts that
+ * line in requestedLines too (handlers.ts:528), which is why the legacy numbers
+ * below are `start + 1 - removed` and not `start - removed`.
+ */
+function legacyTrim(id: string, buf: BufferData): BufferData {
+    buffers.set({ [id]: buf });
+    // Active, so the incoming line is not itself tallied as localUnread and the
+    // only localUnread movement left is the trim's.
+    activeBufferId.set(id);
+    handleBufferLineAdded(lineAdded(id, 'one line too many'));
+    return get(buffers)[id]!;
+}
+
+describe('B2 characterization: three copies of the line trim, three counter rules', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        buffers.set({});
+        activeBufferId.set('');
+    });
+
+    it('16 lines against a cap of 10: the three copies land on three different requestedLines', () => {
+        // API: 16 -> 10, requestedLines untouched.
+        const apiBuf = fixture('0xA00', 16);
+        apiTrim(apiBuf, CAP);
+
+        // Legacy: 15 -> +1 live line -> 16 -> 10, requestedLines 20 + 1 - 6.
+        const legacyAfter = legacyTrim('0xA01', fixture('0xA01', 15));
+
+        // Inline: 16 -> 10, requestedLines 20 - 6.
+        const inlineBuf = fixture('0xA02', 16);
+        buffers.set({ '0xA02': inlineBuf });
+        setActiveBuffer('0xA02');
+        const inlineAfter = get(buffers)['0xA02']!;
+
+        expect([apiBuf.lines.length, legacyAfter.lines.length, inlineAfter.lines.length])
+            .toEqual([CAP, CAP, CAP]);
+
+        // requestedLines counts what the session ASKED the server for, and the
+        // scroll-up page size is derived from it (requestedLines * 2). The API
+        // copy deliberately refuses to spend it on a display trim; the other two
+        // spend it. Same trim, three answers.
+        expect({
+            api: apiBuf.requestedLines,
+            legacy: legacyAfter.requestedLines,
+            inline: inlineAfter.requestedLines,
+        }).toEqual({ api: 20, legacy: 15, inline: 14 });
+    });
+
+    it('legacy and API compensate localUnread for the removed prefix — and subtract more lines than were unread', () => {
+        // localUnread tracks the newest lines; a trim removes the oldest. With 11
+        // lines and localUnread 5 the unread tail is indices 6..10, so dropping
+        // index 0 should leave localUnread at 5. Both copies compute
+        // overlap = min(linesToRemove, unreadStartIndex) = min(1, 6) = 1 and
+        // subtract it anyway, landing on 4. Pinned because a fix has to say
+        // which side of this it lands on.
+        const apiBuf = fixture('0xA03', 11, 5);
+        apiTrim(apiBuf, CAP);
+
+        const legacyAfter = legacyTrim('0xA04', fixture('0xA04', 10, 5));
+
+        expect(apiBuf.localUnread).toBe(4);
+        expect(legacyAfter.localUnread).toBe(4);
+    });
+
+    it('the inline copy has no localUnread compensation at all — and today nothing can see it', () => {
+        // setActiveBuffer zeroes localUnread for the buffer it activates, and the
+        // inline trim only ever runs on that same buffer. So the missing
+        // compensation is masked: the inline path reaches the same 0 for a reason
+        // that has nothing to do with the trim.
+        //
+        // This is the single most important thing S2a learned about B2. Fixing the
+        // inline copy's compensation would change no observable number today,
+        // which is a material input to the §13 decision about whether B2 is worth
+        // fixing at all.
+        const buf = fixture('0xA05', 11, 5);
+        buffers.set({ '0xA05': buf });
+        setActiveBuffer('0xA05');
+
+        const after = get(buffers)['0xA05']!;
+        expect(after.lines.length).toBe(CAP);
+        expect(after.localUnread).toBe(0);
+
+        // Proof that the zero came from activation and not from the trim: the
+        // same buffer, same counters, trimmed by the API copy instead, keeps 4.
+        const control = fixture('0xA06', 11, 5);
+        apiTrim(control, CAP);
+        expect(control.localUnread).toBe(4);
+    });
+
+    it('all three re-anchor a surviving boundary to the same index', () => {
+        // The part they agree on: when the anchor line survives the trim, the
+        // boundary follows it to its new index rather than drifting.
+        const apiBuf = fixture('0xB00', 11);
+        const apiAnchor = apiBuf.readBoundaryId;
+        apiTrim(apiBuf, CAP);
+
+        const legacyBuf = fixture('0xB01', 10);
+        const legacyAnchor = legacyBuf.readBoundaryId;
+        const legacyAfter = legacyTrim('0xB01', legacyBuf);
+
+        const inlineBuf = fixture('0xB02', 11);
+        buffers.set({ '0xB02': inlineBuf });
+        const inlineAnchor = inlineBuf.readBoundaryId;
+        setActiveBuffer('0xB02');
+        const inlineAfter = get(buffers)['0xB02']!;
+
+        expect(apiBuf.readBoundaryId).toBe(apiAnchor);
+        expect(legacyAfter.readBoundaryId).toBe(legacyAnchor);
+        expect(inlineAfter.readBoundaryId).toBe(inlineAnchor);
+        expect([
+            getReadBoundaryIndex(apiBuf),
+            getReadBoundaryIndex(legacyAfter),
+            getReadBoundaryIndex(inlineAfter),
+        ]).toEqual([4, 4, 4]);
+    });
+});

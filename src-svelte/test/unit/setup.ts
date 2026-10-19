@@ -23,6 +23,17 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
 }
 
 /**
+ * `__GIT_COMMIT__` is a Vite `define` (vite.config.ts:28), so the app build always
+ * has it and Vitest never does. SettingsModal renders the running commit in its
+ * footer, so any test that mounts it throws before reaching the code under test.
+ * A fixed placeholder keeps the same render path without pretending to know a
+ * commit — the value is never asserted on.
+ */
+if ((globalThis as Record<string, unknown>).__GIT_COMMIT__ === undefined) {
+    (globalThis as Record<string, unknown>).__GIT_COMMIT__ = 'test-commit';
+}
+
+/**
  * The Popover API is not in jsdom. The app opens its dialogs programmatically
  * (`showPopover()`), so without a stub a component test would throw before it ever
  * reached the code under test. It stays inert: tests assert on what a dialog renders,
