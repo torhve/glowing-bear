@@ -251,4 +251,53 @@ describe('B2 characterization: three copies of the line trim, three counter rule
             getReadBoundaryIndex(inlineAfter),
         ]).toEqual([4, 4, 4]);
     });
+
+    it('a capped buffer that keeps receiving reports the same unread count forever', () => {
+        // The clearest consequence of the overlap formula, and the reason B2 is not
+        // only a tidiness problem.
+        //
+        // `localUnread` counts the NEWEST lines: a live line is pushed to the end of
+        // `lines` and the counter is incremented immediately after (handlers.ts:549
+        // and :567). A trim removes the OLDEST. The two sets therefore overlap only
+        // when the trim reaches as far as the unread tail — but the formula is
+        //
+        //     overlap = min(linesToRemove, unreadStartIndex)
+        //
+        // which is the opposite condition. It subtracts precisely when the removed
+        // prefix and the unread tail are disjoint, and subtracts nothing when the
+        // trim really does eat into the tail.
+        //
+        // On a buffer sitting at its cap every arrival forces a one-line trim, so
+        // each message adds an unread line and immediately cancels it: the count
+        // never moves however many messages arrive.
+        const id = '0xB00';
+        buffers.set({ [id]: fixture(id, CAP, 3) });
+        // Neither test buffer is on screen: handlers.ts:560 skips the unread tally
+        // for the active buffer entirely, so an active control buffer would report
+        // 3 for a reason that has nothing to do with the trim.
+        activeBufferId.set('0xON_SCREEN');
+
+        const atCap: number[] = [];
+        const lengths: number[] = [];
+        for (let i = 0; i < 5; i++) {
+            handleBufferLineAdded(lineAdded(id, `arrival ${i}`));
+            const buf = get(buffers)[id]!;
+            lengths.push(buf.lines.length);
+            atCap.push(buf.localUnread);
+        }
+
+        // The same five arrivals on a buffer with room: no trim runs, and the
+        // counter behaves. This is what the capped run above should have looked like.
+        const roomId = '0xB01';
+        buffers.set({ ...get(buffers), [roomId]: fixture(roomId, 5, 3) });
+        const withRoom: number[] = [];
+        for (let i = 0; i < 5; i++) {
+            handleBufferLineAdded(lineAdded(roomId, `arrival ${i}`));
+            withRoom.push(get(buffers)[roomId]!.localUnread);
+        }
+
+        expect(lengths, 'the capped buffer holds exactly its cap, so every arrival is kept').toEqual([CAP, CAP, CAP, CAP, CAP]);
+        expect(withRoom, 'a buffer with room counts every arrival').toEqual([4, 5, 6, 7, 8]);
+        expect(atCap, 'the capped buffer counts none of them, and is frozen where it started').toEqual([3, 3, 3, 3, 3]);
+    });
 });
