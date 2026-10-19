@@ -4,6 +4,7 @@ import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { disconnect, reconnect } from '../helpers/connection';
 import { irc } from '../helpers/irc-control';
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
+import { waitForChatSettled } from '../helpers/waits';
 
 let page: import('@playwright/test').Page;
 
@@ -69,6 +70,13 @@ async function markBufferRead() {
  * land exactly on that swap, so a vanished control is verified rather than assumed.
  */
 async function clickFetchMore(): Promise<boolean> {
+    // The control sits at the TOP of the message list. While the view is still
+    // pinning or still has frames queued, that row keeps moving, and Playwright
+    // times out clicking an element that was on screen the entire time — which is
+    // how this spec failed once the channel was warmed: "the fetch-more control
+    // vanished", with no `history-capped` anywhere. Settling first is the spec's
+    // own no-sleep rule applied honestly: wait for the condition the click needs.
+    await waitForChatSettled(page);
     const capped = page.getByTestId('history-capped');
     if (await capped.count() > 0) return false;
     const fetchButton = page.getByTestId('fetch-more-lines');
