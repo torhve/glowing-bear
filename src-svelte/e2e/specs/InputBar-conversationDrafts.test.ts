@@ -46,8 +46,10 @@ const input = () => page.getByTestId('message-input');
 async function type(text: string): Promise<void> {
     const field = input();
     await field.focus();
-    await expectInputFocused(page);
     await field.fill(text);
+    // After the text is in: a send still landing may blur an empty composer the
+    // reader only focused, but not one that holds their text.
+    await expectInputFocused(page);
     await waitForInputValue(page, text);
 }
 

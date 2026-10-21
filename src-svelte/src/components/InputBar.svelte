@@ -14,6 +14,7 @@
   import Megaphone from '@lucide/svelte/icons/megaphone';
   import Type from '@lucide/svelte/icons/type';
   import { get } from 'svelte/store';
+  import { SvelteSet } from 'svelte/reactivity';
   import ImageUploadPreview from './ImageUploadPreview.svelte';
   import MultiLinePasteDialog from './MultiLinePasteDialog.svelte';
   import { DEBUG_INPUT } from '#lib/debug.ts';
@@ -119,19 +120,19 @@
   // even when clicking them causes the textarea to lose focus.
   let lastCaretPos = $state(0);
 
-  // When the composer last took focus, and when the send in flight began. A send
-  // that finishes hands focus back by blurring an empty composer, and that blur
-  // Whether a send is in flight, and whether the composer was claimed during it —
-  // focused again, or typed into without ever losing focus. A completed send blurs
-  // an empty composer, but a reader who started the next message while the send flew
-  // is using it, so that blur is skipped. A clock cannot answer this: two events in
-  // the same millisecond are indistinguishable, and which-of-two came first is the
-  // whole question.
-  // Not reactive: nothing renders from either. The count, not a boolean, because a
-  // second Enter while the first send is still flying must not end the first one's
-  // claim window early.
-  let sendsInFlight = 0;
-  let composerClaimedDuringSend = false;
+  // The sends whose delivery has not landed yet, each with the claim the composer
+  // has on focus during it. A completed send blurs an empty composer, but a reader
+  // who focused it again or typed into it without ever losing focus is starting the
+  // next message, so that blur is skipped.
+  //
+  // A clock cannot answer this: two events in the same millisecond are
+  // indistinguishable, and which-of-two came first is the whole question. A claim
+  // shared by all sends cannot answer it either — pressing Enter for a second
+  // message while the first is still flying would reset the claim the first send is
+  // honouring, and the first one to land would then blur a composer the reader is
+  // already typing in. So each send owns one claim, and focus or typing marks every
+  // claim that is currently outstanding. Nothing renders from any of this.
+  const outstandingClaims = new SvelteSet<{ claimed: boolean }>();
 
   // WeeChat standard color palette (IRC color codes 00-15)
   const IRC_COLORS = [
@@ -299,8 +300,8 @@
     composerNotice = null;
     // From here the send owns the composer's focus until it lands. A composer
     // focused or typed into in between is the reader starting the next message.
-    sendsInFlight += 1;
-    composerClaimedDuringSend = false;
+    const claim = { claimed: false };
+    outstandingClaims.add(claim);
     const text = message;
 
     // Everything this send may write — history, buffer clearing, the draft it came
@@ -391,15 +392,16 @@
 
     if (inputRef) {
       // This send has landed. Whether the composer may still be blurred depends on
-      // whether another one is also flying, which is why this is a count.
-      sendsInFlight -= 1;
+      // This send has landed. Its own claim is what decides the blur, and another
+      // send still flying keeps the composer claimed for that one.
+      outstandingClaims.delete(claim);
       if (unsent.length === 0) {
         inputRef.style.height = 'auto';
         // Keep focus off a send that finished; the composer is empty. A composer
-        // focused while this send flew is being used for the next message, so the
-        // blur is skipped: taking that focus away is the difference between a
-        // composer that empties and a composer the reader is typing in.
-        if (sendsInFlight === 0 && !composerClaimedDuringSend) inputRef.blur();
+        // focused or typed into while this send was flying belongs to the next
+        // message, so the blur is skipped: taking that focus away is the difference
+        // between a composer that empties and one the reader is typing in.
+        if (outstandingClaims.size === 0 && !claim.claimed) inputRef.blur();
       } else {
         // Keep focus on a failed send so the text can be corrected and retried, and
         // size the textarea for the text that came back.
@@ -836,7 +838,7 @@
     // Typing during a send claims the composer even when focus never left it: the
     // reader pressed Enter and went straight to the next message, so the completion
     // blur has no claim on it.
-    if (sendsInFlight > 0) composerClaimedDuringSend = true;
+    for (const pending of outstandingClaims) pending.claimed = true;
     if (inputRef) {
       syncInputHeight();
       // Save cursor position so format buttons work after textarea loses focus.
@@ -1341,10 +1343,10 @@
           lastCaretPos = inputRef?.selectionStart ?? 0;
         }}
         onfocus={() => {
-          // Focus arriving during a send means the reader is starting the next
-          // message while this one is still flying, which the completion blur must
-          // respect.
-          if (sendsInFlight > 0) composerClaimedDuringSend = true;
+          // Focus arriving while a send is still flying means the reader is starting
+          // the next message; every outstanding claim has to respect that, not just
+          // the newest one.
+          for (const pending of outstandingClaims) pending.claimed = true;
         }}
         data-testid="message-input"
         placeholder={composerPlaceholder}

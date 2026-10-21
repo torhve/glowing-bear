@@ -26,8 +26,11 @@ test.afterAll(async () => {
 async function typeCommand(cmd: string) {
     const input = page.getByTestId('message-input');
     await input.focus();
-    await expectInputFocused(page);
     await input.fill(cmd);
+    // Asserted after the text is in: the previous command's send can still be landing,
+    // and a completed send may blur an empty composer the reader only focused. A
+    // composer holding text is claimed, so focus here is the guarantee worth asserting.
+    await expectInputFocused(page);
     await input.press('Enter');
     await expect(input).toHaveValue('', { timeout: 5000 });
 }

@@ -36,6 +36,12 @@ const delivery = vi.hoisted(() => {
         settleOne(value: boolean) {
             waiting.shift()?.(value);
         },
+        /** Resolve only the newest waiting send, so the older one lands last — the
+         *  order in which a second Enter could erase the claim the first send was
+         *  honouring. */
+        settleNewest(value: boolean) {
+            waiting.pop()?.(value);
+        },
     };
 });
 
@@ -209,6 +215,40 @@ it('does not let the first of two overlapping sends end the second one', async (
     await settleSend(true);
 
     expect(focusedEl(), 'the first send ending handed the composer back while the second was still flying').toBe(input);
+});
+
+it('keeps a claim made during the first send when a second Enter follows it', async () => {
+    const target = render(InputBar as Component<Record<string, unknown>>);
+    openBuffer();
+
+    const input = typeInto(target, 'first message');
+    pressEnter(input);
+
+    // The reader reaches for the next message while the first send is flying. That
+    // focus is a claim against the first send's completion blur.
+    input.blur();
+    input.focus();
+    flushSync();
+
+    // They type the next message, press Enter for it, and the second send lands
+    // before the first one does. Pressing Enter for the second message must not
+    // cancel the claim the first one is still obliged to respect.
+    input.value = 'second message';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+    pressEnter(input);
+
+    delivery.settleNewest(true);
+    await tick();
+    flushSync();
+    expect(focusedEl(), 'the second send landing took focus while the first was flying').toBe(input);
+
+    delivery.settleOne(true);
+    await tick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    flushSync();
+
+    expect(focusedEl(), 'the first send blurred a composer the reader claimed while it flew').toBe(input);
 });
 
 it('keeps focus on a failed send so the text can be corrected', async () => {
