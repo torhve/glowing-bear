@@ -15,9 +15,22 @@ export function bufferItemForName(page: Page, name: string) {
 }
 
 export async function waitForBuffer(page: Page, name: string, timeout = 10000) {
-    await bufferItemForName(page, name)
-        .first()
-        .waitFor({ state: "visible", timeout });
+    const item = bufferItemForName(page, name).first();
+    try {
+        await item.waitFor({ state: "visible", timeout });
+    } catch (error) {
+        // The sidebar rows are the thing that diverged, so name them: a failure then says
+        // whether the buffer never arrived or arrived under a different name. On the shared
+        // fixture a bot's query buffer has been seen as both `gbbot` and `gbbot2`, and the
+        // relay's buffer list alone cannot say which row the client was shown.
+        const present = await page
+            .locator('[data-testid="buffer-item"] .buffer-name')
+            .allTextContents();
+        throw new Error(
+            `no sidebar row named "${name}" within ${timeout}ms; rows present: ${present.join(", ") || "(none)"}`,
+            { cause: error },
+        );
+    }
 }
 
 export async function switchToBuffer(
