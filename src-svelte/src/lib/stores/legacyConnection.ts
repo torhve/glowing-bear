@@ -20,7 +20,6 @@ import {
     startHotlistPoll,
     stopHotlistPoll,
     type ConnectionProfile,
-    type PendingRetry,
     type TransportAdapter,
 } from '#lib/stores/connectionLifecycle.ts';
 import { DEBUG_NICKLIST, DEBUG_WEECHAT_COMMANDS, DEBUG_CONNECTION } from '#lib/debug.ts';
@@ -239,7 +238,10 @@ function handleReconnectDecision(evt: CloseEvent) {
         // meaning that would have been lost: a user-initiated departure is the
         // `userDisconnect` branch above, and it has its own field.
         setConnectionStatus('error');
-        if (connectionData) showDisconnectToast(connectionData);
+        if (connectionData) {
+            // The toast's Reconnect button is this transport's manual reconnect.
+            sharedShowDisconnectToast(connectionData, () => triggerManualReconnect(false));
+        }
     } else if (connectionData) {
         scheduleReconnect();
     }
@@ -732,12 +734,6 @@ async function initializePBKDF2Native(password: string, nonce: Uint8Array, itera
     await new Promise(r => setTimeout(r, INIT_SETTLE_MS));
 }
 
-// Show a persistent disconnect toast with reconnect button.
-// Called from both disconnect handlers (restored WS and normal WS).
-function showDisconnectToast(connInfo: ConnectionProfile) {
-    sharedShowDisconnectToast(connInfo, () => triggerManualReconnect(false));
-}
-
 // Manual reconnect triggered by toast button — resets backoff timer and tries immediately.
 function triggerManualReconnect(resetAttempts = false) {
     beginManualReconnect(connectionData!, resetAttempts);
@@ -793,10 +789,6 @@ function scheduleReconnect() {
     );
 }
 
-function pendingRetry(): PendingRetry {
-    return pendingRetryState();
-}
-
 /**
  * Cancel everything this transport might still do, without wiping app stores and
  * without claiming the user left.
@@ -845,7 +837,7 @@ export const transportAdapter: TransportAdapter = {
     // timer is what reconnects, and without a profile there is nothing to arm.
     hasRetryLoop: () => connectionData !== null,
     manualReconnect: (resetAttempts) => triggerManualReconnect(resetAttempts),
-    pendingRetry,
+    pendingRetry: pendingRetryState,
     quiesce,
 };
 
@@ -1076,15 +1068,12 @@ function teardownSession() {
     clearHandshakeDeadline();
     // `teardownAll()` has already marked this a user-initiated departure by the
     // time this runs — that is what keeps the onclose handler below from
-    // auto-reconnecting. This function closes this transport's session; declaring
-    // the connection-level outcome is not its job, and doing it here is how both
-    // transports ended up wiping the app on a Leave.
+    // auto-reconnecting. The rules a teardown obeys (local only, never the
+    // connection-level outcome) are stated on `TransportAdapter.teardown`.
     connectionData = null;
     // Close ALL tracked WebSocket instances (including orphaned ones from previous
-    // connections). Local-only: this deliberately does NOT send /quit, matching
-    // the rule the API transport states explicitly. Quitting WeeChat stays a
-    // command the user types (InputBar gates /quit behind a confirm), never a
-    // side effect of leaving.
+    // connections). The `/quit` rule — leaving is never a quit — is stated once on
+    // `TransportAdapter.teardown`; what follows is only this transport's history.
     //
     // What the removed line actually did: `Protocol.formatQuit()` produced a bare
     // "quit\n", which is not part of the relay's client->command grammar (a

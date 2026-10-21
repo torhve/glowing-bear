@@ -38,7 +38,6 @@ import {
     startHotlistPoll,
     stopHotlistPoll,
     type ConnectionProfile,
-    type PendingRetry,
     type TransportAdapter,
 } from '#lib/stores/connectionLifecycle.ts';
 import { clearHistoryOutcomes } from '#lib/stores/historyState.ts';
@@ -329,7 +328,10 @@ export async function connect(profile: ConnectionProfile): Promise<void> {
                 resetAllState(status.generation);
                 // After the wipe so the toast can see whether the banner will
                 // already be showing this loss.
-                if (get(connectionState).wasEverConnected && connectionData) showDisconnectToast(connectionData);
+                if (get(connectionState).wasEverConnected && connectionData) {
+                    // The toast's Reconnect button is this transport's manual reconnect.
+                    sharedShowDisconnectToast(connectionData, () => triggerManualReconnect(false));
+                }
                 if (!settled) { settled = true; reject(new Error(status.error ?? 'connection failed')); }
                 break;
             }
@@ -337,11 +339,6 @@ export async function connect(profile: ConnectionProfile): Promise<void> {
 
         orch.start();
     });
-}
-
-// Show a persistent disconnect toast with reconnect button.
-function showDisconnectToast(connInfo: ConnectionProfile) {
-    sharedShowDisconnectToast(connInfo, () => triggerManualReconnect(false));
 }
 
 
@@ -370,17 +367,6 @@ export function isAttemptInProgress(): boolean {
 }
 
 /**
- * This transport's answer to "is a retry scheduled, and when?".
- *
- * The API transport keeps the schedule as orchestrator status rather than a timer
- * handle it owns, so the mapping is a status read. See the legacy transport for the
- * same question answered from a `setTimeout`.
- */
-function pendingRetry(): PendingRetry {
-    return pendingRetryState();
-}
-
-/**
  * Cancel everything this transport might still do, without wiping app stores and
  * without recording a user-initiated disconnect. See the legacy transport for the
  * full reasoning.
@@ -403,11 +389,11 @@ function quiesce(): void {
 /**
  * This transport's `TransportAdapter` — the lifecycle's view of it.
  *
- * Thin reads of state this module already owns. The API transport keeps its retry
- * schedule inside the orchestrator rather than in a timer it holds, which is why
- * `pendingRetry` and `isAttemptInProgress` are status reads here and timer reads in
- * the legacy transport — the adapter exists so the shared layer never has to know
- * that difference exists.
+ * Thin reads of state this module owns. `isAttemptInProgress` reads the handshake
+ * state this transport keeps, while `pendingRetry` is the shared schedule: both
+ * transports arm the one timer in `connectionLifecycle` (see `quiesce` above), so
+ * the answer is the same function for both. The adapter exists so the shared layer
+ * never has to know which of the two a given read comes from.
  */
 export const transportAdapter: TransportAdapter = {
     kind: 'api',
@@ -419,7 +405,7 @@ export const transportAdapter: TransportAdapter = {
     // reconnect to, and a profile with no orchestrator has no loop to take over.
     hasRetryLoop: () => orchestrator !== null && connectionData !== null,
     manualReconnect: (resetAttempts) => triggerManualReconnect(resetAttempts),
-    pendingRetry,
+    pendingRetry: pendingRetryState,
     quiesce,
 };
 
@@ -647,14 +633,9 @@ export async function sendMessage(message: string): Promise<boolean> {
 }
 
 function teardownSession() {
-    // Local disconnect only — never /quit; WeeChat must not be shut down by
-    // a client leaving.
-    //
-    // This closes THIS transport's session. The connection-level outcome —
-    // `userDisconnect`, the `'disconnected'` status — is written once by the
-    // shared `teardownAll()`, which is what decides whether a transport tears
-    // down at all. A teardown that also declared the outcome was how the two
-    // transports ended up both wiping the app on a Leave.
+    // Closes THIS transport's session only; the rules a teardown obeys (never
+    // `/quit`, never the connection-level outcome) are stated on
+    // `TransportAdapter.teardown`.
     orchestrator?.stop();
     orchestrator = null;
     connectionData = null;

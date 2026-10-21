@@ -125,6 +125,7 @@ describe('a first connect that never reached the relay', () => {
 
         const pending = pendingRetryState();
         expect(pending.active, 'the user asked for auto-reconnect; a down relay is what it is for').toBe(true);
+        expect(legacy.transportAdapter.pendingRetry(), 'the adapter answers from the shared schedule, not a schedule of its own').toEqual(pending);
         expect(get(connectionState).status).toBe('reconnecting');
         expect(get(connectionState).reconnectAttempts).toBe(1);
         expect(get(connectionState).errors.serverUnreachable, '1006 is named as an unreachable relay').toBe(true);

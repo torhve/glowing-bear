@@ -167,6 +167,15 @@ export interface TransportAdapter {
     /**
      * Close this transport's live session and clear its own retry state (armed
      * timer, captured profile). Does NOT wipe app stores — that is `resetAppState`.
+     *
+     * Stated once here because every transport implements it: a teardown is local.
+     * It never sends `/quit` — quitting WeeChat is a command the user types
+     * (`InputBar` gates it behind a confirm), never a side effect of leaving. And it
+     * never declares the connection-level outcome: `userDisconnect` and the
+     * `'disconnected'` status belong to the app and are written once by
+     * `teardownAll()`, which is also what decides whether a transport tears down at
+     * all. A teardown that declared the outcome as well was how both transports
+     * ended up wiping the app on a Leave.
      */
     teardown(): void;
     /**
