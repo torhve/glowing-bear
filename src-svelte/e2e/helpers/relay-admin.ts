@@ -116,3 +116,48 @@ export async function clearServerHotlist(): Promise<void> {
         `hotlist did not clear on the fixture relay after ${attempts} attempts; leftovers: ${JSON.stringify(remaining)}`,
     );
 }
+
+/**
+ * Every buffer name the fixture currently has.
+ *
+ * `GET /api/buffers` returns all of them with every column and ignores both
+ * `full_name` masks and `columns` (live probe against the gbtest relay,
+ * 2026-10-07: 53 buffers, 23 keys each, a `#gbm*` mask answered the same 53), so
+ * filtering is done here rather than asked of the relay.
+ */
+export async function relayBufferNames(): Promise<string[]> {
+    const buffers = await relayJson('/api/buffers') as unknown;
+    if (!Array.isArray(buffers)) return [];
+    return (buffers as Array<Record<string, unknown>>)
+        .map((buffer) => String(buffer.name ?? ''))
+        .filter(Boolean);
+}
+
+/**
+ * Close buffers a spec created and left joined, matched by full-name prefix.
+ *
+ * Why this exists: specs join throwaway channels (`#gb-idle-<ts>`, `#gbmshallow<ts>`,
+ * `#gbmcapped<ts>`) and `/part` leaves the buffer behind — measured against this
+ * relay by History-requestDiscipline.test.ts. After a few runs the fixture was holding
+ * 47 of them (53 buffers total, live probe 2026-10-07). Every one is a row in the
+ * sidebar and a possible hotlist entry, so specs that count rows, switch buffers by
+ * number, or assert a zero unread badge are asserting against other runs' leftovers.
+ *
+ * Closing is exact-name only: `/buffer close irc.gbtest.#gbm*` and `/bufferclose` with
+ * the same mask both answered with the buffer list unchanged, so the names are enumerated
+ * first and closed one by one.
+ *
+ * Returns how many buffers the fixture had at most before closing; the hotlist is
+ * cleared afterwards because a closed buffer can keep its hotlist entry, which is
+ * what keeps the favicon badge above zero.
+ */
+export async function closeTestBuffers(prefixes: string[]): Promise<number> {
+    const names = (await relayBufferNames()).filter((name) => prefixes.some((prefix) => name.startsWith(prefix)));
+    for (const name of names) {
+        fixtureCommand(`buffer close ${name}`);
+    }
+    if (names.length > 0) {
+        await clearServerHotlist().catch(() => undefined);
+    }
+    return names.length;
+}

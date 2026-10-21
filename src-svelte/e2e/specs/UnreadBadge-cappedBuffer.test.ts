@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { createConnectedPage } from '../fixtures/auth';
 import { bufferItemForName, waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { irc, sendSequence } from '../helpers/irc-control';
+import { fixtureCommand } from '../helpers/relay-admin';
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
 import { waitForChatSettled } from '../helpers/waits';
 
@@ -39,6 +40,13 @@ test.beforeAll(async ({ browser }) => {
 });
 
 test.afterAll(async () => {
+    // Both channels this spec joined outlive it: `/part` leaves the buffer behind on
+    // this relay, and the fixture outlives the run, so a leftover is a sidebar row and
+    // a hotlist entry the next run inherits. Closing by exact name is the only form
+    // that worked (a `#gbm*` mask closed nothing).
+    for (const label of ['capped', 'shallow']) {
+        fixtureCommand(`buffer close irc.gbtest.#gbm${label}${STAMP}`);
+    }
     await page.close();
 });
 

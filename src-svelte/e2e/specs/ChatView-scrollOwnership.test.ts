@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { createConnectedPage } from '../fixtures/auth';
 import { switchToBuffer } from '../helpers/buffers';
 import { irc, sendSequence } from '../helpers/irc-control';
+import { fixtureCommand } from '../helpers/relay-admin';
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
 import { waitForChatSettled, waitForRow, waitForRowCountAtLeast } from '../helpers/waits';
 
@@ -300,6 +301,11 @@ test('a buffer whose content fits the viewport has nothing to scroll and settles
     // where that state can be constructed exactly.
     const channel = `#gb-idle-${Date.now()}`;
     const input = page.getByTestId('message-input');
+    // The composer delivers to whichever buffer is active, and at app start that is
+    // the core buffer, where WeeChat refuses `/join` ("You cannot write text in this
+    // buffer" — measured on this relay). Name a channel instead of relying on a buffer
+    // an earlier run happened to leave as the last viewed one.
+    await switchToBuffer(page, '#glowing-bear');
     await input.click();
     await input.fill(`/join ${channel}`);
     await input.press('Enter');
@@ -337,6 +343,10 @@ test('a buffer whose content fits the viewport has nothing to scroll and settles
     await input.click();
     await input.fill(`/part ${channel}`);
     await input.press('Enter');
+    // `/part` leaves the buffer joined on this relay; only an exact `/buffer close`
+    // removes it, so the channel this test joined does not become the next run's
+    // sidebar row or its resumed last-viewed buffer.
+    fixtureCommand(`buffer close irc.gbtest.${channel}`);
     await switchToBuffer(page, '#glowing-bear');
 });
 
