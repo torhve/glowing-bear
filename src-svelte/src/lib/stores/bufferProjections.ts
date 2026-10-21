@@ -158,6 +158,16 @@ function orderedVisibleBuffers(): BufferPresentation[] {
         if (buffer && !buffer.hidden) visible.push(buffer);
     }
 
+    // The id memo is bounded by the buffers that exist right now. Rows enter it only
+    // through `rowFor`, which only this projection calls, so pruning here is what
+    // stops it holding a row for every buffer id ever seen — after a wipe, a
+    // `/buffer close`, or a server part. Bounding it in the projection rather than
+    // wiring a connection-reset hook means every removal path bounds it, and the
+    // connection layer does not have to know what the sidebar renders.
+    for (const id of latestRowById.keys()) {
+        if (!(id in map)) latestRowById.delete(id);
+    }
+
     const signature = orderingSignature(visible, orderByServer);
     if (signature !== lastSignature) {
         lastSignature = signature;
@@ -214,11 +224,16 @@ export const sidebarRows = selectiveDerived(
     sameArrayByReference,
 );
 
-/** Drop memoised state between connections so a new session cannot inherit rows. */
-export function resetBufferProjections(): void {
-    lastSignature = '';
-    lastOrderedIds = [];
-    latestRowById.clear();
+/**
+ * How many rows the id memo currently holds.
+ *
+ * A test-only view, the same kind of window `window.__chatFollowState()` is for the
+ * chat viewport. The memo exists so that nothing renders from it, so its size is
+ * otherwise invisible — and "this does not grow forever" is the whole claim the prune
+ * in `orderedVisibleBuffers` exists to keep true.
+ */
+export function memoisedRowCount(): number {
+    return latestRowById.size;
 }
 
 /**
