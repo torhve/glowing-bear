@@ -30,7 +30,9 @@
   // useless and index keys let a row's component state (e.g. an injected embed) follow
   // the wrong message when the line cap trims the front. lineId is stable across
   // updates; a positional suffix keeps keys unique for identical content-fallback ids
-  // (relays without WeeChat line ids).
+  // (relays without WeeChat line ids). That `line:` fallback is a render key only:
+  // the identity the read boundary and the history dedupe agree on is spelled by
+  // `#lib/lineIdentity.ts`, and this shape is not it.
   let lineKeys = $derived.by(() => {
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local dedup bookkeeping, not reactive state
     const seen = new Map<string, number>();
