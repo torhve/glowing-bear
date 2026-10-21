@@ -1,5 +1,5 @@
 import type { FullConfig } from '@playwright/test';
-import { closeTestBuffers } from './helpers/relay-admin';
+import { closeTestBuffers, relayBufferNames } from './helpers/relay-admin';
 
 /* gbtest itself persists across test runs on purpose: the channel, the PM and the
  * relay stay up so a run does not have to rebuild them. What must NOT persist is the
@@ -20,7 +20,12 @@ const TEST_BUFFER_PREFIXES = [
 export default async function globalTeardown(_config: FullConfig) {
     try {
         const closed = await closeTestBuffers(TEST_BUFFER_PREFIXES);
-        console.log(`[global-teardown] closed ${closed} test buffer(s); gbtest kept running`);
+        // Naming what survives, so a leak outside the prefixes above shows up as a
+        // growing list in the run output instead of silently slowing every later run.
+        const remaining = await relayBufferNames();
+        console.log(
+            `[global-teardown] closed ${closed} test buffer(s); gbtest kept running with ${remaining.length} buffers: ${remaining.join(', ')}`,
+        );
     } catch (err) {
         // The fixture may already be down (a run that never started it, or a manual
         // `npm run irc:stop`). Teardown is hygiene, not a test: say what happened and

@@ -302,3 +302,37 @@ it('survives being torn down while a send is in flight', async () => {
 
     expect(input.isConnected, 'the composer node is gone').toBe(false);
 });
+
+it('gives focus back only when the last send lands and nothing claimed it since', async () => {
+    // The composite the two rules above produce, asserted end to end rather than one
+    // rule at a time: the reader focuses the composer while the first send is flying,
+    // types the next message, presses Enter for it, and then does nothing. The first
+    // send must not take focus — it was claimed while it flew — and the last send
+    // must give it back, because nothing happened in the composer after its Enter.
+    const target = render(InputBar as Component<Record<string, unknown>>);
+    openBuffer();
+
+    const input = typeInto(target, 'first message');
+    pressEnter(input);
+
+    input.blur();
+    input.focus();
+    flushSync();
+
+    input.value = 'second message';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+    pressEnter(input);
+
+    delivery.settleOne(true);
+    await tick();
+    flushSync();
+    expect(focusedEl(), 'the first send blurred a composer claimed while it flew').toBe(input);
+
+    await settleSend(true);
+    expect(input.value, 'the second send emptied the composer').toBe('');
+    expect(
+        focusedEl(),
+        'the last send kept focus from a reader who typed nothing after Enter',
+    ).not.toBe(input);
+});
