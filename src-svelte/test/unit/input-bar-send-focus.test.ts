@@ -26,9 +26,15 @@ const delivery = vi.hoisted(() => {
     const waiting: Array<(value: boolean) => void> = [];
     return {
         defer: () => new Promise<boolean>((resolve) => waiting.push(resolve)),
+        /** Resolve every send still waiting on delivery. */
         settle(value: boolean) {
             const pending = waiting.splice(0);
             for (const resolve of pending) resolve(value);
+        },
+        /** Resolve only the oldest waiting send, so two overlapping sends can land
+         * one at a time and a test can say which one landed. */
+        settleOne(value: boolean) {
+            waiting.shift()?.(value);
         },
     };
 });
@@ -152,6 +158,57 @@ it('leaves focus the reader took while the send was still in flight', async () =
 
     expect(focusedEl(), 'a finished send blurred a composer being used for the next message').toBe(input);
     expect(input.value, 'the draft the reader typed during delivery is untouched').toBe('second message');
+});
+
+it('leaves a composer the reader kept focused and typed into during the send', async () => {
+    const target = render(InputBar as Component<Record<string, unknown>>);
+    openBuffer();
+
+    const input = typeInto(target, 'first message');
+    pressEnter(input);
+
+    // Focus never left the textarea, so no focus event will ever report this reader:
+    // the keystroke is the only evidence the composer is in use again.
+    input.value = 'second message';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+    expect(focusedEl(), 'the composer held focus the whole time').toBe(input);
+
+    await settleSend(true);
+
+    expect(focusedEl(), 'a finished send blurred a composer the reader kept typing in').toBe(input);
+    expect(input.value, 'the keystrokes that arrived during delivery are intact').toBe('second message');
+});
+
+it('does not let the first of two overlapping sends end the second one', async () => {
+    const target = render(InputBar as Component<Record<string, unknown>>);
+    openBuffer();
+
+    const input = typeInto(target, 'first message');
+    pressEnter(input);
+
+    // A second send while the first is still flying (multi-line sends do this).
+    input.value = 'second message';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+    pressEnter(input);
+
+    // The first send lands; the second is still in flight.
+    delivery.settleOne(true);
+    await tick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    flushSync();
+
+    // The reader goes back to the composer while the second send is flying. If the
+    // first landing declared the composer free, this focus is not recorded and the
+    // second send's completion blur takes it away.
+    input.blur();
+    input.focus();
+    flushSync();
+
+    await settleSend(true);
+
+    expect(focusedEl(), 'the first send ending handed the composer back while the second was still flying').toBe(input);
 });
 
 it('keeps focus on a failed send so the text can be corrected', async () => {

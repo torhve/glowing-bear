@@ -121,14 +121,17 @@
 
   // When the composer last took focus, and when the send in flight began. A send
   // that finishes hands focus back by blurring an empty composer, and that blur
-  // Whether a send is in flight, and whether the composer was focused during it.
-  // A completed send blurs an empty composer, but a reader who reached for the next
-  // message while the send flew is using it, so that blur is skipped. A clock cannot
-  // answer this: two events in the same millisecond are indistinguishable, and the
-  // whole question is which of them came first.
-  // Not reactive: nothing renders from either.
-  let sendInFlight = false;
-  let refocusedDuringSend = false;
+  // Whether a send is in flight, and whether the composer was claimed during it —
+  // focused again, or typed into without ever losing focus. A completed send blurs
+  // an empty composer, but a reader who started the next message while the send flew
+  // is using it, so that blur is skipped. A clock cannot answer this: two events in
+  // the same millisecond are indistinguishable, and which-of-two came first is the
+  // whole question.
+  // Not reactive: nothing renders from either. The count, not a boolean, because a
+  // second Enter while the first send is still flying must not end the first one's
+  // claim window early.
+  let sendsInFlight = 0;
+  let composerClaimedDuringSend = false;
 
   // WeeChat standard color palette (IRC color codes 00-15)
   const IRC_COLORS = [
@@ -294,10 +297,10 @@
     }
 
     composerNotice = null;
-    // From here the send owns the composer's focus until it lands; a focus that
-    // arrives in between is the reader starting the next message.
-    sendInFlight = true;
-    refocusedDuringSend = false;
+    // From here the send owns the composer's focus until it lands. A composer
+    // focused or typed into in between is the reader starting the next message.
+    sendsInFlight += 1;
+    composerClaimedDuringSend = false;
     const text = message;
 
     // Everything this send may write — history, buffer clearing, the draft it came
@@ -387,15 +390,16 @@
     }
 
     if (inputRef) {
-      // The send no longer owns the composer's focus, whichever way it landed.
-      sendInFlight = false;
+      // This send has landed. Whether the composer may still be blurred depends on
+      // whether another one is also flying, which is why this is a count.
+      sendsInFlight -= 1;
       if (unsent.length === 0) {
         inputRef.style.height = 'auto';
         // Keep focus off a send that finished; the composer is empty. A composer
         // focused while this send flew is being used for the next message, so the
         // blur is skipped: taking that focus away is the difference between a
         // composer that empties and a composer the reader is typing in.
-        if (!refocusedDuringSend) inputRef.blur();
+        if (sendsInFlight === 0 && !composerClaimedDuringSend) inputRef.blur();
       } else {
         // Keep focus on a failed send so the text can be corrected and retried, and
         // size the textarea for the text that came back.
@@ -829,6 +833,10 @@
   }
 
   function handleInput() {
+    // Typing during a send claims the composer even when focus never left it: the
+    // reader pressed Enter and went straight to the next message, so the completion
+    // blur has no claim on it.
+    if (sendsInFlight > 0) composerClaimedDuringSend = true;
     if (inputRef) {
       syncInputHeight();
       // Save cursor position so format buttons work after textarea loses focus.
@@ -1333,9 +1341,10 @@
           lastCaretPos = inputRef?.selectionStart ?? 0;
         }}
         onfocus={() => {
-          // A focus during a send means the reader is starting the next message
-          // while this one is still flying, which the completion blur must respect.
-          if (sendInFlight) refocusedDuringSend = true;
+          // Focus arriving during a send means the reader is starting the next
+          // message while this one is still flying, which the completion blur must
+          // respect.
+          if (sendsInFlight > 0) composerClaimedDuringSend = true;
         }}
         data-testid="message-input"
         placeholder={composerPlaceholder}
