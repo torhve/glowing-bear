@@ -60,6 +60,11 @@ test('smart-filtered lines are not displayed; other lines are', async () => {
     await expect(page.getByText(MARKER, { exact: false })).toHaveCount(0);
 });
 
+// Observed once, in a run that shared gbtest with the socket-dropping specs: the
+// control line had not reappeared within 15 s. Not reproduced since — five repeat passes
+// of that same subset (42 tests each) and two full serial passes are green — so the
+// cause is unknown, and a failure here should be treated as shared-fixture state until
+// it reproduces twice.
 test('filtered lines stay out of the view after a reconnect re-fetches history', async () => {
     await reconnect(page);
     await waitForBuffer(page, '#glowing-bear', 15000);
