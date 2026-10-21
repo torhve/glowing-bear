@@ -4,6 +4,7 @@ export const activeBufferChanged = writable(0);
 import { recordLastBuffer } from "#lib/stores/bufferResume.ts";
 import { settings } from "#lib/stores/settings.ts";
 import { clamp } from "#lib/num.ts";
+import { weechatLineId } from "#lib/lineIdentity.ts";
 import type {
     BufferData,
     BufferLine,
@@ -280,7 +281,7 @@ export function trimBufferLines(buffer: BufferData, limit: number): void {
 function findServerReadBoundaryIndex(buffer: BufferData): number | null {
     const marker = buffer.serverReadLineId;
     if (marker === undefined || marker < 0) return null;
-    const index = findUniqueLineIndex(buffer.lines, `weechat:${marker}`);
+    const index = findUniqueLineIndex(buffer.lines, weechatLineId(marker));
     return index !== null && index >= 0 ? index : null;
 }
 
@@ -554,7 +555,7 @@ export function createBufferLine(message: {
     // Prefer WeeChat's optional id; the deterministic fallback lets older relays remap
     // a boundary across a history refresh when the line content is unchanged.
     const lineId = message.id !== undefined
-        ? `weechat:${String(message.id)}`
+        ? weechatLineId(message.id)
         : `line:${message.buffer}:${message.date}:${message.prefix || ''}:${message.message}:${tags.join(',')}`;
 
     const showHiddenBrackets =

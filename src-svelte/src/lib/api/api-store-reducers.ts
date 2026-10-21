@@ -5,7 +5,7 @@
 // - BufferData.id is String(apiBufferId); the branded numeric id stays
 //   authoritative on BufferData.apiBufferId. Conversion happens ONLY here —
 //   callers must never Number(buffer.id) or mix the two.
-// - Buffer line identity is `weechat:<apiLineId>` via createBufferLine.
+// - Buffer line identity is one WeeChat line id, spelled by `#lib/lineIdentity.ts`.
 // - A clear epoch per buffer prevents delayed history from repopulating a
 //   buffer that was cleared (or closed) after the request started.
 //
@@ -22,6 +22,7 @@ import {
     injectDateChangeMessageIfNeeded, pendingBufferSwitch, setActiveBuffer, matchesPendingSwitch,
 } from '#lib/stores/models.ts';
 import { shouldResume } from '#lib/stores/bufferResume.ts';
+import { weechatLineId } from '#lib/lineIdentity.ts';
 import { renameConversationDraft } from '#lib/stores/conversationDrafts.ts';
 import { addToast } from '#lib/toast.ts';
 import { createHighlight, playNotificationSound } from '#lib/notifications.ts';
@@ -88,7 +89,7 @@ function scheduleLineFlush(): void {
  * the existing row in place instead of duplicating it, and is not tallied twice.
  */
 function applyLineAdded(target: BufferData, line: LineSnapshot, activeId: string, limit: number, effects: LineBatchEffects): void {
-    const lineId = `weechat:${line.id}`;
+    const lineId = weechatLineId(line.id);
     // The id scan is the expensive half of a live line: it walks every retained
     // line to answer "has history already inserted this one?". The answer is
     // almost always no, and lineIdsSeen answers that in O(1) — the scan measured
@@ -304,7 +305,7 @@ function appendLines(buffer: BufferData, lines: LineSnapshot[], limit: number): 
             displayed: line.displayed ? 1 : 0,
             notify_level: line.notifyLevel,
             highlight: line.highlight ? 1 : 0,
-            id: line.id, // → lineId `weechat:<id>`
+            id: line.id, // → lineId via `weechatLineId`
             bufferType: buffer.type,
         });
         buffer.lines.push(created);
@@ -553,7 +554,7 @@ export function createApiStoreReducers(): ApiReducers {
             buffers.update((current) => {
                 const buffer = current[key];
                 if (!buffer) return current;
-                const lineId = `weechat:${line.id}`;
+                const lineId = weechatLineId(line.id);
                 const index = buffer.lines.findIndex((l) => l.lineId === lineId);
                 if (index < 0) return current;
                 const updated = createBufferLine({

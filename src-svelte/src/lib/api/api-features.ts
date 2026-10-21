@@ -14,6 +14,7 @@ import { get } from 'svelte/store';
 import type { ApiSession, ApiSessionResponse } from '#lib/api/api-session.ts';
 import { validateCompletionResponse, validateLineArray } from '#lib/api/api-validation.ts';
 import { mapLine, isServerHiddenLine } from '#lib/api/api-mapping.ts';
+import { weechatLineId, weechatLineNumber } from '#lib/lineIdentity.ts';
 import { storeKeyForBufferId, flushApiLineBatch, noteLineId } from '#lib/api/api-store-reducers.ts';
 import { buffers, lineLimitFor, resolveReadBoundaryAfterHistory, trimBufferLines } from '#lib/stores/models.ts';
 import type { CompletionResponse } from '#lib/weechat-rest-types.ts';
@@ -148,8 +149,7 @@ function hiddenIdsFor(buffer: BufferData): Set<number> {
  *  fallback. Ids are monotonic in print order on both relays — dense counters on
  *  4.10.1, timestamps on 5.0 — which is what makes a positional merge correct. */
 function serverLineId(line: BufferLine): number | null {
-    const match = /^weechat:(\d+)$/.exec(line.lineId ?? '');
-    return match === null ? null : Number(match[1]);
+    return weechatLineNumber(line.lineId);
 }
 
 /**
@@ -220,7 +220,7 @@ function applyHistory(buffer: BufferData, lines: LineSnapshot[]): void {
     const unseen = lines
         .slice()
         .sort((a, b) => a.id - b.id)
-        .filter((l) => !existing.has(`weechat:${l.id}`) && !hiddenSeen.has(l.id));
+        .filter((l) => !existing.has(weechatLineId(l.id)) && !hiddenSeen.has(l.id));
     // Hidden lines are remembered by id rather than counted. A window whose rows
     // are all smart-filtered away renders nothing, and without that record the same
     // N raw lines would be treated as new on every page. Only displayed lines are
