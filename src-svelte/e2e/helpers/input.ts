@@ -1,4 +1,5 @@
 import { Page, expect } from '@playwright/test';
+import { focusTransitions, renderFocusLog } from './focuslog.ts';
 
 export async function fillInput(page: Page, testId: string, text: string) {
     await page.getByTestId(testId).fill(text);
@@ -45,9 +46,27 @@ export async function waitForInputCaret(page: Page, pos: number, timeout = 5000)
         .toBe(pos);
 }
 
-/** Wait until the input bar has focus. */
+/**
+ * Wait until the input bar has focus.
+ *
+ * A failure here used to say only that the bar was not focused. The focus log is
+ * now appended, because the interesting part of that symptom is what holds focus
+ * instead and when it took it — a failure that says `out textarea#message-input`
+ * is a different bug from one whose last entry is `in <other element>`, and a
+ * log that ends in `in` with focus on the body means the focused element was
+ * removed rather than blurred.
+ */
 export async function expectInputFocused(page: Page, timeout = 5000): Promise<void> {
-    await expect(page.getByTestId('message-input'), 'input bar never took focus').toBeFocused({ timeout });
+    const started = Date.now();
+    try {
+        await expect(page.getByTestId('message-input'), 'input bar never took focus').toBeFocused({ timeout });
+    } catch (err) {
+        const log = await focusTransitions(page);
+        throw new Error(
+            `input bar never took focus. Focus transitions:\n${renderFocusLog(log, started)}`,
+            { cause: err },
+        );
+    }
 }
 
 /** Wait until the input bar has lost focus. */

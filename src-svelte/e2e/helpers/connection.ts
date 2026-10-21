@@ -1,5 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { fillInput } from './input';
+import { installFocusLog } from './focuslog.ts';
 
 export async function clearSettings(page: Page, preserveLastBuffer = false) {
     await page.evaluate((preserve) => {
@@ -93,4 +94,8 @@ export async function sendWeechatCommand(page: Page, command: string) {
 
 export async function waitForAppReady(page: Page, timeout = 10000) {
     await expect(page.locator('body')).toHaveAttribute('data-app-ready', 'true', { timeout });
+    // Every page that reaches the app gets a focus log, so any focus failure
+    // anywhere in the suite can say what took the focus. Idempotent, so specs
+    // that install it themselves are unaffected.
+    await installFocusLog(page);
 }

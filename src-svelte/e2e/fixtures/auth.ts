@@ -1,6 +1,7 @@
 import { Browser, BrowserContext, Page, Route } from '@playwright/test';
 import { connectToWeechat, clearSettings, waitForAppReady } from '../helpers/connection';
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
+import { installFocusLog } from '../helpers/focuslog.ts';
 
 export interface CreateConnectedPageOptions {
   /** Settings to apply after clearing localStorage (e.g. { savepassword: false, enableEmojify: true }) */
@@ -40,6 +41,7 @@ export async function createConnectedPage(
     await page.goto('http://localhost:8001/');
     await waitForAppReady(page);
     setupEffectOrphanFilter(page);
+    await installFocusLog(page);
     await clearSettings(page);
 
     if (options?.settings) {

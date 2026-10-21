@@ -15,12 +15,20 @@
  *
  * It came out of a full serial run where `input.focus()` resolved and focused the
  * textarea, and the element stayed unfocused through five seconds of polling —
- * focus taken and kept away, not transiently dropped. Run directly here that
- * never happened: the watchdog recorded focus arriving on the textarea and
- * nothing taking it, with the same textarea node throughout and the chat shell
- * never swapped for the connection form. So the contract is kept, not the
- * reproduction. The watchdog stays in every test, because a focus failure is only
- * worth reading if it says what took the focus.
+ * focus taken and kept away, not transiently dropped. Run directly here that never
+ * happened: focus arrived on the textarea and nothing took it, with the same textarea
+ * node throughout and the chat shell never swapped for the connection form. So what
+ * is kept here is the contract, not a reproduction.
+ *
+ * One real focus source was found while looking: a completed send blurs the empty
+ * composer (`InputBar.svelte`), which takes focus back from a reader who reached for
+ * the next message while the send flew. That rule is pinned where delivery can be
+ * deferred, in `test/unit/input-bar-send-focus.test.ts`, because a browser cannot
+ * hold a relay round-trip open long enough for the race to exist on command.
+ *
+ * The focus log these tests report is the one installed by `waitForAppReady` and
+ * `createConnectedPage` on every page, so a focus failure in any spec says what
+ * took the focus rather than only that focus was gone.
  */
 import { test, expect } from '@playwright/test';
 import { createConnectedPage } from '../fixtures/auth';
@@ -28,62 +36,12 @@ import { botSay } from '../helpers/messages';
 import { switchToBuffer } from '../helpers/buffers';
 import { expectInputFocused } from '../helpers/input';
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
+import { describeFocused, focusTransitions, renderFocusLog } from '../helpers/focuslog.ts';
 
 const COMPOSER = 'message-input';
 const FLOOD_COUNT = 30;
 
 let page: import('@playwright/test').Page;
-
-/** One focus transition, as the page recorded it. */
-interface FocusRecord {
-    /** `in` when an element gained focus, `out` when one lost it. */
-    kind: 'in' | 'out';
-    element: string;
-    at: number;
-}
-
-declare global {
-    interface Window {
-        __focusLog?: FocusRecord[];
-    }
-}
-
-/**
- * Record every focus transition on the capture phase, so an element that receives
- * focus and is then removed is still caught. The log is carried into the failure
- * message: the point of a focus failure is knowing what took the focus.
- */
-async function watchFocus(target: import('@playwright/test').Page) {
-    await target.evaluate(() => {
-        const log: Window['__focusLog'] = [];
-        window.__focusLog = log;
-        const describe = (el: Element | null) => {
-            if (!el) return '(none)';
-            const testId = el.getAttribute('data-testid');
-            const cls = (el.getAttribute('class') ?? '').split(/\s+/).filter(Boolean).slice(0, 3).join('.');
-            return `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}${testId ? `[${testId}]` : ''}${cls ? `.${cls}` : ''}`;
-        };
-        document.addEventListener('focusin', (e) => {
-            log.push({ kind: 'in', element: describe(e.target), at: Date.now() });
-        }, true);
-        document.addEventListener('focusout', (e) => {
-            log.push({ kind: 'out', element: describe(e.target), at: Date.now() });
-        }, true);
-    });
-}
-
-/** Identity of the focused element: a test id when it has one, else tag and id. */
-async function focusedIdentity(target: import('@playwright/test').Page): Promise<string> {
-    return target.evaluate(() => {
-        const el = document.activeElement;
-        if (!el) return '(none)';
-        return el.getAttribute('data-testid') ?? `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}`;
-    });
-}
-
-async function focusLog(target: import('@playwright/test').Page): Promise<FocusRecord[]> {
-    return target.evaluate(() => (window.__focusLog ?? []).slice(-12));
-}
 
 /**
  * Assert focus keeps sitting on the composer for a stretch of time. The polling
@@ -94,12 +52,12 @@ async function focusLog(target: import('@playwright/test').Page): Promise<FocusR
 async function focusStaysOnComposer(target: import('@playwright/test').Page, context: string) {
     const started = Date.now();
     try {
-        await expect.poll(() => focusedIdentity(target), { timeout: 3000, intervals: [100] }).toBe(COMPOSER);
+        await expect.poll(() => describeFocused(target), { timeout: 3000, intervals: [100] }).toContain(COMPOSER);
     } catch (err) {
-        const log = await focusLog(target);
+        const log = await focusTransitions(target);
         throw new Error(
             `${context}: the composer lost focus. Focus transitions since ${started}:\n`
-            + log.map((ev) => `  ${ev.at - started}ms ${ev.kind} ${ev.element}`).join('\n'),
+            + renderFocusLog(log, started),
             { cause: err },
         );
     }
@@ -129,7 +87,7 @@ test.describe.configure({ mode: 'serial' });
 test.beforeAll(async ({ browser }) => {
     page = await createConnectedPage(browser);
     setupEffectOrphanFilter(page);
-    await watchFocus(page);
+
 });
 
 test.afterAll(async () => {
@@ -171,6 +129,7 @@ test('Alt+digit typed in the composer is a character, not a buffer switch', asyn
     await expect(items.nth(activeBefore === 0 ? 1 : 0), 'a quick key landed on another buffer').not.toHaveClass(/border-s-accent/);
     await focusStaysOnComposer(page, 'after Alt+digit pressed in the composer');
 });
+
 
 test('a clicked buffer switch does not take the composer focus', async () => {
     const items = page.getByTestId('buffer-item');
