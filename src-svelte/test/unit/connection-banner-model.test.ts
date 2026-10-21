@@ -24,7 +24,7 @@ import {
     setActiveBuffer,
 } from '#lib/stores/models.ts';
 import { clearActiveConnectionProfile, setActiveConnectionProfile } from '#lib/connectionProfile.ts';
-import { connectionState, connectionStats, setConnectionStatus, setErrors, setNextReconnectAt } from '#lib/stores/connectionStore.ts';
+import { clearErrors, connectionState, connectionStats, setConnectionStatus, setErrors, setNextReconnectAt } from '#lib/stores/connectionStore.ts';
 import { settings, updateSettings } from '#lib/stores/settings.ts';
 import {
     captureRetainedState,
@@ -34,7 +34,7 @@ import {
 } from '#lib/stores/retainedChat.ts';
 import { chatDisplay } from '#lib/stores/chatPresentation.ts';
 import { connectionBanner } from '#lib/stores/connectionPresentation.ts';
-import type { BufferData } from '#lib/types.ts';
+import type { BufferData, ConnectionError } from '#lib/types.ts';
 
 const KEY_CHANNEL = '1791000000000101';
 const KEY_CORE = '1791000000000102';
@@ -281,6 +281,88 @@ describe('connectionBanner: what the shell and banner show', () => {
     });
 });
 
+/**
+ * Every cause the banner can name, and which one it says when several arrive.
+ *
+ * `reasonFor()` is ten early returns; the connection form has eight boxes for the
+ * same flags, in a different order and with different sentences. That split is
+ * deliberate — the banner has one line, the form has room to explain — but it means
+ * a new cause has to be added twice, and only two of the ten banner sentences were
+ * pinned before this. Pinning all ten plus the precedence is what lets the chain be
+ * replaced by data without silently rewording or reordering a cause.
+ */
+const BANNER_SENTENCES: Array<[Partial<ConnectionError>, string]> = [
+    [{ passwordError: true }, 'WeeChat rejected the password.'],
+    [{ hashAlgorithmDisagree: true }, 'WeeChat and the browser disagree on how to hash the password.'],
+    [{ clockSkewError: true }, 'WeeChat rejected the login timestamp — this device and the server disagree about the time.'],
+    [{ tlsError: true }, 'The TLS connection failed.'],
+    [{ securityError: true }, 'WeeChat refused the connection for security reasons.'],
+    [{ oldWeechatError: true }, 'This WeeChat is too old for the API transport.'],
+    [{ protocolUnansweredError: true }, 'Nothing on this port answered as the relay protocol you selected.'],
+    [{ serverUnreachable: true }, 'The relay could not be reached.'],
+    [{ uploadError: true }, 'WeeChat rejected the initialization data.'],
+    [{ errorMessage: true }, 'WeeChat reported an error.'],
+];
+
+/** A lost session naming `flags`, read as the banner would render it. */
+function bannerNaming(flags: Partial<ConnectionError>): string {
+    profile();
+    openSession();
+    loseSession();
+    clearErrors();
+    setErrors(flags);
+    setConnectionStatus('reconnecting');
+    return get(connectionBanner).reason;
+}
+
+describe('the banner names one cause per failure, in a fixed precedence', () => {
+    it('says the recorded sentence for each cause', () => {
+        for (const [flags, sentence] of BANNER_SENTENCES) {
+            expect(bannerNaming(flags), JSON.stringify(flags)).toBe(sentence);
+        }
+    });
+
+    it('says nothing invented when no cause is named', () => {
+        // With no flag set, the only text left is the status itself.
+        profile();
+        openSession();
+        loseSession();
+        clearErrors();
+
+        setConnectionStatus('connecting');
+        expect(get(connectionBanner).reason).toBe('Connecting…');
+        setConnectionStatus('reconnecting');
+        expect(get(connectionBanner).reason).toBe('Connection lost. Retrying…');
+        setConnectionStatus('disconnected');
+        expect(get(connectionBanner).reason).toBe('Connection lost.');
+    });
+
+    it('names the more actionable cause when two arrive together', () => {
+        // Adjacent pairs of the precedence: each entry must beat the one below it,
+        // so the ordering survives as a property rather than as line order.
+        const precedence: Array<keyof ConnectionError> = [
+            'passwordError',
+            'hashAlgorithmDisagree',
+            'clockSkewError',
+            'tlsError',
+            'securityError',
+            'oldWeechatError',
+            'protocolUnansweredError',
+            'serverUnreachable',
+            'uploadError',
+            'errorMessage',
+        ];
+
+        for (let i = 0; i < precedence.length - 1; i++) {
+            const wins = precedence[i];
+            const loses = precedence[i + 1];
+            const both = bannerNaming({ [wins]: true, [loses]: true });
+
+            expect(both, `${wins} must be said over ${loses}`).toBe(bannerNaming({ [wins]: true }));
+            expect(both, `${loses} must not be said when ${wins} is set`).not.toBe(bannerNaming({ [loses]: true }));
+        }
+    });
+});
 describe('uptime is a property of a live connection', () => {
     // The stats popover renders `Date.now() - connectedSince`. While a retry loop
     // is running the status is 'reconnecting', and a clock still counting up

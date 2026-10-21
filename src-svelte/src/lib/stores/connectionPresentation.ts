@@ -22,6 +22,7 @@ import { activeConnectionProfile } from '#lib/connectionProfile.ts';
 import { settings } from '#lib/stores/settings.ts';
 import { retryAvailability } from '#lib/stores/connectionManager.ts';
 import type { ConnectionError } from '#lib/types.ts';
+import { CONNECTION_ERROR_BANNERS } from '#lib/utils/connectionErrorCatalog.ts';
 
 export type BannerKind =
     /** Nothing to say: connected, or the connection form is on screen. */
@@ -55,25 +56,15 @@ export interface ConnectionBannerModel {
 }
 
 /**
- * Error flags to sentence. Ordered by how actionable the fix is: a wrong password
- * or an unreachable relay is worth naming, a generic protocol error is not.
+ * One sentence for a failure: the first named cause, else the status itself. Which
+ * causes exist and in what precedence they are named lives in
+ * `connectionErrorCatalog`, alongside the list of causes the connection form boxes
+ * instead of the banner naming.
  */
 function reasonFor(errors: ConnectionError, status: ConnectionState['status']): string {
-    if (errors.passwordError) return 'WeeChat rejected the password.';
-    if (errors.hashAlgorithmDisagree) return 'WeeChat and the browser disagree on how to hash the password.';
-    // The long explanation is on the connection form; the banner only has room to
-    // say which of the two clocks to go and fix, and that retrying will not help.
-    if (errors.clockSkewError) return 'WeeChat rejected the login timestamp — this device and the server disagree about the time.';
-    if (errors.tlsError) return 'The TLS connection failed.';
-    if (errors.securityError) return 'WeeChat refused the connection for security reasons.';
-    if (errors.oldWeechatError) return 'This WeeChat is too old for the API transport.';
-    // Only ever set for an attempt that never established a session, so this is
-    // never said about a session that was lost — that is a transport loss, and the
-    // transport was already proved by the session it held.
-    if (errors.protocolUnansweredError) return 'Nothing on this port answered as the relay protocol you selected.';
-    if (errors.serverUnreachable) return 'The relay could not be reached.';
-    if (errors.uploadError) return 'WeeChat rejected the initialization data.';
-    if (errors.errorMessage) return 'WeeChat reported an error.';
+    for (const row of CONNECTION_ERROR_BANNERS) {
+        if (errors[row.flag]) return row.reason;
+    }
     if (status === 'connecting') return 'Connecting…';
     if (status === 'reconnecting') return 'Connection lost. Retrying…';
     return 'Connection lost.';

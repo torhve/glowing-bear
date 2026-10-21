@@ -19,6 +19,7 @@ import { flushSync, mount, unmount } from 'svelte';
 import ConnectionForm from '#components/ConnectionForm.svelte';
 import { clearErrors, setErrors } from '#lib/stores/connectionStore.ts';
 import type { ConnectionError } from '#lib/types.ts';
+import { BANNER_ONLY_ERROR_FLAGS, CONNECTION_ERROR_BANNERS } from '#lib/utils/connectionErrorCatalog.ts';
 
 vi.mock('#lib/stores/connectionManager.ts', () => ({
     connect: vi.fn(),
@@ -163,5 +164,78 @@ describe('the connection form renders every failure cause the same way', () => {
             .map((el) => el.getAttribute('data-testid'));
         expect(recovery).toEqual(['protocol-recovery-auto', 'protocol-recovery-other']);
 
+    });
+});
+
+/**
+ * How boxes stack when several causes are set, and the two causes with no box.
+ *
+ * The banner chooses one sentence by precedence; the form shows every flag it has,
+ * stacked in template order, and that order is not the banner's. Neither is wrong:
+ * the form has room for more than one explanation, and clock-skew and
+ * pinned-protocol come first because they are the two a reader can act on from this
+ * screen. It is pinned anyway — a shared presentation table would otherwise let the
+ * two orders converge silently, and that changes what a user reads mid-failure.
+ */
+const STACKED: Array<[Partial<ConnectionError>, string[]]> = [
+    [{ passwordError: true, hashAlgorithmDisagree: true }, ['password-error', 'hash-algorithm']],
+    [{ tlsError: true, oldWeechatError: true }, ['tls-error', 'old-weechat']],
+    [{ errorMessage: true, passwordError: true }, ['connection-error', 'password-error']],
+    [{ clockSkewError: true, passwordError: true, tlsError: true }, ['clock-skew', 'password-error', 'tls-error']],
+    // The pinned-protocol box replaces the generic unreachable one, so the failure
+    // is explained once.
+    [{ serverUnreachable: true, protocolUnansweredError: true }, ['protocol-unanswered']],
+];
+
+describe('boxes stack in the form order, not the banner order', () => {
+    it('renders every cause set at once, in template order', () => {
+        const target = render();
+
+        for (const [flags, order] of STACKED) {
+            show(flags);
+            const types = [...target.querySelectorAll('[data-error-type]')]
+                .map((el) => el.getAttribute('data-error-type'));
+            expect(types, JSON.stringify(flags)).toEqual(order);
+        }
+    });
+
+    it('explains nothing for the two causes only the banner names', () => {
+        // securityError and uploadError have a banner sentence and no box. A shared
+        // table would be tempted to give them one; the form is not where either is
+        // said, and inventing a box is a product change, not a dedup.
+        const target = render();
+
+        for (const flag of ['securityError', 'uploadError'] as const) {
+            show({ [flag]: true });
+            expect(target.querySelectorAll('[data-error-type]').length, flag).toBe(0);
+        }
+    });
+});
+
+/**
+ * The catalog and this form have to agree about which causes are explained here.
+ *
+ * The catalog is the complete list of causes the app can hold; the form boxes all of
+ * them except the ones the catalog marks as the banner's alone. Everything else is a
+ * cause the user is told a flag for and given no explanation of — which is precisely
+ * what happens when someone adds a flag to `ConnectionError` and updates one surface.
+ * Reading the list instead of repeating it is the point: the form cannot quietly
+ * forget a cause, and the banner cannot quietly claim a box it does not have.
+ */
+describe('every cause in the catalog is explained on this form or handed to the banner', () => {
+    it('boxes every catalog cause except the two the banner alone names', () => {
+        const target = render();
+        const bannerOnly = new Set<string>(BANNER_ONLY_ERROR_FLAGS);
+
+        for (const row of CONNECTION_ERROR_BANNERS) {
+            show({ [row.flag]: true });
+            const boxes = target.querySelectorAll('[data-error-type]');
+
+            if (bannerOnly.has(row.flag)) {
+                expect(boxes.length, `${row.flag} is banner-only by decision`).toBe(0);
+            } else {
+                expect(boxes.length, `${row.flag} must be explained on the form`).toBe(1);
+            }
+        }
     });
 });
