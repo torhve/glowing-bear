@@ -9,7 +9,7 @@
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import Minus from '@lucide/svelte/icons/minus';
   import { detectPrefixIcon, type PrefixIconType } from '#lib/utils/prefixIcons.ts';
-  import { imageExts, videoExts, audioExts, normalizeImageUrl } from '#lib/utils/mediaExtensions.ts';
+  import { classifyMediaUrl } from '#lib/utils/mediaExtensions.ts';
   import { detectEmbedUrl } from '#lib/utils/urlEmbeds.ts';
   import { DEBUG_METADATA } from '#lib/debug.ts';
 
@@ -111,15 +111,12 @@
       let name: string | null = null;
       let content: string | ((this: EmbedCallbackContext) => void) = '';
 
-      if (imageExts.test(url)) {
-        name = 'Image';
-        content = normalizeImageUrl(url);
-      } else if (videoExts.test(url)) {
-        name = 'Video';
-        content = url;
-      } else if (audioExts.test(url)) {
-        name = 'Audio';
-        content = url;
+      // One classification decides both the label and what is shown, so the label on
+      // the control and the element underneath it cannot disagree.
+      const media = classifyMediaUrl(url);
+      if (media) {
+        name = media.name;
+        content = media.content;
       } else {
         const embedMatch = detectEmbedUrl(url);
         if (embedMatch) {

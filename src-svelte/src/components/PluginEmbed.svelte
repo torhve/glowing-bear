@@ -2,7 +2,7 @@
   /* eslint-disable svelte/no-dom-manipulating */
   import { untrack } from 'svelte';
   import type { EmbedCallbackContext, PluginMetadata } from '#lib/types.ts';
-  import { imageExts, videoExts, audioExts, normalizeImageUrl } from '#lib/utils/mediaExtensions.ts';
+  import { classifyMediaUrl } from '#lib/utils/mediaExtensions.ts';
   import { buildEmbed, type EmbedRender } from '#lib/utils/urlEmbeds.ts';
   import Play from '@lucide/svelte/icons/play';
   import ImageIcon from '@lucide/svelte/icons/image';
@@ -35,10 +35,14 @@
   let isString = $derived(typeof content === 'string');
   let isFunction = $derived(typeof content === 'function');
 
-  // Media kind drives the collapsed-state icon: an image glyph for images,
-  // play for video, a waveform for audio. Nothing is fetched until the user
-  // clicks — the collapsed state stays a plain button.
-  let kind = $derived(plugin.name === 'Image' ? 'image' : plugin.name === 'Video' ? 'video' : plugin.name === 'Audio' ? 'audio' : 'other');
+  // Media kind drives the collapsed-state icon: an image glyph for images, play for
+  // video, a waveform for audio. Nothing is fetched until the user clicks — the
+  // collapsed state stays a plain button. Re-reading the name string here was a
+  // third mapping from URL to kind, so an entry could say "Show Image" over an audio
+  // glyph. The icon now comes from the same lookup that named the entry.
+  let kind = $derived(
+    typeof plugin.content === 'string' ? (classifyMediaUrl(plugin.content)?.kind ?? 'other') : 'other'
+  );
   function injectImage(url: string) {
     if (!embedRef) {
       console.warn('[PluginEmbed] injectImage: embedRef is null, URL:', url);
@@ -168,21 +172,14 @@
     }
     if (DEBUG_PLUGIN) console.log('[PluginEmbed] processUrlContent: processing URL:', url);
 
-    if (imageExts.test(url)) {
-      // The same normalization BufferLineRow applies before it renders an image:
-      // a Dropbox shared link has to ask for the file rather than Dropbox's own
-      // page, and an http Imgur link is not served over plain http at all.
-      injectImage(normalizeImageUrl(url));
-      return;
-    }
-
-    if (videoExts.test(url)) {
-      injectVideo(url);
-      return;
-    }
-
-    if (audioExts.test(url)) {
-      injectAudio(url);
+    // The same classification BufferLineRow used to label this entry, so the element
+    // injected here matches the label above it by construction rather than by two
+    // chains happening to agree. Image URLs already arrive normalised.
+    const media = classifyMediaUrl(url);
+    if (media) {
+      if (media.kind === 'image') injectImage(media.content);
+      else if (media.kind === 'video') injectVideo(media.content);
+      else injectAudio(media.content);
       return;
     }
 
@@ -238,6 +235,10 @@
     class:hidden={visible}
     title={`Show ${plugin.name}`}
     aria-label={`Show ${plugin.name}`}
+    // The icon beside the label is decoration, and the aria-label overrides the
+    // button's contents, so nothing readable says which kind this control is offering.
+    // The attribute is the part a test can assert.
+    data-media-kind={kind}
     onclick={showContent}
   >
     {#if kind === 'image'}

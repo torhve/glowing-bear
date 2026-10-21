@@ -41,6 +41,12 @@ test('shows "Show Image" button when noembed is enabled', async () => {
 
     // No preview while collapsed: nothing loads until the user clicks.
     await expect(row.locator('[data-testid="show-embed"] img')).toHaveCount(0);
+
+    // The control names what it will show. The label and the element revealed by the
+    // click have to be the same kind: an entry that says "Show Image" over an audio
+    // glyph, or the other way round, is the bug this assertion exists to catch.
+    await expect(row.locator('[data-testid="show-embed"]')).toHaveAccessibleName('Show Image');
+    await expect(row.locator('[data-testid="show-embed"]')).toHaveAttribute('data-media-kind', 'image');
 });
 
 test('clicking Show Image reveals the embed', async () => {
