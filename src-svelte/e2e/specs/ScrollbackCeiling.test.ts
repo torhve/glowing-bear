@@ -107,6 +107,13 @@ test('a reader paged to the depth ceiling is told so instead of offered an empty
     expect(await capped.count(), `the control never reported the ceiling after ${pages} pages`).toBe(1);
     await expect(button, 'a page at the ceiling fetches nothing, so it must not stay offered').toHaveCount(0);
 
+    // The capped notice sits in a real table row: the channel layout's rows are `tr`/`td` and
+    // the stylesheet's row rules only match those, so a shared div would restyle the control.
+    expect(
+        await page.getByTestId('history-capped').evaluate((el) => el.closest('tr.bufferline.fetchmore-row')?.tagName ?? null),
+        'the capped notice must sit inside a real table row in the channel layout'
+    ).toBe('TR');
+
     // A deep window has to be behind the label, but not exactly 4,096 rows:
     // WeeChat's smart filter drops lines from the page, so a buffer at the ceiling
     // holds fewer lines than the cap allows (4,090 of 4,096 on the shared fixture).

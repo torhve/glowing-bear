@@ -88,6 +88,12 @@ test.describe('basic', () => {
         const readmarker = page.getByTestId('readmarker');
         await expect(readmarker).toBeVisible({ timeout: 5000 });
 
+        // The marker is a real table row in the channel layout: the stylesheet styles
+        // `.readmarker td` and the mobile media query only matches inside real `tr`/`td`, so
+        // the wrapper's element type is part of the contract, not a markup detail.
+        expect(await readmarker.evaluate((el) => el.tagName)).toBe('TR');
+        await expect(readmarker.locator('> td[colspan="3"]')).toHaveCount(1);
+
         // Verify unread lines exist below the readmarker using nextElementSibling traversal.
         // This is more reliable than index arithmetic since tbody contains mixed row types
         // (fetchmore, readmarker, bufferline) and index-based formulas break when non-bufferline

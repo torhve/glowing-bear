@@ -451,6 +451,128 @@
     </div>
   {/if}
 
+  <!--
+    One markup per control, wrapped per layout. The element types are not interchangeable:
+    the stylesheet styles `.readmarker td` and the mobile media query only matches inside
+    real `tr`/`td`, so a shared `<div>` would reparent the table layout's rows. Everything
+    below keeps `tr`/`td` where the table layout had them and plain elements elsewhere, and
+    keeps the testids identical because the specs address one logical control per name.
+  -->
+  {#snippet lineRow(message: BufferLine, index: number)}
+    <BufferLineRow
+      {message}
+      {index}
+      {messages}
+      {noembed}
+      bubbleMode={bubbleMode === true}
+      {otherNick}
+      {myNick}
+      onMention={handleMention}
+    />
+  {/snippet}
+
+  {#snippet markerInner()}
+    <div class="readmarker-container">
+      <div class="readmarker-line"></div>
+      {#if unreadCount > 0}<span class="readmarker-badge">{unreadCount} new</span>{/if}
+      <div class="readmarker-line"></div>
+    </div>
+  {/snippet}
+
+  {#snippet readMarker(table: boolean)}
+    {#if table}
+      <tr class="readmarker" data-testid="readmarker"><td colspan="3">{@render markerInner()}</td></tr>
+    {:else}
+      <div class="readmarker" data-testid="readmarker">{@render markerInner()}</div>
+    {/if}
+  {/snippet}
+
+  {#snippet failedInner(table: boolean)}
+    <p class="text-sm text-text-secondary" data-testid="history-failed">Older messages could not be loaded.</p>
+    <button
+      type="button"
+      data-testid="history-retry"
+      class="rounded px-3 py-1 text-xs font-medium bg-surface-raised text-text-secondary hover:text-text transition-colors"
+      class:mt-1={table}
+      onclick={handleFetchMore}
+    >
+      Try again
+    </button>
+  {/snippet}
+
+  {#snippet fetchMoreInner(table: boolean)}
+    {#if historyCapped}
+      <p
+        class="text-xs font-medium text-text-muted"
+        class:px-3={!table}
+        class:py-1={!table}
+        data-testid="history-capped"
+      >
+        History limit reached
+      </p>
+    {:else}
+      <button
+        type="button"
+        data-testid="fetch-more-lines"
+        class="fetchmorelines flex items-center gap-1 px-3 py-1 rounded text-xs font-medium text-text-secondary hover:text-text hover:bg-surface-raised transition-colors"
+        onclick={handleFetchMore}
+      >
+        <ChevronUp size={14} class="text-text-muted" />
+        Fetch more lines
+      </button>
+    {/if}
+    <span class={['loading-spinner', { hidden: !isLoadingMore }]}>
+      Fetching more lines<span class="loading-dots"><span>.</span><span>.</span><span>.</span></span>
+    </span>
+  {/snippet}
+
+  {#snippet historyControls(table: boolean)}
+    {#if historyMissing}
+      {#if table}
+        <tr class="bufferline history-failed-row">
+          <td class="text-center py-3" colspan=3>{@render failedInner(true)}</td>
+        </tr>
+      {:else}
+        <div class="chat-history-failed flex flex-col items-center gap-2 px-4 py-6 text-center">
+          {@render failedInner(false)}
+        </div>
+      {/if}
+    {/if}
+
+    {#if current && !current.allLinesFetched}
+      {#if table}
+        <tr class="bufferline fetchmore-row">
+          <td class="text-center py-1" colspan=3>{@render fetchMoreInner(true)}</td>
+        </tr>
+      {:else}
+        <div class="bubble-fetchmore-row">{@render fetchMoreInner(false)}</div>
+      {/if}
+    {/if}
+  {/snippet}
+
+  {#snippet body(table: boolean)}
+    {#if showMarkerBeforeUnread}
+      <!-- Read lines (up to and including readEndIndex) -->
+      {#each messages.slice(0, readStartIndex) as message, i (lineKeys[i]!)}
+        {@render lineRow(message, i)}
+      {/each}
+      <!-- Readmarker between read and unread -->
+      {@render readMarker(table)}
+      <!-- Unread lines (after readEndIndex) -->
+      {#each messages.slice(readStartIndex) as message, i (lineKeys[readStartIndex + i]!)}
+        {@render lineRow(message, readStartIndex + i)}
+      {/each}
+    {:else}
+      <!-- All lines visible (no readmarker needed) -->
+      {#each messages as message, i (lineKeys[i]!)}
+        {@render lineRow(message, i)}
+      {/each}
+      {#if showEndMarker}
+        {@render readMarker(table)}
+      {/if}
+    {/if}
+  {/snippet}
+
   <div
     bind:this={containerRef}
     onscroll={handleScroll}
@@ -473,178 +595,15 @@
     {:else if bubbleMode}
       <!-- Bubble mode layout (private/query buffers with stylizePrivateChats enabled) -->
       <div class="chat-bubble-container">
-        {#if historyMissing}
-          <div class="chat-history-failed flex flex-col items-center gap-2 px-4 py-6 text-center">
-            <p class="text-sm text-text-secondary" data-testid="history-failed">Older messages could not be loaded.</p>
-            <button type="button" data-testid="history-retry" class="rounded px-3 py-1 text-xs font-medium bg-surface-raised text-text-secondary hover:text-text transition-colors" onclick={handleFetchMore}>
-              Try again
-            </button>
-          </div>
-        {/if}
-        <!-- Fetch more lines -->
-        {#if !current.allLinesFetched}
-          <div class="bubble-fetchmore-row">
-            {#if historyCapped}
-              <p class="px-3 py-1 text-xs font-medium text-text-muted" data-testid="history-capped">History limit reached</p>
-            {:else}
-              <button type="button" data-testid="fetch-more-lines" class="fetchmorelines flex items-center gap-1 px-3 py-1 rounded text-xs font-medium text-text-secondary hover:text-text hover:bg-surface-raised transition-colors" onclick={handleFetchMore}>
-                <ChevronUp size={14} class="text-text-muted" />
-                Fetch more lines
-              </button>
-            {/if}
-            <span class={['loading-spinner', { hidden: !isLoadingMore }]}>
-              Fetching more lines<span class="loading-dots"><span>.</span><span>.</span><span>.</span></span>
-            </span>
-          </div>
-        {/if}
-
-        {#if showMarkerBeforeUnread}
-          <!-- Read lines (up to and including readEndIndex) -->
-          {#each messages.slice(0, readStartIndex) as message, i (lineKeys[i]!)}
-            <BufferLineRow
-              {message}
-              index={i}
-              {messages}
-              {noembed}
-              bubbleMode={true}
-              {otherNick}
-              {myNick}
-              onMention={handleMention}
-            />
-          {/each}
-          <!-- Readmarker between read and unread -->
-          <div class="readmarker" data-testid="readmarker">
-            <div class="readmarker-container">
-              <div class="readmarker-line"></div>
-              {#if unreadCount > 0}<span class="readmarker-badge">{unreadCount} new</span>{/if}
-              <div class="readmarker-line"></div>
-            </div>
-          </div>
-          <!-- Unread lines (after readEndIndex) -->
-          {#each messages.slice(readStartIndex) as message, i (lineKeys[readStartIndex + i]!)}
-            <BufferLineRow
-              {message}
-              index={readStartIndex + i}
-              {messages}
-              {noembed}
-              bubbleMode={true}
-              {otherNick}
-              {myNick}
-              onMention={handleMention}
-            />
-          {/each}
-        {:else}
-          <!-- All lines visible (no readmarker needed) -->
-          {#each messages as message, i (lineKeys[i]!)}
-            <BufferLineRow
-              {message}
-              index={i}
-              {messages}
-              {noembed}
-              bubbleMode={true}
-              {otherNick}
-              {myNick}
-              onMention={handleMention}
-            />
-          {/each}
-          {#if showEndMarker}
-            <div class="readmarker" data-testid="readmarker">
-              <div class="readmarker-container">
-                <div class="readmarker-line"></div>
-                {#if unreadCount > 0}<span class="readmarker-badge">{unreadCount} new</span>{/if}
-                <div class="readmarker-line"></div>
-              </div>
-            </div>
-          {/if}
-        {/if}
+        {@render historyControls(false)}
+        {@render body(false)}
       </div>
     {:else}
       <!-- Table layout (channels, servers, free buffers) -->
       <table class="chat-table">
         <tbody class="chat-tbody">
-          {#if historyMissing}
-            <tr class="bufferline history-failed-row">
-              <td class="text-center py-3" colspan=3>
-                <p class="text-sm text-text-secondary" data-testid="history-failed">Older messages could not be loaded.</p>
-                <button type="button" data-testid="history-retry" class="mt-1 rounded px-3 py-1 text-xs font-medium bg-surface-raised text-text-secondary hover:text-text transition-colors" onclick={handleFetchMore}>
-                  Try again
-                </button>
-              </td>
-            </tr>
-          {/if}
-          <!-- Fetch more lines row -->
-          {#if !current.allLinesFetched}
-            <tr class="bufferline fetchmore-row">
-              <td class="text-center py-1" colspan=3>
-                {#if historyCapped}
-                  <p class="text-xs font-medium text-text-muted" data-testid="history-capped">History limit reached</p>
-                {:else}
-                  <button type="button" data-testid="fetch-more-lines" class="fetchmorelines flex items-center gap-1 px-3 py-1 rounded text-xs font-medium text-text-secondary hover:text-text hover:bg-surface-raised transition-colors" onclick={handleFetchMore}>
-                    <ChevronUp size={14} class="text-text-muted" />
-                    Fetch more lines
-                  </button>
-                {/if}
-                <span class={['loading-spinner', { hidden: !isLoadingMore }]}>
-                  Fetching more lines<span class="loading-dots"><span>.</span><span>.</span><span>.</span></span>
-                </span>
-              </td>
-            </tr>
-          {/if}<!---->
-
-          {#if showMarkerBeforeUnread}
-            <!-- Read lines (up to and including readEndIndex) -->
-            {#each messages.slice(0, readStartIndex) as message, i (lineKeys[i]!)}
-              <BufferLineRow
-                {message}
-                index={i}
-                {messages}
-                {noembed}
-                onMention={handleMention}
-              />
-            {/each}<!---->
-            <!-- Readmarker row between read and unread -->
-            <tr class="readmarker" data-testid="readmarker">
-              <td colspan="3">
-                <div class="readmarker-container">
-                  <div class="readmarker-line"></div>
-                  {#if unreadCount > 0}<span class="readmarker-badge">{unreadCount} new</span>{/if}
-                  <div class="readmarker-line"></div>
-                </div>
-              </td>
-            </tr><!---->
-            <!-- Unread lines (after readEndIndex) -->
-            {#each messages.slice(readStartIndex) as message, i (lineKeys[readStartIndex + i]!)}
-              <BufferLineRow
-                {message}
-                index={readStartIndex + i}
-                {messages}
-                {noembed}
-                onMention={handleMention}
-              />
-            {/each}<!---->
-          {:else}
-            <!-- All lines visible (no readmarker needed) -->
-            {#each messages as message, i (lineKeys[i]!)}
-              <BufferLineRow
-                {message}
-                index={i}
-                {messages}
-                {noembed}
-                onMention={handleMention}
-              />
-            {/each}<!---->
-            {#if showEndMarker}
-              <tr class="readmarker" data-testid="readmarker">
-                <td colspan="3">
-                  <div class="readmarker-container">
-                    <div class="readmarker-line"></div>
-                    {#if unreadCount > 0}<span class="readmarker-badge">{unreadCount} new</span>{/if}
-                    <div class="readmarker-line"></div>
-                  </div>
-                </td>
-              </tr>
-            {/if}
-          {/if}<!---->
+          {@render historyControls(true)}
+          {@render body(true)}
         </tbody>
       </table>
     {/if}<!---->
