@@ -212,3 +212,29 @@ describe('a Leave sends no quit to the server', () => {
         expect(['quit\n'].filter((frame) => /^\s*quit\b/i.test(frame))).toHaveLength(1);
     });
 });
+
+/**
+ * Who declares a departure, tested at the seam the rule is about.
+ *
+ * `teardownAll()` is the only thing that says "the user left": it writes
+ * `userDisconnect` and `'disconnected'` before tearing anything down. Both transports
+ * used to declare it as the last line of their own teardown, which is how a Leave ran
+ * the app-wide wipe twice. Asserting the count of wipes catches the duplication; this
+ * catches the declaration itself, by running a transport's teardown with no
+ * `teardownAll()` around it and checking the connection-level outcome is still what the
+ * in-flight attempt wrote.
+ */
+describe('a transport teardown declares nothing above its own session', () => {
+    it('closes the session without writing the connection-level outcome', () => {
+        const socket = connectLegacy();
+
+        transportAdapterFor('legacy')!.teardown();
+
+        expect(socket.closeCalls.length, 'it does close the session').toBeGreaterThan(0);
+        expect(get(connectionState).userDisconnect, 'a transport does not decide the user left').toBe(false);
+        expect(
+            get(connectionState).status,
+            'a transport does not declare the connection disconnected',
+        ).toBe('connecting');
+    });
+});
