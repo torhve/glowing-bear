@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { createConnectedPage } from '../fixtures/auth';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
+import { waitForChatSettled } from '../helpers/waits.ts';
 
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
 
@@ -154,6 +155,13 @@ test.describe('basic', () => {
             return count > 0;
         }, { timeout: 5000 });
 
+        // The view is still moving here. Sampling `__chatFollowState` after this same
+        // switch says the follow-pin loop and pending view frames stay busy for roughly
+        // 240 ms, and the scroll to the read boundary is written across those frames.
+        // A one-shot geometry read inside that window asks a moving element where it
+        // is: this assertion failed in a loaded serial run and passed on its own, which
+        // is what measuring a moving view looks like.
+        await waitForChatSettled(page);
         // Verify the readmarker is visible in the viewport.
         // When switching to a buffer with unread messages, the app should scroll
         // to show the readmarker rather than jumping to the bottom.
