@@ -16,7 +16,8 @@
 import { beforeEach, expect, it } from 'vitest';
 import { get } from 'svelte/store';
 import { activeBufferId, buffers, createBuffer } from '#lib/stores/models.ts';
-import { memoisedRowCount, sidebarOrder, sidebarRows } from '#lib/stores/bufferProjections.ts';
+import { sidebarOrder, sidebarRows } from '#lib/stores/bufferProjections.ts';
+import { memoisedRowCount } from '#lib/stores/bufferRow.ts';
 import { resetAppState } from '#lib/stores/connectionLifecycle.ts';
 import type { BufferData } from '#lib/types.ts';
 

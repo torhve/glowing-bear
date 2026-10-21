@@ -29,94 +29,8 @@ import {
 import { settings } from '#lib/stores/settings.ts';
 import type { BufferData, BufferPresentation } from '#lib/types.ts';
 import { sameArrayByReference, selectiveDerived } from '#lib/stores/selectiveDerived.ts';
+import { pruneRowMemo, rowFor } from '#lib/stores/bufferRow.ts';
 
-/**
- * Row identity is value identity for the fields a row renders.
- *
- * `title` and `nameClasses` are compared by reference on purpose: every writer
- * that changes the topic or the name builds a new array, while a shallow clone
- * of a buffer shares the old one. Comparing their contents instead would turn
- * "nothing changed" into an O(topic length) comparison on every publication.
- */
-function sameRow(a: BufferPresentation, b: BufferPresentation): boolean {
-    return a.id === b.id
-        && a.fullName === b.fullName
-        && a.shortName === b.shortName
-        && a.trimmedName === b.trimmedName
-        && a.nameClasses === b.nameClasses
-        && a.prefix === b.prefix
-        && a.number === b.number
-        && a.title === b.title
-        && a.rtitle === b.rtitle
-        && a.hidden === b.hidden
-        && a.localUnread === b.localUnread
-        && a.unread === b.unread
-        && a.notification === b.notification
-        && a.notify === b.notify
-        && a.serverSortKey === b.serverSortKey
-        && a.indent === b.indent
-        && a.bufferType === b.bufferType
-        && a.type === b.type
-        && a.plugin === b.plugin
-        && a.server === b.server
-        && a.hideBufferLineTimes === b.hideBufferLineTimes
-        && a.pinned === b.pinned
-        && a.active === b.active
-        && a.localVariables === b.localVariables;
-}
-
-/** Buffer object -> row, so an unchanged buffer never rebuilds its row. */
-const rowByBuffer = new WeakMap<BufferData, BufferPresentation>();
-/** Buffer id -> its most recent row, so an equivalent clone reuses it. */
-const latestRowById = new Map<string, BufferPresentation>();
-
-/**
- * Project one published buffer into a sidebar row.
- *
- * The second lookup is the point: the legacy hotlist poll re-references every
- * background buffer every 15 s. Those are new objects with identical values, so
- * the freshly built row is thrown away in favour of the previous one — the row
- * object a rendered row is already holding stays valid, and the array containing
- * it compares equal.
- */
-function rowFor(buffer: BufferData): BufferPresentation {
-    const cached = rowByBuffer.get(buffer);
-    if (cached) return cached;
-
-    const row: BufferPresentation = {
-        id: buffer.id,
-        fullName: buffer.fullName,
-        shortName: buffer.shortName,
-        trimmedName: buffer.trimmedName,
-        nameClasses: buffer.nameClasses,
-        prefix: buffer.prefix,
-        number: buffer.number,
-        title: buffer.title,
-        rtitle: buffer.rtitle,
-        hidden: buffer.hidden,
-        localUnread: buffer.localUnread,
-        unread: buffer.unread,
-        notification: buffer.notification,
-        notify: buffer.notify,
-        serverSortKey: buffer.serverSortKey,
-        indent: buffer.indent,
-        bufferType: buffer.bufferType,
-        type: buffer.type,
-        plugin: buffer.plugin,
-        server: buffer.server,
-        hideBufferLineTimes: buffer.hideBufferLineTimes,
-        pinned: buffer.pinned,
-        active: buffer.active,
-        localVariables: buffer.localVariables,
-    };
-
-    const previous = latestRowById.get(buffer.id);
-    const reused = previous && sameRow(previous, row) ? previous : row;
-
-    rowByBuffer.set(buffer, reused);
-    latestRowById.set(buffer.id, reused);
-    return reused;
-}
 
 /**
  * Ordering signature: everything that can change the sidebar's *structure*.
@@ -164,9 +78,7 @@ function orderedVisibleBuffers(): BufferPresentation[] {
     // `/buffer close`, or a server part. Bounding it in the projection rather than
     // wiring a connection-reset hook means every removal path bounds it, and the
     // connection layer does not have to know what the sidebar renders.
-    for (const id of latestRowById.keys()) {
-        if (!(id in map)) latestRowById.delete(id);
-    }
+    pruneRowMemo(Object.keys(map));
 
     const signature = orderingSignature(visible, orderByServer);
     if (signature !== lastSignature) {
@@ -224,17 +136,6 @@ export const sidebarRows = selectiveDerived(
     sameArrayByReference,
 );
 
-/**
- * How many rows the id memo currently holds.
- *
- * A test-only view, the same kind of window `window.__chatFollowState()` is for the
- * chat viewport. The memo exists so that nothing renders from it, so its size is
- * otherwise invisible — and "this does not grow forever" is the whole claim the prune
- * in `orderedVisibleBuffers` exists to keep true.
- */
-export function memoisedRowCount(): number {
-    return latestRowById.size;
-}
 
 /**
  * Hotlist entries: buffers with unread activity, ordered by `compareBuffersHotlist`

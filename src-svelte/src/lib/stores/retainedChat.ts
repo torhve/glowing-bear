@@ -45,7 +45,8 @@ import { getActiveConnectionProfile } from '#lib/connectionProfile.ts';
 import { conversationKeyFor } from '#lib/stores/conversationDrafts.ts';
 import { activeBufferId, buffers, setActiveBuffer } from '#lib/stores/models.ts';
 import { shouldResume } from '#lib/stores/bufferResume.ts';
-import type { BufferData, BufferLine, Nick, NickGroup, RichTextPart } from '#lib/types.ts';
+import { rowFor } from '#lib/stores/bufferRow.ts';
+import type { BufferData, BufferLine, BufferPresentation, Nick, NickGroup, RichTextPart } from '#lib/types.ts';
 
 /** Why a retained view stopped being displayed. Each is a distinct product
  *  event, and the difference matters for tests: a handoff releases because the
@@ -89,32 +90,7 @@ export interface RetainedBuffer {
 /** The sidebar/chat-facing fields, copied so no retained row shares an array
  *  with a live buffer. `metadata` is deliberately absent: plugin metadata can
  *  carry a function, and a snapshot must not outlive the session that made it. */
-export interface RetainedPresentation {
-    id: string;
-    fullName: string;
-    shortName: string;
-    trimmedName: string | null;
-    nameClasses: string[];
-    prefix: string;
-    number: number;
-    title: RichTextPart[];
-    rtitle: string;
-    hidden: boolean;
-    localUnread: number;
-    unread: number;
-    notification: number;
-    notify: number;
-    serverSortKey: string;
-    indent: boolean;
-    bufferType: number;
-    type: BufferData['type'];
-    plugin: string;
-    server: string;
-    hideBufferLineTimes: boolean;
-    pinned: boolean;
-    active: boolean;
-    localVariables?: Record<string, string>;
-}
+export type RetainedPresentation = BufferPresentation;
 
 export interface RetainedSnapshot {
     /** Monotonic for the app lifetime. A capture is only ever replaced by an
@@ -287,32 +263,19 @@ function copyNicklist(nicklist: Record<string, NickGroup>): Record<string, NickG
     return copy;
 }
 
+/**
+ * The snapshot keeps the row the sidebar was rendering, so it asks `rowFor` for that row
+ * instead of mapping the same 24 fields a second time. The three copies below are
+ * deliberate and are the whole difference: the live session keeps mutating those arrays
+ * after the capture, and a view of a lost connection must not edit itself.
+ */
 function copyPresentation(buffer: BufferData): RetainedPresentation {
+    const row = rowFor(buffer);
     return {
-        id: buffer.id,
-        fullName: buffer.fullName,
-        shortName: buffer.shortName,
-        trimmedName: buffer.trimmedName,
-        nameClasses: [...buffer.nameClasses],
-        prefix: buffer.prefix,
-        number: buffer.number,
-        title: copyRichTextParts(buffer.title),
-        rtitle: buffer.rtitle,
-        hidden: buffer.hidden,
-        localUnread: buffer.localUnread,
-        unread: buffer.unread,
-        notification: buffer.notification,
-        notify: buffer.notify,
-        serverSortKey: buffer.serverSortKey,
-        indent: buffer.indent,
-        bufferType: buffer.bufferType,
-        type: buffer.type,
-        plugin: buffer.plugin,
-        server: buffer.server,
-        hideBufferLineTimes: buffer.hideBufferLineTimes,
-        pinned: buffer.pinned,
-        active: buffer.active,
-        localVariables: buffer.localVariables ? { ...buffer.localVariables } : buffer.localVariables,
+        ...row,
+        nameClasses: [...row.nameClasses],
+        title: copyRichTextParts(row.title),
+        localVariables: row.localVariables ? { ...row.localVariables } : row.localVariables,
     };
 }
 
