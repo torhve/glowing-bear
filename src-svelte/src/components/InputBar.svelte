@@ -119,6 +119,17 @@
   // even when clicking them causes the textarea to lose focus.
   let lastCaretPos = $state(0);
 
+  // When the composer last took focus, and when the send in flight began. A send
+  // that finishes hands focus back by blurring an empty composer, and that blur
+  // Whether a send is in flight, and whether the composer was focused during it.
+  // A completed send blurs an empty composer, but a reader who reached for the next
+  // message while the send flew is using it, so that blur is skipped. A clock cannot
+  // answer this: two events in the same millisecond are indistinguishable, and the
+  // whole question is which of them came first.
+  // Not reactive: nothing renders from either.
+  let sendInFlight = false;
+  let refocusedDuringSend = false;
+
   // WeeChat standard color palette (IRC color codes 00-15)
   const IRC_COLORS = [
     { code: '00', name: 'White', css: '#FFFFFF' },
@@ -283,6 +294,10 @@
     }
 
     composerNotice = null;
+    // From here the send owns the composer's focus until it lands; a focus that
+    // arrives in between is the reader starting the next message.
+    sendInFlight = true;
+    refocusedDuringSend = false;
     const text = message;
 
     // Everything this send may write — history, buffer clearing, the draft it came
@@ -372,10 +387,15 @@
     }
 
     if (inputRef) {
+      // The send no longer owns the composer's focus, whichever way it landed.
+      sendInFlight = false;
       if (unsent.length === 0) {
         inputRef.style.height = 'auto';
-        // Keep focus off a send that finished; the composer is empty.
-        inputRef.blur();
+        // Keep focus off a send that finished; the composer is empty. A composer
+        // focused while this send flew is being used for the next message, so the
+        // blur is skipped: taking that focus away is the difference between a
+        // composer that empties and a composer the reader is typing in.
+        if (!refocusedDuringSend) inputRef.blur();
       } else {
         // Keep focus on a failed send so the text can be corrected and retried, and
         // size the textarea for the text that came back.
@@ -1311,6 +1331,11 @@
         ondragend={handleDragEnd}
         onblur={() => {
           lastCaretPos = inputRef?.selectionStart ?? 0;
+        }}
+        onfocus={() => {
+          // A focus during a send means the reader is starting the next message
+          // while this one is still flying, which the completion blur must respect.
+          if (sendInFlight) refocusedDuringSend = true;
         }}
         data-testid="message-input"
         placeholder={composerPlaceholder}
