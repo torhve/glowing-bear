@@ -36,7 +36,7 @@ import { botSay } from '../helpers/messages';
 import { switchToBuffer } from '../helpers/buffers';
 import { expectInputFocused } from '../helpers/input';
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
-import { describeFocused, focusTransitions, renderFocusLog } from '../helpers/focuslog.ts';
+import { describeFocused, focusTransitions, renderFocusLog } from '../helpers/focuslog';
 
 const COMPOSER = 'message-input';
 const FLOOD_COUNT = 30;

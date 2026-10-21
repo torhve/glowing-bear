@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { createConnectedPage } from '../fixtures/auth';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
-import { waitForChatSettled } from '../helpers/waits.ts';
+import { waitForChatSettled } from '../helpers/waits';
 
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
 

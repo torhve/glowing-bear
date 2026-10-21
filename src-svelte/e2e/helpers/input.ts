@@ -1,5 +1,5 @@
 import { Page, expect } from '@playwright/test';
-import { focusTransitions, renderFocusLog } from './focuslog.ts';
+import { focusTransitions, renderFocusLog } from './focuslog';
 
 export async function fillInput(page: Page, testId: string, text: string) {
     await page.getByTestId(testId).fill(text);

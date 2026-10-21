@@ -1,6 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { fillInput } from './input';
-import { installFocusLog } from './focuslog.ts';
+import { installFocusLog } from './focuslog';
 
 export async function clearSettings(page: Page, preserveLastBuffer = false) {
     await page.evaluate((preserve) => {

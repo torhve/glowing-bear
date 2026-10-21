@@ -222,3 +222,43 @@ it('keeps focus on a failed send so the text can be corrected', async () => {
     expect(focusedEl(), 'a failed send keeps focus where the correction has to happen').toBe(input);
     expect(input.value, 'the unsent text came back').toBe('a message');
 });
+
+it('starts the next send with a clean claim so the composer can still be given up', async () => {
+    const target = render(InputBar as Component<Record<string, unknown>>);
+    openBuffer();
+
+    // First send: claimed during delivery, so it keeps focus.
+    const input = typeInto(target, 'first message');
+    pressEnter(input);
+    input.value = 'typed during delivery';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+    await settleSend(true);
+    expect(focusedEl(), 'the claimed send kept the composer').toBe(input);
+
+    // Second send: nothing claims it. A claim that carried over would leave the
+    // composer holding focus forever after an empty, finished send.
+    input.value = 'second message';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+    pressEnter(input);
+    await settleSend(true);
+
+    expect(input.value, 'the second send emptied the composer').toBe('');
+    expect(focusedEl(), 'a later unclaimed send must still give up focus').not.toBe(input);
+});
+
+it('survives being torn down while a send is in flight', async () => {
+    const target = render(InputBar as Component<Record<string, unknown>>);
+    openBuffer();
+
+    const input = typeInto(target, 'a message');
+    pressEnter(input);
+
+    // A disconnect tears the chat shell down mid-send. The completion lands on a
+    // component that is already gone; it must not throw on the way out.
+    await unmount(components.pop() as Record<string, unknown>);
+    await settleSend(true);
+
+    expect(input.isConnected, 'the composer node is gone').toBe(false);
+});
