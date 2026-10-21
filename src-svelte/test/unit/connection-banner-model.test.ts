@@ -304,6 +304,26 @@ const BANNER_SENTENCES: Array<[Partial<ConnectionError>, string]> = [
     [{ errorMessage: true }, 'WeeChat reported an error.'],
 ];
 
+/**
+ * The banner's precedence as a total order, most actionable fix first.
+ *
+ * Named as a list so the test below can check every pair rather than only
+ * neighbours: a presentation table can be reordered in ways an adjacency check
+ * would miss, and the banner has to pick one sentence whatever combination arrives.
+ */
+const BANNER_PRECEDENCE: Array<keyof ConnectionError> = [
+    'passwordError',
+    'hashAlgorithmDisagree',
+    'clockSkewError',
+    'tlsError',
+    'securityError',
+    'oldWeechatError',
+    'protocolUnansweredError',
+    'serverUnreachable',
+    'uploadError',
+    'errorMessage',
+];
+
 /** A lost session naming `flags`, read as the banner would render it. */
 function bannerNaming(flags: Partial<ConnectionError>): string {
     profile();
@@ -337,30 +357,29 @@ describe('the banner names one cause per failure, in a fixed precedence', () => 
         expect(get(connectionBanner).reason).toBe('Connection lost.');
     });
 
-    it('names the more actionable cause when two arrive together', () => {
-        // Adjacent pairs of the precedence: each entry must beat the one below it,
-        // so the ordering survives as a property rather than as line order.
-        const precedence: Array<keyof ConnectionError> = [
-            'passwordError',
-            'hashAlgorithmDisagree',
-            'clockSkewError',
-            'tlsError',
-            'securityError',
-            'oldWeechatError',
-            'protocolUnansweredError',
-            'serverUnreachable',
-            'uploadError',
-            'errorMessage',
-        ];
+    it('names the more actionable cause for any pair, and one cause when all are set', () => {
+        // Full pairwise, not just neighbours: the precedence is a total order, and a
+        // presentation table can be reordered in ways an adjacency check would miss.
+        const alone = new Map(BANNER_PRECEDENCE.map((flag) => [flag, bannerNaming({ [flag]: true })]));
 
-        for (let i = 0; i < precedence.length - 1; i++) {
-            const wins = precedence[i];
-            const loses = precedence[i + 1];
-            const both = bannerNaming({ [wins]: true, [loses]: true });
+        for (let i = 0; i < BANNER_PRECEDENCE.length; i++) {
+            for (let j = i + 1; j < BANNER_PRECEDENCE.length; j++) {
+                const wins = BANNER_PRECEDENCE[i];
+                const loses = BANNER_PRECEDENCE[j];
 
-            expect(both, `${wins} must be said over ${loses}`).toBe(bannerNaming({ [wins]: true }));
-            expect(both, `${loses} must not be said when ${wins} is set`).not.toBe(bannerNaming({ [loses]: true }));
+                // Two causes must not say the same thing, or the assertion below
+                // could pass while the banner silently conflates them.
+                expect(alone.get(wins), `${wins} and ${loses} say different things`).not.toBe(alone.get(loses));
+                expect(
+                    bannerNaming({ [wins]: true, [loses]: true }),
+                    `${wins} must be said over ${loses}`,
+                ).toBe(alone.get(wins));
+            }
         }
+
+        // Every cause at once: the banner still picks the one it picks alone.
+        const all = Object.fromEntries(BANNER_PRECEDENCE.map((flag) => [flag, true])) as Partial<ConnectionError>;
+        expect(bannerNaming(all)).toBe(alone.get('passwordError'));
     });
 });
 describe('uptime is a property of a live connection', () => {

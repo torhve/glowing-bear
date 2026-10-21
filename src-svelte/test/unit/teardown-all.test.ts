@@ -46,7 +46,8 @@ class FakeSocket {
     constructor(public url: string) {
         FakeSocket.instances.push(this);
     }
-    send() {}
+    sendFrames: string[] = [];
+    send(data: string) { this.sendFrames.push(data); }
     close(code?: number, reason?: string) {
         this.closeCalls.push({ code, reason });
         this.readyState = FakeSocket.CLOSED;
@@ -170,5 +171,44 @@ describe('the transport a teardown does not tear down', () => {
             expect(adapter.isAttemptInProgress(), `${kind} must not leave an attempt in flight`).toBe(false);
             expect(adapter.pendingRetry().active, `${kind} must not leave a retry armed`).toBe(false);
         }
+    });
+});
+
+/**
+ * What a Leave sends to the server, which is nothing.
+ *
+ * `teardownSession()` used to send `Protocol.formatQuit()`. The comment that survived
+ * records why that was wrong twice over: quitting WeeChat is a command the user types
+ * (the composer gates it behind a confirm), and a bare `quit\n` is not part of the
+ * relay's client→command grammar at all, so on 4.10.1 it was inert. The rule is now
+ * stated once on `TransportAdapter.teardown` — this is the assertion behind it, so the
+ * rule is a behaviour rather than prose.
+ */
+describe('a Leave sends no quit to the server', () => {
+    it('closes the session without naming a quit', async () => {
+        const socket = connectLegacy();
+
+        // Let the handshake run, so the assertion below reads a socket that really
+        // carried traffic. Against a socket that never opened, an empty frame list
+        // would pass the filter without proving anything.
+        socket.onopen?.({} as Event);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(
+            socket.sendFrames.length,
+            'the session carried traffic, so the assertion below is not reading an empty list',
+        ).toBeGreaterThan(0);
+
+        facadeDisconnect();
+
+        expect(socket.closeCalls.length, 'a Leave closes the socket').toBeGreaterThan(0);
+        expect(
+            socket.sendFrames.filter((frame) => /^\s*quit\b/i.test(frame)),
+            'leaving must not send a quit — that is a command the user types',
+        ).toEqual([]);
+        // And the filter has teeth: this is exactly the frame `Protocol.formatQuit()`
+        // used to produce.
+        expect(['quit\n'].filter((frame) => /^\s*quit\b/i.test(frame))).toHaveLength(1);
     });
 });

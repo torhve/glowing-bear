@@ -104,3 +104,66 @@ it('re-derives the sidebar order after a wipe instead of answering from the old 
     expect(get(sidebarOrder), 'the new session gets its own order').toEqual([KEY]);
     expect(get(sidebarRows)[0].shortName, 'and its own rows').toBe('#second');
 });
+
+/**
+ * The bound has to hold across a session's life, not just one wipe.
+ *
+ * WeeChat reuses buffer ids across connections, and a long-lived app opens channels,
+ * closes them and reconnects many times. Each is a path where an entry could be left
+ * behind, so the count is checked after every step rather than only at the end: a
+ * prune that fired only when the map went empty would pass the wipe test above and
+ * fail these.
+ */
+it('stays bounded across repeated disconnect-and-reconnect cycles', () => {
+    for (let cycle = 0; cycle < 20; cycle++) {
+        const map: Record<string, BufferData> = {};
+        for (let i = 0; i < 5; i++) {
+            const id = `0x${cycle * 5 + i}`;
+            map[id] = channelBuffer(id, `#c${cycle}-${i}`, i);
+        }
+
+        buffers.set(map);
+        expect(get(sidebarRows), `cycle ${cycle}`).toHaveLength(5);
+        expect(memoisedRowCount(), `cycle ${cycle} grew the memo`).toBe(5);
+
+        resetAppState();
+        // A subscribed sidebar re-projects the moment the wipe publishes; that read
+        // is where the bound is enforced.
+        get(sidebarRows);
+        expect(memoisedRowCount(), `cycle ${cycle} kept rows from a closed session`).toBe(0);
+    }
+});
+
+it('shrinks in step as buffers close, never holding a closed one', () => {
+    const map: Record<string, BufferData> = {};
+    for (let i = 0; i < 30; i++) {
+        const id = `0x${i}`;
+        map[id] = channelBuffer(id, `#c${i}`, i);
+    }
+    buffers.set(map);
+    expect(get(sidebarRows)).toHaveLength(30);
+    expect(memoisedRowCount()).toBe(30);
+
+    for (let i = 0; i < 30; i++) {
+        const remaining = { ...get(buffers) };
+        delete remaining[`0x${i}`];
+        buffers.set(remaining);
+        get(sidebarRows);
+
+        expect(memoisedRowCount(), `${30 - i - 1} buffers still present`).toBe(30 - i - 1);
+    }
+});
+
+it('holds no row for a buffer the sidebar does not render', () => {
+    // Rows enter the memo only when a visible buffer is projected, so a hidden
+    // buffer — `/buffer hidden`, or a filtered server — cannot add to it either.
+    const map: Record<string, BufferData> = {};
+    for (let i = 0; i < 10; i++) {
+        const id = `0x${i}`;
+        map[id] = { ...channelBuffer(id, `#c${i}`, i), hidden: i < 6 };
+    }
+    buffers.set(map);
+
+    expect(get(sidebarRows), 'four visible rows').toHaveLength(4);
+    expect(memoisedRowCount(), 'a hidden buffer has no row to memoise').toBe(4);
+});
