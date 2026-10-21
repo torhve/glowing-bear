@@ -24,12 +24,21 @@ const gitCommit =
 
 // $lib and $components are `#lib` / `#components` subpath imports declared in
 // package.json "imports" — Kit 3 deprecated the `alias` option.
+// BASE_PATH is operator-supplied (Docker/Tauri hosting under a sub-path), and Kit 3
+// accepts only '' or a path that starts with '/'. An env var is a string, so the
+// shape is normalised here instead of passed through unchecked: a bare "glow" would
+// otherwise be a type error at build time or a site with relative asset URLs.
+function kitBase(): '' | `/${string}` {
+    const raw = process.env.BASE_PATH ?? '';
+    if (raw === '') return '';
+    return raw.startsWith('/') ? (raw as `/${string}`) : `/${raw}`;
+}
 export default defineConfig({
     define: { __GIT_COMMIT__: JSON.stringify(gitCommit) },
     plugins: [
         sveltekit({
             preprocess: vitePreprocess(),
-            paths: { base: process.env.BASE_PATH ?? '' },
+            paths: { base: kitBase() },
             adapter: adapter({
                 pages: 'build',
                 assets: 'build',
