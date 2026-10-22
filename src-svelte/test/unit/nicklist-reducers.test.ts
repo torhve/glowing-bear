@@ -18,6 +18,7 @@ import { buffers, activeBufferId } from '#lib/stores/models.ts';
 import { createApiStoreReducers } from '#lib/api/api-store-reducers.ts';
 import type { ApiReducers, BufferSnapshot, LineSnapshot, NickGroupSnapshot, NickSnapshot } from '#lib/api/api-contracts.ts';
 import type { ApiBufferId, ApiGroupId, ApiLineId, ApiNickId } from '#lib/api/api-ids.ts';
+import { apiBuffer, apiLine } from './apiFixtures.ts';
 import type { NickGroup } from '#lib/types.ts';
 
 vi.mock('#lib/notifications.ts', () => ({
@@ -35,18 +36,14 @@ const KEY = String(BUFFER_ID);
 let reducers: ApiReducers;
 
 function bufferSnap(): BufferSnapshot {
-    return {
-        id: BUFFER_ID,
+    return apiBuffer(BUFFER_ID, {
         name: 'irc.glowing-bear.#chan',
         shortName: '#chan',
         number: 2,
-        contentType: 'formatted',
         semanticType: 'channel',
-        hidden: false,
         title: '#chan',
         localVariables: { type: 'channel', plugin: 'irc', server: 'glowing-bear', channel: '#chan' },
-        lastReadLineId: -1,
-    };
+    });
 }
 
 function groupSnap(id: number, overrides: Partial<NickGroupSnapshot> = {}): NickGroupSnapshot {
@@ -77,16 +74,7 @@ function nickSnap(id: number, parentGroupId: number, overrides: Partial<NickSnap
 }
 
 function lineSnap(id: number): LineSnapshot {
-    return {
-        id: id as ApiLineId,
-        epochMs: Date.parse('2026-10-04T12:00:00.000Z'),
-        displayed: true,
-        highlight: false,
-        notifyLevel: 1,
-        prefix: '',
-        message: `msg ${id}`,
-        tags: ['notify_message'],
-    };
+    return apiLine(id, { epochMs: Date.parse('2026-10-04T12:00:00.000Z') });
 }
 
 function groupMap(): Record<string, NickGroup> {
@@ -166,7 +154,7 @@ describe('API nicklist reducers', () => {
         reducers.nickChanged(BUFFER_ID, nickSnap(401, 18, { name: 'alice' }));
         reducers.nickChanged(BUFFER_ID, nickSnap(402, 19, { name: 'bob', prefix: '+' }));
 
-        reducers.nickRemoved(BUFFER_ID, 401);
+        reducers.nickRemoved(BUFFER_ID, 401 as ApiNickId);
 
         expect(nicksIn('opers')).toEqual([]);
         expect(nicksIn('voices')).toEqual(['+bob']);
@@ -176,7 +164,7 @@ describe('API nicklist reducers', () => {
         reducers.nickGroupChanged(BUFFER_ID, groupSnap(20, { name: 'opers' }));
         reducers.nickChanged(BUFFER_ID, nickSnap(403, 20, { name: 'alice' }));
 
-        reducers.nickRemoved(BUFFER_ID, 999_999);
+        reducers.nickRemoved(BUFFER_ID, 999_999 as ApiNickId);
 
         expect(nicksIn('opers')).toEqual(['alice']);
     });
@@ -185,7 +173,7 @@ describe('API nicklist reducers', () => {
         reducers.nickGroupChanged(BUFFER_ID, groupSnap(21, { name: 'opers' }));
         reducers.nickChanged(BUFFER_ID, nickSnap(404, 21, { name: 'alice' }));
 
-        reducers.nickGroupRemoved(BUFFER_ID, 21);
+        reducers.nickGroupRemoved(BUFFER_ID, 21 as ApiGroupId);
 
         expect(groupMap()['opers']).toBeUndefined();
         // The registration is gone too, so the same group id arriving again
@@ -220,9 +208,9 @@ describe('API nicklist reducers', () => {
 
     it.each([
         ['nickGroupChanged', (r: ApiReducers) => r.nickGroupChanged(999 as ApiBufferId, groupSnap(23, { name: 'opers' }))],
-        ['nickGroupRemoved', (r: ApiReducers) => r.nickGroupRemoved(999 as ApiBufferId, 23)],
+        ['nickGroupRemoved', (r: ApiReducers) => r.nickGroupRemoved(999 as ApiBufferId, 23 as ApiGroupId)],
         ['nickChanged', (r: ApiReducers) => r.nickChanged(999 as ApiBufferId, nickSnap(407, 23, { name: 'alice' }))],
-        ['nickRemoved', (r: ApiReducers) => r.nickRemoved(999 as ApiBufferId, 407)],
+        ['nickRemoved', (r: ApiReducers) => r.nickRemoved(999 as ApiBufferId, 407 as ApiNickId)],
     ])('%s for a buffer this session does not have invents nothing', (_name, apply) => {
         apply(reducers);
 

@@ -362,11 +362,8 @@ describe('the banner names one cause per failure, in a fixed precedence', () => 
         // presentation table can be reordered in ways an adjacency check would miss.
         const alone = new Map(BANNER_PRECEDENCE.map((flag) => [flag, bannerNaming({ [flag]: true })]));
 
-        for (let i = 0; i < BANNER_PRECEDENCE.length; i++) {
-            for (let j = i + 1; j < BANNER_PRECEDENCE.length; j++) {
-                const wins = BANNER_PRECEDENCE[i];
-                const loses = BANNER_PRECEDENCE[j];
-
+        for (const [i, wins] of BANNER_PRECEDENCE.entries()) {
+            for (const loses of BANNER_PRECEDENCE.slice(i + 1)) {
                 // Two causes must not say the same thing, or the assertion below
                 // could pass while the banner silently conflates them.
                 expect(alone.get(wins), `${wins} and ${loses} say different things`).not.toBe(alone.get(loses));

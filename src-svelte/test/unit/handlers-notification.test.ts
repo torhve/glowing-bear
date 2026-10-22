@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { buffers, activeBufferId } from '#lib/stores/models.ts';
+import { buffers, activeBufferId, createBuffer } from '#lib/stores/models.ts';
 import type { BufferData } from '#lib/types.ts';
 import type { ProtocolMessage } from '#lib/types.ts';
 
@@ -53,35 +53,14 @@ describe('PM/Highlight Notification Handling', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         // Reset stores
-        const testBuffer: BufferData = {
-            id: '0x100',
-            fullName: '#test',
-            shortName: '#test',
-            hidden: false,
-            trimmedName: 'test',
-            nameClasses: [],
-            prefix: '#',
+        const testBuffer = createBuffer({
+            pointers: ['0x100'],
+            full_name: '#test',
+            short_name: '#test',
             number: 1,
-            title: [],
-            rtitle: '',
-            lines: [],
-            allLinesFetched: false,
-            lastSeen: -1,
-            localUnread: 0,
-            unread: 0,
-            notification: 0,
-            notify: 3,
-            nicklist: {},
-            serverSortKey: 'irc.server.test',
-            indent: true,
-            bufferType: 2,
-            type: 'channel',
-            plugin: 'irc',
-            server: 'server',
-            hideBufferLineTimes: false,
-            pinned: false,
-            active: false
-        };
+            type: 2,
+            local_variables: { type: 'channel', plugin: 'irc', server: 'server' },
+        });
         buffers.set({ '0x100': testBuffer });
         
         activeBufferId.set('');
@@ -107,35 +86,14 @@ describe('PM/Highlight Notification Handling', () => {
     }
 
     it('increments notification count for PM (notify_level=2)', () => {
-        const pmBuffer: BufferData = {
-            id: '0x200',
-            fullName: 'testuser',
-            shortName: 'testuser',
-            hidden: false,
-            trimmedName: 'testuser',
-            nameClasses: [],
-            prefix: '',
+        const pmBuffer = createBuffer({
+            pointers: ['0x200'],
+            full_name: 'testuser',
+            short_name: 'testuser',
             number: 0,
-            title: [],
-            rtitle: '',
-            lines: [],
-            allLinesFetched: false,
-            lastSeen: -1,
-            localUnread: 0,
-            unread: 0,
-            notification: 0,
-            notify: 3,
-            nicklist: {},
-            serverSortKey: 'irc.server.testuser',
-            indent: true,
-            bufferType: 2,
-            type: 'private',
-            plugin: 'irc',
-            server: 'server',
-            hideBufferLineTimes: false,
-            pinned: false,
-            active: false
-        };
+            type: 2,
+            local_variables: { type: 'private', plugin: 'irc', server: 'server' },
+        });
         buffers.update((b: Record<string, BufferData>) => ({ ...b, '0x200': pmBuffer }));
 
         handleBufferLineAdded(createLineMessage('0x200', ['private'], 0, 1, 2));
@@ -190,7 +148,9 @@ describe('PM/Highlight Notification Handling', () => {
 
     it('does not increment notification when buffer notify level is 0 (none)', () => {
         buffers.update((b: Record<string, BufferData>) => {
-            b['0x100'].notify = 0;
+            const target = b['0x100'];
+            if (!target) throw new Error('beforeEach did not create buffer 0x100');
+            target.notify = 0;
             return b;
         });
 

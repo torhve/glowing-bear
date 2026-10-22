@@ -6,7 +6,7 @@ import Nicklist from '#components/Nicklist.svelte';
 import { activeBufferId, buffers, createBuffer } from '#lib/stores/models.ts';
 import type { BufferData, Nick, NickGroup } from '#lib/types.ts';
 
-const components: Component<Record<string, unknown>>[] = [];
+const components: Record<string, unknown>[] = [];
 
 // Mount the real component and retain its owner so each test tears down its effects.
 function render<Props extends Record<string, unknown>>(component: Component<Props>, props: Props) {

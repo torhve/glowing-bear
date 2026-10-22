@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { buffers, activeBufferId } from '#lib/stores/models.ts';
+import { buffers, activeBufferId, createBuffer } from '#lib/stores/models.ts';
 import type { BufferData, ProtocolMessage } from '#lib/types.ts';
 
 // Mock settings store to avoid localStorage access at module load time
@@ -38,34 +38,13 @@ const { handleBufferMoved } = await import('#lib/stores/handlers.ts');
 
 describe('handleBufferMoved', () => {
     function makeBuffer(id: string, number: number): BufferData {
-        return {
-            id,
-            fullName: `#test${number}`,
-            shortName: `#test${number}`,
-            hidden: false,
-            trimmedName: `test${number}`,
-            nameClasses: [],
-            prefix: '#',
+        return createBuffer({
+            pointers: [id],
+            full_name: `#test${number}`,
+            short_name: `#test${number}`,
             number,
-            title: [],
-            rtitle: '',
-            lines: [],
-            allLinesFetched: false,
-            lastSeen: -1,
-            unread: 0,
-            notification: 0,
-            notify: 3,
-            nicklist: {},
-            serverSortKey: `irc.test.#test${number}`,
-            indent: true,
-            bufferType: 0,
-            type: 'channel',
-            plugin: 'irc',
-            server: 'test',
-            hideBufferLineTimes: false,
-            pinned: false,
-            active: false
-        } as BufferData;
+            local_variables: { type: 'channel', plugin: 'irc', server: 'test' },
+        });
     }
 
     function createMovedMessage(bufferPointer: string, newNumber: number): ProtocolMessage {

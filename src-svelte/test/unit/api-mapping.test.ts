@@ -127,7 +127,7 @@ describe('dispatchEvent', () => {
             },
         }, 'buffer'), r);
         expect(r.bufferOpened).toHaveBeenCalledTimes(1);
-        const [snap, lines, groups, nicks] = r.bufferOpened.mock.calls[0]!;
+        const [snap, lines, groups, nicks] = vi.mocked(r.bufferOpened).mock.calls[0]!;
         expect(snap.id).toBe(1759000000000001);
         expect(lines).toHaveLength(1);
         expect(groups).toHaveLength(2); // root + group 5, depth-first
@@ -140,7 +140,7 @@ describe('dispatchEvent', () => {
     it('distinguishes absent sub-resources from empty ones', () => {
         const r = reducers();
         dispatchEvent(event('buffer_opened', 1759000000000001, BUFFER, 'buffer'), r);
-        const [, lines, groups] = r.bufferOpened.mock.calls[0]!;
+        const [, lines, groups] = vi.mocked(r.bufferOpened).mock.calls[0]!;
         expect(lines).toBeUndefined();
         expect(groups).toBeUndefined();
     });
@@ -186,8 +186,8 @@ describe('dispatchEvent', () => {
         dispatchEvent(event('buffer_localvar_removed', 1759000000000001, 'pinned'), r);
         expect(r.bufferUpdated).not.toHaveBeenCalled();
         expect(r.unhandled).toHaveBeenCalledTimes(2);
-        expect(r.unhandled.mock.calls[0][0]).toContain('buffer_title_changed invalid');
-        expect(r.unhandled.mock.calls[1][0]).toContain('buffer_localvar_removed invalid');
+        expect(vi.mocked(r.unhandled).mock.calls[0]![0]).toContain('buffer_title_changed invalid');
+        expect(vi.mocked(r.unhandled).mock.calls[1]![0]).toContain('buffer_localvar_removed invalid');
     });
 
     it('routes buffer_notify_changed from a buffer body or a bare level string', () => {

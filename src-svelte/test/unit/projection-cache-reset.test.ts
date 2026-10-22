@@ -38,6 +38,13 @@ function channelBuffer(id: string, shortName: string, number: number): BufferDat
     });
 }
 
+/** The buffer a previous line put in the store, with a failure that names the key. */
+function live(key: string): BufferData {
+    const buffer = get(buffers)[key];
+    if (!buffer) throw new Error(`live(): no buffer ${key} in the store`);
+    return buffer;
+}
+
 beforeEach(() => {
     buffers.set({});
     activeBufferId.set('');
@@ -74,7 +81,7 @@ it('drops a row when one buffer goes away, keeping the rest', () => {
 
     // `/buffer close` removes one entry from the map; the other must keep its row,
     // or the memo is not a memo.
-    buffers.set({ '0x2': get(buffers)['0x2'] });
+    buffers.set({ '0x2': live('0x2') });
     expect(get(sidebarRows), 'one row left').toHaveLength(1);
     expect(memoisedRowCount(), 'the closed buffer still holds a memoised row').toBe(1);
 });
@@ -86,7 +93,7 @@ it('reuses a row when a clone changed nothing visible', () => {
 
     // A hotlist poll clones every background buffer: a new buffer object, identical
     // values, `localVariables` carried through. That is the case the memo exists for.
-    buffers.set({ [KEY]: { ...get(buffers)[KEY] } });
+    buffers.set({ [KEY]: { ...live(KEY) } });
     const second = get(sidebarRows)[0];
 
     expect(second, 'an unchanged clone rebuilt its row instead of reusing it').toBe(first);
@@ -103,7 +110,7 @@ it('re-derives the sidebar order after a wipe instead of answering from the old 
 
     buffers.set({ [KEY]: channelBuffer(KEY, '#second', 2) });
     expect(get(sidebarOrder), 'the new session gets its own order').toEqual([KEY]);
-    expect(get(sidebarRows)[0].shortName, 'and its own rows').toBe('#second');
+    expect(get(sidebarRows)[0]?.shortName, 'and its own rows').toBe('#second');
 });
 
 /**

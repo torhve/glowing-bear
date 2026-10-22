@@ -65,7 +65,8 @@ const MESSAGES = [
         tags_array: [],
         displayed: 0,
         highlight: 0,
-        bufferType: 'weechat' as const,
+        // A core-buffer line: no `type` local variable, which the app derives as `other`.
+        bufferType: 'other' as const,
     },
 ];
 

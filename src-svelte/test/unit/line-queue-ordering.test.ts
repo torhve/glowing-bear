@@ -89,6 +89,7 @@ function makeDataChanged(bufferId: string, date: number, message: string): Proto
             content: [{
                 buffer: bufferId,
                 date,
+                date_long: date,
                 date_usec: 0,
                 date_printed: date,
                 date_usec_printed: 0,
@@ -133,7 +134,7 @@ describe('line queue ordering + history skip semantics', () => {
 
         const lines = get(buffers)['0xord']!.lines;
         expect(lines.length).toBe(1);
-        expect(lines[0].text).toBe('edited after queue');
+        expect(lines[0]?.text).toBe('edited after queue');
     });
 
     it('commits queued lines before _buffer_cleared (clear wins, no zombie lines)', () => {
@@ -162,8 +163,8 @@ describe('line queue ordering + history skip semantics', () => {
             .toBe(1000);
         // The survivors are the newest ones: skipping the rest is only correct if
         // what is kept is the end of the range, not an arbitrary thousand.
-        expect(buf.lines[0].text).toBe('line message 2001');
-        expect(buf.lines[999].text).toBe('line message 3000');
+        expect(buf.lines[0]?.text).toBe('line message 2001');
+        expect(buf.lines[999]?.text).toBe('line message 3000');
     });
 
     it('a history below the cap is kept whole', () => {
@@ -175,6 +176,6 @@ describe('line queue ordering + history skip semantics', () => {
 
         const buf = get(buffers)['0xord']!;
         expect(buf.lines.length).toBe(50);
-        expect(buf.lines[0].text).toBe('line message 1');
+        expect(buf.lines[0]?.text).toBe('line message 1');
     });
 });

@@ -2,35 +2,19 @@
 // a fixed sleep, and must not leave a timer or a subscription behind.
 import { describe, it, expect, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { buffers } from '#lib/stores/models.ts';
+import { buffers, createBuffer } from '#lib/stores/models.ts';
 import { captureBufferAppearance, waitForFreshBuffer, scriptInstalled } from '#lib/utils.ts';
 import type { BufferData } from '#lib/types.ts';
 
 const GREP = 'grep';
 
 function grepBuffer(id: string, clearEpoch: number): BufferData {
-    return {
-        id,
-        fullName: 'python.grep',
-        shortName: GREP,
-        hidden: false,
-        trimmedName: null,
-        nameClasses: [],
-        prefix: '',
-        number: 3,
-        title: [],
-        rtitle: '',
-        lines: [],
-        allLinesFetched: true,
-        lastSeen: -1,
-        localUnread: 0,
-        unread: 0,
-        notification: 0,
-        bufferType: 1,
-        nicklist: {},
-        nicklistSize: 0,
-        clearEpoch,
-    } as BufferData;
+    // `python.grep` reports no `type` local variable and buffer type 1 (a free
+    // buffer); the search marks the buffer it opened as already fetched.
+    const buffer = createBuffer({ pointers: [id], full_name: 'python.grep', short_name: GREP, number: 3, type: 1 });
+    buffer.allLinesFetched = true;
+    buffer.clearEpoch = clearEpoch;
+    return buffer;
 }
 
 function showGrep(id: string, clearEpoch: number) {
