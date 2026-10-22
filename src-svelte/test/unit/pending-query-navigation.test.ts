@@ -16,6 +16,7 @@ import { handleBufferOpened } from '#lib/stores/handlers.ts';
 import type { ApiReducers, BufferSnapshot } from '#lib/api/api-contracts.ts';
 import type { ApiSessionEvent } from '#lib/api/api-session.ts';
 import type { ApiBufferId } from '#lib/api/api-ids.ts';
+import { apiBuffer, apiLine } from './apiFixtures.ts';
 import type { BufferMessage, ProtocolMessage } from '#lib/types.ts';
 
 const ALPHA_ID = 1759000000000001 as ApiBufferId;
@@ -23,18 +24,14 @@ const BETA_ID = 1759000000000002 as ApiBufferId;
 
 // A query buffer for the same nick on two different IRC servers.
 function querySnapshot(id: ApiBufferId, server: string): BufferSnapshot {
-    return {
-        id,
+    return apiBuffer(id, {
         name: `irc.${server}.alice`,
         shortName: 'alice',
         number: 3,
-        contentType: 'formatted',
         semanticType: 'query',
-        hidden: false,
         title: 'alice',
         localVariables: { type: 'query', plugin: 'irc', server, nick: 'alice' },
-        lastReadLineId: -1,
-    };
+    });
 }
 
 function wireBuffer(id: ApiBufferId, server: string) {

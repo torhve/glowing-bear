@@ -7,9 +7,10 @@ import {
     applyServerReadMarker,
     resolveReadBoundaryAfterHistory,
     isUserMessageLine,
-    type BufferData,
-    type BufferLine,
+    createBuffer,
+    createBufferLine,
 } from '#lib/stores/models.ts';
+import type { BufferData, BufferLine } from '#lib/types.ts';
 
 // Mocks models.ts needs to load without localStorage or browser side effects.
 vi.mock('#lib/stores/settings.ts', () => ({
@@ -56,38 +57,42 @@ vi.mock('#lib/stores/bufferResume.ts', () => ({
 }));
 
 
+/** Every line in this file belongs to the one buffer the tests build. */
+const BUFFER_ID = '10';
+
 function line(id: number, text: string): BufferLine {
-    return {
-        lineId: `weechat:${id}`,
-        text,
-        time: 1000 + id,
-        isUserMessage: true,
-        user: { name: `nick${id % 3}`, colorIndex: 1 },
-    } as BufferLine;
+    return createBufferLine({
+        buffer: BUFFER_ID,
+        date: 1_000 + id,
+        prefix: `nick${id % 3}`,
+        message: text,
+        tags_array: ['irc_privmsg'],
+        displayed: 1,
+        notify_level: 1,
+        highlight: 0,
+        id,
+    });
 }
 
 function makeBuffer(id: string, lines: BufferLine[], hotlistTotal: number = 0): BufferData {
-    const buffer: BufferData = {
-        id,
+    const buffer = createBuffer({
+        pointers: [id],
+        full_name: '#test',
+        short_name: '#test',
         number: 10,
-        fullName: '#test',
-        shortName: '#test',
-        localName: '#test',
-        pointer: id,
-        lines,
-        nicks: [],
-        unread: hotlistTotal,
-        hotlistInfo: hotlistTotal > 0 ? { number: 10, name: '#test', priority: 1, count: hotlistTotal } : null,
-        allLinesFetched: false,
-        contentType: 'channel',
-        type: 'channel',
-    } as BufferData;
+        local_variables: { type: 'channel' },
+    });
+    buffer.lines = lines;
+    // The hotlist total the relay would report for this buffer.
+    buffer.unread = hotlistTotal;
     buffers.set({ ...get(buffers), [id]: buffer });
     return buffer;
 }
 
 function stored(id: string): BufferData {
-    return get(buffers)[id];
+    const buffer = get(buffers)[id];
+    if (!buffer) throw new Error(`stored(): no buffer ${id} in the store`);
+    return buffer;
 }
 
 /**
@@ -98,6 +103,10 @@ function stored(id: string): BufferData {
 function displayedUnread(buffer: BufferData): number {
     const readEndIndex = getReadBoundaryIndex(buffer);
     const messages = buffer.lines.filter(isUserMessageLine);
+    // No boundary known: every retained line counts. Written out, because the
+    // comparison below would otherwise read `null` as index 0 and quietly drop
+    // the first line from the count.
+    if (readEndIndex === null) return messages.length;
     return readEndIndex < messages.length - 1 ? messages.length - Math.max(0, readEndIndex + 1) : 0;
 }
 

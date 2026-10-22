@@ -60,15 +60,15 @@ function openConversation(name: string, nicks: string[] = []): Conversation {
     });
     buffer.nicklist = {
         '000': {
-            group: '000',
-            nicks: nicks.map((name, index) => ({
-                name,
-                visible: 1,
-                sortingKey: name.toLowerCase(),
+            name: '',
+            visible: '',
+            nicks: nicks.map((nick, index) => ({
+                name: nick,
+                visible: nick,
                 prefix: '',
-                prefixColor: '',
-                color: 0,
-                active: 1,
+                prefixClasses: [],
+                nameClasses: [],
+                buffer: fullName,
                 spokeAt: nicks.length - index,
             })),
         },

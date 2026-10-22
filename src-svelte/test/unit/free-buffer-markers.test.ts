@@ -7,25 +7,23 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
 import { buffers, createBuffer } from '#lib/stores/models.ts';
 import { createApiStoreReducers } from '#lib/api/api-store-reducers.ts';
-import type { BufferSnapshot } from '#lib/api/api-contracts.ts';
+import type { BufferContentType, BufferSnapshot } from '#lib/api/api-contracts.ts';
 import type { ApiBufferId } from '#lib/api/api-ids.ts';
+import { apiBuffer } from './apiFixtures.ts';
 
 const FREE_ID = 1759000000000001 as ApiBufferId;
 const CHANNEL_ID = 1759000000000002 as ApiBufferId;
 
-function snapshot(id: ApiBufferId, contentType: string, name: string, server: string): BufferSnapshot {
-    return {
-        id,
+function snapshot(id: ApiBufferId, contentType: BufferContentType, name: string, server: string): BufferSnapshot {
+    return apiBuffer(id, {
         name,
         shortName: name,
         number: 2,
         contentType,
         semanticType: contentType === 'free' ? 'other' : 'channel',
-        hidden: false,
         title: name,
         localVariables: { type: contentType, plugin: contentType === 'free' ? 'exec' : 'irc', server },
-        lastReadLineId: -1,
-    };
+    });
 }
 
 beforeEach(() => {

@@ -19,6 +19,7 @@ import { updateTitle, updateFavico, playNotificationSound } from '#lib/notificat
 import { badgeState, documentTitle } from '#lib/stores/indicatorState.ts';
 import type { ApiReducers, BufferSnapshot, LineSnapshot } from '#lib/api/api-contracts.ts';
 import type { ApiBufferId, ApiLineId } from '#lib/api/api-ids.ts';
+import { apiBuffer, apiLine } from './apiFixtures.ts';
 
 vi.mock('#lib/notifications.ts', () => ({
     createHighlight: vi.fn(),
@@ -36,19 +37,15 @@ const CHAN = String(CHAN_ID);
 const OTHER = String(OTHER_ID);
 
 function chanSnap(): BufferSnapshot {
-    return {
-        id: CHAN_ID,
+    return apiBuffer(CHAN_ID, {
         name: 'irc.glowing-bear.#chan',
         shortName: '#chan',
         number: 2,
-        contentType: 'formatted',
         semanticType: 'channel',
-        hidden: false,
         title: '#chan',
         localVariables: { type: 'channel', plugin: 'irc', server: 'glowing-bear', channel: '#chan' },
-        lastReadLineId: -1,
         notify: 3,
-    };
+    });
 }
 
 function otherSnap(): BufferSnapshot {
@@ -56,29 +53,23 @@ function otherSnap(): BufferSnapshot {
 }
 
 function coreSnap(): BufferSnapshot {
-    return {
-        ...chanSnap(),
-        id: 1759000000000020 as ApiBufferId,
+    // `free` is a content type, not a semantic one; the core buffer is `other`.
+    return apiBuffer(1759000000000020, {
         name: 'core.weechat',
         shortName: 'weechat',
         number: 0,
-        semanticType: 'free',
-        localVariables: {},
-    };
+        title: '#chan',
+        notify: 3,
+    });
 }
 
 function lineSnap(id: number, overrides: Partial<LineSnapshot> = {}): LineSnapshot {
-    return {
-        id: id as ApiLineId,
-        epochMs: Date.parse('2026-10-04T12:00:00.000Z') + id * 1000,
-        displayed: true,
-        highlight: false,
-        notifyLevel: 1,
+    return apiLine(id, {
         prefix: 'alice',
         message: `msg ${id}`,
         tags: ['irc_privmsg', 'notify_message'],
         ...overrides,
-    };
+    });
 }
 
 let reducers: ApiReducers;
@@ -191,7 +182,7 @@ describe('API line batch ordering', () => {
     });
 
     it('produces the same state as applying the same events one line at a time', () => {
-        const events = [
+        const events: Array<{ buffer: ApiBufferId; id: number; notifyLevel: number; highlight?: boolean }> = [
             { buffer: CHAN_ID, id: 1, notifyLevel: 1 },
             { buffer: OTHER_ID, id: 51, notifyLevel: 2 },
             { buffer: CHAN_ID, id: 2, notifyLevel: 0 },
@@ -201,7 +192,7 @@ describe('API line batch ordering', () => {
 
         const batchCounters = armIndicatorCounter();
         // Reference: the pre-batching behaviour, one store write per event.
-        for (const e of events) reducers.lineAdded(e.buffer, lineSnap(e.id, e));
+        for (const e of events) reducers.lineAdded(e.buffer, lineSnap(e.id, { notifyLevel: e.notifyLevel, highlight: e.highlight ?? false }));
         flushApiLineBatch();
         const batched = stateSnapshot(batchCounters);
         batchCounters.stop();
@@ -214,7 +205,7 @@ describe('API line batch ordering', () => {
         seedBuffers();
         const lineCounters = armIndicatorCounter();
         for (const e of events) {
-            reducers.lineAdded(e.buffer, lineSnap(e.id, e));
+            reducers.lineAdded(e.buffer, lineSnap(e.id, { notifyLevel: e.notifyLevel, highlight: e.highlight ?? false }));
             flushApiLineBatch();
         }
         const perLine = stateSnapshot(lineCounters);

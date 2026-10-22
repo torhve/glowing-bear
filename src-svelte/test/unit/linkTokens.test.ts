@@ -27,8 +27,8 @@ describe('tokenizeLinks', () => {
         const result = tokenizeLinks('See https://a.com and https://b.org');
         const links = result.filter(t => t.type === 'link');
         expect(links).toHaveLength(2);
-        expect(links[0].value).toBe('https://a.com');
-        expect(links[1].value).toBe('https://b.org');
+        expect(links[0]!.value).toBe('https://a.com');
+        expect(links[1]!.value).toBe('https://b.org');
     });
 
     it('excludes trailing period from URL', () => {
@@ -79,7 +79,7 @@ describe('tokenizeLinks', () => {
         const result = tokenizeLinks('<script>alert("xss")</script>');
         const links = result.filter(t => t.type === 'link');
         expect(links).toHaveLength(0);
-        expect(result[0].value).toBe('<script>alert("xss")</script>');
+        expect(result[0]!.value).toBe('<script>alert("xss")</script>');
     });
 
     it('does not linkify IRC channel names', () => {
@@ -120,7 +120,7 @@ describe('tokenizeLinks', () => {
         const links = result.filter(t => t.type === 'link');
         // &lt; and &gt; are literal text, only the real URL becomes a link
         expect(links).toHaveLength(1);
-        expect(links[0].value).toBe('http://example.com');
+        expect(links[0]!.value).toBe('http://example.com');
     });
 
     it('strips multiple trailing punctuation characters from URLs', () => {

@@ -16,6 +16,7 @@ import { updateTitle, updateFavico, playNotificationSound, createHighlight } fro
 import { badgeState, documentTitle, type BadgeState } from '#lib/stores/indicatorState.ts';
 import type { ApiReducers, BufferSnapshot, LineSnapshot } from '#lib/api/api-contracts.ts';
 import type { ApiBufferId, ApiLineId } from '#lib/api/api-ids.ts';
+import { apiBuffer, apiLine } from './apiFixtures.ts';
 
 vi.mock('#lib/notifications.ts', () => ({
     createHighlight: vi.fn(),
@@ -31,45 +32,35 @@ const BUFFER_ID = 1759000000000021 as ApiBufferId;
 const KEY = String(BUFFER_ID);
 
 function bufferSnap(): BufferSnapshot {
-    return {
-        id: BUFFER_ID,
+    return apiBuffer(BUFFER_ID, {
         name: 'irc.glowing-bear.#chan',
         shortName: '#chan',
         number: 2,
-        contentType: 'formatted',
         semanticType: 'channel',
-        hidden: false,
         title: '#chan',
         localVariables: { type: 'channel', plugin: 'irc', server: 'glowing-bear', channel: '#chan' },
-        lastReadLineId: -1,
         notify: 3,
-    };
+    });
 }
 
 function coreSnap(): BufferSnapshot {
-    return {
-        ...bufferSnap(),
-        id: 1759000000000020 as ApiBufferId,
+    // `free` is a content type, not a semantic one, and the core buffer reports
+    // formatted content with no plugin type — which is `other` semantically.
+    return apiBuffer(1759000000000020, {
         name: 'core.weechat',
         shortName: 'weechat',
         number: 0,
-        semanticType: 'free',
-        localVariables: {},
-    };
+        notify: 3,
+    });
 }
 
 function lineSnap(id: number, overrides: Partial<LineSnapshot> = {}): LineSnapshot {
-    return {
-        id: id as ApiLineId,
-        epochMs: Date.parse('2026-10-04T12:00:00.000Z') + id * 1000,
-        displayed: true,
-        highlight: false,
-        notifyLevel: 1,
+    return apiLine(id, {
         prefix: 'alice',
         message: `msg ${id}`,
         tags: ['irc_privmsg', 'notify_message'],
         ...overrides,
-    };
+    });
 }
 
 let reducers: ApiReducers;

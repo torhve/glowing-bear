@@ -24,6 +24,7 @@ import { handleBufferLineAdded } from '#lib/stores/handlers.ts';
 import { createApiStoreReducers, flushApiLineBatch } from '#lib/api/api-store-reducers.ts';
 import type { BufferSnapshot, LineSnapshot } from '#lib/api/api-contracts.ts';
 import type { ApiBufferId, ApiLineId } from '#lib/api/api-ids.ts';
+import { apiBuffer, apiLine } from './apiFixtures.ts';
 import type { ProtocolMessage } from '#lib/types.ts';
 
 vi.mock('#lib/notifications.ts', () => ({
@@ -45,9 +46,9 @@ const API_KEY = String(API_ID);
 interface Case {
     label: string;
     /** The buffer's own notify setting: 0 none, 1 message, 2 highlight, 3 all. */
-    notify: number;
+    notify: 0 | 1 | 2 | 3;
     /** The line's notify level: 0 backfill, 1 message, 2 private, 3 highlight. */
-    notifyLevel: number;
+    notifyLevel: 0 | 1 | 2 | 3;
     highlight: boolean;
     /** local_variables.type, the semantic buffer type both transports read. */
     bufferType: string;
@@ -145,19 +146,15 @@ function legacyTally(c: Case): Counters {
 function apiTally(c: Case): Counters {
     reset();
     const reducers = createApiStoreReducers();
-    const snapshot: BufferSnapshot = {
-        id: API_ID,
+    const snapshot = apiBuffer(API_ID, {
         name: 'irc.test.#chan',
         shortName: '#chan',
         number: 2,
-        contentType: 'formatted',
         semanticType: c.bufferType as BufferSnapshot['semanticType'],
-        hidden: false,
         title: '#chan',
         localVariables: { type: c.bufferType, plugin: c.plugin, server: 'test' },
-        lastReadLineId: -1,
         notify: c.notify,
-    };
+    });
     reducers.buffers([snapshot]);
     // The bootstrap auto-selects a default buffer to view, which would make every
     // case here an active buffer and tally nothing. The selection has to be
@@ -165,8 +162,7 @@ function apiTally(c: Case): Counters {
     activeBufferId.set(c.active ? API_KEY : '');
     if (!c.boundaryKnown) get(buffers)[API_KEY]!.readBoundaryKnown = false;
 
-    const line: LineSnapshot = {
-        id: 50_001 as ApiLineId,
+    const line = apiLine(50_001, {
         epochMs: 1_700_000_000_000,
         displayed: c.displayed,
         highlight: c.highlight,
@@ -174,7 +170,7 @@ function apiTally(c: Case): Counters {
         prefix: 'Nick',
         message: 'a line',
         tags: ['notify_message'],
-    };
+    });
 
     const token = c.syncing ? beginSyncPhase() : null;
     try {

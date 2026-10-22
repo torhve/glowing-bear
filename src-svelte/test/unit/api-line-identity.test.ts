@@ -13,6 +13,7 @@ import { buffers, activeBufferId, recalculateLinesPerScreen } from '#lib/stores/
 import { createApiStoreReducers, flushApiLineBatch } from '#lib/api/api-store-reducers.ts';
 import type { ApiReducers, BufferSnapshot, LineSnapshot } from '#lib/api/api-contracts.ts';
 import type { ApiBufferId, ApiLineId } from '#lib/api/api-ids.ts';
+import { apiBuffer, apiLine } from './apiFixtures.ts';
 
 vi.mock('#lib/notifications.ts', () => ({
     createHighlight: vi.fn(),
@@ -28,33 +29,19 @@ const BUFFER_ID = 1759000000000009 as ApiBufferId;
 const KEY = String(BUFFER_ID);
 
 function bufferSnap(): BufferSnapshot {
-    return {
-        id: BUFFER_ID,
+    return apiBuffer(BUFFER_ID, {
         name: 'irc.glowing-bear.#chan',
         shortName: '#chan',
         number: 2,
-        contentType: 'formatted',
         semanticType: 'channel',
-        hidden: false,
         title: '#chan',
         localVariables: { type: 'channel', plugin: 'irc', server: 'glowing-bear', channel: '#chan' },
-        lastReadLineId: -1,
         notify: 3,
-    };
+    });
 }
 
 function lineSnap(id: number, overrides: Partial<LineSnapshot> = {}): LineSnapshot {
-    return {
-        id: id as ApiLineId,
-        epochMs: Date.parse('2026-10-04T12:00:00.000Z') + id * 1000,
-        displayed: true,
-        highlight: false,
-        notifyLevel: 1,
-        prefix: 'alice',
-        message: `msg ${id}`,
-        tags: ['notify_message'],
-        ...overrides,
-    };
+    return apiLine(id, { prefix: 'alice', tags: ['notify_message'], ...overrides });
 }
 
 let reducers: ApiReducers;

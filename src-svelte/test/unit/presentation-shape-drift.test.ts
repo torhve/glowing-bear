@@ -67,7 +67,7 @@ function changeField<K extends keyof BufferData>(key: K, value: BufferData[K]): 
 beforeEach(() => {
     buffers.set({});
     activeBufferId.set('');
-    releaseRetainedSnapshot('test-reset');
+    releaseRetainedSnapshot('explicit-leave');
     setActiveConnectionProfile('relay.example', 443, undefined, true);
     seedBuffer();
 });

@@ -12,6 +12,7 @@ import { dispatchEvent } from '#lib/api/api-mapping.ts';
 import type { ApiReducers, BufferSnapshot, LineSnapshot, HotlistSnapshot } from '#lib/api/api-contracts.ts';
 import type { ApiSessionEvent } from '#lib/api/api-session.ts';
 import type { ApiBufferId, ApiGroupId, ApiLineId, ApiNickId } from '#lib/api/api-ids.ts';
+import { apiBuffer, apiLine } from './apiFixtures.ts';
 import { createHighlight } from '#lib/notifications.ts';
 
 // The reducer's alert path must be observable without OS notifications:
@@ -33,33 +34,21 @@ const BUFFER_ID = 1759000000000001 as ApiBufferId;
 const KEY = String(BUFFER_ID);
 
 function bufferSnap(overrides: Partial<BufferSnapshot> = {}): BufferSnapshot {
-    return {
-        id: BUFFER_ID,
+    return apiBuffer(BUFFER_ID, {
         name: 'irc.glowing-bear.#chan',
         shortName: '#chan',
         number: 2,
-        contentType: 'formatted',
         semanticType: 'channel',
-        hidden: false,
         title: '#chan',
         localVariables: { type: 'channel', plugin: 'irc', server: 'glowing-bear', channel: '#chan' },
-        lastReadLineId: -1,
         ...overrides,
-    };
+    });
 }
 
 function lineSnap(id: number, overrides: Partial<LineSnapshot> = {}): LineSnapshot {
-    return {
-        id: id as ApiLineId,
-        epochMs: Date.parse('2026-10-04T12:00:00.000Z'),
-        displayed: true,
-        highlight: false,
-        notifyLevel: 1,
-        prefix: '',
-        message: `msg ${id}`,
-        tags: ['notify_message'],
-        ...overrides,
-    };
+    // This file's cases compare lines against each other, not against a clock,
+    // so they all share one timestamp.
+    return apiLine(id, { epochMs: Date.parse('2026-10-04T12:00:00.000Z'), ...overrides });
 }
 
 function event(name: string, body: unknown, bodyType: string | null = null, bufferId: number = BUFFER_ID): ApiSessionEvent {
@@ -372,7 +361,7 @@ describe('line tally gates (ported legacy rules)', () => {
         // A highlight races in live before the hotlist baseline is applied...
         addLine(BUFFER_ID, lineSnap(1, { notifyLevel: 3, highlight: true, tags: ['notify_highlight'] }));
         // ...and the baseline (generated after the line) already includes it.
-        reducers.hotlist(new Map([[BUFFER_ID, { priority: 3, counts: { low: 0, message: 0, private: 0, highlight: 1 } }]]));
+        reducers.hotlist(new Map([[BUFFER_ID, { date: '2026-10-04T12:00:00.000Z', priority: 3, counts: { low: 0, message: 0, private: 0, highlight: 1 } }]]));
         const buf = get(buffers)[KEY]!;
         expect(buf.notification).toBe(1);
         expect(buf.localUnread).toBe(1);
@@ -388,7 +377,7 @@ describe('line tally gates (ported legacy rules)', () => {
         get(buffers)[KEY]!.readBoundaryKnown = false;
         // Baseline covers two lines this client never saw live (arrived before
         // sync)...
-        reducers.hotlist(new Map([[BUFFER_ID, { priority: 1, counts: { low: 0, message: 2, private: 0, highlight: 0 } }]]));
+        reducers.hotlist(new Map([[BUFFER_ID, { date: '2026-10-04T12:00:00.000Z', priority: 1, counts: { low: 0, message: 2, private: 0, highlight: 0 } }]]));
         // ...and a third line races in after the baseline was generated.
         addLine(BUFFER_ID, lineSnap(3));
         let buf = get(buffers)[KEY]!;
@@ -397,7 +386,7 @@ describe('line tally gates (ported legacy rules)', () => {
         expect(getEffectiveUnread(buf)).toBe(2);
         endSyncPhase(token);
         // The periodic poll re-reads the hotlist, which now counts all three.
-        reducers.hotlist(new Map([[BUFFER_ID, { priority: 1, counts: { low: 0, message: 3, private: 0, highlight: 0 } }]]));
+        reducers.hotlist(new Map([[BUFFER_ID, { date: '2026-10-04T12:00:00.000Z', priority: 1, counts: { low: 0, message: 3, private: 0, highlight: 0 } }]]));
         buf = get(buffers)[KEY]!;
         expect(buf.unread).toBe(3);
         expect(getEffectiveUnread(buf)).toBe(3);
@@ -544,6 +533,7 @@ describe('hotlist baseline', () => {
         addLine(BUFFER_ID, lineSnap(1)); // localUnread 1, unread 1
         const map = new Map<ApiBufferId, HotlistSnapshot>([[BUFFER_ID, {
             priority: 3,
+            date: '2026-10-04T12:00:00.000Z',
             counts: { low: 0, message: 5, private: 1, highlight: 2 },
         }]]);
         reducers.hotlist(map);
@@ -557,7 +547,7 @@ describe('hotlist baseline', () => {
     it('skips active and previous buffers (setActiveBuffer owns them)', () => {
         reducers.buffers([bufferSnap()]);
         activeBufferId.set(KEY);
-        reducers.hotlist(new Map([[BUFFER_ID, { priority: 1, counts: { low: 0, message: 9, private: 0, highlight: 0 } }]]));
+        reducers.hotlist(new Map([[BUFFER_ID, { date: '2026-10-04T12:00:00.000Z', priority: 1, counts: { low: 0, message: 9, private: 0, highlight: 0 } }]]));
         expect(get(buffers)[KEY]!.unread).toBe(0);
     });
 
@@ -565,7 +555,7 @@ describe('hotlist baseline', () => {
         reducers.buffers([bufferSnap()]);
         activeBufferId.set('');
         get(buffers)[KEY]!.readBoundaryKnown = false;
-        reducers.hotlist(new Map([[BUFFER_ID, { priority: 2, counts: { low: 0, message: 4, private: 0, highlight: 0 } }]]));
+        reducers.hotlist(new Map([[BUFFER_ID, { date: '2026-10-04T12:00:00.000Z', priority: 2, counts: { low: 0, message: 4, private: 0, highlight: 0 } }]]));
         expect(get(buffers)[KEY]!.pendingReadBoundaryUnread).toBe(4);
     });
 });

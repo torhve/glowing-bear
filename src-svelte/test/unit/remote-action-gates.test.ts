@@ -92,7 +92,7 @@ function captureOneSession(): void {
 beforeEach(() => {
     buffers.set({});
     activeBufferId.set('');
-    releaseRetainedSnapshot('test-reset');
+    releaseRetainedSnapshot('explicit-leave');
     clearActiveConnectionProfile();
     setConnectionStatus('disconnected');
 });

@@ -24,7 +24,7 @@ describe('buildMentionText', () => {
     it('replaces trailing colon with space when nick matches, adds new nick with colon', () => {
         // AngularJS: "Alice:" → replace ":" with " " → "Alice " → append "Bob: " → "Alice Bob: "
         const nicks: Nick[] = [
-            { prefix: '@', visible: 'Alice', name: 'Alice', prefixClasses: [], nameClasses: [] },
+            { prefix: '@', visible: 'Alice', name: 'Alice', prefixClasses: [], nameClasses: [], buffer: 'irc.gbtest.#chan' },
         ];
         const result = buildMentionText('Alice:', 'Bob', nicks);
         expect(result.text).toBe('Alice Bob: ');
@@ -33,7 +33,7 @@ describe('buildMentionText', () => {
 
     it('does not replace trailing colon if nick not in nicklist', () => {
         const nicks: Nick[] = [
-            { prefix: '@', visible: 'Alice', name: 'Alice', prefixClasses: [], nameClasses: [] },
+            { prefix: '@', visible: 'Alice', name: 'Alice', prefixClasses: [], nameClasses: [], buffer: 'irc.gbtest.#chan' },
         ];
         const result = buildMentionText('Charlie:', 'Bob', nicks);
         expect(result.text).toBe('Charlie: Bob');
@@ -43,7 +43,7 @@ describe('buildMentionText', () => {
     it('handles multi-word input ending with colon matching nick', () => {
         // "hello Alice:" → replace ":" with " " → "hello Alice " → append "Bob: "
         const nicks: Nick[] = [
-            { prefix: '@', visible: 'Alice', name: 'Alice', prefixClasses: [], nameClasses: [] },
+            { prefix: '@', visible: 'Alice', name: 'Alice', prefixClasses: [], nameClasses: [], buffer: 'irc.gbtest.#chan' },
         ];
         const result = buildMentionText('hello Alice:', 'Bob', nicks);
         expect(result.text).toBe('hello Alice Bob: ');
@@ -53,7 +53,7 @@ describe('buildMentionText', () => {
     it('trims trailing whitespace before checking colon suffix', () => {
         // "Alice:  " → trimEnd → "Alice:" → replace ":" with " " → "Alice " → append "Bob: "
         const nicks: Nick[] = [
-            { prefix: '@', visible: 'Alice', name: 'Alice', prefixClasses: [], nameClasses: [] },
+            { prefix: '@', visible: 'Alice', name: 'Alice', prefixClasses: [], nameClasses: [], buffer: 'irc.gbtest.#chan' },
         ];
         const result = buildMentionText('Alice:  ', 'Bob', nicks);
         expect(result.text).toBe('Alice Bob: ');

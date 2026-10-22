@@ -7,6 +7,7 @@ import {
 import { createApiStoreReducers } from '#lib/api/api-store-reducers.ts';
 import type { BufferSnapshot } from '#lib/api/api-contracts.ts';
 import type { ApiBufferId } from '#lib/api/api-ids.ts';
+import { apiBuffer, apiLine } from './apiFixtures.ts';
 import { handleBufferCleared } from '#lib/stores/handlers.ts';
 import type { ProtocolMessage } from '#lib/types.ts';
 
@@ -23,11 +24,11 @@ import type { ProtocolMessage } from '#lib/types.ts';
 const GREP_ID = 1759000000000077 as ApiBufferId;
 
 function snapshot(id: ApiBufferId, name: string): BufferSnapshot {
-    return {
-        id, name, shortName: name, number: 4, contentType: 'formatted',
-        semanticType: 'channel', hidden: false, title: name,
-        localVariables: { type: 'channel', plugin: 'python' }, lastReadLineId: -1,
-    };
+    return apiBuffer(id, {
+        name, shortName: name, number: 4,
+        semanticType: 'channel', title: name,
+        localVariables: { type: 'channel', plugin: 'python' },
+    });
 }
 
 describe('what counts as an established newest window', () => {
