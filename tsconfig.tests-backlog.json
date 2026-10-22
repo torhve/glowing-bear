@@ -1,0 +1,6 @@
+{
+  // The same scope as tsconfig.tests.json without the backlog exclusions, so the number of
+  // remaining errors is visible. Not a gate: `npm run check:tests:backlog`.
+  "extends": "./tsconfig.tests.json",
+  "exclude": ["src-svelte/test/unit/perf", "src-svelte/test/unit/prof"]
+}

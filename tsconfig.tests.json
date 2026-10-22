@@ -1,0 +1,82 @@
+{
+  // Unit tests are typechecked — the files that are clean today, at least.
+  //
+  // The %d files excluded below are the backlog recorded in plan-code-clean.md under stage
+  // S10: their errors are fixtures hand-built with fields the production types now require
+  // (`BufferSnapshot` without `modes`, `LineSnapshot` without `y`), which needs a builder per
+  // fixture rather than a cast. Every other unit test file is checked by `npm run check:tests`,
+  // so a new test cannot arrive type-unchecked. This list must only shrink;
+  // `npm run check:tests:backlog` prints what the excluded files still report.
+  //
+  // `perf/` and `prof/` are excluded because `npm test` never runs them; `npm run test:perf`
+  // is its own gate.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false,
+    // The old-protocol fixture is JavaScript, and it is imported by tests on both sides of the
+    // backlog. Its own type errors belong to that fixture, not to the tests asking for it.
+    "checkJs": false
+  },
+  "include": ["src-svelte/test/unit/**/*.ts"],
+  "exclude": [
+    "src-svelte/test/unit/perf",
+    "src-svelte/test/unit/prof",
+    "src-svelte/test/unit/api-client.test.ts",
+    "src-svelte/test/unit/api-features.test.ts",
+    "src-svelte/test/unit/api-line-batch-effects.test.ts",
+    "src-svelte/test/unit/api-line-batch-ordering.test.ts",
+    "src-svelte/test/unit/api-line-identity.test.ts",
+    "src-svelte/test/unit/api-mapping.test.ts",
+    "src-svelte/test/unit/api-store-reducers.test.ts",
+    "src-svelte/test/unit/buffer-identity-contracts.test.ts",
+    "src-svelte/test/unit/buffer-line-data-changed.test.ts",
+    "src-svelte/test/unit/buffer-moved.test.ts",
+    "src-svelte/test/unit/buffer-search-sort.test.ts",
+    "src-svelte/test/unit/build-mention.test.ts",
+    "src-svelte/test/unit/connection-banner-model.test.ts",
+    "src-svelte/test/unit/connection-lifecycle.test.ts",
+    "src-svelte/test/unit/content-search-wait.test.ts",
+    "src-svelte/test/unit/dependency-audit.test.ts",
+    "src-svelte/test/unit/dialog-header-contract.test.ts",
+    "src-svelte/test/unit/formatted-time-removal.test.ts",
+    "src-svelte/test/unit/free-buffer-markers.test.ts",
+    "src-svelte/test/unit/handlers-notification.test.ts",
+    "src-svelte/test/unit/hasunread-filter.test.ts",
+    "src-svelte/test/unit/history-freshness-invariants.test.ts",
+    "src-svelte/test/unit/history-limit-growth.test.ts",
+    "src-svelte/test/unit/history-window-placement.test.ts",
+    "src-svelte/test/unit/imgur.test.ts",
+    "src-svelte/test/unit/indicator-lifecycle.test.ts",
+    "src-svelte/test/unit/input-bar-async-ownership.test.ts",
+    "src-svelte/test/unit/input-bar-send-ownership.test.ts",
+    "src-svelte/test/unit/keyboard-digit-reading.test.ts",
+    "src-svelte/test/unit/line-batch-indicators.test.ts",
+    "src-svelte/test/unit/line-identity.test.ts",
+    "src-svelte/test/unit/line-queue-ordering.test.ts",
+    "src-svelte/test/unit/linkTokens.test.ts",
+    "src-svelte/test/unit/nicklist-reducers.test.ts",
+    "src-svelte/test/unit/nicklist-root-rows.test.ts",
+    "src-svelte/test/unit/notification-sync-gate.test.ts",
+    "src-svelte/test/unit/pending-query-navigation.test.ts",
+    "src-svelte/test/unit/presentation-shape-drift.test.ts",
+    "src-svelte/test/unit/projection-cache-reset.test.ts",
+    "src-svelte/test/unit/readmarker-history-fetch.test.ts",
+    "src-svelte/test/unit/readmarker.test.ts",
+    "src-svelte/test/unit/relay-status-buffer.test.ts",
+    "src-svelte/test/unit/remote-action-gates.test.ts",
+    "src-svelte/test/unit/retained-chat.test.ts",
+    "src-svelte/test/unit/retained-handoff.test.ts",
+    "src-svelte/test/unit/retry-scheduler.test.ts",
+    "src-svelte/test/unit/settings-theme-migration.test.ts",
+    "src-svelte/test/unit/setup.ts",
+    "src-svelte/test/unit/sync-flag-lifecycle.test.ts",
+    "src-svelte/test/unit/tally-parity.test.ts",
+    "src-svelte/test/unit/teardown-all.test.ts",
+    "src-svelte/test/unit/toast.test.ts",
+    "src-svelte/test/unit/utils.test.ts",
+    "src-svelte/test/unit/weechat-handshake.test.ts",
+    "src-svelte/test/unit/weechat-parity.test.ts",
+    "src-svelte/test/unit/weechat-rich-parity.test.ts"
+  ]
+}

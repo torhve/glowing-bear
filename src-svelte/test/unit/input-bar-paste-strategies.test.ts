@@ -104,6 +104,19 @@ class RecordingFileReader {
         RecordingFileReader.reads.push(this);
     }
 
+    /**
+     * The one read this test expects. Reading `reads[0]` directly is `undefined` under
+     * `noUncheckedIndexedAccess`, and naming the broken invariant here is a better
+     * failure than a suppressed type error.
+     */
+    static sole(): RecordingFileReader {
+        const [only] = RecordingFileReader.reads;
+        if (!only) {
+            throw new Error(`expected exactly one FileReader read, got ${RecordingFileReader.reads.length}`);
+        }
+        return only;
+    }
+
     readAsDataURL(): void {
         /* the read is started; the test finishes it */
     }
@@ -158,7 +171,7 @@ it('previews an image the clipboard gave as a Firefox file', async () => {
     expect(event.defaultPrevented, 'a paste that became an image is consumed').toBe(true);
     expect(RecordingFileReader.reads).toHaveLength(1);
 
-    RecordingFileReader.reads[0].finish('data:image/png;base64,AAA');
+    RecordingFileReader.sole().finish('data:image/png;base64,AAA');
     await settle();
 
     expect(target.querySelector('[data-testid="preview-item"]')).not.toBeNull();

@@ -65,6 +65,19 @@ class RecordingFileReader {
         RecordingFileReader.reads.push(this);
     }
 
+    /**
+     * The one read this test expects. Reading `reads[0]` directly is `undefined` under
+     * `noUncheckedIndexedAccess`, and naming the broken invariant here is a better
+     * failure than a suppressed type error.
+     */
+    static sole(): RecordingFileReader {
+        const [only] = RecordingFileReader.reads;
+        if (!only) {
+            throw new Error(`expected exactly one FileReader read, got ${RecordingFileReader.reads.length}`);
+        }
+        return only;
+    }
+
     readAsDataURL(file: File): void {
         this.file = file;
     }
@@ -137,7 +150,7 @@ it('reads Firefox clipboard files synchronously, before the caller awaits anythi
     // caller gets and the file list comes back empty.
     expect(images.files).toEqual([]);
     expect(RecordingFileReader.reads).toHaveLength(1);
-    expect(RecordingFileReader.reads[0].file?.type).toBe('image/png');
+    expect(RecordingFileReader.sole().file?.type).toBe('image/png');
 });
 
 it('keeps the Firefox files ahead of the items API when both carry content', () => {
@@ -202,13 +215,13 @@ it('counts an image whose content came back empty as no content, not as an error
 it('yields nothing for a Firefox file whose read fails', async () => {
     const images = readClipboardImages(clipboard({ files: [fileOfType('image/png')] }));
 
-    RecordingFileReader.reads[0].fail();
+    RecordingFileReader.sole().fail();
     await expect(images.dataUrls).resolves.toEqual([]);
 });
 
 it('resolves Firefox reads only once their content exists', async () => {
     const images = readClipboardImages(clipboard({ files: [fileOfType('image/png')] }));
-    const first = RecordingFileReader.reads[0];
+    const first = RecordingFileReader.sole();
 
     const resolved = images.dataUrls.then((urls) => urls);
     first.finish('data:image/png;base64,AAA');
