@@ -41,8 +41,8 @@ describe('sortBuffers with pinned', () => {
         const pinned = makeBuffer({ shortName: '#pinned', number: 5, pinned: true });
         const unpinned = makeBuffer({ shortName: '#unpinned', number: 2, pinned: false });
         const result = sortBuffers([unpinned, pinned], false);
-        expect(result[0].shortName).toBe('#pinned');
-        expect(result[1].shortName).toBe('#unpinned');
+        expect(result[0]?.shortName).toBe('#pinned');
+        expect(result[1]?.shortName).toBe('#unpinned');
     });
 
     it('preserves relative order among pinned buffers', () => {
@@ -50,9 +50,9 @@ describe('sortBuffers with pinned', () => {
         const p2 = makeBuffer({ shortName: '#p2', number: 3, pinned: true });
         const u1 = makeBuffer({ shortName: '#u1', number: 1 });
         const result = sortBuffers([p1, p2, u1], false);
-        expect(result[0].shortName).toBe('#p2');
-        expect(result[1].shortName).toBe('#p1');
-        expect(result[2].shortName).toBe('#u1');
+        expect(result[0]?.shortName).toBe('#p2');
+        expect(result[1]?.shortName).toBe('#p1');
+        expect(result[2]?.shortName).toBe('#u1');
     });
 
     it('preserves relative order among unpinned buffers', () => {
@@ -60,9 +60,9 @@ describe('sortBuffers with pinned', () => {
         const u1 = makeBuffer({ shortName: '#u1', number: 5 });
         const u2 = makeBuffer({ shortName: '#u2', number: 3 });
         const result = sortBuffers([p1, u1, u2], false);
-        expect(result[0].shortName).toBe('#p1');
-        expect(result[1].shortName).toBe('#u2');
-        expect(result[2].shortName).toBe('#u1');
+        expect(result[0]?.shortName).toBe('#p1');
+        expect(result[1]?.shortName).toBe('#u2');
+        expect(result[2]?.shortName).toBe('#u1');
     });
 
     it('sorts all pinned before all unpinned (with server grouping)', () => {
@@ -74,11 +74,11 @@ describe('sortBuffers with pinned', () => {
         const result = sortBuffers([serverA_unpinned, serverA_pinned, serverB_unpinned, serverB_pinned], true);
 
         // Pinned tier first (sorted by plugin+server, then number within each server)
-        expect(result[0].shortName).toBe('A-pinned');
-        expect(result[1].shortName).toBe('B-pinned');
+        expect(result[0]?.shortName).toBe('A-pinned');
+        expect(result[1]?.shortName).toBe('B-pinned');
         // Unpinned tier second
-        expect(result[2].shortName).toBe('A-unpinned');
-        expect(result[3].shortName).toBe('B-unpinned');
+        expect(result[2]?.shortName).toBe('A-unpinned');
+        expect(result[3]?.shortName).toBe('B-unpinned');
     });
 
     it('all buffers work correctly when none are pinned', () => {

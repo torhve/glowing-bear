@@ -28,8 +28,10 @@ import {
 import { createApiStoreReducers, flushApiLineBatch, storeKeyForBufferId } from '#lib/api/api-store-reducers.ts';
 import { fetchHistory } from '#lib/api/api-features.ts';
 import type { ApiSession, ApiSessionResponse } from '#lib/api/api-session.ts';
+import type { ApiBufferId } from '#lib/api/api-ids.ts';
+import { apiBuffer, apiLine as fixtureLine } from './apiFixtures.ts';
 
-const API_BUFFER_ID = 77;
+const API_BUFFER_ID = 77 as ApiBufferId;
 
 /** Wire rows as the relay returns them; `id` is WeeChat's line number. */
 function wireLine(id: number, message = `msg ${id}`) {
@@ -39,11 +41,11 @@ function wireLine(id: number, message = `msg ${id}`) {
     };
 }
 
+/** A live line as the API transport delivers it, on the shared fixture builder. */
 function apiLine(id: number, message = `msg ${id}`) {
-    return {
-        id: id as never, epochMs: 1, displayed: true, highlight: false, notifyLevel: 1,
-        prefix: 'bob', message, tags: ['irc_privmsg'],
-    };
+    return fixtureLine(id, {
+        epochMs: 1, prefix: 'bob', message, tags: ['irc_privmsg'],
+    });
 }
 
 function fakeSession(body: unknown[]): ApiSession {
@@ -62,22 +64,26 @@ const WECHAT_LINE_ID = 4242;
 
 beforeEach(() => {
     buffers.set({});
-    const snap = {
-        id: API_BUFFER_ID as never, name: 'irc.glowing-bear.#chan', shortName: '#chan', number: 2,
-        contentType: 'formatted', semanticType: 'channel', hidden: false, title: '',
-        localVariables: { type: 'channel', plugin: 'irc', server: 'glowing-bear' }, lastReadLineId: -1,
-    };
-    createApiStoreReducers().buffers([snap as never]);
+    const snap = apiBuffer(API_BUFFER_ID, {
+        name: 'irc.glowing-bear.#chan', shortName: '#chan', number: 2,
+        semanticType: 'channel', title: '',
+        localVariables: { type: 'channel', plugin: 'irc', server: 'glowing-bear' },
+    });
+    createApiStoreReducers().buffers([snap]);
 });
 
 describe('a line built by one site is found by the other', () => {
     it('resolves a marker against a line the legacy path built', () => {
         const buffer = createBuffer({ full_name: 'irc.gbtest.#chan', short_name: '#chan' });
         buffer.lines = [
-            createBufferLine({ buffer: buffer.id, date: 1, message: 'older', tags_array: ['irc_privmsg'] }),
+            createBufferLine({
+                buffer: buffer.id, date: 1, message: 'older', tags_array: ['irc_privmsg'],
+                displayed: 1, highlight: 0,
+            }),
             createBufferLine({
                 buffer: buffer.id, date: 2, id: WECHAT_LINE_ID,
                 message: 'marked', tags_array: ['irc_privmsg'],
+                displayed: 1, highlight: 0,
             }),
         ];
 
@@ -112,7 +118,7 @@ describe('a line built by one site is found by the other', () => {
         const key = storeKeyForBufferId(API_BUFFER_ID);
 
         // History first, then a live line for the same id.
-        await fetchHistory(fakeSession([wireLine(5), wireLine(6)]), { bufferId: API_BUFFER_ID as never, count: 2 });
+        await fetchHistory(fakeSession([wireLine(5), wireLine(6)]), { bufferId: API_BUFFER_ID, count: 2 });
         reducers.lineAdded(API_BUFFER_ID, apiLine(6));
         flushApiLineBatch();
         expect(get(buffers)[key]!.lines, 'the live race does not add a row').toHaveLength(2);
@@ -120,7 +126,7 @@ describe('a line built by one site is found by the other', () => {
         // Live first, then a history page containing the same id.
         reducers.lineAdded(API_BUFFER_ID, apiLine(7));
         flushApiLineBatch();
-        await fetchHistory(fakeSession([wireLine(7)]), { bufferId: API_BUFFER_ID as never, count: 1 });
+        await fetchHistory(fakeSession([wireLine(7)]), { bufferId: API_BUFFER_ID, count: 1 });
         expect(get(buffers)[key]!.lines, 'the history page does not re-insert it').toHaveLength(3);
     });
     it('inserts a fetched row by its WeeChat number, read back out of the id', async () => {
@@ -134,7 +140,7 @@ describe('a line built by one site is found by the other', () => {
         reducers.lineAdded(API_BUFFER_ID, apiLine(12, 'after'));
         flushApiLineBatch();
 
-        await fetchHistory(fakeSession([wireLine(11, 'between')]), { bufferId: API_BUFFER_ID as never, count: 1 });
+        await fetchHistory(fakeSession([wireLine(11, 'between')]), { bufferId: API_BUFFER_ID, count: 1 });
 
         expect(get(buffers)[key]!.lines.map((l) => l.text), 'the fetched row sits in print order').toEqual([
             'before', 'between', 'after',

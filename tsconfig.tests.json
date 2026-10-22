@@ -24,14 +24,10 @@
     "src-svelte/test/unit/prof",
     "src-svelte/test/unit/api-client.test.ts",
     "src-svelte/test/unit/api-features.test.ts",
-    "src-svelte/test/unit/buffer-line-data-changed.test.ts",
     "src-svelte/test/unit/connection-lifecycle.test.ts",
     "src-svelte/test/unit/dependency-audit.test.ts",
     "src-svelte/test/unit/imgur.test.ts",
-    "src-svelte/test/unit/line-identity.test.ts",
     "src-svelte/test/unit/retained-handoff.test.ts",
-    "src-svelte/test/unit/toast.test.ts",
-    "src-svelte/test/unit/utils.test.ts",
     "src-svelte/test/unit/weechat-parity.test.ts",
     "src-svelte/test/unit/weechat-rich-parity.test.ts"
   ]

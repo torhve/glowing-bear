@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { buffers, activeBufferId } from '#lib/stores/models.ts';
+import { buffers, activeBufferId, createBuffer, createBufferLine } from '#lib/stores/models.ts';
 import type { BufferData, ProtocolMessage, BufferLineMessage } from '#lib/types.ts';
 
 vi.mock('#lib/stores/settings.ts', () => ({
@@ -45,62 +45,39 @@ describe('handleBufferLineDataChanged', () => {
     const LINE2_DATE = 1_700_000_001_000;
 
     function makeBuffer(id: string): BufferData {
-        return {
-            id,
-            fullName: '#test',
-            shortName: '#test',
-            hidden: false,
-            trimmedName: 'test',
-            nameClasses: [],
-            prefix: '#',
+        const buffer = createBuffer({
+            pointers: [id],
+            full_name: '#test',
+            short_name: '#test',
             number: 1,
-            title: [],
-            rtitle: '',
-            lines: [
-                {
-                    prefix: [{ text: '\x19\u000304OldNick\x19', fgColor: { type: 'weechat', name: 'default' }, bgColor: { type: 'option', name: 'default' }, attrs: { name: null, override: {} } }],
-                    content: [{ text: 'old message', fgColor: { type: 'option', name: 'default' }, bgColor: { type: 'option', name: 'default' }, attrs: { name: null, override: {} } }],
-                    date: LINE1_DATE,
-                    shortTime: '12:00',
-                    buffer: id,
-                    tags: ['irc_privmsg'],
-                    highlight: false,
-                    displayed: true,
-                    prefixtext: '\x19\u000304OldNick\x19',
-                    text: 'old message',
-                    showHiddenBrackets: false
-                },
-                {
-                    prefix: [{ text: '\x19\u000304OldNick\x19', fgColor: { type: 'weechat', name: 'default' }, bgColor: { type: 'option', name: 'default' }, attrs: { name: null, override: {} } }],
-                    content: [{ text: 'middle message', fgColor: { type: 'option', name: 'default' }, bgColor: { type: 'option', name: 'default' }, attrs: { name: null, override: {} } }],
-                    date: LINE2_DATE,
-                    shortTime: '12:00',
-                    buffer: id,
-                    tags: [],
-                    highlight: false,
-                    displayed: true,
-                    prefixtext: '\x19\u000304OldNick\x19',
-                    text: 'middle message',
-                    showHiddenBrackets: false
-                }
-            ],
-            allLinesFetched: false,
-            lastSeen: 1,
-            localUnread: 0,
-            unread: 0,
-            notification: 0,
-            notify: 3,
-            nicklist: {},
-            serverSortKey: 'irc.test.#test',
-            indent: true,
-            bufferType: 0,
-            type: 'channel',
-            plugin: 'irc',
-            server: 'test',
-            hideBufferLineTimes: false,
-            pinned: false,
-            active: false
-        } as BufferData;
+            local_variables: { type: 'channel', plugin: 'irc', server: 'test' },
+        });
+        buffer.lastSeen = 1;
+        buffer.lines = [
+            createBufferLine({
+                buffer: id,
+                date: LINE1_DATE,
+                prefix: '\x19\u000304OldNick\x19',
+                message: 'old message',
+                tags_array: ['irc_privmsg'],
+                displayed: 1,
+                notify_level: 1,
+                highlight: 0,
+                bufferType: 'channel',
+            }),
+            createBufferLine({
+                buffer: id,
+                date: LINE2_DATE,
+                prefix: '\x19\u000304OldNick\x19',
+                message: 'middle message',
+                tags_array: [],
+                displayed: 1,
+                notify_level: 1,
+                highlight: 0,
+                bufferType: 'channel',
+            }),
+        ];
+        return buffer;
     }
 
     function createChangedMessage(bufferId: string, lineIndex: number): ProtocolMessage {
@@ -111,6 +88,7 @@ describe('handleBufferLineDataChanged', () => {
                 content: [{
                     buffer: bufferId,
                     date,
+                    date_long: date,
                     date_usec: 0,
                     date_printed: date,
                     date_usec_printed: 0,
@@ -135,23 +113,23 @@ describe('handleBufferLineDataChanged', () => {
         handleBufferLineDataChanged(createChangedMessage('0x01', 0));
 
         const buf = get(buffers)['0x01'];
-        expect(buf!.lines[0].text).toBe('edited message content');
-        expect(buf!.lines[1].text).toBe('middle message');
+        expect(buf!.lines[0]?.text).toBe('edited message content');
+        expect(buf!.lines[1]?.text).toBe('middle message');
     });
 
     it('updates the prefix text on the replaced line', () => {
         handleBufferLineDataChanged(createChangedMessage('0x01', 0));
 
         const buf = get(buffers)['0x01'];
-        expect(buf!.lines[0].prefixtext).toContain('NewNick');
+        expect(buf!.lines[0]?.prefixtext).toContain('NewNick');
     });
 
     it('does not modify the other line when only one is edited', () => {
         handleBufferLineDataChanged(createChangedMessage('0x01', 0));
 
         const buf = get(buffers)['0x01'];
-        expect(buf!.lines[1].text).toBe('middle message');
-        expect(buf!.lines[1].tags).toEqual([]);
+        expect(buf!.lines[1]?.text).toBe('middle message');
+        expect(buf!.lines[1]?.tags).toEqual([]);
     });
 
     it('performs an immutable update — original array reference changes', () => {
@@ -200,6 +178,7 @@ describe('handleBufferLineDataChanged', () => {
                 content: [{
                     buffer: '0x02',
                     date: now,
+                    date_long: now,
                     date_usec: 0,
                     date_printed: now,
                     date_usec_printed: 0,
@@ -216,8 +195,8 @@ describe('handleBufferLineDataChanged', () => {
         handleBufferLineDataChanged(msg);
 
         const buf = get(buffers)['0x02'];
-        expect(buf!.lines[0].text).toBe('first');
-        expect(buf!.lines[1].text).toBe('updated second');
+        expect(buf!.lines[0]?.text).toBe('first');
+        expect(buf!.lines[1]?.text).toBe('updated second');
     });
 
     it('does nothing when no matching line is found (wrong buffer)', () => {
@@ -225,7 +204,7 @@ describe('handleBufferLineDataChanged', () => {
         handleBufferLineDataChanged(msg);
 
         const buf = get(buffers)['0x01'];
-        expect(buf!.lines[0].text).toBe('old message');
+        expect(buf!.lines[0]?.text).toBe('old message');
     });
 
     it('does nothing when message has no content', () => {
@@ -233,7 +212,7 @@ describe('handleBufferLineDataChanged', () => {
         handleBufferLineDataChanged(msg);
 
         const buf = get(buffers)['0x01'];
-        expect(buf!.lines[0].text).toBe('old message');
+        expect(buf!.lines[0]?.text).toBe('old message');
     });
 
     it('handles empty objects array gracefully', () => {
@@ -241,6 +220,6 @@ describe('handleBufferLineDataChanged', () => {
         handleBufferLineDataChanged(msg);
 
         const buf = get(buffers)['0x01'];
-        expect(buf!.lines[0].text).toBe('old message');
+        expect(buf!.lines[0]?.text).toBe('old message');
     });
 });
