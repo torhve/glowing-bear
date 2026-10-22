@@ -123,8 +123,9 @@ test("tapping nicklist button opens nicklist with content when showNicklist is o
     const nickCount2 = await browserPage.getByTestId("nick-item").count();
     expect(nickCount2).toBeGreaterThan(0);
 
-    // Tap again to close
-    await browserPage.getByTestId("nicklist-button").click();
+    // Close through the drawer's own control: the open drawer is `fixed top-0 … z-50` and
+    // covers the top-bar button, so a second tap on that button is not a thing a reader can do.
+    await browserPage.getByTestId("nicklist-close-button").click();
     await expect(browserPage.locator(".mobile-nicklist-overlay")).toHaveClass(
         /translate-x-full/,
     );

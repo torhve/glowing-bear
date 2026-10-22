@@ -184,7 +184,7 @@ test("swipe right from left shows buffer list on mobile", async () => {
     });
 });
 
-test("tapping nicklist button opens and closes nicklist on mobile", async () => {
+test("the top bar opens the nicklist drawer and the drawer closes itself", async () => {
     await closeMobileOverlay(browserPage);
     await disconnect(browserPage);
     await setSettings(browserPage, { showNicklist: false, alwaysnicklist: true });
@@ -210,8 +210,11 @@ test("tapping nicklist button opens and closes nicklist on mobile", async () => 
         /translate-x-0/,
     );
 
-    // Tap again to close
-    await browserPage.getByTestId("nicklist-button").click();
+    // Close through the drawer's own control. The drawer is `fixed top-0 right-0 bottom-0
+    // z-50`, so once it is open it covers the top bar and its button — tapping that button
+    // again is not something a reader on a phone can do, and the assertion used to pass only
+    // when Playwright's click landed mid-slide, before the drawer reached the button.
+    await browserPage.getByTestId("nicklist-close-button").click();
     await expect(browserPage.locator(".mobile-nicklist-overlay")).toHaveClass(
         /translate-x-full/,
     );
