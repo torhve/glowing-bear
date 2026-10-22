@@ -13,7 +13,7 @@ import {
     connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, beginSessionStats,
     setNextReconnectAt,
 } from '#lib/stores/connectionStore.ts';
-import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, weechatVersion, relayApiVersion, historyWindowEstablished, historyPageSize, growHistoryLimit, initialHistoryWindow, shouldFetchOnBufferSwitch, SWITCH_FETCH_REQUEST_LINES } from '#lib/stores/models.ts';
+import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, weechatVersion, relayApiVersion, initialHistoryWindow, runHistoryPage, shouldFetchOnBufferSwitch, SWITCH_FETCH_REQUEST_LINES } from '#lib/stores/models.ts';
 
 import { resolveApiEndpoint } from '#lib/api/api-endpoint.ts';
 import { ApiOrchestrator, type OrchestratorStatus } from '#lib/api/api-orchestrator.ts';
@@ -476,63 +476,30 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
     const session = currentSession();
     if (!session) throw new Error('Not connected');
 
-    const bufferId = explicitBufferId ?? get(activeBufferId);
-    const buffer = getBuffer(bufferId);
-    if (!buffer) throw new Error('No active buffer');
-    const apiId = toApiBufferId(buffer.id);
-    if (apiId === null) return;
+    await runHistoryPage(explicitBufferId, {
+        numLines,
+        deliberate,
+        pending: pendingFetchBuffers,
+        pendingKeyFor: (buffer) => buffer.id,
+        // This transport MERGES a page into what it holds, so a page of one screenful is enough
+        // and a buffer that opens at the cap keeps room for live traffic to grow it. The legacy
+        // path replaces the window and has to floor its page at the lines held instead.
+        heldWindow: () => initialHistoryWindow(),
+        fetch: async (buffer, pageLines, bufferId) => {
+            const apiId = toApiBufferId(buffer.id);
+            if (apiId === null) return null;
 
-    if (buffer.allLinesFetched) return;
+            const result = await fetchHistory(session, { bufferId: apiId, count: pageLines });
+            // Re-read the buffer after the await: a clear/close/reconnect during the request
+            // makes the response stale (fetchHistory already dropped it — applied=false — and
+            // nothing may be written from here).
+            if (!getBuffer(bufferId) || result.applied === false) return null;
 
-    if (pendingFetchBuffers.has(buffer.id)) return;
-    pendingFetchBuffers.add(buffer.id);
-
-    // Same rule as the legacy path: `lines=0` is answered with an empty array,
-    // which is indistinguishable from "there is nothing older". A buffer whose
-    // counter is 0 — freshly retained, or cleared — still has to get a real page.
-    // A page the reader asked for is sized to fill the whole window this buffer
-    // may retain: both relays answer a lines request as "the newest N lines", so
-    // asking for less than the window cannot reach anything older than what is
-    // already held. A page nobody asked for stays at one screenful — a buffer
-    // that opens at the cap has no room left for live traffic to grow it. This
-    // transport merges a page into what it holds, so a small page is safe here;
-    // the legacy path replaces the window and has to floor the page instead.
-    numLines = deliberate
-        ? historyPageSize(numLines, growHistoryLimit(bufferId))
-        : historyPageSize(numLines, initialHistoryWindow());
-
-    try {
-        const result = await fetchHistory(session, { bufferId: apiId, count: numLines });
-        // Re-read the buffer after the await: a clear/close/reconnect during
-        // the request makes the response stale (fetchHistory already dropped
-        // it — applied=false — and nothing may be written from here).
-        const freshBuffer = getBuffer(bufferId);
-        if (!freshBuffer || result.applied === false) return;
-        flushApiLineBatch();
-        buffers.update(current => {
-            const buf = current[bufferId];
-            if (!buf) return current;
-            return {
-                ...current,
-                [bufferId]: {
-                    ...buf,
-                    allLinesFetched: result.complete,
-                    // The window was fetched, whether or not it added anything:
-                    // setting this only on newly-applied lines is what made the
-                    // gate re-fire forever on a buffer whose window was already
-                    // complete — 301 identical `lines=-100` requests in one run.
-                    newestWindowFetched: historyWindowEstablished(result.lines.length, result.complete),
-                },
-            };
-        });
-        flushByteStats();
-    } catch (err) {
-        // Don't mark allLinesFetched=true for transient errors — only when
-        // WeeChat explicitly returned fewer lines than requested.
-        console.warn('[fetchMoreLines] fetch failed, will retry on next attempt:', String(err));
-    } finally {
-        pendingFetchBuffers.delete(buffer.id);
-    }
+            flushApiLineBatch();
+            flushByteStats();
+            return { received: result.lines.length, complete: result.complete };
+        },
+    });
 }
 
 async function deliverInput(command: string, bufferId?: string): Promise<InputOutcome | null> {

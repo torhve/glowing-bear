@@ -1229,6 +1229,88 @@ export function shouldFetchOnBufferSwitch(buffer: BufferData): boolean {
         && !buffer.newestWindowFetched;
 }
 
+/** What a transport hands to `runHistoryPage`: the page it wants and its own fetch. */
+export interface HistoryPageRequest {
+    /** Lines the caller asked for. 0 means "whatever the window needs", see `historyPageSize`. */
+    numLines: number;
+    /** A page the reader asked for widens the window this buffer may retain. */
+    deliberate: boolean;
+    /**
+     * The transport's pending set and this buffer's key in it. They stay per transport on
+     * purpose: legacy keys a buffer as `0x…` and the API by its store id, and a pending fetch
+     * is work one transport still owes — a shared set would let one transport's in-flight
+     * request silence the other's.
+     */
+    pending: Set<string>;
+    pendingKeyFor: (buffer: BufferData) => string;
+    /**
+     * The window a page nobody asked for must cover. The API transport merges a page into what
+     * it holds, so one screenful is enough; legacy replaces the window, so it has to floor the
+     * page at the lines the buffer already holds.
+     */
+    heldWindow: (buffer: BufferData) => number;
+    /**
+     * Ask this transport for the page. `null` means the answer arrived but describes a window
+     * that is no longer current — a clear or a dropped batch — and nothing may be written.
+     */
+    fetch: (buffer: BufferData, pageLines: number, bufferId: string) => Promise<{ received: number; complete: boolean } | null>;
+}
+
+/**
+ * One page of history, whatever the transport.
+ *
+ * The gates, the page size, the two flags a completed page sets and the pending
+ * bookkeeping were written twice, once per transport, and a fix had to land in both: the
+ * `newestWindowFetched` gate that made a legacy buffer re-fire the switch fetch on every
+ * batch, and the rule that a transient error must never mark history finished, are the same
+ * rule in both files. What stays in the caller is exactly the protocol: how to address the
+ * buffer, how to ask, and how the answer is applied.
+ */
+export async function runHistoryPage(
+    explicitBufferId: string | undefined,
+    { numLines, deliberate, pending, pendingKeyFor, heldWindow, fetch }: HistoryPageRequest,
+): Promise<void> {
+    const bufferId = explicitBufferId ?? get(activeBufferId);
+    const buffer = getBuffer(bufferId);
+    if (!buffer) throw new Error('No active buffer');
+
+    // Prevent redundant fetches when all lines have already been loaded
+    if (buffer.allLinesFetched) return;
+
+    const pendingKey = pendingKeyFor(buffer);
+    if (pending.has(pendingKey)) return;
+    pending.add(pendingKey);
+
+    const pageLines = historyPageSize(numLines, deliberate ? growHistoryLimit(bufferId) : heldWindow(buffer));
+
+    try {
+        const result = await fetch(buffer, pageLines, bufferId);
+        if (result === null) return;
+        buffers.update((current) => {
+            const buf = current[bufferId];
+            if (!buf) return current;
+            return {
+                ...current,
+                [bufferId]: {
+                    ...buf,
+                    // Only a page that came back short means the beginning of history was
+                    // reached. Timeouts, protocol errors and connection drops are transient and
+                    // must leave the gate open for the next attempt.
+                    allLinesFetched: result.complete,
+                    // The window was fetched whether or not it added lines. Setting this only on
+                    // newly-applied lines is what made the switch fetch re-fire forever on a
+                    // buffer whose window was already complete.
+                    newestWindowFetched: historyWindowEstablished(result.received, result.complete),
+                },
+            };
+        });
+    } catch (err) {
+        console.warn('[fetchMoreLines] fetch failed, will retry on next attempt:', String(err));
+    } finally {
+        pending.delete(pendingKey);
+    }
+}
+
 
 /**
  * Shallow-copy a single buffer with partial field overrides.

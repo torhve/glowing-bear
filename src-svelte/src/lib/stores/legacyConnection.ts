@@ -1,12 +1,12 @@
 import { get } from 'svelte/store';
 import { setConnectionStatus, setErrors, clearErrors, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, beginSessionStats } from '#lib/stores/connectionStore.ts';
-import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, weechatVersion, historyWindowEstablished, historyPageSize, growHistoryLimit, initialHistoryWindow, shouldFetchOnBufferSwitch, SWITCH_FETCH_REQUEST_LINES } from '#lib/stores/models.ts';
+import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, weechatVersion, initialHistoryWindow, runHistoryPage, shouldFetchOnBufferSwitch, SWITCH_FETCH_REQUEST_LINES } from '#lib/stores/models.ts';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist, flushLineBatch, setOnUpgrade, setOnUpgradeEnded } from '#lib/stores/handlers.ts';
 import { addToast, removeToast, clearToasts, toastStore } from '#lib/toast.ts';
 
 import { Protocol } from '#lib/weechat.ts';
 import { sha256, pbkdf2 as nativePbkdf2, toHexString } from '#lib/utils/crypto.ts';
-import type { ProtocolMessage } from '#lib/types.ts';
+import type { BufferData, ProtocolMessage } from '#lib/types.ts';
 import {
     beginManualReconnect,
     cancelPendingRetry,
@@ -1123,48 +1123,39 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
         throw new Error('WebSocket not open');
     }
 
-    const bufferId = explicitBufferId ?? get(activeBufferId);
-    const buffer = getBuffer(bufferId);
-    if (!buffer) throw new Error('No active buffer');
+    await runHistoryPage(explicitBufferId, {
+        numLines,
+        deliberate,
+        pending: pendingFetchBuffers,
+        pendingKeyFor: (buffer) => '0x' + buffer.id,
+        // This transport REPLACES the buffer's window with the response, so a page smaller than
+        // what the buffer already holds would drop those lines — hence the floor at the lines
+        // held. The API transport merges and has no such floor.
+        //
+        // Known limit of the replace: the floor is measured when the request leaves, but the
+        // response is the relay's window as of when it was built. A line arriving while the
+        // request is in flight is older than the response's newest line and absent from it, so
+        // the replace drops it. Merging is why the API prepends rather than replaces.
+        heldWindow: (buffer) => Math.max(initialHistoryWindow(), buffer.lines.length),
+        fetch: fetchLegacyPage,
+    });
+}
 
-    // Prevent redundant fetches when all lines have already been loaded
-    if (buffer.allLinesFetched) {
-        return;
-    }
-
-
-    const bufferIdStr = '0x' + buffer.id;
-    if (pendingFetchBuffers.has(bufferIdStr)) {
-        return;
-    }
-    pendingFetchBuffers.add(bufferIdStr);
-
-    // A page size of 0 is a request for nothing: `last_line(-0)` answers with an
-    // empty array, and the caller cannot tell that apart from a buffer that has
-    // no older history.
-    //
-    // A page the reader asked for is sized to fill the whole window this buffer
-    // may retain. This transport replaces the window with the response, so a
-    // page smaller than the window would drop lines the buffer already holds —
-    // hence the floor at what is held. A page nobody asked for stays at one
-    // screenful above that, so a freshly opened buffer keeps room for live
-    // traffic to grow it.
-    //
-    // Known limit of the replace: the floor is measured when the request leaves,
-    // but the response is the relay's window as of when it was built. A line that
-    // arrives on this buffer while the request is in flight is older than the
-    // response's newest line and is absent from it, so the replace drops it.
-    // Merging instead of replacing would fix that — it is why the API transport
-    // prepends rather than replaces.
-    numLines = deliberate
-        ? historyPageSize(numLines, growHistoryLimit(bufferId))
-        : historyPageSize(numLines, Math.max(initialHistoryWindow(), buffer.lines.length));
-    // The response is applied as a wholesale replacement of the buffer's lines
-    // (see handleLineInfo), so it is only safe to apply while the buffer still
-    // holds what this request was built against. WeeChat re-renders its own
-    // buffers — relay.list on every client connect/disconnect — and a clear that
-    // lands mid-request would otherwise reinstate the pre-clear window next to
-    // the fresh rows that arrive after it.
+/**
+ * One hdata round-trip for older lines, and the answer's application.
+ *
+ * Returns null when the response describes a window that is no longer current.
+ */
+async function fetchLegacyPage(
+    buffer: BufferData,
+    numLines: number,
+    bufferId: string,
+): Promise<{ received: number; complete: boolean } | null> {
+    // The response is applied as a wholesale replacement of the buffer's lines (see
+    // handleLineInfo), so it is only safe to apply while the buffer still holds what this
+    // request was built against. WeeChat re-renders its own buffers — relay.list on every
+    // client connect/disconnect — and a clear that lands mid-request would otherwise reinstate
+    // the pre-clear window next to the fresh rows that arrive after it.
     const clearEpochBefore = buffer.clearEpoch ?? 0;
 
     const msg = Protocol.formatHdata({
@@ -1175,75 +1166,50 @@ export async function fetchMoreLines(numLines: number = 0, explicitBufferId?: st
     // Set up callback for this request
     const cbId = getNextCallbackId();
 
-    let message: ProtocolMessage;
-    try {
-        const rawResponse = await new Promise<unknown>((resolve, reject) => {
-            if (!ws || ws.readyState !== WebSocket.OPEN) {
+    const rawResponse = await new Promise<unknown>((resolve, reject) => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            delete callbacks[cbId];
+            return reject(new Error('WebSocket not open'));
+        }
+
+        callbacks[cbId] = { resolve, reject };
+
+        // Double-check WS is still open right before sending (TOCTOU guard)
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            delete callbacks[cbId];
+            return reject(new Error('WebSocket not open'));
+        }
+
+        const formattedMsg = protocolInstance.setId(cbId, msg);
+        sendWs(formattedMsg, 'fetch#' + cbId);
+
+        // Timeout after 30 seconds
+        setTimeout(() => {
+            if (callbacks[cbId]) {
                 delete callbacks[cbId];
-                return reject(new Error('WebSocket not open'));
+                reject(new Error('fetchMoreLines timeout'));
             }
+        }, 30000);
+    });
 
-            callbacks[cbId] = { resolve, reject };
+    const message = rawResponse as ProtocolMessage;
 
-            // Double-check WS is still open right before sending (TOCTOU guard)
-            if (!ws || ws.readyState !== WebSocket.OPEN) {
-                delete callbacks[cbId];
-                return reject(new Error('WebSocket not open'));
-            }
+    // Re-read the buffer from the store after await. handleBufferLineAdded may have created a
+    // new store copy during the async wait, so our captured reference is stale.
+    const freshBuffer = getBuffer(bufferId);
+    if (!freshBuffer) return null;
+    // A clear landed while this request was in flight: the window it carries is the pre-clear
+    // one and the fresh rows are still to come. Drop it rather than replacing the buffer with
+    // stale content, and leave the history gate open so the next visit asks again.
+    if ((freshBuffer.clearEpoch ?? 0) !== clearEpochBefore) return null;
 
-            const formattedMsg = protocolInstance.setId(cbId, msg);
-            sendWs(formattedMsg, 'fetch#' + cbId);
+    // handleLineInfo remaps a known boundary by stable line identity. If the previous anchor is
+    // absent, it deliberately leaves the boundary unknown. This avoids deriving a false position
+    // from hotlist totals or row counts.
+    handleLineInfo(message, true, bufferId);
 
-            // Timeout after 30 seconds
-            setTimeout(() => {
-                if (callbacks[cbId]) {
-                    delete callbacks[cbId];
-                    reject(new Error('fetchMoreLines timeout'));
-                }
-            }, 30000);
-        });
-        message = rawResponse as ProtocolMessage;
-        // Re-read the buffer from the store after await. handleBufferLineAdded may have
-        // created a new store copy during the async wait, so our captured reference is stale.
-        const freshBuffer = getBuffer(bufferId);
-        if (!freshBuffer) return;
-        // A clear landed while this request was in flight: the window it carries
-        // is the pre-clear one and the fresh rows are still to come. Drop it
-        // rather than replacing the buffer with stale content, and leave the
-        // history gate open so the next visit asks again.
-        if ((freshBuffer.clearEpoch ?? 0) !== clearEpochBefore) return;
-        // handleLineInfo remaps a known boundary by stable line identity. If the
-        // previous anchor is absent, it deliberately leaves the boundary unknown.
-        // This avoids deriving a false position from hotlist totals or row counts.
-        handleLineInfo(message, true, bufferId);
-
-        const linesReceived = message.objects?.[0]?.content?.length ?? 0;
-        buffers.update(current => {
-            const buf = current[bufferId];
-            if (!buf) return current;
-            return {
-                ...current,
-                [bufferId]: {
-                    ...buf,
-                    allLinesFetched: linesReceived < numLines,
-                    // The page's history gate asks whether THIS session has seen the
-                    // relay's current newest window, and that gate is shared by both
-                    // transports. Only the API path used to answer it, so a legacy
-                    // buffer would keep re-firing the gate on every batch.
-                    newestWindowFetched: historyWindowEstablished(linesReceived, linesReceived < numLines),
-                },
-            };
-        });
-    } catch (err) {
-        // Don't mark allLinesFetched=true for any errors — they're transient.
-        // Timeouts, protocol errors, connection drops should not permanently block
-        // future fetch attempts. Only set allLinesFetched when WeeChat explicitly
-        // returns fewer lines than requested (beginning of history reached).
-        const msg = String(err);
-        console.warn('[fetchMoreLines] fetch failed, will retry on next attempt:', msg);
-    } finally {
-        pendingFetchBuffers.delete(bufferIdStr);
-    }
+    const received = message.objects?.[0]?.content?.length ?? 0;
+    return { received, complete: received < numLines };
 }
 
 // Deliver one WeeChat command. Returns false when nothing was sent.
