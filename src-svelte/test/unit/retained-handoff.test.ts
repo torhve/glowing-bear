@@ -40,6 +40,20 @@ const KEY_CHANNEL = '1791000000000401';
 const KEY_CORE = '1791000000000402';
 const KEY_GONE = '1791000000000403';
 
+/** Read a buffer the test expects to exist, instead of asserting on `undefined`. */
+function live(key: string): BufferData {
+    const buffer = get(buffers)[key];
+    if (!buffer) throw new Error(`live(): no buffer ${key} in the store`);
+    return buffer;
+}
+
+/** The id of one row, when the test depends on that row being there. */
+function rowId(buffer: BufferData, index: number): string {
+    const line = buffer.lines[index];
+    if (!line?.lineId) throw new Error(`rowId(): ${buffer.id} has no line ${index} to take an id from`);
+    return line.lineId;
+}
+
 function seed(key: string, fullName: string, shortName: string, number: number, lineCount = 0): BufferData {
     const buffer = createBuffer({
         pointers: [key],
@@ -164,7 +178,7 @@ describe('seeding: only an instance the new session actually has', () => {
         bootstrap([KEY_CHANNEL]);
         applyRetainedHandoff();
 
-        const lines = get(buffers)[KEY_CHANNEL].lines;
+        const lines = live(KEY_CHANNEL).lines;
         expect(lines.map((line) => line.text)).toEqual(['message 1', 'message 2', 'message 3']);
         expect(new Set(lines.map((line) => line.lineId)).size, 'one row per line').toBe(3);
     });
@@ -180,7 +194,7 @@ describe('seeding: only an instance the new session actually has', () => {
         seed(KEY_CHANNEL, CHANNEL, '#glowing-bear', 10, 3);
         applyRetainedHandoff();
 
-        const lines = get(buffers)[KEY_CHANNEL].lines;
+        const lines = live(KEY_CHANNEL).lines;
         expect(lines, 'a recycled line id must not render the same row twice').toHaveLength(3);
     });
 
@@ -193,12 +207,12 @@ describe('seeding: only an instance the new session actually has', () => {
         // Same name, different instance: a rebuilt relay. Seeding by name would
         // merge a frozen window into a buffer whose line ids restarted.
         seed(KEY_GONE, CHANNEL, '#glowing-bear', 10, 1);
-        const rebuilt = get(buffers)[KEY_GONE];
+        const rebuilt = live(KEY_GONE);
         expect(rebuilt.lines).toHaveLength(1);
 
         const outcome = applyRetainedHandoff();
         expect(outcome?.seeded, 'identity is the store key, not the conversation name').toBe(0);
-        expect(get(buffers)[KEY_GONE].lines).toHaveLength(1);
+        expect(live(KEY_GONE).lines).toHaveLength(1);
     });
 
     it('claims nothing about this session: a retained window is not a fetch', () => {
@@ -210,7 +224,7 @@ describe('seeding: only an instance the new session actually has', () => {
         bootstrap([KEY_CHANNEL]);
         applyRetainedHandoff();
 
-        const buffer = get(buffers)[KEY_CHANNEL];
+        const buffer = live(KEY_CHANNEL);
         expect(buffer.lines, 'the transcript continues across the outage').toHaveLength(4);
         // Holding a stale window is not the same as this session having fetched
         // it. Reading the two flags off the frozen window is what closed the
@@ -229,7 +243,7 @@ describe('seeding: only an instance the new session actually has', () => {
         bootstrap([KEY_CHANNEL]);
         applyRetainedHandoff();
 
-        const buffer = get(buffers)[KEY_CHANNEL];
+        const buffer = live(KEY_CHANNEL);
         const seen = [...(buffer.lineIdsSeen ?? [])];
         expect(seen.length, 'the seeded window is what the replay guard knows about').toBe(3);
         expect(new Set(seen)).toEqual(new Set(buffer.lines.map((line) => line.lineId)));
@@ -261,15 +275,15 @@ describe('reading anchor and drafts across the handoff', () => {
         const original = seed(KEY_CHANNEL, CHANNEL, '#glowing-bear', 10, 3);
         // The reader was partway down: the boundary sits on the second line.
         original.readBoundaryKnown = true;
-        original.readBoundaryId = original.lines[1].lineId;
+        original.readBoundaryId = rowId(original, 1);
         setActiveBuffer(KEY_CHANNEL);
         loseSession();
 
         bootstrap([KEY_CHANNEL]);
         applyRetainedHandoff();
 
-        const buffer = get(buffers)[KEY_CHANNEL];
-        expect(buffer.readBoundaryId, 'the reader lands where they left off, not at the bottom').toBe(original.lines[1].lineId);
+        const buffer = live(KEY_CHANNEL);
+        expect(buffer.readBoundaryId, 'the reader lands where they left off, not at the bottom').toBe(rowId(original, 1));
         expect(buffer.readBoundaryKnown).toBe(true);
     });
 
@@ -277,7 +291,7 @@ describe('reading anchor and drafts across the handoff', () => {
         setActiveConnectionProfile('relay.example', 443, undefined, true);
         const original = seed(KEY_CHANNEL, CHANNEL, '#glowing-bear', 10, 3);
         original.readBoundaryKnown = true;
-        original.readBoundaryId = original.lines[0].lineId;
+        original.readBoundaryId = rowId(original, 0);
         setActiveBuffer(KEY_CHANNEL);
         loseSession();
 
@@ -285,14 +299,14 @@ describe('reading anchor and drafts across the handoff', () => {
         // This session already fetched lines and resolved a boundary of its own
         // before the handoff ran.
         seed(KEY_CHANNEL, CHANNEL, '#glowing-bear', 10, 2);
-        const liveAnchor = get(buffers)[KEY_CHANNEL].lines[1].lineId;
-        buffers.update((live) => ({
-            ...live,
-            [KEY_CHANNEL]: { ...live[KEY_CHANNEL], readBoundaryKnown: true, readBoundaryId: liveAnchor },
-        }));
+        const liveAnchor = rowId(live(KEY_CHANNEL), 1);
+        // Written through `live()` rather than the update callback's own copy: the
+        // callback's value is `BufferData | undefined` and this test has just seeded it.
+        const withBoundary: BufferData = { ...live(KEY_CHANNEL), readBoundaryKnown: true, readBoundaryId: liveAnchor };
+        buffers.update((current) => ({ ...current, [KEY_CHANNEL]: withBoundary }));
         applyRetainedHandoff();
 
-        const buffer = get(buffers)[KEY_CHANNEL];
+        const buffer = live(KEY_CHANNEL);
         expect(buffer.readBoundaryId, 'a live boundary is a fact about this generation').toBe(liveAnchor);
         expect(buffer.lines, 'the retained window is still merged in').toHaveLength(3);
     });
@@ -312,7 +326,7 @@ describe('reading anchor and drafts across the handoff', () => {
         const outcome = applyRetainedHandoff();
         expect(outcome?.fellBack).toBe(true);
 
-        const fallbackKey = conversationKeyFor(get(buffers)[KEY_CORE]);
+        const fallbackKey = conversationKeyFor(live(KEY_CORE));
         expect(readDraft(closedRef)?.text, 'the text belongs to the conversation it was typed in').toBe('half a sentence');
         expect(readDraft({ profileKey, conversationKey: fallbackKey! }), 'and is not moved into the fallback').toBeNull();
     });

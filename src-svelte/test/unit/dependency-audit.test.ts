@@ -23,6 +23,31 @@ import {
 // not a file: scheme, so fileURLToPath would throw here.
 const script = resolve(__dirname, '../../../scripts/audit-deps.mjs');
 
+/**
+ * One RustSec finding after `classifyCargo` has said whether this lockfile could
+ * actually be moved. The script is untyped JavaScript, so the test names the shape
+ * it asserts on instead of accepting whatever arrives.
+ */
+type CargoFinding = {
+    source: string;
+    version: string;
+    patched: string[];
+    actionable: boolean;
+    basis: string;
+};
+
+/**
+ * `classifyCargo` is untyped JavaScript. This is the call the tests make: the
+ * findings it returns are the shape above, and saying so here is what lets the
+ * assertions name a field instead of accepting any object.
+ */
+function classify(
+    findings: unknown[],
+    resolution: Map<string, Array<{ from: string; to: string }>> | null,
+): CargoFinding[] {
+    return classifyCargo(findings, resolution) as CargoFinding[];
+}
+
 /** Write a fixture advisory database: one directory per crate, one .md per advisory. */
 function advisoryDb(entries: Array<{ crate: string; id: string; body: string }>): string {
     const root = mkdtempSync(join(tmpdir(), 'gb-rustsec-'));
@@ -123,7 +148,7 @@ describe('dependency audit advisory matching', () => {
             expect(loadAdvisories(empty).loaded).toBe(false);
             expect(loadAdvisories(join(empty, 'nope')).loaded).toBe(false);
             // Coverage failure outranks findings in the exit code.
-            expect(auditOutcome({ cargoFindings: [], cargoCoverageOk: false, npmAudit: { ok: true, rows: [] }, npmSkipped: false }).code).toBe(2);
+            expect(auditOutcome({ cargoFindings: [], cargoCoverageOk: false, cargoResolution: null, npmAudit: { ok: true, rows: [] }, npmSkipped: false }).code).toBe(2);
         } finally {
             rmSync(empty, { recursive: true, force: true });
         }
@@ -136,7 +161,7 @@ describe('dependency audit advisory matching', () => {
         try {
             const findings = auditCargoLock([{ name: 'implicit', version: '1.4.0' }], advisoriesFor(db));
             expect(findings).toHaveLength(1);
-            expect(classifyCargo(findings, new Map())[0].actionable).toBe(false);
+            expect(classify(findings, new Map())[0]?.actionable).toBe(false);
         } finally {
             rmSync(db, { recursive: true, force: true });
         }
@@ -172,11 +197,11 @@ describe('dependency audit reachability', () => {
                 { name: 'moved', version: '5.4.1' },
             ], advisoriesFor(db));
             const resolution = new Map([['moved', [{ from: '5.4.1', to: '5.4.2' }]]]);
-            const classified = classifyCargo(findings, resolution);
-            const byCrate = new Map(classified.map((f) => [f.source, f]));
+            const classified = classify(findings, resolution);
+            const byCrate = new Map(classified.map((f: CargoFinding) => [f.source, f]));
             expect(byCrate.get('moved')!.actionable).toBe(true);
             expect(byCrate.get('held')!.actionable).toBe(false);
-            expect(classified[0].basis).toBe('cargo resolution');
+            expect(classified[0]?.basis).toBe('cargo resolution');
         } finally {
             rmSync(db, { recursive: true, force: true });
         }
@@ -191,8 +216,8 @@ describe('dependency audit reachability', () => {
         try {
             const findings = auditCargoLock([{ name: 'syn', version: '1.0.109' }], advisoriesFor(db));
             expect(findings).toHaveLength(1);
-            expect(classifyCargo(findings, new Map([['syn', [{ from: '2.0.40', to: '2.0.60' }]]]))[0].actionable).toBe(false);
-            expect(classifyCargo(findings, new Map([['syn', [{ from: '1.0.109', to: '1.0.112' }]]]))[0].actionable).toBe(true);
+            expect(classify(findings, new Map([['syn', [{ from: '2.0.40', to: '2.0.60' }]]]))[0]?.actionable).toBe(false);
+            expect(classify(findings, new Map([['syn', [{ from: '1.0.109', to: '1.0.112' }]]]))[0]?.actionable).toBe(true);
         } finally {
             rmSync(db, { recursive: true, force: true });
         }
@@ -210,12 +235,12 @@ describe('dependency audit reachability', () => {
                 { name: 'far', version: '0.37.5' },
                 { name: 'stale', version: '1.0.4' },
             ], advisoriesFor(db));
-            const classified = classifyCargo(findings, null);
-            const byCrate = new Map(classified.map((f) => [f.source, f]));
+            const classified = classify(findings, null);
+            const byCrate = new Map(classified.map((f: CargoFinding) => [f.source, f]));
             expect(byCrate.get('near')!.actionable).toBe(true);
             expect(byCrate.get('far')!.actionable).toBe(false);
             expect(byCrate.get('stale')!.actionable).toBe(false);
-            expect(classified[0].basis).toBe('caret heuristic (--no-cargo)');
+            expect(classified[0]?.basis).toBe('caret heuristic (--no-cargo)');
         } finally {
             rmSync(db, { recursive: true, force: true });
         }
@@ -288,8 +313,8 @@ describe('dependency audit npm payload validation', () => {
         const parsed = parseNpmAuditReport(payload);
         expect(parsed.ok).toBe(true);
         expect(parsed.rows).toHaveLength(1);
-        expect(parsed.rows[0].fixable).toBe(true);
-        expect(parsed.rows[0].fixVersion).toBe('7.1.6');
+        expect(parsed.rows[0]?.fixable).toBe(true);
+        expect(parsed.rows[0]?.fixVersion).toBe('7.1.6');
     });
 
     it('rejects an error payload rather than reading it as a clean audit', () => {
@@ -350,7 +375,7 @@ describe('dependency audit lockfile parsing', () => {
 });
 
 describe('dependency audit exit codes', () => {
-    const clean = { cargoFindings: [], cargoCoverageOk: true, npmAudit: { ok: true, rows: [] }, npmSkipped: false };
+    const clean = { cargoFindings: [], cargoCoverageOk: true, cargoResolution: null, npmAudit: { ok: true, rows: [] }, npmSkipped: false };
 
     it('is 0 when nothing actionable is present', () => {
         expect(auditOutcome(clean).code).toBe(0);
@@ -367,6 +392,8 @@ describe('dependency audit exit codes', () => {
     it('is 2 rather than 0 when the audit could not see everything', () => {
         expect(auditOutcome({ ...clean, cargoCoverageOk: false }).code).toBe(2);
         expect(auditOutcome({ ...clean, npmAudit: { ok: false, rows: [], note: 'npm audit returned no parseable JSON' } }).code).toBe(2);
+        // A cargo resolution that could not run means reachability was never measured.
+        expect(auditOutcome({ ...clean, cargoResolution: { ok: false, reason: 'cargo update could not run' } }).code).toBe(2);
         // An explicit skip is intent, not failure.
         expect(auditOutcome({ ...clean, npmAudit: { ok: false, rows: [] }, npmSkipped: true }).code).toBe(0);
     });

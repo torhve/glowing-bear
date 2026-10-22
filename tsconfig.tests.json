@@ -23,8 +23,6 @@
     "src-svelte/test/unit/perf",
     "src-svelte/test/unit/prof",
     "src-svelte/test/unit/api-features.test.ts",
-    "src-svelte/test/unit/dependency-audit.test.ts",
-    "src-svelte/test/unit/retained-handoff.test.ts",
     "src-svelte/test/unit/weechat-parity.test.ts",
     "src-svelte/test/unit/weechat-rich-parity.test.ts"
   ]
