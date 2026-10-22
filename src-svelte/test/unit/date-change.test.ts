@@ -49,13 +49,7 @@ vi.mock('#lib/notifications.ts', () => ({
     refreshIndicators: vi.fn(),
 }));
 
-// Mock windowFocus so handlers module loads without runtime errors
-vi.mock('#lib/windowFocus.ts', () => ({
-    initWindowFocusTracking: vi.fn(() => Promise.resolve(() => {})),
-    isWindowFocused: () => typeof document !== 'undefined' && !document.hidden,
-}));
-
-const { injectDateChangeMessageIfNeeded } = await import('#lib/stores/handlers.ts');
+const { injectDateChangeMessageIfNeeded } = await import('#lib/stores/models.ts');
 
 describe('Date change injection', () => {
     it('produces valid rich text with 2-digit color code', () => {

@@ -775,12 +775,6 @@ export function handleUpgradeEnded() {
 
 // ---- Date change injection ----
 
-// The one implementation lives in models.ts, which both transports build lines
-// through. It is re-exported here because the legacy handlers have always
-// exposed it, and the two copies drifting apart is exactly how the API path
-// ended up still building two Date objects per line.
-export { injectDateChangeMessageIfNeeded };
-
 // ---- Buffer opened handler ----
 export function handleBufferOpened(message: ProtocolMessage) {
     const bufferMsg = message.objects[0]?.content[0] as BufferMessage;

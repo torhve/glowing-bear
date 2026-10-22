@@ -12,12 +12,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { vi } from 'vitest';
 
-vi.mock('#lib/windowFocus.ts', () => ({
-    initWindowFocusTracking: vi.fn(() => Promise.resolve(() => {})),
-    isWindowFocused: () => typeof document !== 'undefined' && !document.hidden,
-}));
-
-const { injectDateChangeMessageIfNeeded } = await import('#lib/stores/handlers.ts');
+const { injectDateChangeMessageIfNeeded } = await import('#lib/stores/models.ts');
 
 beforeAll(() => {
     console.debug = () => {};
