@@ -928,6 +928,12 @@ export function markHotlistBaselineApplied(): void {
  * zero count was not evidence of "read" before the baseline and is after it. A
  * cancelled or failed attempt applied no baseline, so it must not resolve anything
  * from counts that never arrived.
+ *
+ * A disconnect closes it too, and that is not a convenience: no hotlist baseline
+ * can ever arrive for a closed connection, so a phase left open here stays open
+ * until some later attempt closes it, and every count in between is read as if a
+ * baseline were still coming. Each transport closes it in its session reset,
+ * before the stores are wiped.
  */
 export function endSyncPhase(generation?: number): void {
     if (generation !== undefined && generation !== syncGeneration) return;

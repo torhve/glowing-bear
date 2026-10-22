@@ -161,13 +161,8 @@ function wipeOnce(retainGeneration?: number): void {
 function resetAllState(retainGeneration?: number) {
     // Flush any pending line batches before clearing state to avoid losing data.
     flushLineBatch();
-    // Buffer ids are per-session and 4.10.1 reuses them, so a recorded history
-    // outcome from this generation must not describe a buffer the next session
-    // creates under the same id.
     clearHistoryOutcomes();
 
-    // No hotlist baseline will arrive for a closed connection: never leave the sync
-    // phase open across a disconnect.
     endSyncPhase();
     // Reject all pending callbacks
     Object.keys(callbacks).forEach(k => {

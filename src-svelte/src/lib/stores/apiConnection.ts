@@ -114,11 +114,7 @@ export const __resetAllStateForTest = resetAllState;
 let settleConnectFailure: (error: string) => void = () => undefined;
 
 function resetAllState(retainGeneration?: number) {
-    // See the legacy note: buffer ids are per-session and reused, so a history
-    // outcome cannot be carried across a generation boundary.
     clearHistoryOutcomes();
-    // No hotlist baseline will arrive for a closed connection: never leave
-    // the sync phase open across a disconnect.
     endSyncPhase();
     connecting = false;
     stopHotlistPoll();
