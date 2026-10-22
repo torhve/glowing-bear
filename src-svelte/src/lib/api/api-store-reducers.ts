@@ -28,7 +28,7 @@ import { addToast } from '#lib/toast.ts';
 import { createHighlight, playNotificationSound } from '#lib/notifications.ts';
 import { toPlainText } from '#lib/weechat-colors.ts';
 import { isWindowFocused } from '#lib/windowFocus.ts';
-import type { BufferData, BufferType, Nick, NickGroup } from '#lib/types.ts';
+import type { BufferData, BufferLine, BufferType, Nick, NickGroup } from '#lib/types.ts';
 import type {
     ApiReducers, BufferSnapshot, LineSnapshot, NickSnapshot, NickGroupSnapshot,
     HotlistSnapshot,
@@ -84,6 +84,28 @@ function scheduleLineFlush(): void {
 }
 
 /**
+ * One relay line, however it arrived.
+ *
+ * This mapping was written three times — for a live line that raced with a
+ * history response, for a page being appended, and for a line changed after
+ * delivery — so a field added to one of them makes a line render differently
+ * depending on which event produced it, with nothing to say so.
+ */
+function lineFromSnapshot(target: BufferData, line: LineSnapshot): BufferLine {
+    return createBufferLine({
+        buffer: target.id,
+        date: line.epochMs,
+        prefix: line.prefix,
+        message: line.message,
+        tags_array: line.tags,
+        displayed: line.displayed ? 1 : 0,
+        notify_level: line.notifyLevel,
+        highlight: line.highlight ? 1 : 0,
+        id: line.id, // → lineId via `weechatLineId`
+        bufferType: target.type,
+    });
+}
+/**
  * The per-line work `lineAdded` used to do inline, unchanged. Line identity is
  * idempotent: a live line that raced with a concurrent history response updates
  * the existing row in place instead of duplicating it, and is not tallied twice.
@@ -98,18 +120,7 @@ function applyLineAdded(target: BufferData, line: LineSnapshot, activeId: string
     if (target.lineIdsSeen?.has(lineId)) {
         const existingIndex = target.lines.findIndex((l) => l.lineId === lineId);
         if (existingIndex >= 0) {
-            target.lines[existingIndex] = createBufferLine({
-                buffer: target.id,
-                date: line.epochMs,
-                prefix: line.prefix,
-                message: line.message,
-                tags_array: line.tags,
-                displayed: line.displayed ? 1 : 0,
-                notify_level: line.notifyLevel,
-                highlight: line.highlight ? 1 : 0,
-                id: line.id,
-                bufferType: target.type,
-            });
+            target.lines[existingIndex] = lineFromSnapshot(target, line);
             return;
         }
     }
@@ -296,18 +307,7 @@ function appendLines(buffer: BufferData, lines: LineSnapshot[], limit: number): 
         // Timestamps, not Dates: this runs per line and the cached local-day
         // window answers it with number comparisons.
         injectDateChangeMessageIfNeeded(buffer, false, buffer.lines.length ? buffer.lines[buffer.lines.length - 1]!.date : line.epochMs, line.epochMs);
-        const created = createBufferLine({
-            buffer: buffer.id,
-            date: line.epochMs,
-            prefix: line.prefix,
-            message: line.message,
-            tags_array: line.tags,
-            displayed: line.displayed ? 1 : 0,
-            notify_level: line.notifyLevel,
-            highlight: line.highlight ? 1 : 0,
-            id: line.id, // → lineId via `weechatLineId`
-            bufferType: buffer.type,
-        });
+        const created = lineFromSnapshot(buffer, line);
         buffer.lines.push(created);
         noteLineId(buffer, created.lineId, limit);
     }
@@ -557,18 +557,7 @@ export function createApiStoreReducers(): ApiReducers {
                 const lineId = weechatLineId(line.id);
                 const index = buffer.lines.findIndex((l) => l.lineId === lineId);
                 if (index < 0) return current;
-                const updated = createBufferLine({
-                    buffer: buffer.id,
-                    date: line.epochMs,
-                    prefix: line.prefix,
-                    message: line.message,
-                    tags_array: line.tags,
-                    displayed: line.displayed ? 1 : 0,
-                    notify_level: line.notifyLevel,
-                    highlight: line.highlight ? 1 : 0,
-                    id: line.id,
-                    bufferType: buffer.type,
-                });
+                const updated = lineFromSnapshot(buffer, line);
                 const copy = { ...current, [key]: { ...buffer, lines: [...buffer.lines] } };
                 copy[key]!.lines[index] = updated;
                 return copy;

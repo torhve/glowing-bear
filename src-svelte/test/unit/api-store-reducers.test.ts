@@ -451,6 +451,29 @@ describe('line tally gates (ported legacy rules)', () => {
     });
 });
 
+describe('a line is built once, whatever event brought it', () => {
+    it('looks the same whether it was appended, re-delivered live, or changed after delivery', () => {
+        reducers.buffers([bufferSnap({ lastReadLineId: -1 })]);
+        const snap = lineSnap(9, { message: 'hello', prefix: '<alice>', tags: ['irc_privmsg'] });
+
+        addLine(BUFFER_ID, snap);
+        const appended = get(buffers)[KEY]!.lines.at(-1)!;
+
+        // The same id arriving again while the buffer already holds it replaces in place.
+        addLine(BUFFER_ID, snap);
+        const reDelivered = get(buffers)[KEY]!.lines.at(-1)!;
+
+        // The relay reporting the line as changed takes the third path.
+        reducers.lineDataChanged(BUFFER_ID, snap);
+        const changed = get(buffers)[KEY]!.lines.at(-1)!;
+
+        // A field mapped by only one of the three paths would show up here as a line
+        // whose shape depends on which event happened to produce it.
+        expect(reDelivered).toEqual(appended);
+        expect(changed).toEqual(appended);
+        expect(get(buffers)[KEY]!.lines.filter((l) => l.lineId === appended.lineId)).toHaveLength(1);
+    });
+});
 describe('notification body (API path)', () => {
     it('strips WeeChat color and attribute controls from prefix and message', () => {
         reducers.buffers([bufferSnap()]);
