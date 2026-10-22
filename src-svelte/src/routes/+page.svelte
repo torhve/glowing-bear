@@ -16,6 +16,7 @@
   import { get } from 'svelte/store';
   import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig, sortedVisibleBuffers, checkAndNavigatePendingNotificationBuffer } from '#lib/stores/models.ts';
   import { sidebarOrder } from '#lib/stores/bufferProjections.ts';
+  import { classifyGlobalCommand, isJumpArm, jumpDigit, quickKeyDigit } from '#lib/keyBindings.ts';
   import { connectionState, setReconnectAttempts, setNextReconnectAt, setErrors } from '#lib/stores/connectionStore.ts';
   import { connect, fetchMoreLines, sendWeeChatCommand, disconnect, requestNicklist, switchBuffer, listScripts, getSession, getWs, initFocusReconnect, cleanupFocusReconnect, setHotlistPollInterval, pendingRetry } from '#lib/stores/connectionManager.ts';
   import { connectionBanner } from '#lib/stores/connectionPresentation.ts';
@@ -264,25 +265,21 @@
 
     // Use get() to avoid $effect dependency on $settings/$sortedVisibleBuffers (prevents listener re-registration)
     const s = get(settings);
-    if (e.altKey && !e.ctrlKey && !e.shiftKey && s.enableQuickKeys) {
-      // Use e.code to extract digit — this works on all keyboard layouts
-      const digitMatch = e.code.match(/^Digit(\d)$/);
-      if (digitMatch) {
-        let digitStr = digitMatch[1];
-        if (!digitStr) return;
-        const digit = parseInt(digitStr, 10);
-        const index = digit === 0 ? 9 : digit - 1;
-        e.preventDefault();
-        if (!$connected) {
-          addToast('Cannot switch buffers — not connected', { type: 'warning', duration: 3000 });
-          return;
-        }
-        const sorted = get(sortedVisibleBuffers) as BufferData[];
-        if (index < sorted.length) {
-          const buf = sorted[index];
-          if (buf) switchBuffer(buf.id);
-        }
-      }
+    if (!s.enableQuickKeys) return;
+
+    const digit = quickKeyDigit(e);
+    if (digit === null) return;
+
+    const index = digit === 0 ? 9 : digit - 1;
+    e.preventDefault();
+    if (!$connected) {
+      addToast('Cannot switch buffers — not connected', { type: 'warning', duration: 3000 });
+      return;
+    }
+    const sorted = get(sortedVisibleBuffers) as BufferData[];
+    if (index < sorted.length) {
+      const buf = sorted[index];
+      if (buf) switchBuffer(buf.id);
     }
   }
 
@@ -293,31 +290,25 @@
   function handleJumpToBuffer(e: KeyboardEvent) {
     // Skip when focus is in an input field so user can type normally
     if (isTypingTarget()) return;
+
     // Alt+J -> arm jump mode (tens place reset)
-    if (e.altKey && !e.ctrlKey && !e.shiftKey && e.code === 'KeyJ') {
+    if (isJumpArm(e)) {
       e.preventDefault();
       _jumpArmed = true;
       _jumpTens = null;
       return;
     }
     if (!_jumpArmed) return;
-    // Digits while armed: first is tens, second completes the buffer number.
-    //
-    // This used to read e.keyCode, which reports the character a layout produces
-    // rather than the key that was pressed — a different number. The key at the
-    // QWERTY J position is 'h' on AZERTY (72, not 74), so the mode never armed
-    // there at all; the key labelled 1 is '&' (38, not 49), so no digit could be
-    // entered. It now reads e.code, the same physical-key reading the Alt+digit
-    // quick keys above already used, which makes the two halves of this shortcut
-    // agree.
-    //
-    // Shift is accepted because armed mode is exclusive — anything that is not a
-    // digit aborts anyway — and on AZERTY a digit is Shift plus a key. Numpad
-    // digits still work, and work better: with NumLock off those keys report
-    // keyCode 34-36 and the old check saw page navigation instead.
-    const digitMatch = e.code.match(/^(?:Digit|Numpad)(\d)$/);
-    const digit = digitMatch?.[1] ? parseInt(digitMatch[1], 10) : -1;
-    if (digit >= 0 && !e.altKey && !e.ctrlKey) {
+
+    // Digits while armed: first is the tens place, the second completes the buffer
+    // number. Both halves read the physical key — the reasons are collected once in
+    // `#lib/keyBindings.ts`. The old reading of `e.keyCode` reported the character a
+    // layout produces, so the key at the QWERTY J position is 'h' on AZERTY and the
+    // mode never armed there, and the key labelled 1 is '&' so no digit could be
+    // entered. Numpad digits now work where they used to misread: with NumLock off
+    // those keys reported keyCode 34-36 and the old check saw page navigation.
+    const digit = jumpDigit(e);
+    if (digit !== null) {
       e.preventDefault();
       if (_jumpTens === null) {
         _jumpTens = digit;
@@ -334,12 +325,49 @@
       }
       return;
     }
+
     // Any other key while armed -> abort
     _jumpArmed = false;
     _jumpTens = null;
   }
 
   let lastEscapeTime = 0;
+
+  // Alt+A: the most urgent buffer, notifications before unreads, each scanned in
+  // buffer-number order from the beginning of the list. Repeated presses advance on
+  // their own because switching clears the buffer it lands on.
+  function switchToMostUrgentBuffer() {
+    const allBuffers = Object.values(get(buffers)) as BufferData[];
+    const sortedByNumber = allBuffers
+      .filter((b: BufferData) => !b.hidden)
+      .sort((a: BufferData, b: BufferData) => a.number - b.number);
+
+    for (const buf of sortedByNumber) {
+      if (buf.notification > 0) {
+        switchBuffer(buf.id);
+        return;
+      }
+    }
+    for (const buf of sortedByNumber) {
+      if (buf.unread > 0) {
+        switchBuffer(buf.id);
+        return;
+      }
+    }
+  }
+
+  // Alt+Arrow: the next or previous visible buffer, by the same order the sidebar
+  // shows. If the active buffer is not in that list there is nothing adjacent.
+  function switchAdjacentBuffer(dir: -1 | 1) {
+    const visible = get(sortedVisibleBuffers) as BufferData[];
+    const curId = get(activeBufferId);
+    const curIdx = visible.findIndex((b: BufferData) => b.id === curId);
+    if (curIdx === -1) return;
+    const target = curIdx + dir;
+    if (target < 0 || target >= visible.length) return;
+    const targetBuf = visible[target];
+    if (targetBuf) switchBuffer(targetBuf.id);
+  }
 
   function handleGlobalKeyboard(e: KeyboardEvent) {
     // Escape handling first — always processes regardless of focused element
@@ -361,106 +389,65 @@
       return;
     }
 
-    const code = e.keyCode || e.which;
+    const command = classifyGlobalCommand(e);
+    if (command === null) return;
 
-    // PageUp/PageDown -> scroll chat (skip when focus is in an input field)
-    if (!e.ctrlKey && !e.altKey && !e.shiftKey && (code === 33 || code === 34)) {
-      // Don't scroll chat when user is typing in the input bar
-      if (isTypingTarget()) return;
-      e.preventDefault();
-      // The chat view decides the step and owns the write; a reader who just
-      // navigated by wheel or touch keeps the position they chose.
-      chatScrollCommands.current?.pageScroll(code === 33 ? -1 : 1);
-      return;
-    }
-
-    // Alt+< -> previous buffer
-    if (e.altKey && (e.code === 'Backquote' || e.code === 'IntlBackslash' || code === 60 || code === 226)) {
-      e.preventDefault();
-      const prevId = get(previousBufferId);
-      if (prevId) switchBuffer(prevId);
-      return;
-    }
-
-    // Alt+L -> focus input bar
-    if (e.altKey && (code === 76 || code === 108)) {
-      e.preventDefault();
-      const input = document.querySelector<HTMLTextAreaElement>('[data-testid="message-input"]');
-      input?.focus();
-      return;
-    }
-
-    // Alt+n -> toggle nicklist
-    if (e.altKey && !e.ctrlKey && code === 78) {
-      e.preventDefault();
-      const s = get(settings);
-      updateSettings({ showNicklist: !s.showNicklist });
-      return;
-    }
-
-    // Alt+A -> switch to most urgent buffer (notifications > unreads, sorted by number)
-    // Matches AngularJS behavior: always scans from the beginning of the buffer list.
-    // Repeated presses naturally advance because switching clears that buffer's counts.
-    if (e.altKey && (code === 97 || code === 65) && !e.ctrlKey) {
-      e.preventDefault();
-      const allBuffers = Object.values(get(buffers)) as BufferData[];
-      const sortedByNumber = allBuffers
-        .filter((b: BufferData) => !b.hidden)
-        .sort((a: BufferData, b: BufferData) => a.number - b.number);
-
-      // First pass: find first buffer with notifications (highlights/mentions)
-      for (const buf of sortedByNumber) {
-        if (buf.notification > 0) {
-          switchBuffer(buf.id);
-          return;
-        }
+    switch (command) {
+      case 'page-up':
+      case 'page-down': {
+        // Don't scroll chat when user is typing in the input bar
+        if (isTypingTarget()) return;
+        e.preventDefault();
+        // The chat view decides the step and owns the write; a reader who just
+        // navigated by wheel or touch keeps the position they chose.
+        chatScrollCommands.current?.pageScroll(command === 'page-up' ? -1 : 1);
+        return;
       }
-
-      // Second pass: find first buffer with unread lines
-      for (const buf of sortedByNumber) {
-        if (buf.unread > 0) {
-          switchBuffer(buf.id);
-          return;
-        }
+      case 'previous-buffer': {
+        e.preventDefault();
+        const prevId = get(previousBufferId);
+        if (prevId) switchBuffer(prevId);
+        return;
       }
-    }
-
-    // Alt+Arrow up/down -> switch to adjacent buffer
-    if (e.altKey && !e.ctrlKey && (code === 38 || code === 40)) {
-      e.preventDefault();
-      const visible = get(sortedVisibleBuffers) as BufferData[];
-      const curId = get(activeBufferId);
-      const curIdx = visible.findIndex((b: BufferData) => b.id === curId);
-      if (curIdx === -1) return;
-      const dir = code === 38 ? -1 : 1;
-      const target = curIdx + dir;
-      if (target >= 0 && target < visible.length) {
-        const targetBuf = visible[target];
-        if (targetBuf) switchBuffer(targetBuf.id);
+      case 'focus-composer': {
+        e.preventDefault();
+        const input = document.querySelector<HTMLTextAreaElement>('[data-testid="message-input"]');
+        input?.focus();
+        return;
       }
-      return;
-    }
-
-    // Alt+h -> clear all unread
-    if (e.altKey && !e.ctrlKey && code === 72) {
-      e.preventDefault();
-      clearAllUnread();
-      sendWeeChatCommand('/input hotlist_clear');
-      return;
-    }
-
-    // Alt/Ctrl+G -> focus buffer search
-    if ((e.altKey || e.ctrlKey) && (code === 71 || code === 103)) {
-      e.preventDefault();
-      toggleBufferSearchGlobal();
-      return;
-    }
-
-    // Ctrl+F -> content search
-    if (e.ctrlKey && (code === 70 || code === 102)) {
-      e.preventDefault();
-      openContentSearch();
-      return;
+      case 'toggle-nicklist': {
+        e.preventDefault();
+        const s = get(settings);
+        updateSettings({ showNicklist: !s.showNicklist });
+        return;
+      }
+      case 'urgent-buffer': {
+        e.preventDefault();
+        switchToMostUrgentBuffer();
+        return;
+      }
+      case 'buffer-up':
+      case 'buffer-down': {
+        e.preventDefault();
+        switchAdjacentBuffer(command === 'buffer-up' ? -1 : 1);
+        return;
+      }
+      case 'clear-unread': {
+        e.preventDefault();
+        clearAllUnread();
+        sendWeeChatCommand('/input hotlist_clear');
+        return;
+      }
+      case 'buffer-search': {
+        e.preventDefault();
+        toggleBufferSearchGlobal();
+        return;
+      }
+      case 'content-search': {
+        e.preventDefault();
+        openContentSearch();
+        return;
+      }
     }
   }
 
