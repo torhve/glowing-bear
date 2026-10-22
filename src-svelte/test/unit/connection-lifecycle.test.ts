@@ -28,6 +28,7 @@ import {
     createBufferLine,
     hotlistClearedBuffers,
     localUnreadBuffers,
+    newPendingSwitch,
     pendingBufferSwitch,
     previousBufferId,
     relayApiVersion,
@@ -39,8 +40,9 @@ import { clearToasts, toastStore } from '#lib/toast.ts';
 import { clearActiveConnectionProfile, setActiveConnectionProfile } from '#lib/connectionProfile.ts';
 import { activeTransport } from '#lib/stores/connectionStore.ts';
 import { createApiStoreReducers, flushApiLineBatch } from '#lib/api/api-store-reducers.ts';
-import type { BufferSnapshot } from '#lib/api/api-contracts.ts';
+import type { BufferSnapshot, LineSnapshot } from '#lib/api/api-contracts.ts';
 import type { ApiBufferId, ApiLineId } from '#lib/api/api-ids.ts';
+import { apiBuffer, apiLine as fixtureLine } from './apiFixtures.ts';
 import * as api from '#lib/stores/apiConnection.ts';
 import {
     clearCaptureIntent,
@@ -71,31 +73,24 @@ const KEY = '1791000000000901';
 const API_ID = 1791000000000901 as ApiBufferId;
 
 function apiSnapshot(id: ApiBufferId): BufferSnapshot {
-    return {
-        id,
+    return apiBuffer(id, {
         name: 'irc.gbtest.#glowing-bear',
         shortName: '#glowing-bear',
         number: 1,
-        contentType: 'formatted',
         semanticType: 'channel',
-        hidden: false,
         title: '#glowing-bear',
         localVariables: { type: 'channel', plugin: 'irc', server: 'gbtest' },
-        lastReadLineId: -1,
-    };
+    });
 }
 
-function apiLine(id: ApiLineId, message: string) {
-    return {
-        id,
+function apiLine(id: ApiLineId, message: string): LineSnapshot {
+    return fixtureLine(id, {
         epochMs: Date.parse('2026-10-12T12:00:00.000Z'),
-        displayed: true,
-        highlight: false,
         notifyLevel: 0,
         prefix: 'gbbot',
         message,
         tags: [],
-    };
+    });
 }
 
 const PROFILE: ConnectionProfile = {
@@ -117,7 +112,7 @@ function seedBufferWithLine() {
     });
     buffer.lines.push(createBufferLine({
         buffer: KEY,
-        date: '2026-10-12T12:00:00',
+        date: Date.parse('2026-10-12T12:00:00.000Z'),
         prefix: 'gbbot',
         message: 'the only line',
         tags_array: [],
@@ -184,10 +179,10 @@ describe('resetAppState — the shared wipe', () => {
         seedBufferWithLine();
         activeBufferId.set(KEY);
         previousBufferId.set('some-other-buffer');
-        pendingBufferSwitch.set('a-switch-that-never-landed');
+        pendingBufferSwitch.set(newPendingSwitch('alice', 'gbtest'));
         bufferBottom.set(false);
         connected.set(true);
-        weechatVersion.set(['4', '10', '1']);
+        weechatVersion.set([4, 10, 1]);
         relayApiVersion.set('0.6.0');
         localUnreadBuffers.update(() => new Set(['stale']));
         hotlistClearedBuffers.update(() => new Set(['stale']));
@@ -258,6 +253,7 @@ describe('which transport the lifecycle is talking to', () => {
             hasRetryLoop: () => true,
             manualReconnect: () => { calls.push(kind); },
             pendingRetry: () => pending,
+            quiesce: () => {},
         };
     }
 

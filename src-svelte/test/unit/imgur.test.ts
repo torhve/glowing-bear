@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 
 // Mock settings before importing imgur to avoid localStorage access
 const mockSettingsSubscribe = vi.fn((fn: (val: Record<string, unknown>) => void) => {
@@ -29,30 +29,40 @@ const mockFileReader = vi.fn(function () {
 vi.stubGlobal('FileReader', mockFileReader);
 
 // Track the actual XMLHttpRequest instance created
-let actualXhr: {
-    open: ReturnType<typeof vi.fn>;
-    setRequestHeader: ReturnType<typeof vi.fn>;
-    send: ReturnType<typeof vi.fn>;
+/**
+ * A XMLHttpRequest stand-in. The mocks carry the signatures the app calls them
+ * with, so `toHaveBeenCalledWith` checks the arguments the upload actually sends
+ * rather than accepting anything.
+ */
+type XhrStub = {
+    open: Mock<(method: string, url: string, isAsync: boolean) => void>;
+    setRequestHeader: Mock<(name: string, value: string) => void>;
+    send: Mock<(body: ArrayBuffer | string | FormData | null) => void>;
     status: number;
     responseText: string;
-    onload: ((this: XMLHttpRequest) => void) | null;
-    onerror: ((this: XMLHttpRequest) => void) | null;
+    // No `this: XMLHttpRequest` here: the test calls these directly on the stand-in.
+    onload: ((ev?: ProgressEvent) => void) | null;
+    onerror: ((ev?: ProgressEvent) => void) | null;
     upload: { onprogress: ((e: unknown) => void) | null };
 };
 
-const mockXhr = vi.fn(function () {
-    actualXhr = {
-        open: vi.fn(),
-        setRequestHeader: vi.fn(),
-        send: vi.fn(),
+function xhrStandIn(): XhrStub {
+    return {
+        open: vi.fn<(method: string, url: string, isAsync: boolean) => void>(),
+        setRequestHeader: vi.fn<(name: string, value: string) => void>(),
+        send: vi.fn<(body: ArrayBuffer | string | FormData | null) => void>(),
         status: 0,
         responseText: '',
         onload: null,
         onerror: null,
-        upload: {
-            onprogress: null,
-        },
+        upload: { onprogress: null },
     };
+}
+
+let actualXhr: XhrStub;
+
+const mockXhr = vi.fn(function () {
+    actualXhr = xhrStandIn();
     return actualXhr;
 });
 vi.stubGlobal('XMLHttpRequest', mockXhr);
@@ -60,18 +70,7 @@ vi.stubGlobal('XMLHttpRequest', mockXhr);
 describe('uploadImage', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        actualXhr = {
-            open: vi.fn(),
-            setRequestHeader: vi.fn(),
-            send: vi.fn(),
-            status: 0,
-            responseText: '',
-            onload: null,
-            onerror: null,
-            upload: {
-                onprogress: null,
-            },
-        };
+        actualXhr = xhrStandIn();
     });
 
     it('uploads File as raw binary via readAsArrayBuffer', async () => {

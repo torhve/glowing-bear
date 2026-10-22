@@ -11,12 +11,27 @@ function jsonResponse(status: number, body: unknown): Response {
     });
 }
 
+
+/** A fetch stub that answers with `response` and records the url and init it was given. */
+function fetchReturning(response: Response) {
+    return vi.fn(async (_url: string, _init: RequestInit) => response);
+}
+
+type FetchStub = ReturnType<typeof fetchReturning>;
+
+/** The Authorization header one recorded request sent. */
+function authHeaderAt(fetchMock: FetchStub, call: number): string {
+    const headers = fetchMock.mock.calls[call]?.[1]?.headers as Record<string, string> | undefined;
+    const value = headers?.authorization;
+    if (!value) throw new Error(`request ${call} sent no Authorization header`);
+    return value;
+}
 describe('performHandshake', () => {
     beforeEach(() => { vi.restoreAllMocks(); });
     afterEach(() => { vi.restoreAllMocks(); });
 
     it('posts the supported algorithm list and returns the negotiation', async () => {
-        const fetchMock = vi.fn(async () => jsonResponse(200, {
+        const fetchMock = fetchReturning(jsonResponse(200, {
             password_hash_algo: 'pbkdf2+sha256',
             password_hash_iterations: 100000,
             totp: false,
@@ -56,13 +71,13 @@ describe('apiRequest', () => {
     const auth = { algo: 'pbkdf2+sha256' as const, iterations: 1000, totp: false };
 
     it('sends a fresh Basic credential header and parses JSON', async () => {
-        const fetchMock = vi.fn(async () => jsonResponse(200, [{ id: 1 }]));
+        const fetchMock = fetchReturning(jsonResponse(200, [{ id: 1 }]));
         vi.stubGlobal('fetch', fetchMock);
         const body = await apiRequest<unknown[]>(endpoint, auth, 'pw', 'GET', '/api/buffers?lines=0');
         expect(body).toEqual([{ id: 1 }]);
-        const headers = fetchMock.mock.calls[0]![1].headers as Record<string, string>;
-        expect(headers.authorization.startsWith('Basic ')).toBe(true);
-        const decoded = Buffer.from(headers.authorization.slice(6), 'base64').toString('utf8');
+        const authorization = authHeaderAt(fetchMock, 0);
+        expect(authorization.startsWith('Basic ')).toBe(true);
+        const decoded = Buffer.from(authorization.slice(6), 'base64').toString('utf8');
         expect(decoded.startsWith('hash:pbkdf2+sha256:')).toBe(true);
         expect(decoded).toContain(':1000:');
     });
@@ -75,23 +90,24 @@ describe('apiRequest', () => {
 
     it('maps API error bodies to ApiHttpError with status', async () => {
         vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(404, { error: 'Buffer not found' })));
-        const err = await apiRequest(endpoint, auth, 'pw', 'GET', '/api/buffers/999')
-            .catch((e) => e);
-        expect(err).toBeInstanceOf(ApiHttpError);
+        const err = await apiRequest(endpoint, auth, 'pw', 'GET', '/api/buffers/999').then(
+            () => { throw new Error('the request unexpectedly succeeded'); },
+            (e) => {
+                if (!(e instanceof ApiHttpError)) throw e;
+                return e;
+            },
+        );
         expect(err.status).toBe(404);
         expect(err.apiError).toBe('Buffer not found');
     });
 
     it('generates a new timestamped credential per request', async () => {
-        const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+        const fetchMock = fetchReturning(new Response(null, { status: 204 }));
         vi.stubGlobal('fetch', fetchMock);
         await apiRequest(endpoint, auth, 'pw', 'POST', '/api/ping', {});
         await new Promise((r) => setTimeout(r, 1100)); // cross a second boundary
         await apiRequest(endpoint, auth, 'pw', 'POST', '/api/ping', {});
-        const dec = (i: number) => Buffer.from(
-            (fetchMock.mock.calls[i]![1].headers as Record<string, string>).authorization.slice(6),
-            'base64',
-        ).toString('utf8');
+        const dec = (i: number) => Buffer.from(authHeaderAt(fetchMock, i).slice(6), 'base64').toString('utf8');
         const tsOf = (cred: string) => cred.split(':')[2];
         expect(tsOf(dec(0))).not.toBe(tsOf(dec(1)));
     });
