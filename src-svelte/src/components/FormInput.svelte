@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import type { HTMLInputTypeAttribute, KeyboardEventHandler, EventHandler } from 'svelte/elements';
+  import { FORM_SURFACE } from '#lib/formControlClass.ts';
 
   let {
     id,
@@ -52,7 +53,7 @@
     if (internalValue !== value) internalValue = value ?? '';
   });
 
-  const combinedClass = $derived(`form-input w-full bg-input-bg border border-border rounded text-text focus:outline-none focus:border-accent hover:border-text-muted placeholder-text-muted transition-colors ${getSizeClass(size)} ${getVariantClass(variant)} ${extraClass}`);
+  const combinedClass = $derived(`form-input ${FORM_SURFACE} hover:border-text-muted placeholder-text-muted transition-colors ${getSizeClass(size)} ${getVariantClass(variant)} ${extraClass}`);
 
   function handleInput(e: Event) {
     const target = e.target as HTMLInputElement;

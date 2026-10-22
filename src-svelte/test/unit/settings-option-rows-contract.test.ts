@@ -1,10 +1,11 @@
 /**
  * The settings option rows and section headers, pinned before they are collapsed.
  *
- * `SettingsModal` hand-writes 15 option rows and 6 section headers. Unlike the six
- * dialog headers (see `dialog-header-contract.test.ts`), these really are copies —
- * which is exactly why they are worth a component. But "they are copies" is only
- * safe to act on once the differences between them are listed, and there are five:
+ * `SettingsModal` used to hand-write 15 option rows and 6 section headers; `ToggleOption`
+ * and a `sectionHeader` snippet render them now. Unlike the six dialog headers (see
+ * `dialog-header-contract.test.ts`), the settings rows really were copies — which is why
+ * they were worth a component. But "they are copies" is only safe to act on once the
+ * differences between them are listed, and there are five:
  *
  *   - `id` is not derived from the setting key (`showNicklist` → `show-nicklist`,
  *     but `noembed` → `noembed`), so it has to stay an explicit value;
@@ -28,6 +29,7 @@ import SettingsModal from '#components/SettingsModal.svelte';
 import { get } from 'svelte/store';
 import { settings, updateSettings } from '#lib/stores/settings.ts';
 import type { Settings } from '#lib/types.ts';
+import { FORM_FIELD_CLASS, FORM_SURFACE } from '#lib/formControlClass.ts';
 
 const components: Record<string, unknown>[] = [];
 
@@ -247,26 +249,37 @@ describe('the six section headers', () => {
 });
 
 describe('the four wide field controls', () => {
-    /** Three share one class string exactly; the custom CSS textarea adds `font-mono`. */
-    const FIELD_CLASS = 'w-full px-3 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent';
+    /**
+     * The surface a wide field carries, as a token set. Attribute order is not
+     * something CSS can see, and the field controls now compose that surface from
+     * `#lib/formControlClass.ts` instead of repeating the string, so the tokens are
+     * what is pinned — a forked surface still fails here.
+     */
+    const FIELD_TOKENS = [
+        'w-full', 'px-3', 'py-2', 'bg-input-bg', 'border', 'border-border', 'rounded',
+        'text-text', 'text-sm', 'focus:outline-none', 'focus:border-accent',
+    ].sort();
 
-    it('share one class string, with the textarea the only variant', () => {
+    it('share one class, with the textarea the only variant', () => {
         const target = render();
         const themeDark = target.querySelector('[data-testid="theme-dark-selector"]')!;
         const themeLight = target.querySelector('[data-testid="theme-light-selector"]')!;
         const fontFamily = target.querySelector('[data-testid="font-family-input"]')!;
         const customCss = target.querySelector('[data-testid="custom-css-textarea"]')!;
 
-        // The three identical ones are byte-identical, which is what makes them a
+        // The three identical ones carry the same tokens, which is what makes them a
         // deduplication candidate rather than a family lookalike.
-        expect(themeDark.className).toBe(FIELD_CLASS);
-        expect(themeLight.className).toBe(FIELD_CLASS);
-        expect(fontFamily.className).toBe(FIELD_CLASS);
+        expect(tokens(themeDark)).toEqual(FIELD_TOKENS);
+        expect(tokens(themeLight)).toEqual(FIELD_TOKENS);
+        expect(tokens(fontFamily)).toEqual(FIELD_TOKENS);
 
-        // The textarea is the variant: same tokens plus `font-mono`. Its tokens are
-        // not in the same order as the others — `font-mono` sits mid-string — and
-        // order is not something CSS can see, so this one is pinned as a token set.
-        expect([...customCss.classList].sort()).toEqual([...FIELD_CLASS.split(' '), 'font-mono'].sort());
+        // The shared vocabulary is what actually renders: a change to the module has
+        // to show up here rather than only in how the modal looks.
+        expect(FORM_FIELD_CLASS.split(' ').sort()).toEqual(FIELD_TOKENS);
+        expect(FIELD_TOKENS).toEqual(expect.arrayContaining(FORM_SURFACE.split(' ')));
+
+        // The textarea is the variant: same tokens plus `font-mono`.
+        expect(tokens(customCss)).toEqual([...FIELD_TOKENS, 'font-mono'].sort());
     });
 
     it('the field controls are not the FormInput class — a shared component would restyle them', () => {
@@ -277,5 +290,11 @@ describe('the four wide field controls', () => {
         const fontFamily = target.querySelector('[data-testid="font-family-input"]')!;
         expect(fontFamily.classList.contains('form-input')).toBe(false);
         expect(fontFamily.classList.contains('transition-colors')).toBe(false);
+
+        // The sibling that *is* a FormInput shares the same surface tokens, so the two
+        // families are one vocabulary with different additions, not two drifting surfaces.
+        const fontSize = target.querySelector('[data-testid="font-size-input"]')!;
+        expect(fontSize.classList.contains('form-input')).toBe(true);
+        expect(tokens(fontSize)).toEqual(expect.arrayContaining(FORM_SURFACE.split(' ')));
     });
 });

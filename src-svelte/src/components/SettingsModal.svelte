@@ -37,6 +37,11 @@
   import Cog from '@lucide/svelte/icons/cog';
   import { version as appVersion } from '../../../package.json';
   import FormInput from '#components/FormInput.svelte';
+  import FormSelect from '#components/FormSelect.svelte';
+  import FormTextarea from '#components/FormTextarea.svelte';
+  import ToggleOption from '#components/ToggleOption.svelte';
+  import { FORM_FIELD_CLASS } from '#lib/formControlClass.ts';
+  import type { LucideIcon } from '@lucide/svelte';
 
   // About footer line: app version always; relay version + transport only
   // once known (API relays report the Relay API version; legacy relays don't).
@@ -126,6 +131,10 @@
   }
 </script>
 
+{#snippet sectionHeader(title: string, Icon: LucideIcon)}
+  <h3 class="settings-section-header text-base font-bold text-accent uppercase tracking-wide mb-3 flex items-center gap-2"><Icon size={14} />{title}</h3>
+{/snippet}
+
 <BaseDialog id="settings-modal" labelledby="settings-title">
   <div class="settings-modal-content flex flex-col max-h-[85vh]">
     <div class="settings-header px-6 py-4 border-b border-border flex items-center justify-between">
@@ -145,36 +154,32 @@
 
     <div class="settings-body flex-1 overflow-y-auto p-6 space-y-6">
       <section class="settings-section" data-settings-section="appearance">
-        <h3 class="settings-section-header text-base font-bold text-accent uppercase tracking-wide mb-3 flex items-center gap-2"><Palette size={14} />Appearance</h3>
+        {@render sectionHeader('Appearance', Palette)}
         <div class="space-y-3">
           <div>
             <label for="theme-dark-selector" class="block text-sm text-text-secondary mb-1">Theme for dark mode</label>
-            <select
+            <FormSelect
               id="theme-dark-selector"
-              data-testid="theme-dark-selector"
               value={$settings.themeDark}
               onchange={(e) => handleThemeSlotChange('dark', e.currentTarget.value)}
-              class="w-full px-3 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent"
             >
               {#each themes as theme (theme)}
                 <option value={theme}>{themeLabels[theme]}</option>
               {/each}
-            </select>
+            </FormSelect>
           </div>
 
           <div>
             <label for="theme-light-selector" class="block text-sm text-text-secondary mb-1">Theme for light mode</label>
-            <select
+            <FormSelect
               id="theme-light-selector"
-              data-testid="theme-light-selector"
               value={$settings.themeLight}
               onchange={(e) => handleThemeSlotChange('light', e.currentTarget.value)}
-              class="w-full px-3 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent"
             >
               {#each themes as theme (theme)}
                 <option value={theme}>{themeLabels[theme]}</option>
               {/each}
-            </select>
+            </FormSelect>
             <p class="mt-1 text-xs text-text-muted">
               Glowing Bear follows the system's light/dark setting and uses the matching theme.
               Pick the same theme in both to keep one look whatever the system does.
@@ -183,6 +188,12 @@
 
           <div>
             <label for="font-family" class="block text-sm text-text-secondary mb-1 flex items-center gap-1"><Type size={14} class="shrink-0" />Font Family</label>
+            <!--
+              Not FormInput: this field shares the surface the selects and the textarea
+              use, and FormInput would add hover, placeholder and transition classes plus
+              its own size-derived padding. `settings-option-rows-contract.test.ts` pins
+              that difference so it stays a decision rather than an accident.
+            -->
             <input
               id="font-family"
               data-testid="font-family-input"
@@ -190,7 +201,7 @@
               value={$settings.fontfamily}
               oninput={(e: Event) => updateSettings({ fontfamily: (e.target as HTMLInputElement).value })}
               placeholder="Inconsolata, Consolas, Monaco, monospace"
-              class="w-full px-3 py-2 bg-input-bg border border-border rounded text-text text-sm focus:outline-none focus:border-accent"
+              class={FORM_FIELD_CLASS}
             />
           </div>
 
@@ -232,179 +243,89 @@
 
           <div>
             <label for="custom-css" class="block text-sm text-text-secondary mb-1 flex items-center gap-1"><Code size={14} class="shrink-0" />Custom CSS</label>
-            <textarea
+            <FormTextarea
               id="custom-css"
               data-testid="custom-css-textarea"
               value={$settings.customCSS}
               oninput={(e) => updateSettings({ customCSS: e.currentTarget.value })}
               rows={4}
               placeholder="/* Your custom CSS here */"
-              class="w-full px-3 py-2 bg-input-bg border border-border rounded text-text text-sm font-mono focus:outline-none focus:border-accent"
-            ></textarea>
+            />
           </div>
         </div>
       </section>
 
       <section class="settings-section" data-settings-section="display">
-        <h3 class="settings-section-header text-base font-bold text-accent uppercase tracking-wide mb-3 flex items-center gap-2"><Monitor size={14} />Display</h3>
+        {@render sectionHeader('Display', Monitor)}
         <div class="space-y-2">
-          <label class="settings-option flex items-center justify-between py-2" data-settings-option="showNicklist">
-            <span class="settings-option-label text-sm text-text flex items-center gap-2"><Users size={14} class="text-text-secondary shrink-0" />Show nicklist</span>
-            <input
-              id="show-nicklist"
-              name="showNicklist"
-              type="checkbox"
-              checked={$settings.showNicklist}
-              onchange={() => updateSettings({ showNicklist: !$settings.showNicklist })}
-              class="w-4 h-4"
-              data-settings-checkbox="showNicklist"
-            />
-          </label>
+          <ToggleOption id="show-nicklist" name="showNicklist" icon={Users} checked={$settings.showNicklist}
+            onchange={() => updateSettings({ showNicklist: !$settings.showNicklist })}>
+            Show nicklist
+          </ToggleOption>
 
-          <label class="settings-option flex items-center justify-between py-2" data-settings-option="noembed">
-            <span class="settings-option-label text-sm text-text flex items-center gap-2"><ImageOff size={14} class="text-text-secondary shrink-0" />Hide embedded content by default</span>
-            <input
-              id="noembed"
-              name="noembed"
-              type="checkbox"
-              checked={$settings.noembed}
-              onchange={() => updateSettings({ noembed: !$settings.noembed })}
-              class="w-4 h-4"
-              data-settings-checkbox="noembed"
-            />
-          </label>
+          <ToggleOption id="noembed" name="noembed" icon={ImageOff} checked={$settings.noembed}
+            onchange={() => updateSettings({ noembed: !$settings.noembed })}>
+            Hide embedded content by default
+          </ToggleOption>
 
-          <label class="settings-option flex items-center justify-between py-2" data-settings-option="orderbyserver">
-            <span class="settings-option-label text-sm text-text flex items-center gap-2"><FolderTree size={14} class="text-text-secondary shrink-0" />Hierarchical buffer view (group by server)</span>
-            <input
-              id="orderbyserver"
-              name="orderbyserver"
-              type="checkbox"
-              checked={$settings.orderbyserver}
-              onchange={() => updateSettings({ orderbyserver: !$settings.orderbyserver })}
-              class="w-4 h-4"
-              data-settings-checkbox="orderbyserver"
-            />
-          </label>
+          <ToggleOption id="orderbyserver" name="orderbyserver" icon={FolderTree} checked={$settings.orderbyserver}
+            onchange={() => updateSettings({ orderbyserver: !$settings.orderbyserver })}>
+            Hierarchical buffer view (group by server)
+          </ToggleOption>
 
-          <label class="settings-option flex items-center justify-between py-2" data-settings-option="stylizePrivateChats">
-            <span class="settings-option-label text-sm text-text flex items-center gap-2"><MessageCircle size={14} class="text-text-secondary shrink-0" />Stylize private chats as bubbles</span>
-            <input
-              id="stylize-private-chats"
-              name="stylizePrivateChats"
-              type="checkbox"
-              checked={$settings.stylizePrivateChats}
-              onchange={() => updateSettings({ stylizePrivateChats: !$settings.stylizePrivateChats })}
-              class="w-4 h-4"
-              data-testid="stylizePrivateChats-checkbox"
-              data-settings-checkbox="stylizePrivateChats"
-            />
-          </label>
+          <ToggleOption id="stylize-private-chats" name="stylizePrivateChats" icon={MessageCircle}
+            checked={$settings.stylizePrivateChats} testid="stylizePrivateChats-checkbox"
+            onchange={() => updateSettings({ stylizePrivateChats: !$settings.stylizePrivateChats })}>
+            Stylize private chats as bubbles
+          </ToggleOption>
         </div>
       </section>
 
       <section class="settings-section" data-settings-section="behaviour">
-        <h3 class="settings-section-header text-base font-bold text-accent uppercase tracking-wide mb-3 flex items-center gap-2"><Cog size={14} />Behaviour</h3>
+        {@render sectionHeader('Behaviour', Cog)}
         <div class="space-y-2">
-          <label class="settings-option flex items-center justify-between py-2" data-settings-option="onlyUnread">
-            <span class="settings-option-label text-sm text-text flex items-center gap-2"><ListFilter size={14} class="text-text-secondary shrink-0" />Only show buffers with unread messages</span>
-            <input
-              id="only-unread"
-              name="onlyUnread"
-              type="checkbox"
-              checked={$settings.onlyUnread}
-              onchange={() => updateSettings({ onlyUnread: !$settings.onlyUnread })}
-              class="w-4 h-4"
-              data-settings-checkbox="onlyUnread"
-            />
-          </label>
+          <ToggleOption id="only-unread" name="onlyUnread" icon={ListFilter} checked={$settings.onlyUnread}
+            onchange={() => updateSettings({ onlyUnread: !$settings.onlyUnread })}>
+            Only show buffers with unread messages
+          </ToggleOption>
 
-          <label class="settings-option flex items-center justify-between py-2" data-settings-option="readlineBindings">
-            <span class="settings-option-label text-sm text-text flex items-center gap-2"><Keyboard size={14} class="text-text-secondary shrink-0" />Enable readline keybindings (Ctrl+A/E/U/W/B/F)</span>
-            <input
-              id="readline-bindings"
-              name="readlineBindings"
-              type="checkbox"
-              checked={$settings.readlineBindings}
-              onchange={() => updateSettings({ readlineBindings: !$settings.readlineBindings })}
-              class="w-4 h-4"
-              data-settings-checkbox="readlineBindings"
-            />
-          </label>
+          <ToggleOption id="readline-bindings" name="readlineBindings" icon={Keyboard} checked={$settings.readlineBindings}
+            onchange={() => updateSettings({ readlineBindings: !$settings.readlineBindings })}>
+            Enable readline keybindings (Ctrl+A/E/U/W/B/F)
+          </ToggleOption>
 
-          <label class="settings-option flex items-center justify-between py-2" data-settings-option="enableFormatting">
-            <span class="settings-option-label text-sm text-text flex items-center gap-2"><Type size={14} class="text-text-secondary shrink-0" />Enable text formatting (Ctrl+B/I/U/K)</span>
-            <input
-              id="enable-formatting"
-              name="enableFormatting"
-              type="checkbox"
-              checked={$settings.enableFormatting}
-              onchange={() => updateSettings({ enableFormatting: !$settings.enableFormatting })}
-              class="w-4 h-4"
-              data-testid="enableFormatting-checkbox"
-              data-settings-checkbox="enableFormatting"
-            />
-          </label>
+          <ToggleOption id="enable-formatting" name="enableFormatting" icon={Type} checked={$settings.enableFormatting}
+            testid="enableFormatting-checkbox"
+            onchange={() => updateSettings({ enableFormatting: !$settings.enableFormatting })}>
+            Enable text formatting (Ctrl+B/I/U/K)
+          </ToggleOption>
 
-          <label class="settings-option flex items-center justify-between py-2" data-settings-option="enableQuickKeys">
-            <span class="settings-option-label text-sm text-text flex items-center gap-2"><ArrowLeftRight size={14} class="text-text-secondary shrink-0" />Use Alt+[0-9] to switch buffers</span>
-            <input
-              id="enable-quick-keys"
-              name="enableQuickKeys"
-              type="checkbox"
-              checked={$settings.enableQuickKeys}
-              onchange={() => updateSettings({ enableQuickKeys: !$settings.enableQuickKeys })}
-              class="w-4 h-4"
-              data-settings-checkbox="enableQuickKeys"
-            />
-          </label>
+          <ToggleOption id="enable-quick-keys" name="enableQuickKeys" icon={ArrowLeftRight} checked={$settings.enableQuickKeys}
+            onchange={() => updateSettings({ enableQuickKeys: !$settings.enableQuickKeys })}>
+            Use Alt+[0-9] to switch buffers
+          </ToggleOption>
 
-          <label class="settings-option flex items-center justify-between py-2" data-settings-option="enableEmojify">
-            <span class="settings-option-label text-sm text-text flex items-center gap-2"><SmilePlus size={14} class="text-text-secondary shrink-0" />Replace emoji shortcodes while typing (<code>:beer:</code> → 🍺)</span>
-            <input
-              id="enable-emojify"
-              name="enableEmojify"
-              type="checkbox"
-              checked={$settings.enableEmojify}
-              onchange={() => updateSettings({ enableEmojify: !$settings.enableEmojify })}
-              class="w-4 h-4"
-              data-testid="enableEmojify-checkbox"
-              data-settings-checkbox="enableEmojify"
-            />
-          </label>
+          <ToggleOption id="enable-emojify" name="enableEmojify" icon={SmilePlus} checked={$settings.enableEmojify}
+            testid="enableEmojify-checkbox"
+            onchange={() => updateSettings({ enableEmojify: !$settings.enableEmojify })}>
+            Replace emoji shortcodes while typing (<code>:beer:</code> → 🍺)
+          </ToggleOption>
         </div>
       </section>
 
       <section class="settings-section" data-settings-section="notifications">
-        <h3 class="settings-section-header text-base font-bold text-accent uppercase tracking-wide mb-3 flex items-center gap-2"><Bell size={14} />Notifications</h3>
+        {@render sectionHeader('Notifications', Bell)}
         <div class="space-y-2">
-          <label class="settings-option flex items-center justify-between py-2" data-settings-option="useFavico">
-            <span class="settings-option-label text-sm text-text flex items-center gap-2"><Eye size={14} class="text-text-secondary shrink-0" />Display unread count in favicon</span>
-            <input
-              id="use-favico"
-              name="useFavico"
-              type="checkbox"
-              checked={$settings.useFavico}
-              onchange={() => updateSettings({ useFavico: !$settings.useFavico })}
-              data-testid="favico-checkbox"
-              class="w-4 h-4"
-              data-settings-checkbox="useFavico"
-            />
-          </label>
+          <ToggleOption id="use-favico" name="useFavico" icon={Eye} checked={$settings.useFavico}
+            testid="favico-checkbox" onchange={() => updateSettings({ useFavico: !$settings.useFavico })}>
+            Display unread count in favicon
+          </ToggleOption>
 
-          <label class="settings-option flex items-center justify-between py-2" data-settings-option="soundnotification">
-            <span class="settings-option-label text-sm text-text flex items-center gap-2"><Volume2 size={14} class="text-text-secondary shrink-0" />Play sound on notification</span>
-            <input
-              id="sound-notification"
-              name="soundnotification"
-              type="checkbox"
-              checked={$settings.soundnotification}
-              onchange={() => updateSettings({ soundnotification: !$settings.soundnotification })}
-              data-testid="sound-checkbox"
-              class="w-4 h-4"
-              data-settings-checkbox="soundnotification"
-            />
-          </label>
+          <ToggleOption id="sound-notification" name="soundnotification" icon={Volume2} checked={$settings.soundnotification}
+            testid="sound-checkbox"
+            onchange={() => updateSettings({ soundnotification: !$settings.soundnotification })}>
+            Play sound on notification
+          </ToggleOption>
 
           {#if notifSupported}
             {#if notifPermissionStatus === 'granted'}
@@ -434,20 +355,12 @@
       </section>
 
       <section class="settings-section" data-settings-section="advanced">
-        <h3 class="settings-section-header text-base font-bold text-accent uppercase tracking-wide mb-3 flex items-center gap-2"><Sliders size={14} />Advanced</h3>
+        {@render sectionHeader('Advanced', Sliders)}
         <div class="space-y-2">
-          <label class="settings-option flex items-center justify-between py-2" data-settings-option="enableMathjax">
-            <span class="settings-option-label text-sm text-text flex items-center gap-2"><Sigma size={14} class="text-text-secondary shrink-0" />Enable LaTeX math rendering (KaTeX)</span>
-            <input
-              id="enable-mathjax"
-              name="enableMathjax"
-              type="checkbox"
-              checked={$settings.enableMathjax}
-              onchange={() => updateSettings({ enableMathjax: !$settings.enableMathjax })}
-              class="w-4 h-4"
-              data-settings-checkbox="enableMathjax"
-            />
-          </label>
+          <ToggleOption id="enable-mathjax" name="enableMathjax" icon={Sigma} checked={$settings.enableMathjax}
+            onchange={() => updateSettings({ enableMathjax: !$settings.enableMathjax })}>
+            Enable LaTeX math rendering (KaTeX)
+          </ToggleOption>
 
           <div>
             <label for="imgur-token" class="block text-sm text-text-secondary mb-1 flex items-center gap-1"><Image size={14} class="shrink-0" />Imgur API Token</label>
@@ -474,34 +387,18 @@
       </section>
 
       <section class="settings-section" data-settings-section="connection">
-        <h3 class="settings-section-header text-base font-bold text-accent uppercase tracking-wide mb-3 flex items-center gap-2"><Plug size={14} />Connection</h3>
+        {@render sectionHeader('Connection', Plug)}
         <div class="space-y-2">
-          <label class="settings-option flex items-center justify-between py-2" data-settings-option="savepassword">
-            <span class="settings-option-label text-sm text-text flex items-center gap-2"><Lock size={14} class="text-text-secondary shrink-0" />Save password in browser</span>
-            <input
-              id="save-password"
-              name="savepassword"
-              type="checkbox"
-              checked={$settings.savepassword}
-              onchange={toggleSavePassword}
-              class="w-4 h-4"
-              data-settings-checkbox="savepassword"
-            />
-          </label>
+          <ToggleOption id="save-password" name="savepassword" icon={Lock} checked={$settings.savepassword}
+            onchange={toggleSavePassword}>
+            Save password in browser
+          </ToggleOption>
 
           {#if $settings.savepassword}
-            <label class="settings-option flex items-center justify-between py-2" data-settings-option="autoconnect">
-              <span class="settings-option-label text-sm text-text flex items-center gap-2"><LogIn size={14} class="text-text-secondary shrink-0" />Automatically connect</span>
-              <input
-                id="auto-connect"
-                name="autoconnect"
-                type="checkbox"
-                checked={$settings.autoconnect}
-                onchange={() => updateSettings({ autoconnect: !$settings.autoconnect })}
-                class="w-4 h-4"
-                data-settings-checkbox="autoconnect"
-              />
-            </label>
+            <ToggleOption id="auto-connect" name="autoconnect" icon={LogIn} checked={$settings.autoconnect}
+              onchange={() => updateSettings({ autoconnect: !$settings.autoconnect })}>
+              Automatically connect
+            </ToggleOption>
           {/if}
 
           <label class="settings-option flex items-center justify-between py-2" data-settings-option="protocol">
