@@ -406,13 +406,6 @@ export function makeKeyboardActivatable(handler: () => void): (e: KeyboardEvent)
 }
 
 /**
- * Filter a File array to only image files.
- */
-export function filterImageFiles(files: File[]): File[] {
-    return files.filter(f => f.type.match(/image.*/));
-}
-
-/**
  * Modify a textarea's value using a transformer function, then dispatch an input event.
  * Handles selection range preservation and focus management.
  */

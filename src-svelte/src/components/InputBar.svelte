@@ -6,7 +6,8 @@
   import { cycleKey, entryIndex, stepIndex, type CompletionCycle, type CompletionDirection } from '#lib/completionCycle.ts';
   import { settings } from '#lib/stores/settings.ts';
   import { addToHistory, getHistoryUp, getHistoryDown } from '#lib/stores/inputHistory.ts';
-  import { isPopoverOpen, filterImageFiles, joinMultilineToSingle, MULTILINE_PASTE_THRESHOLD, completeNick } from '#lib/utils.ts';
+  import { isPopoverOpen, joinMultilineToSingle, MULTILINE_PASTE_THRESHOLD, completeNick } from '#lib/utils.ts';
+  import { filterImages, hasClipboardImages, readClipboardImages } from '#lib/clipboardImages.ts';
   import Send from '@lucide/svelte/icons/send';
   import { emojifyInput } from '#lib/emojify.ts';
   import { tick, untrack } from 'svelte';
@@ -878,7 +879,7 @@
     // The conversation this clipboard content came from, captured before any async
     // read resolves.
     const pasteOwner = boundRef;
-    const imageFiles = filterImageFiles(Array.from(files));
+    const imageFiles = filterImages(Array.from(files));
     if (imageFiles.length === 0 && !(base64Strings?.length)) return;
 
     // Create preview items synchronously — createObjectURL is instant, no FileReader needed
@@ -1024,11 +1025,10 @@
     inputRef?.focus();
   }
 
-  // Handle paste events — detect images from clipboard.
-  // Tries multiple browser strategies in order:
-  // 1. clipboardData.files (Firefox on macOS exposes pasted images this way)
-  // 2. clipboardData.items + getAsFile() (Chrome standard behavior)
-  // 3. clipboardData.items + getAsString() (Safari fallback when getAsFile returns null)
+  // Handle paste events. Reading the clipboard's images is #lib/clipboardImages.ts's
+  // job — its strategy order is a browser fact, and Firefox's clipboard files have to
+  // start reading inside this handler. The event stays here, because whether a paste is
+  // images or text is the handler's decision, not the reader's.
   async function handlePaste(e: ClipboardEvent) {
     const data = e.clipboardData;
     if (!data) {
@@ -1036,105 +1036,38 @@
       return;
     }
 
-    // Strategy 1: clipboardData.files (Firefox on macOS)
-    // Firefox's clipboard files are ephemeral and get GC'd before FileReader can read them,
-    // so we must read their content immediately within this event handler.
-    const allFiles = Array.from(data.files);
-    const files = filterImageFiles(allFiles);
-    log('clipboardData.files:', allFiles.length, 'total,', files.length, 'images', allFiles.map(f => ({ name: f.name, type: f.type })));
-    if (files.length > 0) {
+    const images = readClipboardImages(data, log);
+    if (images.found) {
       e.preventDefault();
-      log('using strategy 1 (files), reading immediately to avoid GC');
-      const dataUrls = await Promise.all(
-        files.map(file =>
-          new Promise<string>(resolve => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = () => resolve('');
-            reader.readAsDataURL(file);
-          }),
-        ),
-      );
-      const validUrls = dataUrls.filter(u => u.length > 0);
-      log('strategy 1 resolved', validUrls.length, 'data URLs');
-      void collectImagesForPreview([], validUrls);
+      const dataUrls = await images.dataUrls;
+      log('clipboard gave', images.files.length, 'files,', dataUrls.length, 'data URLs');
+      void collectImagesForPreview(images.files, dataUrls.length ? dataUrls : undefined);
       return;
     }
 
-    // Strategy 2+3: clipboardData.items API (Chrome, Safari)
-    const items = data.items;
-    if (!items) {
-      log('no clipboardData.items, falling back to getData');
-      // items API unavailable (e.g. some browser contexts, Playwright DataTransfer).
-      // Fall back to getData for plain text paste.
-      e.preventDefault();
-      const pastedText = data.getData('text/plain') || data.getData('text');
-      if (pastedText) {
-        log('pasted', pastedText.length, 'characters of text via getData fallback');
-        inputRef?.focus();
-        if (isMultiLinePaste(pastedText)) {
-          showMultiLinePasteDialog(pastedText);
-          return;
-        }
-        insertAtCursor(pastedText, true);
-      }
-      return;
-    }
+    pasteTextFromClipboard(e, data);
+  }
 
-    const imageFiles: File[] = [];
-    const imageStringsPromises: Promise<string | null>[] = [];
-
-    log('clipboardData.items count:', items.length);
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      log('item[' + i + ']:', item?.kind, item?.type);
-      if (item && item.type.startsWith('image/')) {
-        const file = item.getAsFile();
-        if (file) {
-          log('item[' + i + '] getAsFile() succeeded:', file.name, file.type, file.size + ' bytes');
-          imageFiles.push(file);
-        } else {
-          log('item[' + i + '] getAsFile() returned null, falling back to getAsString');
-          imageStringsPromises.push(
-            new Promise(resolve => {
-              item.getAsString(s => {
-                log('getAsString callback:', s ? 'got ' + s.substring(0, 60) + '...' : 'null');
-                resolve(s || null);
-              });
-            }),
-          );
-        }
-      }
-    }
-
-    log('collected:', imageFiles.length, 'files,', imageStringsPromises.length, 'promises');
-    if (imageFiles.length === 0 && imageStringsPromises.length === 0) {
-      log('no images found, handling text paste');
-      // No images in clipboard — handle plain text paste.
-      // Explicitly prevent default and insert at cursor to avoid race conditions
-      // between browser's native paste and Svelte's bind:value reactivity.
-      e.preventDefault();
-      const pastedText = data.getData('text/plain') || data.getData('text');
-      if (pastedText) {
-        log('pasted', pastedText.length, 'characters of text');
-        inputRef?.focus();
-        if (isMultiLinePaste(pastedText)) {
-          showMultiLinePasteDialog(pastedText);
-          return;
-        }
-        insertAtCursor(pastedText, true);
-      }
-      return;
-    }
-
+  /**
+   * Paste the clipboard's text into the composer: take the event over, then either ask
+   * about a multi-line paste or drop the text at the caret.
+   *
+   * The default is prevented only when there is text to insert. The insert below is
+   * what must not race the browser's native paste into `bind:value`; a clipboard that
+   * reports no text is the browser's to handle, and an HTML-only clipboard still pastes
+   * as text natively, so preventing it unconditionally would swallow that paste.
+   */
+  function pasteTextFromClipboard(e: ClipboardEvent, data: DataTransfer): void {
+    const pastedText = data.getData('text/plain') || data.getData('text');
+    if (!pastedText) return;
     e.preventDefault();
-
-    // Wait for all getAsString callbacks to complete before processing
-    const resolvedStrings = await Promise.all(imageStringsPromises);
-    const strings = resolvedStrings.filter((s): s is string => s !== null && s.length > 0);
-    log('resolved strings:', strings.length);
-
-    void collectImagesForPreview(imageFiles, strings.length ? strings : undefined);
+    log('pasted', pastedText.length, 'characters of text');
+    inputRef?.focus();
+    if (isMultiLinePaste(pastedText)) {
+      showMultiLinePasteDialog(pastedText);
+      return;
+    }
+    insertAtCursor(pastedText, true);
   }
 
   function handleFileInputChange() {
@@ -1230,29 +1163,12 @@
       if (!data) return;
 
       // Check for images first — if clipboard contains images, skip global handling
-      // so the user can paste them into an appropriate target.
-      const allFiles = Array.from(data.files);
-      if (filterImageFiles(allFiles).length > 0) return;
+      // Check for images first — if clipboard contains images, skip global handling
+      // so the user can paste them into an appropriate target. The check must not start
+      // a read: this handler is about to ignore whatever it finds.
+      if (hasClipboardImages(data)) return;
 
-      const items = data.items;
-      if (items) {
-        for (let i = 0; i < items.length; i++) {
-          const item = items[i] as DataTransferItem | undefined;
-          if (item && item.type.startsWith('image/')) return;
-        }
-      }
-
-      // Plain text paste — insert at cursor and focus the textarea
-      const pastedText = data.getData('text/plain') || data.getData('text');
-      if (!pastedText) return;
-
-      e.preventDefault();
-      inputRef?.focus();
-      if (isMultiLinePaste(pastedText)) {
-        showMultiLinePasteDialog(pastedText);
-        return;
-      }
-      insertAtCursor(pastedText, true);
+      pasteTextFromClipboard(e, data);
     }
     document.addEventListener('paste', handleGlobalPaste);
     return () => document.removeEventListener('paste', handleGlobalPaste);
