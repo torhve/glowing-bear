@@ -71,7 +71,7 @@ test('should show buffer search input in topbar', async () => {
     await expect(page.locator('#buffer-search')).toBeVisible({ timeout: 5000 });
     // Close modal for subsequent tests
     await page.keyboard.press('Escape');
-    await expect(page.locator('#buffer-search')).not.toBeVisible({ timeout: 5000 }).catch(() => {});
+    await expect(page.locator('#buffer-search')).not.toBeVisible({ timeout: 5000 });
 });
 
 // Skipped — FormInput one-way value binding does not reliably trigger Svelte 5 reactivity from Playwright interactions.

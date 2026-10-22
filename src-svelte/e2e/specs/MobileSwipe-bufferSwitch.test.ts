@@ -31,13 +31,60 @@ test.beforeEach(async () => {
 /** The buffer the chat is showing, as the topic bar names it. */
 async function activeBufferName(): Promise<string> {
     const name = await page.locator('.topic-channel-name').textContent();
-    return (name ?? '').trim();
+    // The topic bar keeps a channel's `#`; the sidebar row drops it. Every
+    // comparison here is against a sidebar row, so both sides lose the sigil.
+    return (name ?? '').trim().replace(/^#/, '');
 }
 
 /** The sidebar rows in the order they are drawn, which is the order a swipe walks. */
 async function sidebarRows(): Promise<string[]> {
+    // Reading the sidebar means opening it: on mobile the buffer list is an overlay, and
+    // a hidden overlay renders no rows, so a measurement taken while it is closed sees
+    // an empty list and reports "the swipe moved nowhere".
+    await page.evaluate(() => window.__showBufferListOnMobile?.());
     const rows = page.getByTestId('buffer-item').locator('.buffer-name');
     return (await rows.allTextContents()).map((text) => text.trim());
+}
+
+/**
+ * The rows that survive a second read.
+ *
+ * The serial specs share one gbtest fixture, so a channel another spec is
+ * assembling — or has just closed — appears and disappears in the sidebar
+ * mid-test. Indexing into a list read once is how this spec used to expect a
+ * buffer named `exec.gbtest-deep` that no longer existed by the time it
+ * swiped. A buffer that is present twice, a moment apart, is the fixture's
+ * own; those are the only rows whose neighbours are safe to assert on.
+ */
+async function stableRows(): Promise<string[]> {
+    let rows: string[] = [];
+    await expect
+        .poll(
+            async () => {
+                const now = await sidebarRows();
+                const quiet =
+                    rows.length === now.length && rows.every((name, i) => name === now[i]);
+                rows = now;
+                return quiet;
+            },
+            { timeout: 4000, intervals: [400] },
+        )
+        .toBe(true);
+    return rows;
+}
+
+/**
+ * How many rows the active buffer sits from `reference`, both read at once.
+ *
+ * The claim is "the swipe moved exactly one row", so the measurement compares
+ * positions rather than expecting a neighbour's name from an earlier read: the
+ * fixture's buffer list is shared with the other serial specs, and a channel
+ * they close between the two reads used to make this spec expect a buffer that
+ * was already gone.
+ */
+async function offsetFrom(reference: string): Promise<number> {
+    const rows = await sidebarRows();
+    return rows.indexOf(await activeBufferName()) - rows.indexOf(reference);
 }
 
 /** A vertical swipe on the top bar: outside the chat scroll area, so it may switch buffers. */
@@ -51,42 +98,40 @@ async function swipeUpTopBar(fromY: number, distance: number): Promise<void> {
 
 test.describe('vertical swipe switches buffers along the sidebar order', () => {
     test('a swipe up moves to the row above, a swipe down back to the row below', async () => {
-        const rows = await sidebarRows();
+        const rows = await stableRows();
         expect(rows.length).toBeGreaterThan(2);
 
-        // Start somewhere in the middle so both neighbours exist.
-        const start = Math.min(2, rows.length - 2);
+        // Second to last, so both neighbours exist in a list that just held still.
+        const start = rows.length - 2;
         await switchToBufferMobile(page, rows[start]);
         expect(await activeBufferName()).toBe(rows[start]);
 
         await swipeUpTopBar(300, 120);
-        await expect
-            .poll(async () => activeBufferName(), { timeout: 5000 })
-            .toBe(rows[start - 1]);
+        await expect.poll(() => offsetFrom(rows[start]), { timeout: 5000 }).toBe(-1);
 
+        // Measured from the row the swipe landed on, so this assertion also says
+        // "exactly one row", in the direction the finger moved.
+        const landed = await activeBufferName();
         await swipeDownTopBar(200, 120);
-        await expect
-            .poll(async () => activeBufferName(), { timeout: 5000 })
-            .toBe(rows[start]);
+        await expect.poll(() => offsetFrom(landed), { timeout: 5000 }).toBe(1);
     });
 
     test('a vertical drag short of the threshold is a scroll, not a buffer switch', async () => {
-        const rows = await sidebarRows();
-        const start = Math.min(2, rows.length - 2);
-        await switchToBufferMobile(page, rows[start]);
+        const rows = await stableRows();
+        await switchToBufferMobile(page, rows[rows.length - 2]);
         const before = await activeBufferName();
 
         // Well under the vertical threshold, over the horizontal drag threshold.
         await swipeDownTopBar(300, 40);
-        await expect.poll(async () => activeBufferName(), { timeout: 1500 }).toBe(before);
+        await expect.poll(() => activeBufferName(), { timeout: 1500 }).toBe(before);
     });
 
     test('the first row has no row above it, so a swipe up there stays put', async () => {
-        const rows = await sidebarRows();
+        const rows = await stableRows();
         await switchToBufferMobile(page, rows[0]);
         const first = await activeBufferName();
 
         await swipeUpTopBar(300, 200);
-        await expect.poll(async () => activeBufferName(), { timeout: 1500 }).toBe(first);
+        await expect.poll(() => activeBufferName(), { timeout: 1500 }).toBe(first);
     });
 });

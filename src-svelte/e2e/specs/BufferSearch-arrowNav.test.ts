@@ -177,3 +177,24 @@ test('arrow keys are no-op when no results match', async () => {
 
     await expect(page.getByText('No buffers found')).toBeVisible();
 });
+
+// The dialog ending itself is a separate claim from the buffer switching: the row's
+// click handler switches, clears the query, hides the popover, then tells the page the
+// selection happened. A close that silently did nothing would leave the dialog covering
+// the chat it just switched to.
+test('choosing a result closes the dialog and switches to that buffer', async () => {
+    await openBufferSearch(page);
+
+    const searchInput = page.locator('#buffer-search');
+    await searchInput.fill('#glowing-bear');
+    await waitForSearchResults(true);
+
+    await searchInput.press('Enter');
+
+    await expect(page.locator('#buffer-search-modal')).not.toBeVisible({ timeout: 5000 });
+    await expect
+        .poll(async () => (await page.locator('.topic-channel-name').textContent())?.trim(), {
+            timeout: 5000,
+        })
+        .toBe('#glowing-bear');
+});
