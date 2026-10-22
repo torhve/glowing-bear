@@ -2,12 +2,14 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { Protocol as NewProtocol } from '#lib/weechat.ts';
 import { rawText2Rich, type RichPart } from '#lib/weechat-colors.ts';
 
-async function loadOldProtocol() {
+type OldProtocolCtor = typeof NewProtocol;
+
+async function loadOldProtocol(): Promise<OldProtocolCtor> {
     const mod = await import('../fixtures/weechat-old.js');
-    return (mod as unknown as { Protocol: typeof NewProtocol }).Protocol;
+    return (mod as unknown as { Protocol: OldProtocolCtor }).Protocol;
 }
 
-let OldProtocol: typeof NewProtocol | null = null;
+let OldProtocol: OldProtocolCtor | null = null;
 
 beforeEach(async () => {
     if (!OldProtocol) {
@@ -18,6 +20,12 @@ beforeEach(async () => {
         }
     }
 });
+
+/** The old parser, or the reason this run cannot compare anything. */
+function oldProtocol(): OldProtocolCtor {
+    if (!OldProtocol) throw new Error('the old-parser fixture did not load');
+    return OldProtocol;
+}
 
 // Check if override is effectively empty (no true values)
 function overridesAreInactive(override: Record<string, boolean>): boolean {
@@ -55,7 +63,7 @@ function partsAreEquivalent(n: RichPart, o: RichPart, opts?: { allowTypeMismatch
     const oNormalized: Record<string, boolean> = {};
     for (const k in o.attrs.override) {
         const mapped = attrKeyMap[k] ?? k;
-        oNormalized[mapped] = o.attrs.override[k];
+        oNormalized[mapped] = o.attrs.override[k] ?? false;
     }
     // If both have active attrs, check specific keys match
     if (nActive) {
@@ -79,165 +87,146 @@ function compareRichParts(newParts: RichPart[], oldParts: RichPart[], opts?: { a
 
 describe('richText2Rich parity: new vs old JS parser', () => {
     it('parses plain text identically', async () => {
-        expect(OldProtocol).not.toBeNull();
         const input = 'Hello world';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         expect(compareRichParts(newResult, oldResult)).toBe(true);
     });
 
     it('parses empty string identically', async () => {
-        expect(OldProtocol).not.toBeNull();
         const input = '';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         expect(compareRichParts(newResult, oldResult)).toBe(true);
     });
 
     it('parses F foreground color with no attrs identically', async () => {
-        expect(OldProtocol).not.toBeNull();
         const input = '\x19F03red text';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         expect(compareRichParts(newResult, oldResult)).toBe(true);
     });
 
     it('parses F foreground color with attrs identically', async () => {
-        expect(OldProtocol).not.toBeNull();
         const input = '\x19F*03bold red text';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         expect(compareRichParts(newResult, oldResult)).toBe(true);
     });
 
     it('parses STD color code (date change prefix) identically', async () => {
-        expect(OldProtocol).not.toBeNull();
         const input = '\x1904\u2500\u2500\u2500';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         // Old JS has bgColor bug for STD colors; skip bg comparison
         expect(compareRichParts(newResult, oldResult, { skipBgColor: true })).toBe(true);
     });
 
     it('parses out-of-range STD color code (old JS has bug, allows type mismatch)', async () => {
-        expect(OldProtocol).not.toBeNull();
         const input = '\x1928(Leaving\x1c';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         // Old JS treats 2-digit codes as option indices (bug for >15), TS preserves current colors
         expect(compareRichParts(newResult, oldResult, { allowTypeMismatch: true, skipBgColor: true })).toBe(true);
     });
 
     it('parses foreground+background with * identically', async () => {
-        expect(OldProtocol).not.toBeNull();
         const input = '\x19*03,07highlighted\x1c';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         expect(compareRichParts(newResult, oldResult)).toBe(true);
     });
 
     it('parses attribute set/reset identically', async () => {
-        expect(OldProtocol).not.toBeNull();
         const input = '\x1a\x01bold\x1b\x01unbold text';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         expect(compareRichParts(newResult, oldResult)).toBe(true);
     });
 
     it('parses color reset \x1c identically', async () => {
-        expect(OldProtocol).not.toBeNull();
         const input = '\x1903red\x1cdefault';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         // Old JS has bgColor bug for STD colors; skip bg comparison
         expect(compareRichParts(newResult, oldResult, { skipBgColor: true })).toBe(true);
     });
 
     it('parses emphasis E code identically', async () => {
-        expect(OldProtocol).not.toBeNull();
         const input = 'Eemphasized text';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         // Old JS has bgColor bug for E; skip bg comparison
         expect(compareRichParts(newResult, oldResult, { skipBgColor: true })).toBe(true);
     });
 
     it('parses multiple style changes identically', async () => {
-        expect(OldProtocol).not.toBeNull();
         const input = '\x1903red\x1900normal\x1902green';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         // Old JS has bgColor bug for STD colors; skip bg comparison
         expect(compareRichParts(newResult, oldResult, { skipBgColor: true })).toBe(true);
     });
 
     it('parses mIRC color codes (converted before parsing) identically', async () => {
-        expect(OldProtocol).not.toBeNull();
         // \x0302 → \x1902, \x03 at end → \x1c
         const input = '\x1902Bold\x1c Normal';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         // Old JS has bgColor bug for STD colors; skip bg comparison
         expect(compareRichParts(newResult, oldResult, { skipBgColor: true })).toBe(true);
     });
 
     it('parses IRC bold + reset identically', async () => {
-        expect(OldProtocol).not.toBeNull();
         // \x02 → \x1a\x01, \x0f → \x1c
         const input = '\x1a\x01bold text\x1creset';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         expect(compareRichParts(newResult, oldResult)).toBe(true);
     });
 
     it('parses \x0328(Leaving\x03 pattern identically', async () => {
-        expect(OldProtocol).not.toBeNull();
         // \x0328 → \x1928, \x03 at end → \x1c
         const input = '\x1928(Leaving\x1c';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         // Out-of-range color code: allow type mismatch + skip bgColor (old JS bug)
         expect(compareRichParts(newResult, oldResult, { allowTypeMismatch: true, skipBgColor: true })).toBe(true);
     });
 
     it('parses background color B code identically', async () => {
-        expect(OldProtocol).not.toBeNull();
         const input = '\x19B07backgrounded';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         expect(compareRichParts(newResult, oldResult)).toBe(true);
     });
 
     it('parses extended color code @12345 identically (unimplemented)', async () => {
-        expect(OldProtocol).not.toBeNull();
         const input = '\x19@12345colored text';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         expect(compareRichParts(newResult, oldResult)).toBe(true);
     });
 
     it('parses foreground+bg with attrs and * identically', async () => {
-        expect(OldProtocol).not.toBeNull();
         const input = '\x19*!03,07inverse bg';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         expect(compareRichParts(newResult, oldResult)).toBe(true);
     });
 
     it('parses mixed attributes and colors identically', async () => {
-        expect(OldProtocol).not.toBeNull();
         const input = '\x1a\x01bold\x1903red bold\x1b\x01unbold\x1900normal';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         // Old JS has bgColor bug for STD colors; skip bg comparison
         expect(compareRichParts(newResult, oldResult, { skipBgColor: true })).toBe(true);
     });
 
     it('parses unicode styled text identically', async () => {
-        expect(OldProtocol).not.toBeNull();
         const input = '\x1904\u2764\u2764\u2764\x1cplain';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         // Old JS has bgColor bug for STD colors; skip bg comparison
         expect(compareRichParts(newResult, oldResult, { skipBgColor: true })).toBe(true);
     });
@@ -260,10 +249,9 @@ describe('richText2Rich parity: new vs old JS parser', () => {
     });
 
     it('parses multiple STD color codes in sequence identically', async () => {
-        expect(OldProtocol).not.toBeNull();
         const input = '\x1900start\x1901blue\x1902green\x1903red\x1904darkred\x1905brown';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         // Old JS has bgColor bug for STD colors; skip bg comparison
         expect(compareRichParts(newResult, oldResult, { skipBgColor: true })).toBe(true);
     });
@@ -286,36 +274,32 @@ describe('richText2Rich parity: new vs old JS parser', () => {
     });
 
     it('parses all attribute chars identically', async () => {
-        expect(OldProtocol).not.toBeNull();
         const input = '\x1a\x01\x1a\x02\x1a\x03\x1a\x04underlined';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         expect(compareRichParts(newResult, oldResult)).toBe(true);
     });
 
     it('parses set-attribute controls identically', async () => {
-        expect(OldProtocol).not.toBeNull();
         const input = '\x1a\x01bold via control char';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         expect(compareRichParts(newResult, oldResult)).toBe(true);
     });
 
     it('parses IRC color fg+bg identically', async () => {
-        expect(OldProtocol).not.toBeNull();
         // \x0312,04 → \x19*12,04, trailing \x03 → \x1c
         const input = '\x19*12,04fg bg color\x1c more';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         expect(compareRichParts(newResult, oldResult)).toBe(true);
     });
 
     it('parses bare \x03 reset identically', async () => {
-        expect(OldProtocol).not.toBeNull();
         // bare \x03 → \x1c (reset all)
         const input = '\x1creset colors';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         expect(compareRichParts(newResult, oldResult)).toBe(true);
     });
 });
@@ -324,19 +308,17 @@ describe('attrsFromStr behavior via rawText2Rich', () => {
     it('empty attr group resets attrs (parity with old JS)', async () => {
         // STD colors reset attrs to empty override — bold is lost in both TS and old JS
         // bgColor differs between implementations (option vs weechat default) but attrs/fgColor match
-        expect(OldProtocol).not.toBeNull();
         const input = '\x1a\x01bold\x1903color\x1904more';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         expect(compareRichParts(newResult, oldResult, { skipBgColor: true })).toBe(true);
     });
 
     it('F code without attrs resets attrs (parity with old JS)', async () => {
         // F03 has no attribute prefix — resets to fresh attrs with all-false overrides in both
-        expect(OldProtocol).not.toBeNull();
         const input = '\x1a\x01bold\x19F03red';
         const newResult = rawText2Rich(input);
-        const oldResult = OldProtocol.rawText2Rich(input);
+        const oldResult = oldProtocol().rawText2Rich(input);
         expect(compareRichParts(newResult, oldResult)).toBe(true);
         const redPart = newResult.find(p => p.text === 'red');
         expect(redPart).toBeDefined();

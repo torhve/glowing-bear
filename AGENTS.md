@@ -53,7 +53,7 @@ The app is a **dual-protocol client**. `connectionManager.ts` chooses one transp
 npm run dev                    # Dev server (localhost:8001)
 npm run build                  # Production build (static output to build/)
 npm run check                  # svelte-check
-npm run check:tests            # tsc over `src-svelte/test/unit`; `tsconfig.tests.json` excludes the fixture-shape backlog (must only shrink), `npm run check:tests:backlog` prints it
+npm run check:tests            # tsc over every `src-svelte/test/unit` file (only `perf/` and `prof/` are excluded — `npm run test:perf` is its own gate)
 npm run lint                   # eslint src-svelte/src src-svelte/test src-svelte/e2e
 npm test                       # Vitest unit tests (runs `svelte-kit sync` first)
 npm run test:perf               # Perf benches (test/unit/perf/*.bench.ts) — NOT part of `npm test`

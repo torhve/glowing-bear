@@ -12,7 +12,9 @@ import {
 import type { BufferData } from '#lib/types.ts';
 import type { ApiSession, ApiSessionResponse } from '#lib/api/api-session.ts';
 import type { ApiBufferId } from '#lib/api/api-ids.ts';
-import type { BufferSnapshot, HotlistSnapshot } from '#lib/api/api-contracts.ts';
+import type { ApiLineId } from '#lib/api/api-ids.ts';
+import type { HotlistSnapshot } from '#lib/api/api-contracts.ts';
+import { apiBuffer, apiLine } from './apiFixtures.ts';
 
 const BUFFER_ID = 1759000000000001 as ApiBufferId;
 const KEY = String(BUFFER_ID);
@@ -22,6 +24,16 @@ function fakeSession(handler: (path: string) => ApiSessionResponse | Promise<Api
     return {
         request: (req: { path: string }) => Promise.resolve(handler(req.path)),
     } as unknown as ApiSession;
+}
+
+/**
+ * One relay response frame. The features read `body`, but what the session hands
+ * them is the whole frame — `code`, the request it answers, and `body_type` are
+ * always present on the wire — so the fixtures build it here rather than each
+ * inventing a two-field object the relay never sends.
+ */
+function response(code: number, body: unknown): ApiSessionResponse {
+    return { code, request: '', request_id: '1', body_type: null, body };
 }
 
 function wireLine(id: number, message = `msg ${id}`) {
@@ -39,6 +51,9 @@ function wireMessage(id: number, message = `msg ${id}`) {
 function displayedUnread(buffer: BufferData): number {
     const readEndIndex = getReadBoundaryIndex(buffer);
     const messages = buffer.lines.filter(isUserMessageLine);
+    // No boundary known yet: everything retained counts, which is what the chat
+    // badge shows while a session is still resolving where the reader was.
+    if (readEndIndex === null) return messages.length;
     return readEndIndex < messages.length - 1 ? messages.length - Math.max(0, readEndIndex + 1) : 0;
 }
 
@@ -46,12 +61,13 @@ beforeEach(() => {
     buffers.set({});
     clearHiddenLineIdTracking();
     const reducers = createApiStoreReducers();
-    const snap: BufferSnapshot = {
-        id: BUFFER_ID, name: 'irc.glowing-bear.#chan', shortName: '#chan', number: 2,
-        contentType: 'formatted', semanticType: 'channel', hidden: false, title: '',
-        localVariables: { type: 'channel', plugin: 'irc', server: 'glowing-bear' }, lastReadLineId: -1,
-    };
-    reducers.buffers([snap]);
+    reducers.buffers([apiBuffer(BUFFER_ID, {
+        name: 'irc.glowing-bear.#chan',
+        shortName: '#chan',
+        number: 2,
+        semanticType: 'channel',
+        localVariables: { type: 'channel', plugin: 'irc', server: 'glowing-bear' },
+    })]);
 });
 
 describe('UTF-8 offset conversion', () => {
@@ -84,17 +100,19 @@ describe('UTF-8 offset conversion', () => {
 
 describe('fetchHistory', () => {
     it('prepends oldest-first with stable lineIds and dedupes overlaps', async () => {
-        const session = fakeSession(() => ({ code: 200, body: [wireLine(20), wireLine(21)] }));
+        const session = fakeSession(() => (response(200, [wireLine(20), wireLine(21)])));
         const first = await fetchHistory(session, { bufferId: BUFFER_ID, count: 2 });
         expect(first.applied).toBe(true);
         expect(first.complete).toBe(false); // 2 of 2 requested — more may exist older
         // A live line that raced with the history response must not duplicate.
-        createApiStoreReducers().lineAdded(BUFFER_ID, {
-            id: 21 as never, epochMs: 1, displayed: true, highlight: false, notifyLevel: 1,
-            prefix: '', message: 'msg 21 live', tags: ['notify_message'],
-        });
+        createApiStoreReducers().lineAdded(BUFFER_ID, apiLine(21 as ApiLineId, {
+            epochMs: 1,
+            notifyLevel: 1,
+            message: 'msg 21 live',
+            tags: ['notify_message'],
+        }));
         // Empty second fetch: asserts the earlier state is stable.
-        const session2 = fakeSession(() => ({ code: 200, body: [] }));
+        const session2 = fakeSession(() => (response(200, [])));
         await fetchHistory(session2, { bufferId: BUFFER_ID, count: 10 });
         const buf = get(buffers)[KEY]!;
         const ids = buf.lines.map((l) => l.lineId);
@@ -112,7 +130,7 @@ describe('fetchHistory', () => {
         } as unknown as ApiSession;
         const p = fetchHistory(session, { bufferId: BUFFER_ID, count: 10 });
         createApiStoreReducers().bufferCleared(BUFFER_ID); // epoch bumps mid-flight
-        resolveReq({ code: 200, body: [wireLine(1)] });
+        resolveReq(response(200, [wireLine(1)]));
         const res = await p;
         expect(res.applied).toBe(false);
         expect(get(buffers)[KEY]!.lines).toHaveLength(0);
@@ -125,27 +143,20 @@ describe('fetchHistory', () => {
         } as unknown as ApiSession;
         const p = fetchHistory(session, { bufferId: BUFFER_ID, count: 10 });
         createApiStoreReducers().bufferClosed(BUFFER_ID);
-        resolveReq({ code: 200, body: [wireLine(1)] });
+        resolveReq(response(200, [wireLine(1)]));
         const res = await p;
         expect(res.applied).toBe(false);
     });
 
     it('non-200 (closed buffer 404) yields nothing', async () => {
-        const session = fakeSession(() => ({ code: 404, body: { error: 'Buffer not found' } }));
+        const session = fakeSession(() => (response(404, { error: 'Buffer not found' })));
         const res = await fetchHistory(session, { bufferId: BUFFER_ID, count: 10 });
         expect(res.applied).toBe(false);
         expect(res.lines).toHaveLength(0);
     });
 
     it('skips smart-filtered lines from history (displayed:false / irc_smart_filter)', async () => {
-        const session = fakeSession(() => ({
-            code: 200,
-            body: [
-                { ...wireLine(1, 'filtered'), displayed: false },
-                { ...wireLine(2, 'tagged'), tags: ['irc_smart_filter'] },
-                wireLine(3, 'visible'),
-            ],
-        }));
+        const session = fakeSession(() => (response(200, [ { ...wireLine(1, 'filtered'), displayed: false }, { ...wireLine(2, 'tagged'), tags: ['irc_smart_filter'] }, wireLine(3, 'visible'), ])));
         const res = await fetchHistory(session, { bufferId: BUFFER_ID, count: 10 });
         expect(res.applied).toBe(true);
         const buf = get(buffers)[KEY]!;
@@ -153,13 +164,7 @@ describe('fetchHistory', () => {
     });
 
     it('a fully hidden fetch still advances the window (blank-buffer regression)', async () => {
-        const session = fakeSession(() => ({
-            code: 200,
-            body: [
-                { ...wireLine(1, 'join'), displayed: false },
-                { ...wireLine(2, 'part'), tags: ['irc_smart_filter'] },
-            ],
-        }));
+        const session = fakeSession(() => (response(200, [ { ...wireLine(1, 'join'), displayed: false }, { ...wireLine(2, 'part'), tags: ['irc_smart_filter'] }, ])));
         const res = await fetchHistory(session, { bufferId: BUFFER_ID, count: 2 });
         expect(res.applied).toBe(true);
         const buf = get(buffers)[KEY]!;
@@ -170,41 +175,21 @@ describe('fetchHistory', () => {
     });
 
     it('an overlapping refetch of the same window adds nothing', async () => {
-        const session = fakeSession(() => ({
-            code: 200,
-            body: [wireLine(1, 'a'), { ...wireLine(2, 'join'), displayed: false }],
-        }));
+        const session = fakeSession(() => (response(200, [wireLine(1, 'a'), { ...wireLine(2, 'join'), displayed: false }])));
         await fetchHistory(session, { bufferId: BUFFER_ID, count: 2 });
         // Overlapping refetch of the same newest-2 window: nothing is new.
-        const session2 = fakeSession(() => ({
-            code: 200,
-            body: [wireLine(1, 'a'), { ...wireLine(2, 'join'), displayed: false }],
-        }));
+        const session2 = fakeSession(() => (response(200, [wireLine(1, 'a'), { ...wireLine(2, 'join'), displayed: false }])));
         await fetchHistory(session2, { bufferId: BUFFER_ID, count: 2 });
         expect(get(buffers)[KEY]!.lines.map((l) => l.text)).toEqual(['a']);
     });
 
     it('pages past a hidden-only window into visible history', async () => {
         // First fetch: newest-2 window is all smart-filtered (blank buffer).
-        const session = fakeSession(() => ({
-            code: 200,
-            body: [
-                { ...wireLine(5, 'join'), displayed: false },
-                { ...wireLine(6, 'part'), tags: ['irc_smart_filter'] },
-            ],
-        }));
+        const session = fakeSession(() => (response(200, [ { ...wireLine(5, 'join'), displayed: false }, { ...wireLine(6, 'part'), tags: ['irc_smart_filter'] }, ])));
         await fetchHistory(session, { bufferId: BUFFER_ID, count: 2 });
         expect(get(buffers)[KEY]!.lines).toHaveLength(0);
         // Doubled window (newest-4): older lines include a visible message.
-        const session2 = fakeSession(() => ({
-            code: 200,
-            body: [
-                { ...wireLine(5, 'join'), displayed: false },
-                { ...wireLine(6, 'part'), tags: ['irc_smart_filter'] },
-                wireLine(4, 'hello'),
-                { ...wireLine(3, 'join'), displayed: false },
-            ],
-        }));
+        const session2 = fakeSession(() => (response(200, [ { ...wireLine(5, 'join'), displayed: false }, { ...wireLine(6, 'part'), tags: ['irc_smart_filter'] }, wireLine(4, 'hello'), { ...wireLine(3, 'join'), displayed: false }, ])));
         const res = await fetchHistory(session2, { bufferId: BUFFER_ID, count: 4 });
         expect(res.applied).toBe(true);
         const buf = get(buffers)[KEY]!;
@@ -214,10 +199,8 @@ describe('fetchHistory', () => {
     });
 
     it('an entirely hidden history completes at the start of history', async () => {
-        const session = fakeSession(() => ({
-            code: 200,
-            body: [{ ...wireLine(1, 'join'), displayed: false }], // 1 of 2: start reached
-        }));
+        // 1 of 2 requested, and the one that was returned is hidden: start reached.
+        const session = fakeSession(() => response(200, [{ ...wireLine(1, 'join'), displayed: false }]));
         const res = await fetchHistory(session, { bufferId: BUFFER_ID, count: 2 });
         const buf = get(buffers)[KEY]!;
         expect(res.complete).toBe(true); // caller sets allLinesFetched → paging stops
@@ -226,19 +209,21 @@ describe('fetchHistory', () => {
 
     it('reconnect clears hidden-id tracking so ids are not deduped against a previous session', async () => {
         const hidden = { ...wireLine(1, 'join'), displayed: false };
-        const session = fakeSession(() => ({ code: 200, body: [hidden] }));
+        const session = fakeSession(() => (response(200, [hidden])));
         await fetchHistory(session, { bufferId: BUFFER_ID, count: 1 });
         // New session, same buffer id and epoch 0: the same line id is fresh data.
         clearHiddenLineIdTracking();
         buffers.set({});
-        createApiStoreReducers().buffers([{
-            id: BUFFER_ID, name: 'irc.glowing-bear.#chan', shortName: '#chan', number: 2,
-            contentType: 'formatted', semanticType: 'channel', hidden: false, title: '',
-            localVariables: { type: 'channel', plugin: 'irc', server: 'glowing-bear' }, lastReadLineId: -1,
-        }]);
+        createApiStoreReducers().buffers([apiBuffer(BUFFER_ID, {
+            name: 'irc.glowing-bear.#chan',
+            shortName: '#chan',
+            number: 2,
+            semanticType: 'channel',
+            localVariables: { type: 'channel', plugin: 'irc', server: 'glowing-bear' },
+        })]);
         // The same id, now displayed. Without the reset it would still be held
         // against the buffer as a known-hidden line and never rendered.
-        const session2 = fakeSession(() => ({ code: 200, body: [wireLine(1, 'join')] }));
+        const session2 = fakeSession(() => (response(200, [wireLine(1, 'join')])));
         await fetchHistory(session2, { bufferId: BUFFER_ID, count: 1 });
         expect(get(buffers)[KEY]!.lines.map((l) => l.text)).toEqual(['join']);
     });
@@ -248,18 +233,12 @@ describe('fetchHistory', () => {
         // Bootstrap snapshot: no lines, and WeeChat reports no read marker (-1).
         expect(get(buffers)[KEY]!.readBoundaryKnown).toBe(false);
 
-        const newest = fakeSession(() => ({
-            code: 200,
-            body: Array.from({ length: 100 }, (_, i) => wireMessage(101 + i)),
-        }));
+        const newest = fakeSession(() => (response(200, Array.from({ length: 100 }, (_, i) => wireMessage(101 + i)))));
         await fetchHistory(newest, { bufferId: BUFFER_ID, count: 100 });
         expect(displayedUnread(get(buffers)[KEY]!)).toBe(0);
 
         // Second "Fetch more lines" page: a wider window of older history.
-        const older = fakeSession(() => ({
-            code: 200,
-            body: Array.from({ length: 70 }, (_, i) => wireMessage(31 + i)),
-        }));
+        const older = fakeSession(() => (response(200, Array.from({ length: 70 }, (_, i) => wireMessage(31 + i)))));
         await fetchHistory(older, { bufferId: BUFFER_ID, count: 170 });
 
         const buf = get(buffers)[KEY]!;
@@ -280,10 +259,7 @@ describe('fetchHistory', () => {
             priority: 1, date: '2026-10-04T12:00:00.000Z', counts: { low: 0, message: 12, private: 0, highlight: 0 },
         };
         createApiStoreReducers().hotlist(new Map([[BUFFER_ID, entry]]));
-        const session = fakeSession(() => ({
-            code: 200,
-            body: Array.from({ length: 5 }, (_, i) => wireMessage(101 + i)),
-        }));
+        const session = fakeSession(() => (response(200, Array.from({ length: 5 }, (_, i) => wireMessage(101 + i)))));
         await fetchHistory(session, { bufferId: BUFFER_ID, count: 5 });
 
         const buf = get(buffers)[KEY]!;
@@ -299,10 +275,7 @@ describe('fetchHistory', () => {
         activeBufferId.set('');
         previousBufferId.set('');
         try {
-            const session = fakeSession(() => ({
-                code: 200,
-                body: Array.from({ length: 5 }, (_, i) => wireMessage(101 + i)),
-            }));
+            const session = fakeSession(() => (response(200, Array.from({ length: 5 }, (_, i) => wireMessage(101 + i)))));
             await fetchHistory(session, { bufferId: BUFFER_ID, count: 5 });
             // Counts are not authoritative yet, so nothing may be claimed as read.
             expect(get(buffers)[KEY]!.readBoundaryKnown).toBe(false);
@@ -328,10 +301,7 @@ describe('fetchHistory', () => {
             // Bootstrap activates the resumed buffer before any history is loaded,
             // then the chat view fetches a window while the phase is still open.
             setActiveBuffer(KEY);
-            const session = fakeSession(() => ({
-                code: 200,
-                body: Array.from({ length: 5 }, (_, i) => wireMessage(101 + i)),
-            }));
+            const session = fakeSession(() => (response(200, Array.from({ length: 5 }, (_, i) => wireMessage(101 + i)))));
             await fetchHistory(session, { bufferId: BUFFER_ID, count: 5 });
             expect(get(buffers)[KEY]!.readBoundaryKnown).toBe(false);
 
@@ -352,10 +322,7 @@ describe('fetchHistory', () => {
 
     it('a sync phase that closes without a baseline resolves nothing', async () => {
         const generation = beginSyncPhase();
-        const session = fakeSession(() => ({
-            code: 200,
-            body: Array.from({ length: 5 }, (_, i) => wireMessage(101 + i)),
-        }));
+        const session = fakeSession(() => (response(200, Array.from({ length: 5 }, (_, i) => wireMessage(101 + i)))));
         await fetchHistory(session, { bufferId: BUFFER_ID, count: 5 });
         // Attempt failed: the phase closes but no counts were ever applied.
         endSyncPhase(generation);
@@ -371,7 +338,7 @@ describe('sendInput', () => {
         const session = {
             request: (req: { path: string; body?: unknown }) => {
                 seenPath = req.path; seenBody = req.body as Record<string, unknown>;
-                return Promise.resolve({ code: 204, body: null });
+                return Promise.resolve(response(204, null));
             },
         } as unknown as ApiSession;
         const out = await sendInput(session, BUFFER_ID, '/join #new');
@@ -381,7 +348,7 @@ describe('sendInput', () => {
     });
 
     it('404 is rejected with the server error detail', async () => {
-        const session = fakeSession(() => ({ code: 404, body: { error: 'Buffer not found' } }));
+        const session = fakeSession(() => (response(404, { error: 'Buffer not found' })));
         const out = await sendInput(session, BUFFER_ID, '/me hi');
         expect(out.accepted).toBe(false);
         expect(out.error).toContain('Buffer not found');
@@ -389,13 +356,7 @@ describe('sendInput', () => {
 });
 
 describe('requestCompletion', () => {
-    const completionBody = (over: Record<string, unknown> = {}) => ({
-        code: 200,
-        body: {
-            context: 'auto', base_word: 'ali', position_replace: 5, add_space: false,
-            list: ['alice', 'alison'], ...over,
-        },
-    });
+    const completionBody = (over: Record<string, unknown> = {}) => (response(200, { context: 'auto', base_word: 'ali', position_replace: 5, add_space: false, list: ['alice', 'alison'], ...over, }));
 
     it('maps candidates and byte-based replacement range onto the command', async () => {
         const session = fakeSession(() => completionBody());
@@ -428,7 +389,7 @@ describe('requestCompletion', () => {
     });
 
     it('invalid payloads fail without throwing', async () => {
-        const session = fakeSession(() => ({ code: 200, body: { context: 'x' } }));
+        const session = fakeSession(() => (response(200, { context: 'x' })));
         const res = await requestCompletion(session, { bufferId: BUFFER_ID, command: 'ali', cursor: 3 });
         expect(res.ok).toBe(false);
         expect(res.error).toContain('invalid completion payload');
