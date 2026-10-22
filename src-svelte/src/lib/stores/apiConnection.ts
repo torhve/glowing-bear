@@ -13,7 +13,7 @@ import {
     connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, beginSessionStats,
     setNextReconnectAt,
 } from '#lib/stores/connectionStore.ts';
-import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, weechatVersion, relayApiVersion, initialHistoryWindow, runHistoryPage, shouldFetchOnBufferSwitch, SWITCH_FETCH_REQUEST_LINES } from '#lib/stores/models.ts';
+import { buffers, activeBufferId, getBuffer, connected, beginSyncPhase, endSyncPhase, weechatVersion, relayApiVersion, initialHistoryWindow, runHistoryPage } from '#lib/stores/models.ts';
 
 import { resolveApiEndpoint } from '#lib/api/api-endpoint.ts';
 import { ApiOrchestrator, type OrchestratorStatus } from '#lib/api/api-orchestrator.ts';
@@ -35,6 +35,7 @@ import {
     retryAttemptNumber,
     scheduleRetry,
     showDisconnectToast as sharedShowDisconnectToast,
+    switchBufferCommon,
     startHotlistPoll,
     stopHotlistPoll,
     type ConnectionProfile,
@@ -539,32 +540,12 @@ export async function sendWeeChatCommand(command: string, bufferId?: string): Pr
 
 export async function switchBuffer(bufferId: string): Promise<boolean> {
     if (!currentSession()) return false;
-    const buffer = getBuffer(bufferId);
-    // Fetch lines for buffers that need historical context before switching.
-    // Freshness, not line count: a buffer can hold a full retained window and
-    // still have fetched nothing in this session.
-    if (buffer && shouldFetchOnBufferSwitch(buffer)) {
-        try {
-            await fetchMoreLines(SWITCH_FETCH_REQUEST_LINES, bufferId);
-        } catch {
-            // Silently ignore fetch failures on buffer switch
-        }
-    }
-    const success = setActiveBuffer(bufferId);
-    if (!success) return false;
-    // Defer hotlist/unread clear until after the scroll effect (rAF) has run,
-    // so lastSeen calculation uses the correct localUnread before it's zeroed.
-    requestAnimationFrame(() => {
-        void deliverInput('/buffer set hotlist -1', bufferId);
-        // `/buffer set unread` with no argument puts the read marker on the buffer's
-        // last line, so `last_read_line_id` is a real line id that other clients and
-        // our own re-anchoring can act on; `/buffer set unread 0` removes the marker
-        // and leaves -1. The `/input set_unread_current_buffer` we used to send is a
-        // WeeChat 3.8 alias for exactly this command (core-command.c).
-        void deliverInput('/buffer set unread', bufferId);
-        scheduleHotlistQuery();
+
+    return switchBufferCommon(bufferId, {
+        fetchPage: fetchMoreLines,
+        deliver: (command, id) => { void deliverInput(command, id); },
+        hotlistQuery: scheduleHotlistQuery,
     });
-    return true;
 }
 
 // Schedule a hotlist query with debounce — rapid switches coalesce.

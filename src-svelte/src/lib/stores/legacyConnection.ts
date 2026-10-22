@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
 import { setConnectionStatus, setErrors, clearErrors, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, beginSessionStats } from '#lib/stores/connectionStore.ts';
-import { buffers, activeBufferId, getBuffer, connected, setActiveBuffer, beginSyncPhase, endSyncPhase, weechatVersion, initialHistoryWindow, runHistoryPage, shouldFetchOnBufferSwitch, SWITCH_FETCH_REQUEST_LINES } from '#lib/stores/models.ts';
+import { buffers, activeBufferId, getBuffer, connected, beginSyncPhase, endSyncPhase, weechatVersion, initialHistoryWindow, runHistoryPage } from '#lib/stores/models.ts';
 import { handleVersionInfo, handleConfValue, handleBufferInfo, handleHotlistInfo, handleLineInfo, handleMessage, handleNicklist, flushLineBatch, setOnUpgrade, setOnUpgradeEnded } from '#lib/stores/handlers.ts';
 import { addToast, removeToast, clearToasts, toastStore } from '#lib/toast.ts';
 
@@ -13,6 +13,7 @@ import {
     pendingRetryState,
     HANDSHAKE_TIMEOUT_MS,
     scheduleRetry,
+    switchBufferCommon,
     teardownAll,
     debounceHotlistQuery,
     resetAppState,
@@ -1233,41 +1234,12 @@ export async function switchBuffer(bufferId: string): Promise<boolean> {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         return false;
     }
-    // Fetch lines for buffers that need historical context before switching.
-    // Fetch if: lastSeen < 0 (never synced), or line count is very low (< 20)
-    // meaning initial sync didn't load enough history for proper readmarker positioning.
-    // Buffers with sufficient cached lines should not be refetched — that would
-    // destroy the preserved lastSeen value and localUnread state.
-    const buffer = getBuffer(bufferId);
-    // An old `requestedLines < 100` test used to answer "has this buffer been
-    // fetched yet?" with a held-line count, which a retained handoff, a clear, or a
-    // trim can all change for reasons that have nothing to do with freshness.
-    // newestWindowFetched is the one answer to that question on both transports.
-    if (buffer && shouldFetchOnBufferSwitch(buffer)) {
-        // Line identity, rather than an array offset, preserves a known boundary when
-        // a switch fetch replaces the cached snapshot. An absent identity remains unknown.
-        try {
-            await fetchMoreLines(SWITCH_FETCH_REQUEST_LINES, bufferId);
-        } catch (err) {
-            console.error('[setActiveBuffer] fetchMoreLines failed:', err);
-            // Silently ignore fetch failures on buffer switch
-        }
-    }
-    const success = setActiveBuffer(bufferId);
-    if (!success) {
-        return false;
-    }
-    // Defer hotlist/unread clear until after the scroll effect (rAF) has run,
-    // so that lastSeen calculation uses the correct localUnread value before it's zeroed out.
-    requestAnimationFrame(() => {
-        sendWeeChatCommand('/buffer set hotlist -1', bufferId);
-        // See apiConnection.switchBuffer: `/buffer set unread` (no argument) leaves a real
-        // marker id; the `/input set_unread_current_buffer` alias is deprecated since 3.8.
-        sendWeeChatCommand('/buffer set unread', bufferId);
-        scheduleHotlistQuery();
+
+    return switchBufferCommon(bufferId, {
+        fetchPage: fetchMoreLines,
+        deliver: sendWeeChatCommand,
+        hotlistQuery: scheduleHotlistQuery,
     });
-    // Nicklist backfill is handled by $effect in +page.svelte (guarded: only fetches if empty).
-    return true;
 }
 
 // Schedule a hotlist query with debounce — resets timer on each call so rapid

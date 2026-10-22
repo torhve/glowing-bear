@@ -46,12 +46,16 @@ import {
     activeBufferId,
     bufferBottom,
     buffers,
+    getBuffer,
     connected,
     hotlistClearedBuffers,
     localUnreadBuffers,
     pendingBufferSwitch,
     previousBufferId,
     relayApiVersion,
+    setActiveBuffer,
+    shouldFetchOnBufferSwitch,
+    SWITCH_FETCH_REQUEST_LINES,
     weechatVersion,
 } from '#lib/stores/models.ts';
 
@@ -791,5 +795,63 @@ export function scheduleRetry(attempt: RetryAttempt, onReconnect: () => void): b
     if (DEBUG_CONNECTION) {
         console.log(`[retry] attempt ${attempts}, next in ${(delay / 1000).toFixed(1)}s`);
     }
+    return true;
+}
+
+/**
+ * Switch to a buffer, whatever the transport.
+ *
+ * Both transports asked the same three questions in the same order — does this
+ * buffer still need a page before the read marker has anything to sit against,
+ * did the switch take, and which two commands tell WeeChat the reader is now
+ * here — and each wrote its own answer, including a long comment explaining why
+ * `/buffer set unread` takes no argument, written once and cross-referenced from
+ * the other file. The two commands are the same text on both relays; only the
+ * guard and the send helper belong to a transport.
+ */
+export async function switchBufferCommon(
+    bufferId: string,
+    { fetchPage, deliver, hotlistQuery }: {
+        /** Fetch one page of history for a buffer that has no window yet. */
+        fetchPage: (requestedLines: number, bufferId: string) => Promise<void>;
+        /** Send one command on this transport. Its answer is not this switch's concern. */
+        deliver: (command: string, bufferId: string) => void;
+        /** This transport's debounced hotlist query. */
+        hotlistQuery: () => void;
+    },
+): Promise<boolean> {
+    const buffer = getBuffer(bufferId);
+
+    // Fetch lines for a buffer that needs historical context before switching. Freshness, not
+    // line count: a buffer can hold a full retained window and still have fetched nothing in
+    // this session. An old `requestedLines < 100` test answered "has this buffer been fetched"
+    // with a held-line count, which a retained handoff, a clear or a trim can all change for
+    // reasons that have nothing to do with freshness.
+    if (buffer && shouldFetchOnBufferSwitch(buffer)) {
+        try {
+            await fetchPage(SWITCH_FETCH_REQUEST_LINES, bufferId);
+        } catch (err) {
+            // A page that failed is not a switch that failed. The buffer is real and the page
+            // is re-asked on the next visit, so this must not swallow the switch.
+            console.warn('[switchBuffer] history fetch failed:', String(err));
+        }
+    }
+
+    if (!setActiveBuffer(bufferId)) return false;
+
+    // Defer the hotlist/unread clear until after the scroll effect (rAF) has run, so lastSeen
+    // is calculated from the correct localUnread before it is zeroed out.
+    requestAnimationFrame(() => {
+        deliver('/buffer set hotlist -1', bufferId);
+        // `/buffer set unread` with no argument puts the read marker on the buffer's last line,
+        // so `last_read_line_id` is a real line id that other clients and our own re-anchoring
+        // can act on; `/buffer set unread 0` removes the marker and leaves -1. The
+        // `/input set_unread_current_buffer` this used to send is a WeeChat 3.8 alias for
+        // exactly this command (core-command.c).
+        deliver('/buffer set unread', bufferId);
+        hotlistQuery();
+    });
+
+    // Nicklist backfill is handled by $effect in +page.svelte (guarded: only fetches if empty).
     return true;
 }
