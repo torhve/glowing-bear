@@ -6,7 +6,9 @@
   import { historyOutcomes, historyUnavailable } from '#lib/stores/historyState.ts';
   import { settings } from '#lib/stores/settings.ts';
   import { fetchMoreLines, closeBufferOnWeeChat, pinBuffer, unpinBuffer } from '#lib/stores/connectionManager.ts';
-  import { buildMentionText, isFreeBuffer, modifyTextareaValue } from '#lib/utils.ts';
+  import { buildMentionText, isFreeBuffer } from '#lib/utils.ts';
+  import { applyComposerEdit, readComposerInput } from '#lib/composerInput.ts';
+  import type { ComposerHolder } from '#lib/composerInput.ts';
   import { ChatViewport, createChatDomAdapter, TOUCH_NAVIGATION_THRESHOLD_PX } from '#lib/chatViewport.ts';
   import type { ChatViewportState, ChatScrollCommands } from '#lib/chatViewport.ts';
   import BufferLineRow from '#components/BufferLineRow.svelte';
@@ -305,6 +307,11 @@
     return () => document.removeEventListener('visibilitychange', onVisibility);
   });
 
+  // The composer this page's mentions write into, published by InputBar. It used to be
+  // found by `document.querySelector('[data-testid="message-input"]')`, which cannot say
+  // which page owns the element.
+  const composer: ComposerHolder = readComposerInput();
+
   // Handle mention click: extract nick from message prefix, insert into input at cursor.
   function handleMention(message: BufferLine) {
     if (!message.showHiddenBrackets) return;
@@ -312,7 +319,9 @@
     const lastPart = prefixParts[prefixParts.length - 1];
     const nickName = lastPart?.text?.trim() || message.prefixtext?.trim() || '';
     if (!nickName) return;
-    modifyTextareaValue('[data-testid="message-input"]', (value: string, start: number, end: number) => {
+    const input = composer.current;
+    if (!input) return;
+    applyComposerEdit(input, (value: string, start: number, end: number) => {
       const result = buildMentionText(value.substring(0, start) + value.substring(end), nickName, current?.nicklist?.root?.nicks);
       return { value: result.text, cursor: result.caretPos };
     });

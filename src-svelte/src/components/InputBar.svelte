@@ -9,6 +9,7 @@
   import { isPopoverOpen, joinMultilineToSingle, MULTILINE_PASTE_THRESHOLD, completeNick } from '#lib/utils.ts';
   import { filterImages, hasClipboardImages, readClipboardImages } from '#lib/clipboardImages.ts';
   import Send from '@lucide/svelte/icons/send';
+  import { readComposerInput } from '#lib/composerInput.ts';
   import { emojifyInput } from '#lib/emojify.ts';
   import { tick, untrack } from 'svelte';
   import Camera from '@lucide/svelte/icons/camera';
@@ -46,6 +47,24 @@
   function log(...args: unknown[]) { if (DEBUG_INPUT) console.log('[paste]', ...args); }
 
   let inputRef = $state<HTMLTextAreaElement>();
+
+  // Publish this composer to the page, whose global key handlers focus and blur it and
+  // whose chat view and nicklist write a nick into it. They used to find it with
+  // `document.querySelector('[data-testid="message-input"]')`; the holder says which page
+  // owns the element, and an unmounted composer leaves it null exactly as the query did.
+  const composer = readComposerInput();
+  $effect(() => {
+    const element = inputRef;
+    if (!element) return;
+    composer.current = element;
+    return () => {
+      // Only the element that published itself may take the slot back. Without that
+      // check, a remount's cleanup runs after the new element has already published and
+      // leaves the page holding null — a composer the shortcuts cannot find, which is
+      // worse than the query this replaced.
+      if (composer.current === element) composer.current = null;
+    };
+  });
   let colorPickerRef = $state<HTMLDivElement | undefined>();
   let fileInputRef = $state<HTMLInputElement>();
   // Which conversation the text in this composer belongs to. Both halves are

@@ -23,18 +23,26 @@
   import { chatDisplay } from '#lib/stores/chatPresentation.ts';
   import { setHistoryOutcome } from '#lib/stores/historyState.ts';
   import { initNotifications, onDisconnect, refreshIndicators, startIndicatorOwner } from '#lib/notifications.ts';
-  import { parseRelayUrl, isPopoverOpen, bufferHasNicklist, modifyTextareaValue, captureBufferAppearance, waitForFreshBuffer, scriptInstalled } from '#lib/utils.ts';
+  import { parseRelayUrl, isPopoverOpen, bufferHasNicklist, captureBufferAppearance, waitForFreshBuffer, scriptInstalled } from '#lib/utils.ts';
   import { isTypingTarget } from '#lib/domFocus.ts';
   import { addToast, toastStore } from '#lib/toast.ts';
   import { showWindow } from '#lib/tauriWindow.ts';
   import { setChatScrollCommands } from '#lib/chatScrollContext.ts';
   import type { ChatScrollCommands, ChatScrollCommandsHolder } from '#lib/chatViewport.ts';
+  import { applyComposerEdit, setComposerInput } from '#lib/composerInput.ts';
+  import type { ComposerHolder } from '#lib/composerInput.ts';
 
   // One holder for this page instance, shared with the composer through context.
   // ChatView fills it while mounted and clears it on unmount. Plain object on
   // purpose: mounting and unmounting the chat view must not re-run page effects.
   const chatScrollCommands: ChatScrollCommandsHolder = { current: null };
   setChatScrollCommands(chatScrollCommands);
+
+  // The composer's textarea, published by InputBar while it is mounted. The page writes
+  // to it from the global key handlers, so it no longer looks the element up by its test
+  // id. Plain object on purpose, as above: mounting the composer must not re-run effects.
+  const composer: ComposerHolder = { current: null };
+  setComposerInput(composer);
 
   /* eslint-disable @typescript-eslint/no-explicit-any -- dev-time debug globals on window */
   if (typeof window !== 'undefined' && import.meta.env.DEV) {
@@ -380,7 +388,7 @@
     // (blurs input on single tap, disconnects on double tap)
     if (e.code === 'Escape') {
       // Always blur the input so subsequent Alt shortcuts (e.g. Alt+1 quick key) work
-      const input = document.querySelector<HTMLTextAreaElement>('[data-testid="message-input"]');
+      const input = composer.current;
       if (document.activeElement === input) {
         input?.blur();
       }
@@ -417,8 +425,7 @@
       }
       case 'focus-composer': {
         e.preventDefault();
-        const input = document.querySelector<HTMLTextAreaElement>('[data-testid="message-input"]');
-        input?.focus();
+        composer.current?.focus();
         return;
       }
       case 'toggle-nicklist': {
@@ -541,11 +548,10 @@
     if (e.ctrlKey || e.altKey || e.metaKey) return;
     if (isTypingTarget()) return;
     if (isPopoverOpen()) return;
-    const input = document.querySelector<HTMLTextAreaElement>('[data-testid="message-input"]');
+    const input = composer.current;
     if (!input) return;
     e.preventDefault();
-    input.focus();
-    modifyTextareaValue('[data-testid="message-input"]', (value: string, start: number, end: number) => ({
+    applyComposerEdit(input, (value: string, start: number, end: number) => ({
       value: value.substring(0, start) + e.key + value.substring(end),
       cursor: start + 1,
     }));

@@ -233,23 +233,6 @@ export function buildMentionText(inputText: string, nickName: string, nicklist?:
     return { text: newValue, caretPos: newValue.length };
 }
 
-/**
- * Insert a nick into the message input at cursor position.
- */
-export function insertNickIntoInput(nickName: string): void {
-    const input = document.querySelector<HTMLTextAreaElement>('[data-testid="message-input"]');
-    if (!input) return;
-    const start = input.selectionStart ?? input.value.length;
-    const end = input.selectionEnd ?? input.value.length;
-    const before = input.value.substring(0, start);
-    const after = input.value.substring(end);
-    const needsSpace = before.length > 0 && !/\s$/.test(before);
-    input.value = before + (needsSpace ? ' ' : '') + nickName + ' ' + after;
-    const newPos = start + (needsSpace ? 1 : 0) + nickName.length + 1;
-    input.focus();
-    input.setSelectionRange(newPos, newPos);
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-}
 
 /**
  * Check if a buffer has unread messages or notifications (highlights).
@@ -405,24 +388,6 @@ export function makeKeyboardActivatable(handler: () => void): (e: KeyboardEvent)
     };
 }
 
-/**
- * Modify a textarea's value using a transformer function, then dispatch an input event.
- * Handles selection range preservation and focus management.
- */
-export function modifyTextareaValue(
-    selector: string,
-    transformer: (value: string, start: number, end: number) => { value: string; cursor: number }
-): void {
-    const input = document.querySelector<HTMLTextAreaElement>(selector);
-    if (!input) return;
-    const start = input.selectionStart ?? input.value.length;
-    const end = input.selectionEnd ?? start;
-    const result = transformer(input.value, start, end);
-    input.value = result.value;
-    input.focus();
-    input.setSelectionRange(result.cursor, result.cursor);
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-}
 
 /** Number of pasted lines (after splitting on newlines) at or above which the
  * multi-line paste confirmation dialog appears. */

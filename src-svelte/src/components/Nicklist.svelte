@@ -6,11 +6,16 @@
   import { chatDisplay } from '#lib/stores/chatPresentation.ts';
   import { sendBufferCommand } from '#lib/stores/connectionManager.ts';
   import { settings } from '#lib/stores/settings.ts';
-  import { insertNickIntoInput, bufferHasNicklist, makeKeyboardActivatable } from '#lib/utils.ts';
+  import { bufferHasNicklist, makeKeyboardActivatable } from '#lib/utils.ts';
+  import { insertNickAtCursor, readComposerInput } from '#lib/composerInput.ts';
   import { DEBUG_NICKLIST } from '#lib/debug.ts';
 
   let { onClose, forceShow }: { onClose?: () => void; forceShow?: boolean } = $props();
   let searchQuery = $state('');
+
+  // The composer a keyboard-activated nick is inserted into, published by InputBar.
+  // Clicking a nick opens a query; only Enter or Space writes here.
+  const composer = readComposerInput();
 
   // The same view the chat and the composer are showing, so the member list
   // cannot describe a different conversation than the one on screen.
@@ -140,7 +145,9 @@
                 onclick={() => openQuery(nick)}
                 role="button"
                 tabindex="0"
-                onkeydown={makeKeyboardActivatable(() => insertNickIntoInput(nick.name))}
+                onkeydown={makeKeyboardActivatable(() => {
+                  if (composer.current) insertNickAtCursor(composer.current, nick.name);
+                })}
               >
                 {@render nickBody(nick)}
               </div>
