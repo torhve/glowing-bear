@@ -78,7 +78,7 @@ function orderedVisibleBuffers(): BufferPresentation[] {
     // `/buffer close`, or a server part. Bounding it in the projection rather than
     // wiring a connection-reset hook means every removal path bounds it, and the
     // connection layer does not have to know what the sidebar renders.
-    pruneRowMemo(Object.keys(map));
+    pruneRowMemo(visible.map((buffer) => buffer.id));
 
     const signature = orderingSignature(visible, orderByServer);
     if (signature !== lastSignature) {
@@ -86,9 +86,17 @@ function orderedVisibleBuffers(): BufferPresentation[] {
         lastOrderedIds = sortBuffers(visible, orderByServer).map((buffer) => buffer.id);
     }
 
+    // Rows are re-projected from the current buffers, never from the memoised ids alone,
+    // so a memo entry cannot carry a stale object. The lookup is by the buffer's own id
+    // rather than its store key: both transports key the map by that id, but a lookup by
+    // store key would silently drop a buffer from the sidebar — and from the quick keys,
+    // the jump and Alt+Arrow, which count positions in this order — if the two ever
+    // differed.
+    const byId = new Map(visible.map((buffer) => [buffer.id, buffer]));
+
     const rows: BufferPresentation[] = [];
     for (const id of lastOrderedIds) {
-        const buffer = map[id];
+        const buffer = byId.get(id);
         // A buffer can disappear between the sort and the projection; a row for
         // a buffer that no longer exists must not be published.
         if (buffer && !buffer.hidden) rows.push(rowFor(buffer));

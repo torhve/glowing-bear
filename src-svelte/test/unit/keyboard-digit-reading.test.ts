@@ -124,7 +124,7 @@ describe('buffer navigation reads the physical key, on both handlers', () => {
     it('Alt+1 quick keys switch on that same key, because they read the physical one', () => {
         render(Page, {});
         const first = channel('channel-a', 1);
-        buffers.set({ '0x1': first });
+        buffers.set({ [first.id]: first });
         flushSync();
 
         // Same physical key, same produced value, opposite outcome.
@@ -151,7 +151,7 @@ describe('buffer navigation reads the physical key, on both handlers', () => {
     it('Alt+1 quick keys ignore the numpad entirely', () => {
         render(Page, {});
         const first = channel('channel-a', 1);
-        buffers.set({ '0x1': first });
+        buffers.set({ [first.id]: first });
         flushSync();
 
         key('Numpad1', 49, true);

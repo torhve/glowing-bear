@@ -14,7 +14,7 @@
   import { settings, updateSettings, applyHashParams } from '#lib/stores/settings.ts';
   import { applyConfiguredTheme, startThemeFollow, themeSlotsKey, themeStore } from '#lib/stores/theme.ts';
   import { get } from 'svelte/store';
-  import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig, sortedVisibleBuffers, checkAndNavigatePendingNotificationBuffer } from '#lib/stores/models.ts';
+  import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig, checkAndNavigatePendingNotificationBuffer } from '#lib/stores/models.ts';
   import { sidebarOrder } from '#lib/stores/bufferProjections.ts';
   import { classifyGlobalCommand, isJumpArm, jumpDigit, quickKeyDigit } from '#lib/keyBindings.ts';
   import { connectionState, setReconnectAttempts, setNextReconnectAt, setErrors } from '#lib/stores/connectionStore.ts';
@@ -263,7 +263,7 @@
     // Skip when focus is in an input field so Alt-combinations like Alt+7 (pipe on Norwegian layout) work for typing
     if (isTypingTarget()) return;
 
-    // Use get() to avoid $effect dependency on $settings/$sortedVisibleBuffers (prevents listener re-registration)
+    // Use get() to avoid an $effect dependency on $settings/$sidebarOrder (prevents listener re-registration)
     const s = get(settings);
     if (!s.enableQuickKeys) return;
 
@@ -276,10 +276,13 @@
       addToast('Cannot switch buffers — not connected', { type: 'warning', duration: 3000 });
       return;
     }
-    const sorted = get(sortedVisibleBuffers) as BufferData[];
-    if (index < sorted.length) {
-      const buf = sorted[index];
-      if (buf) switchBuffer(buf.id);
+    // A quick key is a position in the order the sidebar shows. `sidebarOrder` publishes
+    // that order without re-sorting on message traffic, and reading it with get() adds no
+    // reactive dependency.
+    const order = get(sidebarOrder);
+    if (index < order.length) {
+      const id = order[index];
+      if (id) switchBuffer(id);
     }
   }
 
@@ -317,11 +320,13 @@
       const targetNum = _jumpTens * 10 + digit;
       _jumpArmed = false;
       _jumpTens = null;
-      const sorted = get(sortedVisibleBuffers) as BufferData[];
+      // The jump counts positions in the order the sidebar shows, the same reading
+      // the quick keys use.
+      const order = get(sidebarOrder);
       const targetIdx = targetNum - 1;
-      if (targetIdx >= 0 && targetIdx < sorted.length) {
-        const targetBuf = sorted[targetIdx];
-        if (targetBuf) switchBuffer(targetBuf.id);
+      if (targetIdx >= 0 && targetIdx < order.length) {
+        const id = order[targetIdx];
+        if (id) switchBuffer(id);
       }
       return;
     }
@@ -359,14 +364,15 @@
   // Alt+Arrow: the next or previous visible buffer, by the same order the sidebar
   // shows. If the active buffer is not in that list there is nothing adjacent.
   function switchAdjacentBuffer(dir: -1 | 1) {
-    const visible = get(sortedVisibleBuffers) as BufferData[];
-    const curId = get(activeBufferId);
-    const curIdx = visible.findIndex((b: BufferData) => b.id === curId);
+    // The same order the sidebar paints and the quick keys count, published without a
+    // re-sort on message traffic.
+    const order = get(sidebarOrder);
+    const curIdx = order.indexOf(get(activeBufferId));
     if (curIdx === -1) return;
     const target = curIdx + dir;
-    if (target < 0 || target >= visible.length) return;
-    const targetBuf = visible[target];
-    if (targetBuf) switchBuffer(targetBuf.id);
+    if (target < 0 || target >= order.length) return;
+    const id = order[target];
+    if (id) switchBuffer(id);
   }
 
   function handleGlobalKeyboard(e: KeyboardEvent) {

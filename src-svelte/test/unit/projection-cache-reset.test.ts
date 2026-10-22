@@ -168,3 +168,17 @@ it('holds no row for a buffer the sidebar does not render', () => {
     expect(get(sidebarRows), 'four visible rows').toHaveLength(4);
     expect(memoisedRowCount(), 'a hidden buffer has no row to memoise').toBe(4);
 });
+
+it('keeps a row when the store key is not the buffer id', () => {
+    // Both transports store a buffer under its own id, so the two agree in the app.
+    // The prune and the row lookup used to walk the store keys, so any disagreement
+    // dropped the buffer from the sidebar — and from the quick keys, the two-step jump
+    // and Alt+Arrow, which count positions in that order — without saying anything.
+    // Keying on the id makes the lookup hold on its own terms.
+    const buffer = channelBuffer('0x9', '#mismatch', 9);
+    buffers.set({ 'some-other-key': buffer });
+
+    expect(get(sidebarOrder), 'the buffer is in the order').toEqual(['0x9']);
+    expect(get(sidebarRows).map((row) => row.id), 'and has a row').toEqual(['0x9']);
+    expect(memoisedRowCount(), 'the row is memoised, not pruned away by the store key').toBe(1);
+});

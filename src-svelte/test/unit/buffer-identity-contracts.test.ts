@@ -13,6 +13,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
+import { readFileSync } from 'node:fs';
 import {
     buffers,
     activeBufferId,
@@ -745,14 +746,14 @@ describe('sidebar projection', () => {
     });
 });
 
-describe('sidebar ordering equivalence (guards the swipe path)', () => {
+describe('sidebar ordering is the one order the app navigates by', () => {
     /**
-     * The mobile vertical-swipe buffer switch used to read
-     * `$sortedVisibleBuffers` inside its handler, which kept a component-lifetime
-     * subscription to a full filter+sort that re-ran on every buffer publication
-     * — including message-only traffic that cannot reorder anything. It now reads
-     * `sidebarOrder`. That is only safe if the two orderings agree, so the swipe
-     * still moves to the buffer the sidebar shows next to the current one.
+     * The mobile vertical-swipe buffer switch used to read `$sortedVisibleBuffers`
+     * inside its handler, which kept a component-lifetime subscription to a full
+     * filter+sort that re-ran on every buffer publication — including message-only
+     * traffic that cannot reorder anything. It now reads `sidebarOrder`, and the
+     * keyboard reads it too: Alt+digit quick keys, the two-step jump and Alt+Arrow all
+     * resolve "position in the sidebar's list", which is exactly this sequence.
      */
     function seedOrderingCase(orderbyserver: boolean) {
         settingsMock.apply({ orderbyserver });
@@ -777,6 +778,16 @@ describe('sidebar ordering equivalence (guards the swipe path)', () => {
             expect(viaProjection).not.toContain('0x2');
             expect(viaProjection.length).toBe(3);
         }
+    });
+
+    it('the keyboard takes its positions from that order, not from a second sort', () => {
+        // The three keyboard lookups that resolve a buffer position — quick keys, the
+        // two-step jump, Alt+Arrow — must read the sidebar's own order. Reading a second
+        // filter+sort would let the two orderings drift apart, and would re-run the sort
+        // on every buffer publication this projection exists to avoid.
+        const page = readFileSync('src-svelte/src/routes/+page.svelte', 'utf8');
+        expect(page).not.toContain('get(sortedVisibleBuffers)');
+        expect(page.match(/get\(sidebarOrder\)/g)?.length, 'quick keys, jump, Alt+Arrow, swipe').toBeGreaterThanOrEqual(4);
     });
 
     it('a message-only change does not re-sort the sidebar', () => {
