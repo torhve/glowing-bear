@@ -31,6 +31,7 @@ import {
     isRelayStatusBuffer,
     injectDateChangeMessageIfNeeded,
     trimBufferLines,
+    LINE_FLUSH_FALLBACK_MS,
 } from "#lib/stores/models.ts";
 import { tallyUnreadLine } from "#lib/unreadTally.ts";
 import { shouldResume, getLastBuffer, recordLastBuffer } from "#lib/stores/bufferResume.ts";
@@ -56,6 +57,7 @@ import type {
     BufferType,
 } from "#lib/types.ts";
 import { bufferNamePrefix, bufferServerSortKey, isPinnedBuffer, trimmedBufferName } from '#lib/bufferNaming.ts';
+import { ROOT_GROUP_KEY } from "#lib/nicklistGroup.ts";
 
 // ---- Batched line addition handling ----
 // During rapid message bursts, WeeChat sends many _buffer_line_added messages
@@ -83,7 +85,7 @@ function scheduleLineFlush(): void {
         flushTimer = setTimeout(() => {
             flushTimer = null;
             flushLineBatch();
-        }, 100);
+        }, LINE_FLUSH_FALLBACK_MS);
     }
 }
 
@@ -1248,7 +1250,7 @@ export function handleNicklist(message: ProtocolMessage, fresh?: boolean) {
         }
     }
 
-    let group = "root";
+    let group = ROOT_GROUP_KEY;
     const modifiedBuffers = new Set<string>();
     for (const n of nicklist) {
         const ptr0 = n.pointers[0];
@@ -1267,7 +1269,7 @@ export function handleNicklist(message: ProtocolMessage, fresh?: boolean) {
                 JSON.stringify(n.pointers),
             );
         // Ensure root group always exists for hasData check
-        if (!("root" in buffer.nicklist)) {
+        if (!(ROOT_GROUP_KEY in buffer.nicklist)) {
             buffer.nicklist.root = { name: "", visible: "", nicks: [] };
             if (DEBUG_NICKLIST)
                 console.log("[nicklist] created root group for", buffer.shortName);
@@ -1464,7 +1466,7 @@ export function handleNicklistDiff(message: ProtocolMessage) {
     // Track current group per buffer — WeeChat sends items ordered by buffer then group
     // Reset to 'root' whenever we switch to a different buffer
     let currentBufferId: string | null = null;
-    let group = "root";
+    let group = ROOT_GROUP_KEY;
     const modifiedBuffers = new Set<string>();
 
     // First pass: process removals (op=45) and group creation.
@@ -1475,11 +1477,11 @@ export function handleNicklistDiff(message: ProtocolMessage) {
         if (!buffer) continue;
 
         if (currentBufferId !== ptr0) {
-            group = "root";
+            group = ROOT_GROUP_KEY;
             currentBufferId = ptr0;
         }
 
-        if (!("root" in buffer.nicklist)) continue;
+        if (!(ROOT_GROUP_KEY in buffer.nicklist)) continue;
 
         if ((n as NickGroupMessage).group === 1) {
             const g = createNickGroup(n as NickGroupMessage);
@@ -1503,7 +1505,7 @@ export function handleNicklistDiff(message: ProtocolMessage) {
 
     // Second pass: process additions (op=43) and updates (op=42).
     currentBufferId = null;
-    group = "root";
+    group = ROOT_GROUP_KEY;
     for (const n of nicklist) {
         const ptr0 = n.pointers[0];
         if (!ptr0) continue;
@@ -1515,11 +1517,11 @@ export function handleNicklistDiff(message: ProtocolMessage) {
         }
 
         if (currentBufferId !== ptr0) {
-            group = "root";
+            group = ROOT_GROUP_KEY;
             currentBufferId = ptr0;
         }
 
-        if (!("root" in buffer.nicklist)) {
+        if (!(ROOT_GROUP_KEY in buffer.nicklist)) {
             if (DEBUG_NICKLIST)
                 console.log(
                     "[nicklist] skipping diff for",

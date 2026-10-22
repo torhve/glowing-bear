@@ -20,6 +20,7 @@ import {
     parseRichText, removeBuffer, isRelayStatusBuffer, trimBufferLines,
     maxBufferLines, lineLimitFor, lineLimitWith, applyServerReadMarker, markHotlistBaselineApplied,
     injectDateChangeMessageIfNeeded, pendingBufferSwitch, setActiveBuffer, matchesPendingSwitch,
+    LINE_FLUSH_FALLBACK_MS,
 } from '#lib/stores/models.ts';
 import { shouldResume } from '#lib/stores/bufferResume.ts';
 import { weechatLineId } from '#lib/lineIdentity.ts';
@@ -36,6 +37,7 @@ import type {
 import type { ApiBufferId } from '#lib/api/api-ids.ts';
 import { isServerHiddenLine } from '#lib/api/api-mapping.ts';
 import { tallyUnreadLine } from '#lib/unreadTally.ts';
+import { isRootGroup, nickGroupKey } from '#lib/nicklistGroup.ts';
 
 /** Central conversion: store key for an API buffer id. */
 export function storeKeyForBufferId(bufferId: ApiBufferId): string {
@@ -79,7 +81,7 @@ function scheduleLineFlush(): void {
         flushTimer = setTimeout(() => {
             flushTimer = null;
             flushApiLineBatch();
-        }, 100);
+        }, LINE_FLUSH_FALLBACK_MS);
     }
 }
 
@@ -179,10 +181,10 @@ export function flushApiLineBatch(): void {
 const groupKeys = new Map<string, Map<number, string>>();
 function groupKey(bufferKey: string, groupId: number, name = ''): string {
     const map = groupKeys.get(bufferKey);
-    return map?.get(groupId) ?? (name || 'root');
+    return map?.get(groupId) ?? nickGroupKey(name);
 }
 function registerGroupKey(bufferKey: string, groupId: number, name: string): string {
-    const key = name || 'root';
+    const key = nickGroupKey(name);
     let map = groupKeys.get(bufferKey);
     if (!map) { map = new Map(); groupKeys.set(bufferKey, map); }
     map.set(groupId, key);
@@ -604,7 +606,7 @@ export function createApiStoreReducers(): ApiReducers {
         nickChanged(bufferId, nick): void {
             updateNicklist(bufferId, (target) => {
                 const groupKey2 = groupKey(target.id, nick.parentGroupId);
-                const group = target.nicklist[groupKey2] ?? createNickGroup({ name: groupKey2 === 'root' ? '' : groupKey2, visible: '1' });
+                const group = target.nicklist[groupKey2] ?? createNickGroup({ name: isRootGroup(groupKey2) ? '' : groupKey2, visible: '1' });
                 const existingIndex = group.nicks.findIndex((n) => n.nickId === nick.id);
                 const created = createNickFromApi(target, nick);
                 const nicks = existingIndex >= 0

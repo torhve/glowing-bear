@@ -1227,6 +1227,16 @@ export function initialHistoryWindow(): number {
 export const SWITCH_FETCH_BELOW_LINES = 20;
 export const SWITCH_FETCH_REQUEST_LINES = 100;
 
+/**
+ * How long a queued batch of lines may wait for a frame before it is forced out.
+ *
+ * Both transports schedule their flush on `requestAnimationFrame` and arm this
+ * timer as the guarantee that a batch still lands when no frame ever arrives —
+ * a hidden tab, a page that never paints. One number, because a reader should not
+ * get lines promptly on one relay and a tenth of a second late on the other.
+ */
+export const LINE_FLUSH_FALLBACK_MS = 100;
+
 export function shouldFetchOnBufferSwitch(buffer: BufferData): boolean {
     return (buffer.lastSeen < 0 || buffer.lines.length < SWITCH_FETCH_BELOW_LINES)
         && !buffer.newestWindowFetched;

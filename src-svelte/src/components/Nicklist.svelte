@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { NickGroup, Nick } from '#lib/types.ts';
+  import { isRootGroup } from '#lib/nicklistGroup.ts';
   import Users from '@lucide/svelte/icons/users';
   import Search from '@lucide/svelte/icons/search';
   import { pendingBufferSwitch, newPendingSwitch, getBuffer, clearPendingSwitchIfCurrent } from '#lib/stores/models.ts';
@@ -57,12 +58,12 @@
       })
       // WeeChat's root group is the ungrouped nicks; keep it first so they read
       // as a preamble to the grouped sections.
-      .sort((a, b) => (a[0] === 'root' ? -1 : b[0] === 'root' ? 1 : 0));
+      .sort((a, b) => (isRootGroup(a[0]) ? -1 : isRootGroup(b[0]) ? 1 : 0));
   });
 
   function nickSectionClass(groupName: string): string {
     // Root nicks have no header and no section box — they are bare rows.
-    return groupName === 'root' ? '' : 'nick-group border-b border-border';
+    return isRootGroup(groupName) ? '' : 'nick-group border-b border-border';
   }
 
   function getPrefixClass(prefix: string): string {
