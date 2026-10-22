@@ -143,7 +143,8 @@ describe("the trim honours the buffer's own cap", () => {
         const buffer = bufferWith(1000, { historyLimit: 500 });
         trimBufferLines(buffer, lineLimitFor(buffer));
         expect(buffer.lines).toHaveLength(500);
-        expect(buffer.lines[0]!.text).toBe('msg 500', 'the oldest lines are the ones dropped');
+        // The oldest lines are the ones dropped.
+        expect(buffer.lines[0]!.text).toBe('msg 500');
     });
 
     it('does not trim a deep window away when the reader switches back to it', () => {

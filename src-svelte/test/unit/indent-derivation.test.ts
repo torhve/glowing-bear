@@ -188,4 +188,20 @@ describe('indent derivation: one rule for all three writers', () => {
             });
         }
     });
+
+    it('the type is the `type` local variable copied through, not a checked vocabulary', () => {
+        // `relay.raw` reports `debug` — upstream `relay_raw_open` sets its
+        // `localvar_set_type` to "debug" — and a plugin can set any string.
+        // Both transports copy it verbatim, so an unlisted type survives rather
+        // than being rewritten to `other`; only the indent rule is a closed list.
+        const created = createBuffer({
+            pointers: ['0x901'],
+            full_name: 'relay.relay.raw',
+            short_name: 'relay.raw',
+            number: 0,
+            local_variables: { plugin: 'relay', server: 'relay_raw', type: 'debug' },
+        });
+        expect(created.type).toBe('debug');
+        expect(created.indent).toBe(false);
+    });
 });

@@ -81,6 +81,7 @@ function makeBuffer(id: string, overrides: Partial<BufferData> = {}): BufferData
         rtitle: '',
         lines: [],
         allLinesFetched: false,
+        newestWindowFetched: false,
         lastSeen: -1,
         readBoundaryKnown: false,
         readBoundaryId: null,

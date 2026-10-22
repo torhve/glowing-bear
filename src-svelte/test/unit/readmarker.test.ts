@@ -71,6 +71,7 @@ function makeBuffer(id: string, opts: Partial<BufferData> = {}): BufferData {
         rtitle: '',
         lines: [],
         allLinesFetched: false,
+        newestWindowFetched: false,
         lastSeen: -1,
         localUnread: 0,
         unread: 0,
@@ -101,6 +102,8 @@ function createLineMessage(
     id?: string | number,
 ): ProtocolMessage {
     return {
+        // A line arrives as the `_buffer_line_added` signal.
+        id: '_buffer_line_added',
         objects: [{
             pointer: bufferId,
             content: [{
@@ -124,6 +127,9 @@ function createLineMessage(
 // Format: objects[0].content = HotlistEntry[]
 function createHotlistInfo(entries: HotlistEntry[]): ProtocolMessage {
     return {
+        // A hotlist snapshot is the reply to an hdata request, so its id is the
+        // numeric callback id the client stamped on that request.
+        id: '1',
         objects: [{
             pointer: '0xhotlist',
             content: entries
@@ -306,6 +312,8 @@ describe('Readmarker behavior', () => {
             expect(get(buffers)['0x200']!.pendingReadBoundaryUnread).toBe(2);
 
             handleLineInfo({
+                // History arrives as the reply to a `hdata` request: callback id, not a signal id.
+                id: '1',
                 objects: [{
                     pointer: '0x200',
                     content: [secondMessage.objects[0]!.content[0]!, firstMessage.objects[0]!.content[0]!],
@@ -603,10 +611,10 @@ describe('Readmarker behavior', () => {
             const anchorLine = createBufferLine(anchor.objects[0]!.content[0]!);
             const buffer = makeBuffer('0x4', { lines: [anchorLine], readBoundaryKnown: true, readBoundaryId: 'weechat:anchor', lastSeen: 0 });
             buffers.set({ '0x4': buffer });
-            handleLineInfo({ objects: [{ pointer: '0x4', content: [anchor.objects[0]!.content[0]!, replacement.objects[0]!.content[0]!] }] }, true, '0x4');
+            handleLineInfo({ id: '1', objects: [{ pointer: '0x4', content: [anchor.objects[0]!.content[0]!, replacement.objects[0]!.content[0]!] }] }, true, '0x4');
             expect(getReadBoundaryIndex(get(buffers)['0x4']!)).toBe(1);
             const missing = createLineMessage('0x4', ['irc_privmsg'], 0, 1, 0, 1, 'missing');
-            handleLineInfo({ objects: [{ pointer: '0x4', content: [missing.objects[0]!.content[0]!] }] }, true, '0x4');
+            handleLineInfo({ id: '1', objects: [{ pointer: '0x4', content: [missing.objects[0]!.content[0]!] }] }, true, '0x4');
             expect(getReadBoundaryIndex(get(buffers)['0x4']!)).toBe(null);
             setReadBoundaryUnknown(get(buffers)['0x4']!);
             expect(getReadBoundaryIndex(get(buffers)['0x4']!)).toBe(null);
@@ -625,7 +633,7 @@ describe('Readmarker behavior', () => {
             // The chat view's "Fetch more lines" request arrives as a legacy lineInfo.
             const older = createLineMessage('0x400', ['irc_privmsg'], 0, 1, 0, 1, 'older');
             const newer = createLineMessage('0x400', ['irc_privmsg'], 0, 1, 0, 2, 'newer');
-            handleLineInfo({ objects: [{ pointer: '0x400', content: [older.objects[0]!.content[0]!, newer.objects[0]!.content[0]!] }] }, true, '0x400');
+            handleLineInfo({ id: '1', objects: [{ pointer: '0x400', content: [older.objects[0]!.content[0]!, newer.objects[0]!.content[0]!] }] }, true, '0x400');
 
             const after = get(buffers)['0x400']!;
             expect(after.lines.length).toBe(2);

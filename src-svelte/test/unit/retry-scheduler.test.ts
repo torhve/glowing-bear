@@ -69,13 +69,13 @@ describe('the shared retry scheduler', () => {
         const expected = [30_000, 45_000, 67_500, 101_250, 151_875, 227_812.5, 300_000, 300_000];
         const seen: number[] = [];
 
-        for (let i = 0; i < expected.length; i++) {
+        for (const ms of expected) {
             const { attempt } = attemptSpy();
             scheduleRetry(attempt, () => undefined);
             const next = get(connectionState).nextReconnectAt;
             seen.push(next ? next - Date.now() : -1);
             // Fire the armed attempt so the next schedule counts the next step.
-            vi.advanceTimersByTime(expected[i] + 10);
+            vi.advanceTimersByTime(ms + 10);
         }
 
         expect(seen).toEqual(expected);

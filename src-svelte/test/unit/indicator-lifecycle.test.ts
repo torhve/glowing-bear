@@ -69,6 +69,7 @@ function makeBuffer(id: string, overrides: Partial<BufferData> = {}): BufferData
         rtitle: overrides.rtitle ?? '',
         lines: [],
         allLinesFetched: false,
+        newestWindowFetched: false,
         lastSeen: -1,
         localUnread: 0,
         unread: 0,
@@ -252,7 +253,7 @@ describe('indicator lifecycle', () => {
     it('publishes the indicators once per background batch, not once per line', async () => {
         buffers.set({
             '0x100': makeBuffer('0x100', { active: true }),
-            '0x200': makeBuffer('0x200', { readBoundaryKnown: true, serverReadLineId: '0' }),
+            '0x200': makeBuffer('0x200', { readBoundaryKnown: true, serverReadLineId: 0 }),
         });
         activeBufferId.set('0x100');
 

@@ -80,7 +80,9 @@ function addLine(key: string, id: number, text: string): void {
 }
 
 function live(key: string): BufferData {
-    return get(buffers)[key];
+    const buffer = get(buffers)[key];
+    if (!buffer) throw new Error(`live(): no buffer ${key} in the store`);
+    return buffer;
 }
 
 function connectProfile(host = 'relay.example', port = 443): string {

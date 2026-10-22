@@ -20,7 +20,7 @@
  * is kept here as the contrast; the jump half is checked on exactly the layouts
  * the old reading failed.
  */
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount, type Component } from 'svelte';
 import Page from '../../src/routes/+page.svelte';
 import { buffers, connected, createBuffer } from '#lib/stores/models.ts';

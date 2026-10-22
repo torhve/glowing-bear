@@ -74,7 +74,8 @@ describe('history window placement', () => {
         const before = buffer.lines;
         insertHistoryLines(buffer, [line(8), line(9)]);
         expect(ids(buffer)).toEqual([8, 9, 10, 11, 12]);
-        expect(buffer.lines[2]).toBe(before[0], 'held line objects are reused, not rebuilt');
+        // Held line objects are reused, not rebuilt.
+        expect(buffer.lines[2]).toBe(before[0]);
         expect(buffer.lines[4]).toBe(before[2]);
     });
     it('falls back to prepending when the fetched window carries no server id', () => {

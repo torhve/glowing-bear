@@ -11,7 +11,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { get } from 'svelte/store';
 import { activeTransport, connectionState } from '#lib/stores/connectionStore.ts';
 import { updateSettings } from '#lib/stores/settings.ts';
-import { buffers, connected } from '#lib/stores/models.ts';
+import { buffers, connected, createBuffer } from '#lib/stores/models.ts';
 import { connect as facadeConnect, disconnect as facadeDisconnect } from '#lib/stores/connectionManager.ts';
 import { transportAdapterFor } from '#lib/stores/connectionLifecycle.ts';
 
@@ -130,7 +130,8 @@ describe('teardownAll', () => {
 
         buffers.update((current) => ({
             ...current,
-            '99': { id: '99', number: 99, name: '#leftover', shortName: '#leftover', lines: [], allLinesFetched: true, lastSeen: 0 },
+            // Built the way the app builds one, so the leftover buffer has every field a wipe has to tolerate.
+            '99': createBuffer({ pointers: ['99'], full_name: '#leftover', short_name: '#leftover', number: 99 }),
         }));
         expect(Object.keys(get(buffers))).toHaveLength(1);
 

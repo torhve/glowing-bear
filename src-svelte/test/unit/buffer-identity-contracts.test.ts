@@ -31,9 +31,9 @@ import {
 } from '#lib/stores/models.ts';
 import { hotlistEntries, sidebarOrder, sidebarRows } from '#lib/stores/bufferProjections.ts';
 import { getDisplayName } from '#lib/utils.ts';
-import type { BufferData, BufferPresentation, ProtocolMessage } from '#lib/types.ts';
+import type { BufferData, BufferPresentation, ProtocolMessage, RichTextPart } from '#lib/types.ts';
 import { createApiStoreReducers, flushApiLineBatch } from '#lib/api/api-store-reducers.ts';
-import type { HotlistSnapshot, LineSnapshot } from '#lib/api/api-contracts.ts';
+import type { BufferSnapshot, HotlistSnapshot, LineSnapshot } from '#lib/api/api-contracts.ts';
 import type { ApiBufferId, ApiLineId } from '#lib/api/api-ids.ts';
 
 // Indicator side effects are irrelevant here and must not reach canvas or audio.
@@ -107,6 +107,7 @@ function makeBuffer(id: string, overrides: Partial<BufferData> = {}): BufferData
         rtitle: '',
         lines: [],
         allLinesFetched: false,
+        newestWindowFetched: false,
         lastSeen: -1,
         localUnread: 0,
         unread: 0,
@@ -123,6 +124,16 @@ function makeBuffer(id: string, overrides: Partial<BufferData> = {}): BufferData
         pinned: false,
         active: false,
         ...overrides,
+    };
+}
+
+/** A `RichTextPart` with no colour and no attribute — the shape a plain topic arrives as. */
+function plainPart(text: string): RichTextPart {
+    return {
+        text,
+        fgColor: { type: 'weechat', name: 'default' },
+        bgColor: { type: 'option', name: 'default' },
+        attrs: { name: null, override: {} },
     };
 }
 
@@ -405,9 +416,13 @@ describe('known identity costs (must be fixed before selectors rely on reference
         buffers.set({ [key]: makeBuffer(key) });
         const reducers = createApiStoreReducers();
 
+        const base = Date.parse('2026-10-08T12:00:00.000Z');
         const line = (n: number): LineSnapshot => ({
             id: n as ApiLineId,
-            epochMs: Date.parse('2026-10-08T12:00:00.000Z') + n,
+            // Wire shape: `y` is the position hint (-1 when meaningless) and `date` is the raw ISO string `epochMs` is derived from.
+            y: -1,
+            date: new Date(base + n).toISOString(),
+            epochMs: base + n,
             displayed: true,
             highlight: false,
             notifyLevel: 1,
@@ -531,7 +546,8 @@ describe('publication invariant (guards a selective currentBuffer)', () => {
 
     it('an API buffer-info snapshot republishes the buffer it mutated', () => {
         const reducers = createApiStoreReducers();
-        const active = makeBuffer('1', { active: true, title: ['old topic'] });
+        const oldTitle = [plainPart('old topic')];
+        const active = makeBuffer('1', { active: true, title: oldTitle });
         buffers.set({ '1': active });
         activeBufferId.set('1');
 
@@ -566,7 +582,7 @@ describe('publication invariant (guards a selective currentBuffer)', () => {
         // classify as "nothing happened".
         expect(published.title.map((t) => t.text).join('')).toBe('new topic');
         expect(published).not.toBe(active);
-        expect(active.title).toEqual(['old topic']);
+        expect(active.title).toEqual([plainPart('old topic')]);
     });
 });
 

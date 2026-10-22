@@ -21,7 +21,7 @@ describe('Protocol handshake parsing', () => {
         ]);
         const protocol = new Protocol();
         const result = await protocol.parse(binary);
-        expect(result.objects[0]!.content.key).toBe('password_hash_algo');
+        expect((result.objects[0]!.content as { key: string }).key).toBe('password_hash_algo');
         expect((result.objects[0]!.content as { value: string }).value).toBe('pbkdf2+sha512');
     });
 

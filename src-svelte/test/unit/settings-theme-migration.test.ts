@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import { settings } from '#lib/stores/settings.ts';
 
@@ -42,7 +42,7 @@ describe('theme slots (issue #13)', () => {
         expect(get(store).themeDark).toBe('catppuccin-frappe');
         expect(get(store).themeLight).toBe('catppuccin-frappe');
         // The obsolete key must not survive into the store.
-        expect('theme' in (get(store) as Record<string, unknown>)).toBe(false);
+        expect(get(store)).not.toHaveProperty('theme');
     });
 
     it('pins both slots to the pre-slot theme from the old gb_theme key', async () => {

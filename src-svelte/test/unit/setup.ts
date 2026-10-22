@@ -43,8 +43,11 @@ if ((globalThis as Record<string, unknown>).__GIT_COMMIT__ === undefined) {
 // `@vitest-environment node`, where there is no HTMLElement to patch at all.
 if (typeof HTMLElement !== 'undefined' && !('showPopover' in HTMLElement.prototype)) {
     const inert = function (this: HTMLElement) {};
-    HTMLElement.prototype.showPopover = inert as HTMLElement['showPopover'];
-    HTMLElement.prototype.hidePopover = inert as HTMLElement['hidePopover'];
+    // The `in` guard above narrows `HTMLElement.prototype` to `never` (the DOM lib
+    // says the method is always there), so patch through a binding the guard cannot narrow.
+    const proto: HTMLElement = HTMLElement.prototype;
+    proto.showPopover = inert as HTMLElement['showPopover'];
+    proto.hidePopover = inert as HTMLElement['hidePopover'];
 }
 
 /**

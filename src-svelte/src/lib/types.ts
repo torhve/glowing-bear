@@ -24,8 +24,14 @@ export interface RichTextPart {
     $$hashKey?: string;
 }
 
-// Buffer types from WeeChat
-export type BufferType = 'server' | 'channel' | 'private' | 'query' | 'channel_temp' | 'other' | 'relay';
+// Buffer types from WeeChat. The field is a copy of the buffer's `type` local
+// variable: every transport assigns `local_variables.type` straight through
+// (`createBuffer`, the buffer-update path and the API reducers), so the union
+// lists the values the app branches on plus the ones a real relay is known to
+// report — `relay.list` reports `relay`, `relay.raw` reports `debug` (upstream
+// `relay_raw_open` sets `localvar_set_type` to "debug"). A plugin can set any
+// string, which is why those assignments are casts rather than checks.
+export type BufferType = 'server' | 'channel' | 'private' | 'query' | 'channel_temp' | 'other' | 'relay' | 'debug';
 
 // Buffer message types from protocol
 export interface BufferMessage {
