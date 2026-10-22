@@ -22,6 +22,10 @@
   // The dialog is rendered unconditionally — popover visibility is toggled, not
   // mounted — so its result rows exist in the DOM even while it is closed.
   let isOpen = $state(false);
+  // BaseDialog hands back its own <dialog> element. Closing through that element
+  // rather than `document.getElementById('buffer-search-modal')` means the modal
+  // closes the dialog it rendered even if another element ever carries that id.
+  let baseDialog: { dialog: HTMLDialogElement | undefined } | undefined = $state();
 
   let filteredBuffers = $derived(
     $visibleBuffers.filter((buf: BufferPresentation) => {
@@ -78,7 +82,7 @@
     if (!switched) return;
     bufferSearchQuery = '';
     selectedIndex = 0;
-    (document.getElementById('buffer-search-modal') as HTMLElement)?.hidePopover();
+    baseDialog?.dialog?.hidePopover();
     onBufferSelect();
   }
 
@@ -148,7 +152,7 @@
   });
 </script>
 
-<BaseDialog id="buffer-search-modal" labelledby="buffer-search-title" noAnimation onbeforetoggle={handleBeforeToggle} ontoggle={handleToggle}>
+<BaseDialog bind:this={baseDialog} id="buffer-search-modal" labelledby="buffer-search-title" noAnimation onbeforetoggle={handleBeforeToggle} ontoggle={handleToggle}>
   <div class="buffer-search-content flex flex-col max-h-[85vh]">
     <div class="buffer-search-header px-4 py-3 border-b border-border flex items-center justify-between">
       <h2 id="buffer-search-title" class="text-sm font-bold text-text">Search Buffers</h2>

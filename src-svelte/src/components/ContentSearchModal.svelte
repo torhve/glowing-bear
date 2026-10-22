@@ -12,14 +12,17 @@
   let { onSearch }: Props = $props();
 
   let searchQuery = $state('');
-  let dialogRef = $state<HTMLDialogElement>();
+  // The dialog element this modal rendered, read back from BaseDialog: closing a
+  // popover by looking up its id in the document worked only while this component
+  // was the one thing in the page carrying that id.
+  let baseDialog: { dialog: HTMLDialogElement | undefined } | undefined = $state();
 
   function handleSearch() {
     const query = searchQuery.trim();
     if (query) {
       onSearch(query);
       searchQuery = '';
-      (document.getElementById('content-search-modal') as HTMLElement)?.hidePopover();
+      baseDialog?.dialog?.hidePopover();
     }
   }
 
@@ -35,10 +38,10 @@
     focusWhenPopoverOpens('content-search-input');
   }
 
-  export { dialogRef as dialog };
+
 </script>
 
-<BaseDialog id="content-search-modal" labelledby="content-search-title" noAnimation onbeforetoggle={handleBeforeToggle}>
+<BaseDialog bind:this={baseDialog} id="content-search-modal" labelledby="content-search-title" noAnimation onbeforetoggle={handleBeforeToggle}>
   <div class="content-search-content flex flex-col max-h-[85vh]">
     <div class="content-search-header px-4 py-3 border-b border-border flex items-center justify-between">
       <h2 id="content-search-title" class="text-sm font-bold text-text inline-flex items-center gap-2">
