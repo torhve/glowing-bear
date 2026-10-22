@@ -14,77 +14,8 @@ import {
 
 import { createConnectedPage } from '../fixtures/auth';
 import { waitForChatSettled } from "../helpers/waits";
+import { swipeOnDocument as swipeGesture } from "../helpers/touch";
 
-// Inject touch event dispatcher into the page for swipe simulation.
-async function injectSwipeDispatcher(page: import("@playwright/test").Page) {
-    await page.evaluate(() => {
-        (window as any).__swipeOnTarget = (
-            target: Element,
-            sx: number,
-            sy: number,
-            ex: number,
-            ey: number,
-            steps = 10,
-        ) => {
-            const makeTouch = (x: number, y: number, id: number) =>
-                new Touch({
-                    identifier: id,
-                    clientX: x,
-                    clientY: y,
-                    radiusX: 1,
-                    radiusY: 1,
-                    force: 0.5,
-                    target,
-                });
-            target.dispatchEvent(
-                new TouchEvent("touchstart", {
-                    bubbles: true,
-                    cancelable: false,
-                    composed: true,
-                    touches: [makeTouch(sx, sy, 1)],
-                }),
-            );
-            for (let i = 1; i <= steps; i++) {
-                const t = i / steps;
-                const mx = sx + (ex - sx) * t;
-                const my = sy + (ey - sy) * t;
-                target.dispatchEvent(
-                    new TouchEvent("touchmove", {
-                        bubbles: true,
-                        cancelable: false,
-                        composed: true,
-                        touches: [makeTouch(mx, my, 2)],
-                    }),
-                );
-            }
-            target.dispatchEvent(
-                new TouchEvent("touchend", {
-                    bubbles: true,
-                    cancelable: false,
-                    composed: true,
-                    changedTouches: [makeTouch(ex, ey, 3)],
-                    touches: [],
-                }),
-            );
-        };
-    });
-}
-
-// Helper to simulate a swipe gesture via touch events on document
-async function swipeGesture(
-    page: import("@playwright/test").Page,
-    startX: number,
-    startY: number,
-    endX: number,
-    endY: number,
-) {
-    await page.evaluate(
-        ({ sx, sy, ex, ey }) => {
-            (window as any).__swipeOnTarget(document, sx, sy, ex, ey);
-        },
-        { sx: startX, sy: startY, ex: endX, ey: endY },
-    );
-}
 
 let browserPage: import("@playwright/test").Page;
 
@@ -93,7 +24,6 @@ test.describe.configure({ mode: "serial" });
 test.beforeAll(async ({ browser }) => {
     browserPage = await createConnectedPage(browser, {
         settings: { savepassword: false, autoconnect: false, showNicklist: false },
-        beforeConnect: async (p) => { await injectSwipeDispatcher(p); },
     });
 });
 

@@ -31,6 +31,8 @@
   import type { ChatScrollCommands, ChatScrollCommandsHolder } from '#lib/chatViewport.ts';
   import { applyComposerEdit, setComposerInput } from '#lib/composerInput.ts';
   import type { ComposerHolder } from '#lib/composerInput.ts';
+  import { classifySwipe, isHorizontalDrag, NO_TOUCH, touchOrigin } from '#lib/mobileGestures.ts';
+  import type { TouchOrigin } from '#lib/mobileGestures.ts';
 
   // One holder for this page instance, shared with the composer through context.
   // ChatView fills it while mounted and clears it on unmount. Plain object on
@@ -606,12 +608,10 @@
   let isMobileState = $state(typeof window !== 'undefined' && window.innerWidth < 768);
   // Whether current buffer has nick data to display (used for auto-hiding nicklist)
   let hasCurrentBufferNicklist = $derived(bufferHasNicklist($chatDisplay.buffer));
-  let touchStartX = 0;
-  let touchStartY = 0;
-  let touchStartTime = 0;
-  let touchStartTarget: HTMLElement | null = null;
-  // Whether touch gesture originated inside the mobile nicklist overlay
-  let touchStartedInNicklist = $state(false);
+  // Where the current touch started, or nothing until a touchstart lands. `inNicklist`
+  // used to be a separate `$state` that only the handlers read, reset at the end of every
+  // gesture for no effect — touchstart overwrote it anyway.
+  let touchStart: TouchOrigin = NO_TOUCH;
 
   // Resize listener keeps isMobileState in sync with actual viewport size.
   // This ensures {#if} blocks and touch gesture guards react correctly when
@@ -676,21 +676,14 @@
     if (!isMobile()) return;
     const firstTouch = e.touches[0];
     if (!firstTouch) return;
-    touchStartX = firstTouch.clientX;
-    touchStartY = firstTouch.clientY;
-    touchStartTime = Date.now();
-    touchStartTarget = e.target as HTMLElement | null;
-    // Track if touch originated inside the mobile nicklist overlay
-    touchStartedInNicklist = touchStartTarget instanceof Element && !!touchStartTarget.closest('.mobile-nicklist-overlay');
+    touchStart = touchOrigin(firstTouch, e.target, Date.now());
   }
 
   function handleTouchMove(e: TouchEvent) {
     if (!isMobile()) return;
     const firstTouch = e.touches[0];
     if (!firstTouch) return;
-    const deltaX = Math.abs(firstTouch.clientX - touchStartX);
-    const deltaY = Math.abs(firstTouch.clientY - touchStartY);
-    if (deltaX > deltaY && deltaX > 10) {
+    if (isHorizontalDrag(touchStart, firstTouch.clientX, firstTouch.clientY)) {
       e.preventDefault();
     }
   }
@@ -699,75 +692,64 @@
     if (!isMobile()) return;
     const firstTouch = e.changedTouches[0];
     if (!firstTouch) return;
-    const touchEndX = firstTouch.clientX;
-    const touchEndY = firstTouch.clientY;
-    const deltaX = touchEndX - touchStartX;
-    const deltaY = touchEndY - touchStartY;
-    const deltaTime = Date.now() - touchStartTime;
+    const swipe = classifySwipe(touchStart, firstTouch.clientX, firstTouch.clientY, Date.now(), window.innerWidth);
+    if (!swipe) return;
 
-    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50 && deltaTime < 500) {
+    if (swipe.direction === 'right') {
       // Swipe right -> show buffer list, close nicklist (overlays are mutually exclusive)
-      if (deltaX > 0) {
-        if (touchStartedInNicklist && nicklistOpenOnMobile) {
-          // Swipe right on nicklist overlay -> close it and show buffer list
-          nicklistOpenOnMobile = false;
-          showBufferList = true;
-        } else {
-          // Swipe right from chat/buffer area -> show buffer list, close nicklist
-          showBufferList = true;
-          nicklistOpenOnMobile = false;
-        }
+      if (touchStart.inNicklist && nicklistOpenOnMobile) {
+        // Swipe right on nicklist overlay -> close it and show buffer list
+        nicklistOpenOnMobile = false;
+        showBufferList = true;
+      } else {
+        // Swipe right from chat/buffer area -> show buffer list, close nicklist
+        showBufferList = true;
+        nicklistOpenOnMobile = false;
       }
+      return;
+    }
+
+    if (swipe.direction === 'left') {
       // Swipe left -> check if from right edge (nicklist) or general (buffer list)
-      else {
-        const rightEdgeThreshold = 80;
-        // If touching the nicklist panel while open -> close it directly
-        if (nicklistOpenOnMobile && touchStartedInNicklist) {
-          nicklistOpenOnMobile = false;
-        }
-        // Swipe from right edge -> open nicklist and close buffer list
-        else if (touchStartX > window.innerWidth - rightEdgeThreshold && !nicklistOpenOnMobile && (hasCurrentBufferNicklist || $settings.alwaysnicklist)) {
-          nicklistOpenOnMobile = true;
-          showBufferList = false;
-        } else if (nicklistOpenOnMobile) {
-          // Swipe left on nicklist from non-right-edge -> close it
-          nicklistOpenOnMobile = false;
-        } else {
-          // General swipe left -> close buffer list
-          showBufferList = false;
-        }
+      // If touching the nicklist panel while open -> close it directly
+      if (nicklistOpenOnMobile && touchStart.inNicklist) {
+        nicklistOpenOnMobile = false;
       }
+      // Swipe from right edge -> open nicklist and close buffer list
+      else if (swipe.fromRightEdge && !nicklistOpenOnMobile && (hasCurrentBufferNicklist || $settings.alwaysnicklist)) {
+        nicklistOpenOnMobile = true;
+        showBufferList = false;
+      } else if (nicklistOpenOnMobile) {
+        // Swipe left on nicklist from non-right-edge -> close it
+        nicklistOpenOnMobile = false;
+      } else {
+        // General swipe left -> close buffer list
+        showBufferList = false;
+      }
+      return;
     }
 
-    if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 80 && deltaTime < 500) {
-      // Skip vertical swipe buffer-switching when touch originated inside the chat scroll area.
-      // This prevents accidental buffer switches while scrolling through messages on mobile.
-      const chatContainer = document.querySelector('[data-testid="chat-messages"]');
-      if (chatContainer && touchStartTarget && chatContainer.contains(touchStartTarget)) {
-        return;
-      }
-      // `sidebarOrder` is the same ordering `sortedVisibleBuffers` produced, but
-      // memoized on structure: reading it here used to keep a component-lifetime
-      // subscription to a full filter+sort that re-ran on every buffer
-      // publication, including message-only traffic that cannot reorder
-      // anything. Reading with get() inside a swipe handler adds no dependency.
-      const order = get(sidebarOrder);
-      const currentBuf = get(currentBuffer);
-      const currentIndex = currentBuf ? order.indexOf(currentBuf.id) : -1;
-
-      if (currentIndex !== -1) {
-        if (deltaY < 0 && currentIndex < order.length - 1) {
-          const prevId = order[currentIndex - 1];
-          if (prevId) switchBuffer(prevId);
-        } else if (deltaY > 0 && currentIndex > 0) {
-          const nextId = order[currentIndex + 1];
-          if (nextId) switchBuffer(nextId);
-        }
-      }
+    // Skip vertical swipe buffer-switching when touch originated inside the chat scroll area.
+    // This prevents accidental buffer switches while scrolling through messages on mobile.
+    const chatContainer = document.querySelector('[data-testid="chat-messages"]');
+    if (chatContainer && touchStart.target && chatContainer.contains(touchStart.target)) {
+      return;
     }
 
-    // Reset nicklist touch tracking for next gesture
-    touchStartedInNicklist = false;
+    // `sidebarOrder` is the same ordering `sortedVisibleBuffers` produced, but
+    // memoized on structure: reading it here used to keep a component-lifetime
+    // subscription to a full filter+sort that re-ran on every buffer
+    // publication, including message-only traffic that cannot reorder
+    // anything. Reading with get() inside a swipe handler adds no dependency.
+    const order = get(sidebarOrder);
+    const currentBuf = get(currentBuffer);
+    const currentIndex = currentBuf ? order.indexOf(currentBuf.id) : -1;
+    if (currentIndex === -1) return;
+
+    // A finger moving up walks toward the top of the sidebar, a finger moving down toward
+    // the bottom. Out of range reads as nothing, so the first and last rows simply stay put.
+    const neighbourId = order[swipe.direction === 'up' ? currentIndex - 1 : currentIndex + 1];
+    if (neighbourId) switchBuffer(neighbourId);
   }
 
 </script>

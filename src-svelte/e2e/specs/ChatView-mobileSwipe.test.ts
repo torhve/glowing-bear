@@ -1,76 +1,18 @@
 import { test, expect } from '@playwright/test';
 import { connectToWeechat, disconnect, reconnect, clearSettings, setSettings, waitForAppReady } from '../helpers/connection';
 import { switchToBuffer, waitForBuffer } from '../helpers/buffers';
+import { swipeOnDocument, swipeOnElement } from '../helpers/touch';
 
 import { createConnectedPage } from '../fixtures/auth';
 
-// Inject touch event dispatcher into the page for reuse across swipe functions.
-async function injectTouchDispatcher(page: import('@playwright/test').Page) {
-    await page.evaluate(() => {
-        (window as any).__swipeOnTarget = (target: Element, sx: number, sy: number, ex: number, ey: number, steps = 10) => {
-            const makeTouch = (x: number, y: number, id: number) => new Touch({ identifier: id, clientX: x, clientY: y, radiusX: 1, radiusY: 1, force: 0.5, target });
-            // touchstart
-            target.dispatchEvent(new TouchEvent('touchstart', {
-                bubbles: true, cancelable: false, composed: true,
-                touches: [makeTouch(sx, sy, 1)],
-            }));
-            // touchmove with intermediate steps
-            for (let i = 1; i <= steps; i++) {
-                const t = i / steps;
-                const mx = sx + (ex - sx) * t;
-                const my = sy + (ey - sy) * t;
-                target.dispatchEvent(new TouchEvent('touchmove', {
-                    bubbles: true, cancelable: false, composed: true,
-                    touches: [makeTouch(mx, my, 2)],
-                }));
-            }
-            // touchend
-            target.dispatchEvent(new TouchEvent('touchend', {
-                bubbles: true, cancelable: false, composed: true,
-                changedTouches: [makeTouch(ex, ey, 3)],
-                touches: [],
-            }));
-        };
-    });
-}
 
-// Simulate a swipe gesture by dispatching touch events on a specific DOM element.
-async function swipeOnElement(
-    page: import('@playwright/test').Page,
-    selector: string,
-    startX: number,
-    startY: number,
-    endX: number,
-    endY: number,
-) {
-    await page.evaluate(({ sel, sx, sy, ex, ey }) => {
-        const target = document.querySelector(sel);
-        if (!target) return;
-        (window as any).__swipeOnTarget(target, sx, sy, ex, ey);
-    }, { sel: selector, sx: startX, sy: startY, ex: endX, ey: endY });
-}
-
-// Simulate a swipe gesture dispatched directly on document (for non-element-targeted tests).
-async function swipeOnDocument(
-    page: import('@playwright/test').Page,
-    startX: number,
-    startY: number,
-    endX: number,
-    endY: number,
-) {
-    await page.evaluate(({ sx, sy, ex, ey }) => {
-        (window as any).__swipeOnTarget(document, sx, sy, ex, ey);
-    }, { sx: startX, sy: startY, ex: endX, ey: endY });
-}
 
 let page: import('@playwright/test').Page;
 
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
-    page = await createConnectedPage(browser, {
-        beforeConnect: async (p) => { await injectTouchDispatcher(p); },
-    });
+    page = await createConnectedPage(browser);
 });
 
 test.afterAll(async () => {
@@ -90,7 +32,6 @@ test('vertical swipe on chat area does not switch buffers', async () => {
     await setSettings(page, { showNicklist: false });
     await page.goto('http://localhost:8001/');
     await waitForAppReady(page);
-    await injectTouchDispatcher(page);
     await page.setViewportSize({ width: 375, height: 667 });
     await connectToWeechat(page);
 
@@ -125,7 +66,6 @@ test('horizontal swipe right from left edge shows buffer list on mobile', async 
     await clearSettings(page);
     await page.goto('http://localhost:8001/');
     await waitForAppReady(page);
-    await injectTouchDispatcher(page);
     await page.setViewportSize({ width: 375, height: 667 });
     await connectToWeechat(page);
 
@@ -148,7 +88,6 @@ test('horizontal swipe left from right edge opens nicklist on mobile', async () 
     await setSettings(page, { alwaysnicklist: true });
     await page.goto('http://localhost:8001/');
     await waitForAppReady(page);
-    await injectTouchDispatcher(page);
     await page.setViewportSize({ width: 375, height: 667 });
     await connectToWeechat(page);
 
@@ -177,7 +116,6 @@ test('swipe right on nicklist closes it and opens buffer list', async () => {
     await setSettings(page, { alwaysnicklist: true });
     await page.goto('http://localhost:8001/');
     await waitForAppReady(page);
-    await injectTouchDispatcher(page);
     await page.setViewportSize({ width: 375, height: 667 });
     await connectToWeechat(page);
 
