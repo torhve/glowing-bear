@@ -55,6 +55,7 @@ import type {
     BufferData,
     BufferType,
 } from "#lib/types.ts";
+import { bufferNamePrefix, bufferServerSortKey, isPinnedBuffer, trimmedBufferName } from '#lib/bufferNaming.ts';
 
 // ---- Batched line addition handling ----
 // During rapid message bursts, WeeChat sends many _buffer_line_added messages
@@ -331,11 +332,8 @@ function handleBufferUpdate(
     if (message.pointers[0] !== buffer.id) return {};
 
     const shortName = message.short_name ?? buffer.shortName;
-    const trimmedName =
-      shortName.replace(/^[#&+]/, "") || (shortName ? " " : null);
-    const prefix = ["#", "&", "+"].includes(shortName.charAt(0))
-        ? shortName.charAt(0)
-        : "";
+    const trimmedName = trimmedBufferName(shortName);
+    const prefix = bufferNamePrefix(shortName);
     const title =
       message.title && typeof message.title === "string"
           ? parseRichText(message.title)
@@ -356,9 +354,8 @@ function handleBufferUpdate(
     const indent = bufferTypeIndents(type);
     const plugin = localVariables?.plugin ?? buffer.plugin;
     const server = localVariables?.server ?? buffer.server;
-    const pinned = localVariables?.pinned === "true";
-    const serverSortKey =
-      `${plugin}.${server}${type === "server" ? "" : "." + shortName}`.toLowerCase();
+    const pinned = isPinnedBuffer(localVariables);
+    const serverSortKey = bufferServerSortKey(plugin, server, type, shortName);
 
     const notify = message.notify !== undefined ? message.notify : buffer.notify;
 
@@ -866,11 +863,8 @@ export function handleBufferRenamed(message: ProtocolMessage) {
     const updated = updateBuffer(bufferId, {
         fullName: obj.full_name,
         shortName: obj.short_name,
-        trimmedName:
-          obj.short_name.replace(/^[#&+]/, "") || (obj.short_name ? " " : null),
-        prefix: ["#", "&", "+"].includes(obj.short_name.charAt(0))
-            ? obj.short_name.charAt(0)
-            : "",
+        trimmedName: trimmedBufferName(obj.short_name),
+        prefix: bufferNamePrefix(obj.short_name),
     });
     if (!updated) return;
     reportDraftRename(previousFullName, obj.full_name);
@@ -980,10 +974,9 @@ export function handleBufferLocalvarChanged(message: ProtocolMessage) {
     const type = lv.type || buffer.type;
     const plugin = lv.plugin || buffer.plugin;
     const server = lv.server || buffer.server;
-    const pinned = lv.pinned === "true";
+    const pinned = isPinnedBuffer(lv);
     const indent = bufferTypeIndents(type);
-    const serverSortKey =
-      `${plugin}.${server}${type === "server" ? "" : "." + buffer.shortName}`.toLowerCase();
+    const serverSortKey = bufferServerSortKey(plugin, server, type, buffer.shortName);
 
     // Merge new local vars into existing map, preserving existing entries not in this message.
     const mergedLocalVars = { ...(buffer.localVariables || {}), ...lv };

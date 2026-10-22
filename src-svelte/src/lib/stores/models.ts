@@ -427,11 +427,8 @@ export function createBuffer(message: {
     const id = (message.pointers && message.pointers[0]) || "";
     const fullName = message.full_name;
     const shortName = message.short_name;
-    const trimmedName =
-      shortName.replace(/^[#&+]/, "") || (shortName ? " " : null);
-    const prefix = ["#", "&", "+"].includes(shortName.charAt(0))
-        ? shortName.charAt(0)
-        : "";
+    const trimmedName = trimmedBufferName(shortName);
+    const prefix = bufferNamePrefix(shortName);
     const title = Array.isArray(message.title)
         ? message.title
         : message.title
@@ -442,10 +439,9 @@ export function createBuffer(message: {
     const indent = bufferTypeIndents(type);
     const plugin = localVars.plugin || "";
     const server = localVars.server || "";
-    const pinned = localVars.pinned === "true";
+    const pinned = isPinnedBuffer(localVars);
     const hideBufferLineTimes = message.type === 1;
-    const serverSortKey =
-      `${plugin}.${server}${type === "server" ? "" : "." + shortName}`.toLowerCase();
+    const serverSortKey = bufferServerSortKey(plugin, server, type, shortName);
 
     const buffer: BufferData = {
         id,
@@ -839,6 +835,7 @@ export function clearPendingSwitchIfCurrent(requestId: number): void {
 }
 
 import { type Writable } from "svelte/store";
+import { bufferNamePrefix, bufferServerSortKey, isPinnedBuffer, trimmedBufferName } from "#lib/bufferNaming.ts";
 export const pendingBufferSwitch: Writable<PendingQuery | null> = writable<PendingQuery | null>(null);
 
 export const previousBufferId = writable<string>("");
