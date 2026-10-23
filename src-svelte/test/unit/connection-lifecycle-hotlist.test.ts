@@ -94,23 +94,28 @@ describe('the shared hotlist poll', () => {
         expect(polls).toBe(0);
     });
 
-    it('cannot outlive the transport that armed it', () => {
-        // The leak this ownership exists to close. Replacing a transport quiesces
-        // it, and quiescing bumps the connection generation so the old socket's
-        // onclose returns early — skipping the resetAllState() that used to clear
-        // the poll. Removing stopHotlistPoll() from the transport's quiesce()
-        // makes this fail.
-        startHotlistPoll(poll);
-        vi.advanceTimersByTime(15_000);
-        expect(polls).toBe(1);
+    it.each(['api', 'legacy'] as const)(
+        'quiesce stops the shared poll on the %s transport',
+        (kind) => {
+            // The leak this ownership exists to close. Replacing a transport quiesces
+            // it, and quiescing bumps the connection generation so the old socket's
+            // onclose returns early — skipping the resetAllState() that used to clear
+            // the poll. Removing stopHotlistPoll() from that transport's quiesce()
+            // makes its case fail. Both transports arm the same shared poll, so both
+            // have to be held to it: pinning one and not the other is how a forgotten
+            // call survives a review.
+            startHotlistPoll(poll);
+            vi.advanceTimersByTime(15_000);
+            expect(polls).toBe(1);
 
-        const adapter = transportAdapterFor('api');
-        expect(adapter, 'the real API adapter should be registered').toBeDefined();
-        adapter!.quiesce();
+            const adapter = transportAdapterFor(kind);
+            expect(adapter, `the real ${kind} adapter should be registered`).toBeDefined();
+            adapter!.quiesce();
 
-        vi.advanceTimersByTime(120_000);
-        expect(polls).toBe(1);
-    });
+            vi.advanceTimersByTime(120_000);
+            expect(polls).toBe(1);
+        },
+    );
 });
 
 describe('the shared manual-reconnect preamble', () => {
