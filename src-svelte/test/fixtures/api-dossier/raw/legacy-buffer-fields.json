@@ -1,0 +1,47 @@
+{
+  "url": "ws://localhost:9001/weechat",
+  "capturedAt": "2026-10-23T08:30:04.292Z",
+  "handshake": {
+    "password_hash_algo": "pbkdf2+sha256",
+    "password_hash_iterations": 100000,
+    "nonceBytes": 16
+  },
+  "buffers": [
+    {
+      "full_name": "core.weechat",
+      "short_name": "weechat",
+      "plugin": "core",
+      "number": 1
+    },
+    {
+      "full_name": "irc.server.gbtest",
+      "short_name": "gbtest",
+      "plugin": "irc",
+      "number": 1
+    },
+    {
+      "full_name": "relay.relay.list",
+      "short_name": "relay.list",
+      "plugin": "relay",
+      "number": 2
+    },
+    {
+      "full_name": "irc.gbtest.#glowing-bear",
+      "short_name": "#glowing-bear",
+      "plugin": "irc",
+      "number": 3
+    },
+    {
+      "full_name": "python.grep",
+      "short_name": "grep",
+      "plugin": "python",
+      "number": 4
+    },
+    {
+      "full_name": "irc.gbtest.gbbot2",
+      "short_name": "gbbot2",
+      "plugin": "irc",
+      "number": 5
+    }
+  ]
+}

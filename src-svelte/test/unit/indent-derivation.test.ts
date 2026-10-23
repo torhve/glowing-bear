@@ -25,12 +25,6 @@ vi.mock('#lib/stores/settings.ts', async () => (await import('./helpers/mockSett
 vi.mock('#lib/notifications.ts', async () => (await import('./helpers/mockNotifications.ts')).mockNotifications());
 
 // jsdom exposes no localStorage here; buffer resume is unrelated to indent.
-vi.mock('#lib/stores/bufferResume.ts', () => ({
-    shouldResume: vi.fn(() => false),
-    getLastBuffer: vi.fn(() => null),
-    recordLastBuffer: vi.fn(),
-}));
-
 const { handleBufferInfo, handleBufferLocalvarChanged } = await import('#lib/stores/handlers.ts');
 
 /** One `_buffer_*` / `_buffer_info` hdata row for a buffer of a given type. */

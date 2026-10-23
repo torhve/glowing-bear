@@ -21,12 +21,6 @@ vi.mock('#lib/notifications.ts', async () => (await import('./helpers/mockNotifi
 
 // jsdom in this setup exposes no localStorage; last-buffer resume is unrelated to the
 // sync phase, and handleBufferInfo would otherwise throw on it.
-vi.mock('#lib/stores/bufferResume.ts', () => ({
-    shouldResume: vi.fn(() => false),
-    getLastBuffer: vi.fn(() => null),
-    recordLastBuffer: vi.fn(),
-}));
-
 const { handleBufferInfo, handleHotlistInfo, handleBufferLineAdded, handleLineInfo } =
     await import('#lib/stores/handlers.ts');
 

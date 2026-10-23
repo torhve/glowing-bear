@@ -19,16 +19,6 @@ vi.mock('#lib/windowFocus.ts', () => ({
     isWindowFocused: () => typeof document !== 'undefined' && !document.hidden,
 }));
 
-// Mock bufferResume store — models.ts now imports recordBuffer for auto-resume.
-vi.mock('#lib/stores/bufferResume.ts', () => ({
-    lastBufferId: {
-        subscribe: (fn: (val: string) => void) => { fn(''); return () => {}; },
-        set: vi.fn(),
-    },
-    recordLastBuffer: vi.fn(),
-    shouldResume: vi.fn().mockReturnValue(false),
-}));
-
 const { handleBufferLineAdded, handleHotlistInfo, handleLineInfo } = await import('#lib/stores/handlers.ts');
 
 // Helper to create a test buffer

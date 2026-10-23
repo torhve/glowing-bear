@@ -44,7 +44,7 @@ import { get, readable, writable } from 'svelte/store';
 import { getActiveConnectionProfile } from '#lib/connectionProfile.ts';
 import { conversationKeyFor } from '#lib/stores/conversationDrafts.ts';
 import { activeBufferId, buffers, setActiveBuffer } from '#lib/stores/models.ts';
-import { shouldResume } from '#lib/stores/bufferResume.ts';
+import { pickResumeTarget } from '#lib/stores/bufferResume.ts';
 import { rowFor } from '#lib/stores/bufferRow.ts';
 import type { BufferData, BufferLine, BufferPresentation, Nick, NickGroup, RichTextPart } from '#lib/types.ts';
 
@@ -465,10 +465,7 @@ export function planRetainedHandoff(liveKeys: Iterable<string>): HandoffPlan | n
         const ordered = [...live]
             .map((key) => ({ key, buffer: liveBuffers[key] }))
             .filter((entry): entry is { key: string; buffer: BufferData } => !!entry.buffer);
-        const resume = ordered.find((entry) => shouldResume(entry.buffer.fullName));
-        const core = ordered.find((entry) => entry.buffer.fullName === 'core.weechat');
-        const fallback = resume ?? core ?? ordered[0];
-        activeKey = fallback?.key ?? null;
+        activeKey = pickResumeTarget(ordered);
         activeFellBack = !!activeKey;
     }
 

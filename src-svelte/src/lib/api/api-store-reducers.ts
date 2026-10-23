@@ -22,7 +22,7 @@ import {
     injectDateChangeMessageIfNeeded, pendingBufferSwitch, setActiveBuffer, matchesPendingSwitch,
     LINE_FLUSH_FALLBACK_MS,
 } from '#lib/stores/models.ts';
-import { shouldResume } from '#lib/stores/bufferResume.ts';
+import { pickResumeTarget, shouldResume } from '#lib/stores/bufferResume.ts';
 import { weechatLineId } from '#lib/lineIdentity.ts';
 import { renameConversationDraft } from '#lib/stores/conversationDrafts.ts';
 import { addToast } from '#lib/toast.ts';
@@ -440,11 +440,10 @@ export function createApiStoreReducers(): ApiReducers {
             // connections); otherwise prefer core.weechat, then the first
             // buffer — same default order as the legacy buffer-info pass.
             if (!get(activeBufferId)) {
-                const resume = list.find((snap) => shouldResume(snap.name));
-                const fallback = resume
-                    ?? list.find((snap) => snap.name === 'core.weechat')
-                    ?? list[0];
-                if (fallback) setActiveBuffer(storeKeyForBufferId(fallback.id));
+                const target = pickResumeTarget(
+                    list.map((snap) => ({ key: storeKeyForBufferId(snap.id), buffer: { fullName: snap.name } })),
+                );
+                if (target !== null) setActiveBuffer(target);
             }
         },
 

@@ -7,6 +7,7 @@
 // HERE, the single central point (identity rule). The legacy transport lives
 // in legacyConnection.ts and keeps its own pointer-keyed ids.
 
+import { CORE_BUFFER_FULL_NAME } from '#lib/stores/bufferResume.ts';
 import { get } from 'svelte/store';
 import {
     setConnectionStatus, clearErrors,
@@ -509,7 +510,7 @@ async function deliverInput(command: string, bufferId?: string): Promise<InputOu
     // Global commands (no target) go to core.weechat explicitly; the endpoint
     // would otherwise fall back to the main buffer.
     if (bufferId === undefined) {
-        const res = await sendInputNamed(session, 'core.weechat', command);
+        const res = await sendInputNamed(session, CORE_BUFFER_FULL_NAME, command);
         flushByteStats();
         return res;
     }

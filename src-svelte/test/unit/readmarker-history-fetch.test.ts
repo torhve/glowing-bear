@@ -22,15 +22,6 @@ vi.mock('#lib/windowFocus.ts', () => ({
     isWindowFocused: () => typeof document !== 'undefined' && !document.hidden,
 }));
 
-vi.mock('#lib/stores/bufferResume.ts', () => ({
-    lastBufferId: {
-        subscribe: (fn: (val: string) => void) => { fn(''); return () => {}; },
-        set: vi.fn(),
-    },
-    recordLastBuffer: vi.fn(),
-    shouldResume: vi.fn().mockReturnValue(false),
-}));
-
 
 /** Every line in this file belongs to the one buffer the tests build. */
 const BUFFER_ID = '10';

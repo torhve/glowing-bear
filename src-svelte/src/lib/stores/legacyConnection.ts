@@ -1,3 +1,4 @@
+import { CORE_BUFFER_FULL_NAME } from '#lib/stores/bufferResume.ts';
 import { get } from 'svelte/store';
 import { setConnectionStatus, setErrors, clearErrors, connectionState, recordBytesReceived, recordBytesSent, resetReconnectAttempts, beginSessionStats } from '#lib/stores/connectionStore.ts';
 import { buffers, activeBufferId, getBuffer, connected, beginSyncPhase, endSyncPhase, weechatVersion, initialHistoryWindow, runHistoryPage } from '#lib/stores/models.ts';
@@ -1219,7 +1220,7 @@ export function sendWeeChatCommand(command: string, bufferId?: string): boolean 
     // dropped without any error reaching the client. Same target the API
     // transport picks for a command with no buffer.
     const msg = Protocol.formatInput({
-        buffer: bufferId ? '0x' + bufferId : 'core.weechat',
+        buffer: bufferId ? '0x' + bufferId : CORE_BUFFER_FULL_NAME,
         data: command
     });
     return sendWs(msg, 'cmd:' + command.substring(0, 50));

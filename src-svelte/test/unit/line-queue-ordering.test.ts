@@ -20,15 +20,6 @@ vi.mock('#lib/windowFocus.ts', () => ({
     isWindowFocused: () => true,
 }));
 
-vi.mock('#lib/stores/bufferResume.ts', () => ({
-    lastBufferId: {
-        subscribe: (fn: (val: string) => void) => { fn(''); return () => {}; },
-        set: vi.fn(),
-    },
-    recordLastBuffer: vi.fn(),
-    shouldResume: vi.fn().mockReturnValue(false),
-}));
-
 const { handleEvent, handleLineInfo, flushLineBatch } = await import('#lib/stores/handlers.ts');
 
 const BASE_EPOCH = 1_700_000_000_000;

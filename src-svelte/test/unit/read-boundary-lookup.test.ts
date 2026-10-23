@@ -37,12 +37,6 @@ vi.mock('#lib/stores/settings.ts', async () => (await import('./helpers/mockSett
 
 vi.mock('#lib/notifications.ts', async () => (await import('./helpers/mockNotifications.ts')).mockNotifications());
 
-vi.mock('#lib/stores/bufferResume.ts', () => ({
-    shouldResume: vi.fn(() => false),
-    getLastBuffer: vi.fn(() => null),
-    recordLastBuffer: vi.fn(),
-}));
-
 const { handleBufferLineAdded, handleLineInfo } = await import('#lib/stores/handlers.ts');
 
 const CAP = 10;

@@ -34,7 +34,7 @@ import {
     LINE_FLUSH_FALLBACK_MS,
 } from "#lib/stores/models.ts";
 import { tallyUnreadLine } from "#lib/unreadTally.ts";
-import { shouldResume, getLastBuffer, recordLastBuffer } from "#lib/stores/bufferResume.ts";
+import { findFallbackEntry, getLastBuffer, recordLastBuffer, shouldResume } from "#lib/stores/bufferResume.ts";
 import { renameConversationDraft } from "#lib/stores/conversationDrafts.ts";
 import { addToast } from "#lib/toast.ts";
 import {
@@ -306,23 +306,11 @@ export function handleBufferInfo(message: ProtocolMessage) {
         return;
     }
 
-    // If no buffer was auto-resumed, prefer weechat.core before falling back to first buffer.
-    let targetBufferId: string | null = null;
-    const allBuffers = get(buffers);
-    for (const id in allBuffers) {
-        const buf = allBuffers[id];
-        if (buf?.shortName === "core" && buf?.plugin === "weechat") {
-            targetBufferId = id;
-            break;
-        }
-    }
-    if (!targetBufferId) {
-        const bufferKeys = Object.keys(allBuffers);
-        targetBufferId = bufferKeys[0] || null;
-    }
-    if (targetBufferId) {
-        setActiveBuffer(targetBufferId);
-    }
+    // If no buffer was auto-resumed, prefer core.weechat before falling back to first buffer.
+    const target = findFallbackEntry(
+        Object.entries(get(buffers)).map(([key, buffer]) => ({ key, buffer })),
+    );
+    if (target) setActiveBuffer(target.key);
 }
 
 // ---- Buffer update handler ----

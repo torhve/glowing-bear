@@ -36,6 +36,8 @@ form; this directory keeps the reproducible evidence.
                                           # dedicated instance on 9011 with
                                           # password_hash_algo=* — stop the gbtest5
                                           # fixture first, it owns that port)
+   node probes/probe-legacy-buffer-fields.mjs  # legacy hdata: what full_name / short_name /
+                                          # plugin actually say (gbtest legacy relay, port 9001)
    node probes/probe-endpoint-matrix.mjs 9010   # every endpoint the transport uses,
                                           # diff 4.10.1 vs 5.0 (also 9011)
    node probes/probe-weechat5-schema.mjs 9011  # buffer/line key sets, id type +
@@ -264,6 +266,26 @@ replace, so the span to replace is `[pos_start, pos_end]`.
 - An unknown buffer answers with an **empty hdata** and "nothing found" answers
   with an empty `list`; neither is an error and both mean "no completion".
 
+### Buffer name fields, on both relays (live, `probes/probe-legacy-buffer-fields.mjs`)
+
+The resume rules compare buffer *names*, so the exact spelling of each field is
+part of the contract. The API relay's `GET /api/buffers` and the legacy hdata
+request (`buffer:gui_buffers(*)` with
+`local_variables,notify,number,full_name,short_name,title,hidden,type`) report the
+same values, and the app copies them straight through (`createBuffer` takes
+`short_name` as-is and `plugin` from `local_variables.plugin`).
+
+| buffer | `full_name` / snapshot `name` | `short_name` | `local_variables.plugin` |
+|---|---|---|---|
+| core | `core.weechat` | `weechat` | `core` |
+| irc channel | `irc.gbtest.#glowing-bear` | `#glowing-bear` | `irc` |
+
+- **`short_name` is `weechat` and `plugin` is `core`** — the reverse of what a rule
+  written `shortName === "core" && plugin === "weechat"` assumes. No buffer on the
+  relay matches that pair. The only name that identifies the core buffer is
+  `full_name` (the API snapshot calls the same field `name`): `core.weechat`.
+- Captured frame: `raw/legacy-buffer-fields.json` (legacy relay, port 9001). The
+  API relay's matching values are in `frames/probe-scripts-grep.jsonl`.
 ### Scripts list + content-search freshness (live, `probes/probe-scripts-grep.mjs`)
 
 - `GET /api/scripts` → `body_type:"scripts"`, `body:[{name,version,description,
