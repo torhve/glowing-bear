@@ -1,6 +1,7 @@
 <script lang="ts">
   import '../app.css';
   import type { BufferData } from '#lib/types.ts';
+  import { fontSizeCss } from '#lib/fontSize.ts';
   import ConnectionForm from '#components/ConnectionForm.svelte';
   import ConnectionBanner from '#components/ConnectionBanner.svelte';
   import TopBar from '#components/TopBar.svelte';
@@ -161,8 +162,11 @@
 
   $effect(() => {
     document.documentElement.style.setProperty('--font-mono', $settings.fontfamily || 'Fira Mono, Consolas, Monaco, Courier New, monospace');
-    document.documentElement.style.setProperty('--font-size', $settings.fontsize || '14px');
-    document.body.style.fontSize = $settings.fontsize || '14px';
+    // One value, two writers: the custom property the chat rows read and the
+    // body size they inherit are the same fact, so they cannot drift apart.
+    const fontSize = fontSizeCss($settings.fontsize);
+    document.documentElement.style.setProperty('--font-size', fontSize);
+    document.body.style.fontSize = fontSize;
   });
 
   // Appearance is an explicit invalidation: a theme or custom-CSS change can

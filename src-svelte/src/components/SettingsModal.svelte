@@ -8,6 +8,7 @@
   import { weechatVersion, relayApiVersion } from '#lib/stores/models.ts';
   import { activeTransport } from '#lib/stores/connectionStore.ts';
   import { clamp } from '#lib/num.ts';
+  import { FONT_SIZE_DEFAULT_CSS, FONT_SIZE_DEFAULT_PX, parseFontSizePx } from '#lib/fontSize.ts';
   import BaseDialog from '#components/BaseDialog.svelte';
   import Palette from '@lucide/svelte/icons/palette';
   import Monitor from '@lucide/svelte/icons/monitor';
@@ -62,24 +63,19 @@
   let notifPermissionStatus = $derived($settings.notificationPermission);
 
   // Font size slider state synced with settings store
-  // The bounds belong to the slider and the text field at the same time. The
-  // field writes the store before the slider reads it back, so both parsers have
-  // to agree on them, and the slider's own min and max are the same pair.
+  // The bounds belong to the slider and the text field at the same time, and the
+  // slider's own min and max are the same pair as these. The *value rule* is not
+  // here: `lib/fontSize.ts` owns it, because the same string is also read by
+  // `+page.svelte` as a CSS length and the two readings must not disagree.
   const FONT_SIZE_MIN = 6;
   const FONT_SIZE_MAX = 36;
-  const FONT_SIZE_DEFAULT = 14;
 
-  let fontSizePx = $state(FONT_SIZE_DEFAULT);
+  let fontSizePx = $state(FONT_SIZE_DEFAULT_PX);
 
   // Sync slider position from settings store
   $effect(() => {
-    const fs = $settings.fontsize || '14px';
-    const m = /^\s*(\d+)\s*(?:px)?\s*$/.exec(fs);
-    if (m && m[1]) {
-      fontSizePx = clamp(parseInt(m[1], 10), FONT_SIZE_MIN, FONT_SIZE_MAX);
-    } else {
-      fontSizePx = 14;
-    }
+    const px = parseFontSizePx($settings.fontsize);
+    fontSizePx = px === null ? FONT_SIZE_DEFAULT_PX : clamp(px, FONT_SIZE_MIN, FONT_SIZE_MAX);
   });
 
   // The slots are settings and `+page.svelte` is the only writer of the applied
@@ -229,13 +225,13 @@
                 value={$settings.fontsize}
                 oninput={(e: Event) => {
                   const val = (e.target as HTMLInputElement).value!;
-                  const m = val.match(/^(\d+)(?:px)?$/);
-                  if (m && m[1]) {
-                    fontSizePx = clamp(parseInt(m[1], 10), FONT_SIZE_MIN, FONT_SIZE_MAX);
+                  const px = parseFontSizePx(val);
+                  if (px !== null) {
+                    fontSizePx = clamp(px, FONT_SIZE_MIN, FONT_SIZE_MAX);
                   }
                   updateSettings({ fontsize: val });
                 }}
-                placeholder="14px"
+                placeholder={FONT_SIZE_DEFAULT_CSS}
                 extraClass="w-20"
               />
             </div>
