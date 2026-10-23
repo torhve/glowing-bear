@@ -15,6 +15,10 @@ import type * as Notifications from '#lib/notifications.ts';
  * `startIndicatorOwner` is not a `vi.fn()`: the app holds the returned function
  * as an unsubscribe, so a bare mock would hand back `undefined` and the caller
  * would throw the moment it cleaned up.
+ * The two capability probes default to "this environment cannot notify", which is
+ * the coherent pair: a test that wants the granted path overrides both, because a
+ * mock reporting "unsupported" next to "permission granted" describes a state the
+ * real module can never be in.
  *
  * A test that asserts on one of these calls imports the name from the mocked
  * module and reads it through `vi.mocked(name)`, which keeps the spy's argument
@@ -22,7 +26,7 @@ import type * as Notifications from '#lib/notifications.ts';
  */
 export function mockNotifications(): typeof Notifications {
     return {
-        requestNotificationPermission: vi.fn(async () => true),
+        requestNotificationPermission: vi.fn(async () => false),
         isNotificationSupported: vi.fn(() => false),
         createHighlight: vi.fn(async () => {}),
         cancelAll: vi.fn(),
