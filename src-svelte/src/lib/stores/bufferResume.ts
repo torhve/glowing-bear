@@ -46,7 +46,7 @@ function isCoreBuffer(buffer: ResumeCandidate): boolean {
 }
 
 /** The buffer the last session ended on, when it is among the candidates. */
-export function findResumedEntry<K>(entries: readonly ResumeEntry<K>[]): ResumeEntry<K> | undefined {
+function findResumedEntry<K>(entries: readonly ResumeEntry<K>[]): ResumeEntry<K> | undefined {
     const saved = getLastBuffer();
     return saved === null ? undefined : entries.find((entry) => shouldResume(entry.buffer.fullName));
 }
