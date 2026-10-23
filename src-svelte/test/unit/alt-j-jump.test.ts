@@ -1,9 +1,10 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { flushSync, mount, unmount, type Component } from 'svelte';
+import { flushSync, type Component } from 'svelte';
 import Page from '../../src/routes/+page.svelte';
 import { buffers, createBuffer } from '#lib/stores/models.ts';
 import { switchBuffer } from '#lib/stores/connectionManager.ts';
 import type { BufferData } from '#lib/types.ts';
+import { mountHarness } from './helpers/mountComponent.ts';
 
 // This mock must cover every export `+page.svelte` imports from the facade: the
 // component's debug-global block reads them all at module scope, so a missing key
@@ -37,16 +38,7 @@ vi.mock('#lib/tauriWindow.ts', async (importOriginal) => {
     return { ...actual, showWindow: vi.fn() };
 });
 
-const components: Record<string, unknown>[] = [];
-
-// Mount the real page component and retain its owner so each test tears down its effects.
-function render<Props extends Record<string, unknown>>(component: Component<Props>, props: Props) {
-    const target = document.createElement('div');
-    document.body.appendChild(target);
-    components.push(mount(component, { target, props }));
-    flushSync();
-    return target;
-}
+const { render, teardown } = mountHarness();
 
 // Dispatch a keydown on document with a reliable legacy keyCode (jsdom ignores
 // keyCode in the KeyboardEvent init dict, so set it explicitly).
@@ -66,8 +58,7 @@ function channel(id: string, number: number): BufferData {
 }
 
 afterEach(async () => {
-    for (const component of components.splice(0)) await unmount(component);
-    document.body.replaceChildren();
+    await teardown();
     buffers.set({});
     vi.clearAllMocks();
 });

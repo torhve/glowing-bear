@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { flushSync, mount, unmount, type Component } from 'svelte';
+import { flushSync, type Component } from 'svelte';
 import { get } from 'svelte/store';
 import InputBar from '#components/InputBar.svelte';
 import { activeBufferId, buffers, createBuffer } from '#lib/stores/models.ts';
@@ -8,6 +8,7 @@ import { toastStore } from '#lib/toast.ts';
 import { clearActiveConnectionProfile, setActiveConnectionProfile } from '#lib/connectionProfile.ts';
 import { resetConversationDrafts } from '#lib/stores/conversationDrafts.ts';
 import type { BufferData } from '#lib/types.ts';
+import { mountHarness } from './helpers/mountComponent.ts';
 
 vi.mock('#lib/stores/connectionManager.ts', () => ({
     sendMessage: vi.fn(() => Promise.resolve(true)),
@@ -15,16 +16,7 @@ vi.mock('#lib/stores/connectionManager.ts', () => ({
     getSession: vi.fn(() => null),
 }));
 
-const components: Record<string, unknown>[] = [];
-
-// Mount the real component and retain its owner so each test tears down its effects.
-function render<Props extends Record<string, unknown>>(component: Component<Props>, props: Props) {
-    const target = document.createElement('div');
-    document.body.appendChild(target);
-    components.push(mount(component, { target, props }));
-    flushSync();
-    return target;
-}
+const { render, teardown, unmountLast } = mountHarness();
 
 // Each test gets its own buffer so per-buffer input history never bleeds across tests.
 let bufferCounter = 0;
@@ -100,8 +92,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-    for (const component of components.splice(0)) await unmount(component);
-    document.body.replaceChildren();
+    await teardown();
     activeBufferId.set('');
     buffers.set({});
     clearActiveConnectionProfile();
@@ -114,7 +105,7 @@ it('keeps a half-typed message when the input bar is torn down and rebuilt by a 
     typeInto(first, 'a long message I was still typing');
 
     // A disconnect swaps the chat view for the connection form, unmounting the input bar.
-    unmount(components.pop()!);
+    void unmountLast();
     flushSync();
 
     const second = render(InputBar, {});
@@ -187,7 +178,7 @@ it('does not resurrect a draft that was already sent successfully', async () => 
     await pressEnter(input);
     expect(inputIn(first).value).toBe('');
 
-    unmount(components.pop()!);
+    void unmountLast();
     flushSync();
 
     const second = render(InputBar, {});

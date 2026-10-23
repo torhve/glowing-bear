@@ -1,19 +1,11 @@
 import { afterEach, expect, it } from 'vitest';
-import { flushSync, mount, unmount, type Component } from 'svelte';
+import { flushSync, type Component } from 'svelte';
 import { fromStore, writable } from 'svelte/store';
 import PluginEmbed from '#components/PluginEmbed.svelte';
 import type { PluginMetadata } from '#lib/types.ts';
+import { mountHarness } from './helpers/mountComponent.ts';
 
-const components: Record<string, unknown>[] = [];
-
-// Mount the real component and retain its owner so each test tears down its effects.
-function render<Props extends Record<string, unknown>>(component: Component<Props>, props: Props) {
-    const target = document.createElement('div');
-    document.body.appendChild(target);
-    components.push(mount(component, { target, props }));
-    flushSync();
-    return target;
-}
+const { render, teardown } = mountHarness();
 
 // Find buttons by their visible label rather than depending on component internals.
 function button(target: HTMLElement, label: string) {
@@ -24,8 +16,7 @@ function button(target: HTMLElement, label: string) {
 
 
 afterEach(async () => {
-    for (const component of components.splice(0)) await unmount(component);
-    document.body.replaceChildren();
+    await teardown();
 });
 
 it('lets users hide automatic embeds and keeps manual toggles until the setting changes', () => {

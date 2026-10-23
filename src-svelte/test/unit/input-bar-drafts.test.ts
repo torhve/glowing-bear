@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { flushSync, mount, tick, unmount, type Component } from 'svelte';
+import { flushSync, tick, type Component } from 'svelte';
 import InputBar from '#components/InputBar.svelte';
 import { activeBufferId, buffers, createBuffer, setActiveBuffer } from '#lib/stores/models.ts';
 import { sendMessage } from '#lib/stores/connectionManager.ts';
@@ -7,6 +7,7 @@ import { toastStore } from '#lib/toast.ts';
 import { clearActiveConnectionProfile, setActiveConnectionProfile } from '#lib/connectionProfile.ts';
 import { readDraft, resetConversationDrafts } from '#lib/stores/conversationDrafts.ts';
 import type { BufferData } from '#lib/types.ts';
+import { mountHarness } from './helpers/mountComponent.ts';
 
 vi.mock('#lib/stores/connectionManager.ts', () => ({
     sendMessage: vi.fn(() => Promise.resolve(true)),
@@ -18,16 +19,7 @@ vi.mock('#lib/stores/connectionManager.ts', () => ({
 const RELAY_ONE = 'https://relay.example:443';
 const RELAY_TWO = 'https://other.example:443';
 
-const components: Record<string, unknown>[] = [];
-
-// Mount the real component and retain its owner so each test tears down its effects.
-function render<Props extends Record<string, unknown>>(component: Component<Props>, props: Props) {
-    const target = document.createElement('div');
-    document.body.appendChild(target);
-    components.push(mount(component, { target, props }));
-    flushSync();
-    return target;
-}
+const { render, teardown, unmountLast } = mountHarness();
 
 interface Conversation {
     id: string;
@@ -89,8 +81,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-    for (const component of components.splice(0)) await unmount(component);
-    document.body.replaceChildren();
+    await teardown();
     activeBufferId.set('');
     buffers.set({});
     clearActiveConnectionProfile();
@@ -156,7 +147,7 @@ it('keeps a draft across a remount to the same conversation', () => {
     typeInto(first, 'a long message I was still typing');
 
     // A disconnect swaps the chat view for the connection form, unmounting the bar.
-    unmount(components.pop()!);
+    void unmountLast();
     flushSync();
 
     const second = render(InputBar, {});

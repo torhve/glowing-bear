@@ -16,19 +16,15 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { get } from 'svelte/store';
-import { flushSync, mount, unmount } from 'svelte';
+import { flushSync } from 'svelte';
 import SettingsModal from '#components/SettingsModal.svelte';
 import { settings, updateSettings } from '#lib/stores/settings.ts';
+import { mountHarness } from './helpers/mountComponent.ts';
 
-const components: Record<string, unknown>[] = [];
+const { render, teardown } = mountHarness();
 
-function render() {
-    const target = document.createElement('div');
-    document.body.appendChild(target);
-    components.push(mount(SettingsModal, { target, props: {} }));
-    flushSync();
-    return target;
-}
+// This file only ever mounts one component.
+const renderModal = () => render(SettingsModal, {});
 
 function input(target: HTMLElement, testid: string) {
     const el = target.querySelector<HTMLInputElement>(`[data-testid="${testid}"]`);
@@ -55,14 +51,11 @@ beforeEach(() => {
     updateSettings({ fontsize: '14px' });
 });
 
-afterEach(async () => {
-    for (const component of components.splice(0)) await unmount(component);
-    document.body.replaceChildren();
-});
+afterEach(teardown);
 
 describe('B8 characterization: one value, two parsers', () => {
     it('a padded value is written to settings and the slider moves anyway', () => {
-        const target = render();
+        const target = renderModal();
         expect(sliderLabel(target)).toBe('14px');
 
         typeIntoFontSize(target, ' 15 px ');
@@ -83,7 +76,7 @@ describe('B8 characterization: one value, two parsers', () => {
     });
 
     it('the sync effect accepts that same padded string, so the two disagree about it', () => {
-        const target = render();
+        const target = renderModal();
         expect(sliderLabel(target)).toBe('14px');
 
         // The value the field just wrote, arriving through the store instead of
@@ -96,7 +89,7 @@ describe('B8 characterization: one value, two parsers', () => {
     });
 
     it('an unpadded value is accepted by both, which is why the split stays hidden', () => {
-        const target = render();
+        const target = renderModal();
 
         typeIntoFontSize(target, '18');
 
@@ -106,7 +99,7 @@ describe('B8 characterization: one value, two parsers', () => {
     });
 
     it('the slider clamps to 6..36 and the field clamps the same range separately', () => {
-        const target = render();
+        const target = renderModal();
         const slider = input(target, 'font-size-slider');
         expect(slider.min, 'a third copy of the bounds lives in the markup').toBe('6');
         expect(slider.max).toBe('36');
@@ -120,7 +113,7 @@ describe('B8 characterization: one value, two parsers', () => {
     });
 
     it('a value neither regex accepts leaves the slider at its fallback', () => {
-        const target = render();
+        const target = renderModal();
 
         typeIntoFontSize(target, 'large');
 

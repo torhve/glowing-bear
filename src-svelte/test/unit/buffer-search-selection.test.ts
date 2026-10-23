@@ -1,24 +1,16 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { flushSync, mount, unmount, type Component } from 'svelte';
+import { flushSync, type Component } from 'svelte';
 import BufferSearchModal from '#components/BufferSearchModal.svelte';
 import { activeBufferId, buffers, createBuffer } from '#lib/stores/models.ts';
 import { switchBuffer } from '#lib/stores/connectionManager.ts';
 import type { BufferData } from '#lib/types.ts';
+import { mountHarness } from './helpers/mountComponent.ts';
 
 vi.mock('#lib/stores/connectionManager.ts', () => ({
     switchBuffer: vi.fn(async () => true),
 }));
 
-const components: Record<string, unknown>[] = [];
-
-// Mount the real component and retain its owner so each test tears down its effects.
-function render<Props extends Record<string, unknown>>(component: Component<Props>, props: Props) {
-    const target = document.createElement('div');
-    document.body.appendChild(target);
-    components.push(mount(component, { target, props }));
-    flushSync();
-    return target;
-}
+const { render, teardown } = mountHarness();
 
 
 // Build search results without needing an external WeeChat relay.
@@ -52,8 +44,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-    for (const component of components.splice(0)) await unmount(component);
-    document.body.replaceChildren();
+    await teardown();
     showBuffer('', []);
     vi.clearAllTimers();
     vi.useRealTimers();

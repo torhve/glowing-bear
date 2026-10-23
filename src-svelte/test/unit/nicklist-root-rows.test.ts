@@ -1,21 +1,13 @@
 // The nicklist must show WeeChat's `root` group (nicks with no group) as bare
 // rows above the grouped sections — they were previously dropped entirely.
 import { describe, it, expect, afterEach } from 'vitest';
-import { flushSync, mount, unmount, type Component } from 'svelte';
+import { flushSync, type Component } from 'svelte';
 import Nicklist from '#components/Nicklist.svelte';
 import { activeBufferId, buffers, createBuffer } from '#lib/stores/models.ts';
 import type { BufferData, Nick, NickGroup } from '#lib/types.ts';
+import { mountHarness } from './helpers/mountComponent.ts';
 
-const components: Record<string, unknown>[] = [];
-
-// Mount the real component and retain its owner so each test tears down its effects.
-function render<Props extends Record<string, unknown>>(component: Component<Props>, props: Props) {
-    const target = document.createElement('div');
-    document.body.appendChild(target);
-    components.push(mount(component, { target, props }));
-    flushSync();
-    return target;
-}
+const { render, teardown, unmountLast } = mountHarness();
 
 function nick(name: string): Nick {
     return { prefix: '', visible: '1', name, prefixClasses: [], nameClasses: [], buffer: '1' };
@@ -47,9 +39,8 @@ function showNicklist(groups: Record<string, Nick[]>) {
     flushSync();
 }
 
-afterEach(() => {
-    for (const component of components.splice(0)) unmount(component);
-    document.body.replaceChildren();
+afterEach(async () => {
+    await teardown();
     activeBufferId.set('');
     buffers.set({});
 });

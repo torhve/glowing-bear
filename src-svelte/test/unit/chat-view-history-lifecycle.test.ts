@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { flushSync, mount, unmount, type Component } from 'svelte';
+import { flushSync, type Component } from 'svelte';
 import ChatView from '#components/ChatView.svelte';
 import { activeBufferId, buffers, createBuffer, createBufferLine } from '#lib/stores/models.ts';
 import { fetchMoreLines } from '#lib/stores/connectionManager.ts';
 import type { BufferData } from '#lib/types.ts';
+import { mountHarness } from './helpers/mountComponent.ts';
 
 vi.mock('#lib/stores/connectionManager.ts', () => ({
     fetchMoreLines: vi.fn(),
@@ -13,16 +14,7 @@ vi.mock('#lib/stores/connectionManager.ts', () => ({
     unpinBuffer: vi.fn(),
 }));
 
-const components: Record<string, unknown>[] = [];
-
-// Mount the real component and retain its owner so each test tears down its effects.
-function render<Props extends Record<string, unknown>>(component: Component<Props>, props: Props) {
-    const target = document.createElement('div');
-    document.body.appendChild(target);
-    components.push(mount(component, { target, props }));
-    flushSync();
-    return target;
-}
+const { render, teardown, unmountLast } = mountHarness();
 
 // Find buttons by their visible label rather than depending on component internals.
 function button(target: HTMLElement, label: string) {
@@ -103,8 +95,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-    for (const component of components.splice(0)) await unmount(component);
-    document.body.replaceChildren();
+    await teardown();
     showBuffer('', []);
     vi.clearAllTimers();
     vi.useRealTimers();
@@ -177,7 +168,7 @@ it('does not move the new buffer when history from the previous buffer finishes 
     button(target, 'Fetch more lines').click();
     flushSync();
     showBuffer(a.id, [a, b]);
-    await unmount(components.pop()!);
+    await unmountLast();
     finishAfterUnmount();
     await settleFrames();
     expect(target.querySelector('[data-testid="chat-messages"]')).toBeNull();
