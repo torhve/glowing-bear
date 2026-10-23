@@ -36,14 +36,7 @@ const mockPlayNotificationSound = vi.fn();
 const mockUpdateTitle = vi.fn();
 const mockUpdateFavico = vi.fn();
 
-vi.mock('#lib/notifications.ts', () => ({
-    createHighlight: mockCreateHighlight,
-    playNotificationSound: mockPlayNotificationSound,
-    updateTitle: mockUpdateTitle,
-    updateFavico: mockUpdateFavico,
-    startIndicatorOwner: () => () => {},
-    refreshIndicators: vi.fn(),
-}));
+vi.mock('#lib/notifications.ts', async () => (await import('./helpers/mockNotifications.ts')).mockNotifications());
 
 vi.mock('#lib/windowFocus.ts', () => ({
     initWindowFocusTracking: vi.fn(() => Promise.resolve(() => {})),

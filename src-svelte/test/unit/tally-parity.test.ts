@@ -27,14 +27,7 @@ import type { ApiBufferId, ApiLineId } from '#lib/api/api-ids.ts';
 import { apiBuffer, apiLine } from './apiFixtures.ts';
 import type { ProtocolMessage } from '#lib/types.ts';
 
-vi.mock('#lib/notifications.ts', () => ({
-    createHighlight: vi.fn(),
-    playNotificationSound: vi.fn(),
-    updateTitle: vi.fn(),
-    updateFavico: vi.fn(),
-    startIndicatorOwner: () => () => {},
-    refreshIndicators: vi.fn(),
-}));
+vi.mock('#lib/notifications.ts', async () => (await import('./helpers/mockNotifications.ts')).mockNotifications());
 vi.mock('#lib/windowFocus.ts', () => ({
     isWindowFocused: () => false,
 }));

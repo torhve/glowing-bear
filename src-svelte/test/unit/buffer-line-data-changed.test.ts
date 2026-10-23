@@ -23,14 +23,7 @@ vi.mock('#lib/stores/settings.ts', () => ({
     updatePartialSettings: vi.fn()
 }));
 
-vi.mock('#lib/notifications.ts', () => ({
-    createHighlight: vi.fn(),
-    playNotificationSound: vi.fn(),
-    updateTitle: vi.fn(),
-    updateFavico: vi.fn(),
-    startIndicatorOwner: () => () => {},
-    refreshIndicators: vi.fn(),
-}));
+vi.mock('#lib/notifications.ts', async () => (await import('./helpers/mockNotifications.ts')).mockNotifications());
 
 // Mock windowFocus so handlers module loads without runtime errors
 vi.mock('#lib/windowFocus.ts', () => ({

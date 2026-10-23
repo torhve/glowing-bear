@@ -21,14 +21,7 @@ import type { ApiBufferId, ApiGroupId, ApiLineId, ApiNickId } from '#lib/api/api
 import { apiBuffer, apiLine } from './apiFixtures.ts';
 import type { NickGroup } from '#lib/types.ts';
 
-vi.mock('#lib/notifications.ts', () => ({
-    createHighlight: vi.fn(),
-    playNotificationSound: vi.fn(),
-    updateTitle: vi.fn(),
-    updateFavico: vi.fn(),
-    startIndicatorOwner: () => () => {},
-    refreshIndicators: vi.fn(),
-}));
+vi.mock('#lib/notifications.ts', async () => (await import('./helpers/mockNotifications.ts')).mockNotifications());
 
 const BUFFER_ID = 1759000000000001 as ApiBufferId;
 const KEY = String(BUFFER_ID);

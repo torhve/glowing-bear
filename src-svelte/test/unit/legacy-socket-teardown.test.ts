@@ -24,16 +24,7 @@ import {
 } from '#lib/stores/connectionManager.ts';
 import * as legacy from '#lib/stores/legacyConnection.ts';
 
-vi.mock('#lib/notifications.ts', () => ({
-    createHighlight: vi.fn(),
-    playNotificationSound: vi.fn(),
-    updateTitle: vi.fn(),
-    updateFavicon: vi.fn(),
-    updateFavico: vi.fn(),
-    startIndicatorOwner: () => () => {},
-    refreshIndicators: vi.fn(),
-    onDisconnect: vi.fn(),
-}));
+vi.mock('#lib/notifications.ts', async () => (await import('./helpers/mockNotifications.ts')).mockNotifications());
 
 class FakeSocket {
     static readonly OPEN = 1;

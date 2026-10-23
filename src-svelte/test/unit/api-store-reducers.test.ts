@@ -17,14 +17,7 @@ import { createHighlight } from '#lib/notifications.ts';
 
 // The reducer's alert path must be observable without OS notifications:
 // the highlight body is asserted below, sound/title/favico are no-ops here.
-vi.mock('#lib/notifications.ts', () => ({
-    createHighlight: vi.fn(),
-    playNotificationSound: vi.fn(),
-    updateTitle: vi.fn(),
-    updateFavico: vi.fn(),
-    startIndicatorOwner: () => () => {},
-    refreshIndicators: vi.fn(),
-}));
+vi.mock('#lib/notifications.ts', async () => (await import('./helpers/mockNotifications.ts')).mockNotifications());
 // Treat the window as unfocused so createHighlight is reached.
 vi.mock('#lib/windowFocus.ts', () => ({
     isWindowFocused: () => false,

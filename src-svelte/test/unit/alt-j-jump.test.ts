@@ -24,14 +24,7 @@ vi.mock('#lib/stores/connectionManager.ts', () => ({
     pendingRetry: vi.fn(() => ({ active: false })),
 }));
 
-vi.mock('#lib/notifications.ts', () => ({
-    initNotifications: vi.fn(),
-    updateTitle: vi.fn(),
-    updateFavico: vi.fn(),
-    onDisconnect: vi.fn(),
-    startIndicatorOwner: () => () => {},
-    refreshIndicators: vi.fn(),
-}));
+vi.mock('#lib/notifications.ts', async () => (await import('./helpers/mockNotifications.ts')).mockNotifications());
 
 vi.mock('#lib/tauriWindow.ts', async (importOriginal) => {
     const actual = await importOriginal<typeof import('#lib/tauriWindow.ts')>();

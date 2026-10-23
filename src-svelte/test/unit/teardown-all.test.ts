@@ -19,16 +19,14 @@ import { transportAdapterFor } from '#lib/stores/connectionLifecycle.ts';
 // counts wipes.
 const onDisconnect = vi.hoisted(() => vi.fn());
 
-vi.mock('#lib/notifications.ts', () => ({
-    createHighlight: vi.fn(),
-    playNotificationSound: vi.fn(),
-    updateTitle: vi.fn(),
-    updateFavicon: vi.fn(),
-    updateFavico: vi.fn(),
-    startIndicatorOwner: () => () => {},
-    refreshIndicators: vi.fn(),
-    onDisconnect,
-}));
+// `vi.mock` is hoisted above this file's imports and its factory runs while the
+// module under test is still being imported, so the shared stub has to arrive
+// through a dynamic import rather than a static one.
+vi.mock('#lib/notifications.ts', () =>
+    import('./helpers/mockNotifications.ts').then((m) => ({
+        ...m.mockNotifications(),
+        onDisconnect: onDisconnect,
+    })));
 
 class FakeSocket {
     static readonly OPEN = 1;

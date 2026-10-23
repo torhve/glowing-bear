@@ -31,19 +31,22 @@ vi.mock('#lib/stores/settings.ts', () => ({
     updatePartialSettings: vi.fn()
 }));
 
-const mockCreateHighlight = vi.fn();
-const mockPlayNotificationSound = vi.fn();
-const mockUpdateTitle = vi.fn();
-const mockUpdateFavico = vi.fn();
+const mockCreateHighlight = vi.hoisted(() => vi.fn());
+const mockPlayNotificationSound = vi.hoisted(() => vi.fn());
+const mockUpdateTitle = vi.hoisted(() => vi.fn());
+const mockUpdateFavico = vi.hoisted(() => vi.fn());
 
-vi.mock('#lib/notifications.ts', () => ({
-    createHighlight: mockCreateHighlight,
-    playNotificationSound: mockPlayNotificationSound,
-    updateTitle: mockUpdateTitle,
-    updateFavico: mockUpdateFavico,
-    startIndicatorOwner: () => () => {},
-    refreshIndicators: vi.fn(),
-}));
+// `vi.mock` is hoisted above this file's imports and its factory runs while the
+// module under test is still being imported, so the shared stub has to arrive
+// through a dynamic import rather than a static one.
+vi.mock('#lib/notifications.ts', () =>
+    import('./helpers/mockNotifications.ts').then((m) => ({
+        ...m.mockNotifications(),
+        createHighlight: mockCreateHighlight,
+        playNotificationSound: mockPlayNotificationSound,
+        updateTitle: mockUpdateTitle,
+        updateFavico: mockUpdateFavico,
+    })));
 
 // Focus is driven by document.hidden so tests can flip it explicitly.
 vi.mock('#lib/windowFocus.ts', () => ({

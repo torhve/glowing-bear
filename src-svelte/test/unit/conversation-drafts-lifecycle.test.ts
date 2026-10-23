@@ -33,14 +33,7 @@ vi.mock('#lib/stores/connectionManager.ts', () => ({
     getActiveTransport: vi.fn(() => 'legacy'),
 }));
 
-vi.mock('#lib/notifications.ts', () => ({
-    createHighlight: vi.fn(),
-    playNotificationSound: vi.fn(),
-    updateTitle: vi.fn(),
-    updateFavico: vi.fn(),
-    startIndicatorOwner: () => () => {},
-    refreshIndicators: vi.fn(),
-}));
+vi.mock('#lib/notifications.ts', async () => (await import('./helpers/mockNotifications.ts')).mockNotifications());
 
 const RELAY = 'https://relay.example:443';
 const API_BUFFER_ID = 1759000000000099 as ApiBufferId;

@@ -63,17 +63,7 @@ vi.mock('#lib/stores/settings.ts', () => ({
     },
 }));
 
-vi.mock('#lib/notifications.ts', () => ({
-    playNotificationSound: vi.fn(),
-    createHighlight: vi.fn(),
-    createDM: vi.fn(),
-    createMention: vi.fn(),
-    onDisconnect: vi.fn(),
-    updateTitle: vi.fn(),
-    updateFavico: vi.fn(),
-    startIndicatorOwner: () => () => {},
-    refreshIndicators: vi.fn(),
-}));
+vi.mock('#lib/notifications.ts', async () => (await import('./helpers/mockNotifications.ts')).mockNotifications());
 
 vi.mock('#lib/stores/bufferResume.ts', () => ({
     shouldResume: vi.fn(() => false),

@@ -14,15 +14,10 @@ import { createApiStoreReducers, flushApiLineBatch } from '#lib/api/api-store-re
 import type { ApiReducers, BufferSnapshot, LineSnapshot } from '#lib/api/api-contracts.ts';
 import type { ApiBufferId, ApiLineId } from '#lib/api/api-ids.ts';
 import { apiBuffer, apiLine } from './apiFixtures.ts';
-
-vi.mock('#lib/notifications.ts', () => ({
-    createHighlight: vi.fn(),
-    playNotificationSound: vi.fn(),
-    updateTitle: vi.fn(),
-    updateFavico: vi.fn(),
-    startIndicatorOwner: () => () => {},
-    refreshIndicators: vi.fn(),
-}));
+// `vi.mock` is hoisted above the file's imports and its factory runs while the
+// module under test is still being imported, so the helper has to arrive through
+// a dynamic import rather than a static one.
+vi.mock('#lib/notifications.ts', async () => (await import('./helpers/mockNotifications.ts')).mockNotifications());
 vi.mock('#lib/windowFocus.ts', () => ({ isWindowFocused: () => true }));
 
 const BUFFER_ID = 1759000000000009 as ApiBufferId;

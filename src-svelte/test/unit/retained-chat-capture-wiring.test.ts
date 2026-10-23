@@ -40,16 +40,7 @@ import {
 } from '#lib/stores/retainedChat.ts';
 
 // The wipe ends with a notification hook; this suite is about state, not sound.
-vi.mock('#lib/notifications.ts', () => ({
-    createHighlight: vi.fn(),
-    playNotificationSound: vi.fn(),
-    updateTitle: vi.fn(),
-    updateFavicon: vi.fn(),
-    updateFavico: vi.fn(),
-    startIndicatorOwner: () => () => {},
-    refreshIndicators: vi.fn(),
-    onDisconnect: vi.fn(),
-}));
+vi.mock('#lib/notifications.ts', async () => (await import('./helpers/mockNotifications.ts')).mockNotifications());
 
 const RELAY = 'https://relay.example:443';
 const OTHER_RELAY = 'https://other.example:443';
