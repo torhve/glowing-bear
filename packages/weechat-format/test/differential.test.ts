@@ -219,6 +219,17 @@ const CASES: Case[] = [
     { id: 'combined-out-of-range-bg', input: `${C}*03,99bg oob`, current: [], legacy: ['bg'], note: 'same modeling on the background side' },
     { id: 'unicode', input: '😀 emoji 😀', current: [], legacy: [], note: 'identical' },
     { id: 'irc-converted-controls', input: `${C}F02dark${C}B03light${CTL.setAttr}\u0001bold${CTL.removeAttr}\u0001plain${C}${CTL.reset}end`, current: [], legacy: [], note: 'the adapter emits WeeChat control characters, so converted IRC text parses identically here' },
+    // Ledger row 1: printable attribute markers. The library consumes only the
+    // control byte, so `*` and `/` stay in the text; the Angular parser read them
+    // as attributes and stripped them.
+    { id: 'bar-printable-set-remove', input: `${CTL.setAttr}*bold${CTL.removeAttr}/unbold text`, current: [], legacy: ['text', 'attrs'], note: 'ledger row 1: literal marker text where the Angular parser reads an attribute; the Angular parser strips the markers, and the length difference shifts the position-aligned style comparison' },
+    { id: 'bar-printable-then-reset', input: `${CTL.setAttr}*bold text${CTL.reset}reset`, current: [], legacy: ['text', 'attrs'], note: 'ledger row 1: literal marker text where the Angular parser reads an attribute; the Angular parser strips the markers, and the length difference shifts the position-aligned style comparison' },
+    { id: 'bar-printable-then-color', input: `${CTL.setAttr}*bold${C}F03red`, current: [], legacy: ['text', 'fg', 'attrs'], note: 'ledger row 1: literal marker text where the Angular parser reads an attribute; the Angular parser strips the markers, and the length difference shifts the position-aligned style comparison' },
+    { id: 'bar-printable-across-colors', input: `${CTL.setAttr}*bold${C}03red${CTL.removeAttr}/unbold${C}00normal`, current: [], legacy: ['text', 'fg', 'bg', 'attrs'], note: 'ledger row 1: literal marker text where the Angular parser reads an attribute; the Angular parser strips the markers, and the length difference shifts the position-aligned style comparison' },
+    { id: 'bar-printable-two-colors', input: `${CTL.setAttr}*bold${C}03color${C}04more`, current: [], legacy: ['text', 'fg', 'bg', 'attrs'], note: 'ledger row 1: literal marker text where the Angular parser reads an attribute; the Angular parser strips the markers, and the length difference shifts the position-aligned style comparison' },
+    // Ledger rows 2 and 4: incomplete combined controls.
+    { id: 'combined-no-separator', input: `${C}*03bold red${CTL.reset}`, current: [], legacy: ['fg'], note: 'ledger row 2: an incomplete combined control applies nothing; the Angular parser rendered red foreground' },
+    { id: 'truncated-extended-bg', input: `${C}*03,@\u000100456fg bg`, current: [], legacy: ['text', 'fg'], note: 'ledger row 4: the fixed-width window is consumed and nothing applies because the background failed to parse' },
 ];
 
 // Raw mIRC text: the adapter translates it first, the library does not. The point
