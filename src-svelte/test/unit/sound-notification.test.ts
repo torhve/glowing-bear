@@ -1,15 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { playNotificationSound } from '#lib/notifications.ts';
 
-// Mock settings to return soundnotification: true
-vi.mock('#lib/stores/settings.ts', () => ({
-    settings: {
-        subscribe(fn: (s: any) => void) {
-            fn({ soundnotification: true });
-            return () => {};
-        }
-    }
-}));
+// The sound path is the only thing this file exercises, so it is the one setting
+// written out; the rest come from the shared default.
+vi.mock('#lib/stores/settings.ts', async () => (await import('./helpers/mockSettings.ts')).mockSettings({ soundnotification: true }));
 
 // Mock localStorage
 const localStorageMock = {

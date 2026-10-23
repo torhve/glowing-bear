@@ -1,13 +1,10 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 
-// Mock settings before importing imgur to avoid localStorage access
-const mockSettingsSubscribe = vi.fn((fn: (val: Record<string, unknown>) => void) => {
-    fn({ iToken: '', iAlb: '' });
-    return () => {};
-});
-vi.mock('#lib/stores/settings.ts', () => ({
-    settings: { subscribe: mockSettingsSubscribe },
-}));
+// Mock settings before importing imgur to avoid localStorage access.
+// `imgur.ts` reads `get(settings)` per call, so a test changes the values it
+// sees by writing to this mock rather than re-importing the module.
+vi.mock('#lib/stores/settings.ts', async () => (await import('./helpers/mockSettings.ts')).mockSettings());
+import { updateSettings } from '#lib/stores/settings.ts';
 
 // Track the actual FileReader instance created
 let actualReader: {
@@ -112,22 +109,15 @@ describe('uploadImage', () => {
     });
 
     it('sets album header for authenticated binary uploads', async () => {
-        mockSettingsSubscribe.mockImplementation((fn: (val: Record<string, unknown>) => void) => {
-            fn({ iToken: 'a'.repeat(40), iAlb: 'alb1234567' });
-            return () => {};
-        });
-        // Re-import to pick up new settings mock
+        updateSettings({ iToken: 'a'.repeat(40), iAlb: 'alb1234567' });
         const { uploadImage } = await import('#lib/imgur.ts');
         const file = new File(['test'], 'test.png', { type: 'image/png' });
         void uploadImage(file, () => {});
         actualReader!.onload!({ target: { result: new ArrayBuffer(1) } } as unknown as ProgressEvent);
 
         expect(actualXhr.setRequestHeader).toHaveBeenCalledWith('X-Imgur-Album', 'alb1234567');
-        // Restore default mock
-        mockSettingsSubscribe.mockImplementation((fn: (val: Record<string, unknown>) => void) => {
-            fn({ iToken: '', iAlb: '' });
-            return () => {};
-        });
+        // Back to the anonymous default so a later test does not inherit this one's token.
+        updateSettings({ iToken: '', iAlb: '' });
     });
 
     it('handles API error response (binary)', async () => {

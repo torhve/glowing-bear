@@ -42,40 +42,17 @@ vi.mock('#lib/windowFocus.ts', () => ({
     initWindowFocusTracking: vi.fn(() => Promise.resolve(() => {})),
     isWindowFocused: () => false,
 }));
-const settingsMock = vi.hoisted(() => {
-    let value: Record<string, unknown> = {
-        hostField: '', port: '9001', tls: false, password: '',
-        savepassword: false, autoconnect: false, useTotp: false,
-        themeDark: 'dark', themeLight: 'light', fontfamily: '', fontsize: '', customCSS: '',
-        iToken: '', iAlb: '', onlyUnread: false, noembed: false,
-        alwaysnicklist: false, orderbyserver: false,
-        readlineBindings: false, useFavico: false, soundnotification: false,
-        enableMathjax: false, enableQuickKeys: false, showNicklist: true,
-        showQuickKeys: false, showJumpKeys: false, highlightWords: '',
-        hotlistsync: true,
-    };
-    const subs = new Set<(val: Record<string, unknown>) => void>();
-    return {
-        settings: {
-            subscribe: (fn: (val: Record<string, unknown>) => void) => {
-                subs.add(fn);
-                fn(value);
-                return () => { subs.delete(fn); };
-            },
-        },
-        apply: (patch: Record<string, unknown>) => {
-            value = { ...value, ...patch };
-            for (const fn of [...subs]) fn(value);
-        },
-        reset: () => { value = { ...value, onlyUnread: false, orderbyserver: false }; },
-    };
-});
 
-vi.mock('#lib/stores/settings.ts', () => ({
-    settings: settingsMock.settings,
-    updateSettings: settingsMock.apply,
-    updatePartialSettings: settingsMock.apply,
+vi.mock('#lib/stores/settings.ts', async () => (await import('./helpers/mockSettings.ts')).mockSettings({
+    port: '9001',
+    fontsize: '',
+    noembed: false,
+    orderbyserver: false,
+    useFavico: false,
+    soundnotification: false,
+    enableQuickKeys: false,
 }));
+import { updateSettings } from '#lib/stores/settings.ts';
 
 const {
     handleBufferLineAdded,
@@ -676,7 +653,7 @@ describe('sidebar projection', () => {
 
     it('onlyUnread membership follows the count rule', () => {
         seedSidebar(20);
-        settingsMock.apply({ onlyUnread: true });
+        updateSettings({ onlyUnread: true });
 
         // Every buffer is read and none is pinned: only the active buffer remains.
         expect(get(sidebarRows).map((r) => r.id)).toEqual(['0x1']);
@@ -691,12 +668,12 @@ describe('sidebar projection', () => {
         setActiveBuffer('0x2');
         expect(get(sidebarRows).map((r) => r.id)).toEqual(['0x2']);
 
-        settingsMock.apply({ onlyUnread: false });
+        updateSettings({ onlyUnread: false });
     });
 
     it('quick-key order is the sorted list, not the filtered one', () => {
         seedSidebar(20);
-        settingsMock.apply({ onlyUnread: true });
+        updateSettings({ onlyUnread: true });
 
         const filtered = get(sidebarRows).map((r) => r.id);
         const order = get(sidebarOrder);
@@ -706,7 +683,7 @@ describe('sidebar projection', () => {
         // cannot move one onto a different buffer.
         expect(order).toEqual(Array.from({ length: 20 }, (_unused, i) => `0x${i + 1}`));
 
-        settingsMock.apply({ onlyUnread: false });
+        updateSettings({ onlyUnread: false });
     });
 
     it('an unchanged hotlist poll does not repaint the hotlist strip', () => {
@@ -765,7 +742,7 @@ describe('sidebar ordering is the one order the app navigates by', () => {
      * resolve "position in the sidebar's list", which is exactly this sequence.
      */
     function seedOrderingCase(orderbyserver: boolean) {
-        settingsMock.apply({ orderbyserver });
+        updateSettings({ orderbyserver });
         buffers.set({
             '0x1': makeBuffer('0x1', { server: 'freenode', serverSortKey: 'irc.freenode.#a' }),
             '0x2': makeBuffer('0x2', { server: 'libera', serverSortKey: 'irc.libera.#b', hidden: true }),

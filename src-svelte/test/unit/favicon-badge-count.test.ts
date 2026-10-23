@@ -25,16 +25,7 @@ vi.mock('#lib/tauriWindow.ts', () => ({
     setBadgeCount: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('#lib/stores/settings.ts', () => ({
-    settings: {
-        subscribe: (fn: (val: any) => void) => {
-            fn({ useFavico: true, themeDark: 'dark', themeLight: 'light', customCSS: '' });
-            return () => {};
-        },
-    },
-    updateSettings: vi.fn(),
-    updatePartialSettings: vi.fn(),
-}));
+vi.mock('#lib/stores/settings.ts', async () => (await import('./helpers/mockSettings.ts')).mockSettings({}));
 
 // Hoisted because indicatorState.ts subscribes to these stores while the module
 // graph is still loading — a plain `const` below would not exist yet.

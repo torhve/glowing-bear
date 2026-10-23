@@ -1,43 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 
 // Mock settings store to avoid localStorage access at module load time
-vi.mock('#lib/stores/settings.ts', () => ({
-    settings: {
-        subscribe: (fn: (val: any) => void) => {
-            fn({
-                hostField: '',
-                port: '9001',
-                tls: false,
-                password: '',
-                savepassword: false,
-                autoconnect: false,
-                useTotp: false,
-                themeDark: 'dark', themeLight: 'light',
-                fontfamily: '',
-                fontsize: '',
-                customCSS: '',
-                iToken: '',
-                iAlb: '',
-                onlyUnread: false,
-                noembed: false,
-                alwaysnicklist: false,
-                orderbyserver: false,
-                readlineBindings: false,
-                useFavico: false,
-                soundnotification: false,
-                enableMathjax: false,
-                enableQuickKeys: false,
-                showNicklist: true,
-                showQuickKeys: false,
-                showJumpKeys: false,
-                highlightWords: ''
-            });
-            return () => {};
-        }
-    },
-    updateSettings: vi.fn(),
-    updatePartialSettings: vi.fn()
-}));
+vi.mock('#lib/stores/settings.ts', async () => (await import('./helpers/mockSettings.ts')).mockSettings({port: '9001', fontsize: '', noembed: false, orderbyserver: false, useFavico: false, soundnotification: false, enableQuickKeys: false}));
 
 // Mock notifications before importing handlers
 vi.mock('#lib/notifications.ts', async () => (await import('./helpers/mockNotifications.ts')).mockNotifications());

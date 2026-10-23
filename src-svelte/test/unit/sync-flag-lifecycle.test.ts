@@ -15,33 +15,7 @@ import {
 import type { BufferData, ProtocolMessage } from '#lib/types.ts';
 
 // Mock settings store to avoid localStorage access at module load time
-vi.mock('#lib/stores/settings.ts', () => ({
-    settings: {
-        subscribe: (fn: (val: any) => void) => {
-            fn({
-                hostField: '', port: '9001', tls: false, password: '',
-                savepassword: false, autoconnect: false, useTotp: false,
-                themeDark: 'dark', themeLight: 'light', fontfamily: '', fontsize: '', customCSS: '',
-                iToken: '', iAlb: '', onlyUnread: false, noembed: false,
-                notifyDMs: true, notifyHighlights: true, notificationSoundMode: 'off',
-                notificationSoundCustom: null, notificationVolume: 50,
-                joinPartsTTL: 30, joinPartsThreshold: 50, joinPartsBufferLimit: 100,
-                joinPartsHide: false, joinPartsHideCore: false, joinPartsHideQueries: false,
-                joinPartsHideOther: false, joinPartsHideAll: false,
-                joinPartsHideAllTemp: false, joinPartsHideTempTimer: null,
-                joinPartsHideTempRestore: null,
-                hotkeyList: [],
-                openNewBufferTab: true, autocolor: true, colorNicks: true,
-                timestamp: true, timestampFormat: '%H:%M',
-                bufferLineTimes: false, hideJoinParts: false,
-                embedLinks: false, autoplay: false, showNickList: true,
-                testSetting: false,
-            });
-        },
-        set: () => {},
-        update: () => {},
-    },
-}));
+vi.mock('#lib/stores/settings.ts', async () => (await import('./helpers/mockSettings.ts')).mockSettings({port: '9001', fontsize: '', noembed: false}));
 
 vi.mock('#lib/notifications.ts', async () => (await import('./helpers/mockNotifications.ts')).mockNotifications());
 

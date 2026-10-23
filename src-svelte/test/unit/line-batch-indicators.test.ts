@@ -20,25 +20,7 @@ import { badgeState, documentTitle, type BadgeState } from '#lib/stores/indicato
  * desktop popup — is deliberately still per line.
  */
 
-vi.mock('#lib/stores/settings.ts', () => ({
-    settings: {
-        subscribe: (fn: (val: any) => void) => {
-            fn({
-                hostField: '', port: '9001', tls: false, password: '',
-                savepassword: false, autoconnect: false, useTotp: false,
-                themeDark: 'dark', themeLight: 'light', fontfamily: '', fontsize: '', customCSS: '',
-                iToken: '', iAlb: '', onlyUnread: false, noembed: false,
-                alwaysnicklist: false, orderbyserver: false,
-                readlineBindings: false, useFavico: true, soundnotification: true,
-                enableMathjax: false, enableQuickKeys: false, showNicklist: true,
-                showQuickKeys: false, showJumpKeys: false, highlightWords: '', hotlistsync: true
-            });
-            return () => {};
-        }
-    },
-    updateSettings: vi.fn(),
-    updatePartialSettings: vi.fn()
-}));
+vi.mock('#lib/stores/settings.ts', async () => (await import('./helpers/mockSettings.ts')).mockSettings({port: '9001', fontsize: '', noembed: false, orderbyserver: false, enableQuickKeys: false}));
 
 const mockCreateHighlight = vi.hoisted(() => vi.fn());
 const mockPlayNotificationSound = vi.hoisted(() => vi.fn());

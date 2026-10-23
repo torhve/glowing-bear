@@ -68,21 +68,6 @@ const currentBufferMock = {
     }),
 };
 
-const settingsMock = vi.hoisted(() => {
-    let value: Record<string, unknown> = { useFavico: true };
-    const subs = new Set<(v: Record<string, unknown>) => void>();
-    return {
-        subscribe: (fn: (v: Record<string, unknown>) => void) => {
-            subs.add(fn);
-            fn(value);
-            return () => { subs.delete(fn); };
-        },
-        set: (next: Record<string, unknown>) => {
-            value = next;
-            for (const fn of [...subs]) fn(value);
-        },
-    };
-});
 
 vi.mock('#lib/stores/models.ts', () => ({
     buffers: buffersMock,
@@ -90,9 +75,8 @@ vi.mock('#lib/stores/models.ts', () => ({
     setActiveBuffer: vi.fn(),
 }));
 
-vi.mock('#lib/stores/settings.ts', () => ({
-    settings: settingsMock,
-}));
+vi.mock('#lib/stores/settings.ts', async () => (await import('./helpers/mockSettings.ts')).mockSettings());
+import { updateSettings } from '#lib/stores/settings.ts';
 
 describe('favicon badge integration', () => {
     let notifications: typeof import('#lib/notifications.ts');
@@ -100,7 +84,7 @@ describe('favicon badge integration', () => {
     beforeEach(async () => {
         vi.clearAllMocks();
         buffersMock.set({});
-        settingsMock.set({ useFavico: true });
+        updateSettings({ useFavico: true });
         notifications = await import('#lib/notifications.ts');
     });
 
@@ -155,7 +139,7 @@ describe('favicon badge integration', () => {
     });
 
     it('respects useFavico setting', async () => {
-        settingsMock.set({ useFavico: false });
+        updateSettings({ useFavico: false });
 
         notifications.updateFavico();
 
