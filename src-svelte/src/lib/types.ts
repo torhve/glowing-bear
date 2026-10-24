@@ -88,14 +88,6 @@ export interface HotlistEntry {
 }
 
 
-// Completion result
-export interface CompletionResult {
-    type: number;
-    text: string;
-    cursor: number;
-    replacement_start: number;
-    replacement_end: number;
-}
 
 // ---- Domain Models ----
 
@@ -267,7 +259,6 @@ export interface PendingQuery {
 // ---- Connection ----
 
 
-export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error';
 
 export interface ConnectionError {
     passwordError: boolean;
@@ -387,9 +378,4 @@ export interface ProtocolMessage {
     }[];
 }
 
-export interface WebSocketResponse {
-    objects: {
-        content: any[];
-    }[];
-}
 /* eslint-enable @typescript-eslint/no-explicit-any */

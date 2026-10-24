@@ -38,8 +38,6 @@ import {
     teardownAll,
     transportAdapterFor,
     type ConnectionProfile,
-    type RetryAvailability,
-    type RetryNowOutcome,
 } from '#lib/stores/connectionLifecycle.ts';
 import { clearCaptureIntent, releaseIfProfileChanged, releaseRetainedSnapshot } from '#lib/stores/retainedChat.ts';
 
@@ -276,7 +274,6 @@ export function disconnect(): void {
 // The retry decision lives in the shared lifecycle and is made through the active
 // adapter. Re-exported here because the banner and the tests reach the command
 // through the facade, which is the module that owns "which transport".
-export type { RetryNowOutcome, RetryAvailability };
 export const retryAvailability = sharedRetryAvailability;
 
 /**
