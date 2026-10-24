@@ -665,7 +665,7 @@ export function handleBufferLineDataChanged(message: ProtocolMessage) {
 // Both _buffer_merged and _buffer_unmerged update the buffer number when
 // a buffer joins or leaves another buffer's merge group. Shift intermediate
 // buffers to fill the gap, using immutable updates for Svelte reactivity.
-export function handleBufferMergedOrUnmerged(message: ProtocolMessage) {
+function handleBufferMergedOrUnmerged(message: ProtocolMessage) {
     const obj = message.objects[0]?.content[0];
     if (!obj) return;
     const bufferId = obj.pointers?.[0];
@@ -721,7 +721,7 @@ export function handleBufferMergedOrUnmerged(message: ProtocolMessage) {
 
 // ---- Pong handler ----
 // WeeChat echoes back ping arguments; log for debugging and future latency tracking.
-export function handlePong(message: ProtocolMessage) {
+function handlePong(message: ProtocolMessage) {
     const data = message.objects[0]?.content?.[0];
     console.debug(
         "[handler] _pong:",
@@ -736,7 +736,7 @@ let onUpgradeCallback: (() => void) | null = null;
 export function setOnUpgrade(cb: (() => void) | null) {
     onUpgradeCallback = cb;
 }
-export function handleUpgrade() {
+function handleUpgrade() {
     if (DEBUG_HANDLERS)
         console.log("[handler] _upgrade: WeeChat upgrading, disconnecting");
     onUpgradeCallback?.();
@@ -749,7 +749,7 @@ export function setOnUpgradeEnded(cb: (() => void) | null) {
     onUpgradeEndedCallback = cb;
 }
 let upgradeReconnectTimer: ReturnType<typeof setTimeout> | null = null;
-export function handleUpgradeEnded() {
+function handleUpgradeEnded() {
     if (DEBUG_HANDLERS)
         console.log(
             "[handler] _upgrade_ended: WeeChat upgrade complete, reconnecting",
@@ -818,7 +818,7 @@ export function handleBufferOpened(message: ProtocolMessage) {
 
 // ---- Buffer title changed ----
 // Update buffer metadata immutably to trigger Svelte reactivity.
-export function handleBufferTitleChanged(message: ProtocolMessage) {
+function handleBufferTitleChanged(message: ProtocolMessage) {
     const obj = message.objects[0]?.content[0];
     if (!obj) return;
     const bufferId = obj.pointers[0];
@@ -869,7 +869,7 @@ function reportDraftRename(oldFullName: string, newFullName: string): void {
 
 // ---- Buffer hidden/unhidden ----
 // Toggle buffer.hidden immutably to trigger Svelte reactivity.
-export function handleBufferHidden(message: ProtocolMessage) {
+function handleBufferHidden(message: ProtocolMessage) {
     const obj = message.objects[0]?.content[0];
     if (!obj) return;
     const updated = updateBuffer(obj.pointers[0], { hidden: true });
@@ -879,7 +879,7 @@ export function handleBufferHidden(message: ProtocolMessage) {
     buffers.update((current) => ({ ...current, [obj.pointers[0]]: updated }));
 }
 
-export function handleBufferUnhidden(message: ProtocolMessage) {
+function handleBufferUnhidden(message: ProtocolMessage) {
     const obj = message.objects[0]?.content[0];
     if (!obj) return;
     const updated = updateBuffer(obj.pointers[0], { hidden: false });
@@ -1010,7 +1010,7 @@ export function handleBufferCleared(message: ProtocolMessage) {
 }
 
 // ---- Buffer closing ----
-export function handleBufferClosing(message: ProtocolMessage) {
+function handleBufferClosing(message: ProtocolMessage) {
     const bufferMsg = message.objects[0]?.content[0];
     if (!bufferMsg) return;
     const bufferId = bufferMsg.pointers[0];
@@ -1393,7 +1393,7 @@ function updateNickSpokeAtInBuffer(
 
 // Updates spokeAt timestamps on pre-built buffer copies (for immutable updates).
 // Each created line is matched to its buffer and only that buffer's nicklist is searched.
-export function handleNickMessageForSpeakOnBuffers(
+function handleNickMessageForSpeakOnBuffers(
     createdLines: { buffer: string; line: BufferLine }[],
     updatedBuffers: Record<string, BufferData>,
 ) {

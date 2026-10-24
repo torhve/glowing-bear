@@ -113,7 +113,7 @@ function _formatDict(dict: Record<string, unknown>): string {
     ).join(',');
 }
 
-export function formatHandshake(opts: FormatHandshakeOpts): string {
+function formatHandshake(opts: FormatHandshakeOpts): string {
     const defaults: FormatHandshakeOpts = {
         password_hash_algo: 'pbkdf2+sha512',
         compression: 'zlib'
@@ -138,7 +138,7 @@ export function formatHandshake(opts: FormatHandshakeOpts): string {
 // Format init command: "init totp=...,password_hash=...\n"
 // Signature matches original JS: (password_hash, totp)
 // Parameter order matches old JS parser: totp first, then password_hash.
-export function formatInit(passwordHash: string | null, totp: string | null): string {
+function formatInit(passwordHash: string | null, totp: string | null): string {
     const parts = [];
     const keys: string[] = [];
     if (totp !== null) {
@@ -156,7 +156,7 @@ export function formatInit(passwordHash: string | null, totp: string | null): st
     return _formatCmd(null, 'init', parts);
 }
 
-export function formatHdata(opts: FormatHdataOpts): string {
+function formatHdata(opts: FormatHdataOpts): string {
     const parts = [opts.path];
     if (opts.keys && opts.keys.length > 0) {
         parts.push(opts.keys.join(','));
@@ -164,25 +164,25 @@ export function formatHdata(opts: FormatHdataOpts): string {
     return _formatCmd(opts.id ?? null, 'hdata', parts);
 }
 
-export function formatInfo(opts: FormatInfoOpts): string {
+function formatInfo(opts: FormatInfoOpts): string {
     return _formatCmd(opts.id ?? null, 'info', [opts.name]);
 }
 
-export function formatSync(dict: Record<string, unknown>): string {
+function formatSync(dict: Record<string, unknown>): string {
     const dictStr = _formatDict(dict);
     const parts = dictStr ? [dictStr] : [];
     return _formatCmd(null, 'sync', parts);
 }
 
-export function formatInput(opts: FormatInputOpts): string {
+function formatInput(opts: FormatInputOpts): string {
     return _formatCmd(opts.id ?? null, 'input', [opts.buffer, opts.data]);
 }
 
-export function formatNicklist(opts: FormatNicklistOpts): string {
+function formatNicklist(opts: FormatNicklistOpts): string {
     return _formatCmd(opts.id ?? null, 'nicklist', [opts.buffer]);
 }
 
-export function formatInfolist(opts: FormatInfolistOpts): string {
+function formatInfolist(opts: FormatInfolistOpts): string {
     const parts = [opts.name];
     if (opts.pointer !== null && opts.pointer !== undefined) {
         parts.push(String(opts.pointer));
@@ -193,14 +193,14 @@ export function formatInfolist(opts: FormatInfolistOpts): string {
     return _formatCmd(opts.id ?? null, 'infolist', parts);
 }
 
-export function formatLocalvarSet(opts: FormatLocalvarSetOpts): string {
+function formatLocalvarSet(opts: FormatLocalvarSetOpts): string {
     return formatInput({
         buffer: opts.buffer,
         data: '/buffer set localvar_set_' + opts.name + ' ' + opts.value
     });
 }
 
-export function formatQuit(): string {
+function formatQuit(): string {
     return _formatCmd(null, 'quit', []);
 }
 
@@ -213,7 +213,7 @@ interface FormatCompletionOpts {
 
 // Format completion command: "(id) completion buffer position [data]\n"
 // Matches WeeChat relay protocol spec for completion requests.
-export function formatCompletion(opts: FormatCompletionOpts): string {
+function formatCompletion(opts: FormatCompletionOpts): string {
     const position = opts.position ?? -1;
     const parts = [opts.buffer, String(position)];
     if (opts.data !== undefined && opts.data !== null) {
@@ -230,7 +230,7 @@ interface FormatDesyncOpts {
 
 // Format desync command: "(id) desync buffer1,buffer2[,option1,option2]\n"
 // Matches WeeChat relay protocol spec for desync requests.
-export function formatDesync(opts: FormatDesyncOpts): string {
+function formatDesync(opts: FormatDesyncOpts): string {
     const parts = [opts.buffers.join(',')];
     if (opts.options !== null && opts.options !== undefined) {
         parts.push(opts.options.join(','));
@@ -244,7 +244,7 @@ interface FormatTestOpts {
 
 // Format test command: "(id) test\n"
 // Matches WeeChat relay protocol spec for test requests.
-export function formatTest(opts: FormatTestOpts): string {
+function formatTest(opts: FormatTestOpts): string {
     return _formatCmd(opts.id ?? null, 'test', []);
 }
 
@@ -255,7 +255,7 @@ interface FormatPingOpts {
 
 // Format ping command: "(id) ping [args...]\n"
 // Matches WeeChat relay protocol spec for ping requests.
-export function formatPing(opts: FormatPingOpts): string {
+function formatPing(opts: FormatPingOpts): string {
     const parts: string[] = [];
     if (opts.args !== null && opts.args !== undefined) {
         parts.push(opts.args.join(' '));
