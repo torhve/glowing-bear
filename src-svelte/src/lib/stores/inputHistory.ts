@@ -19,7 +19,7 @@ function trimHistory(lines: string[], pos: number): { lines: string[]; pos: numb
     return { lines: trimmed, pos: newPos };
 }
 
-export interface BufferHistory {
+interface BufferHistory {
     lines: string[];
     pos: number;
 }

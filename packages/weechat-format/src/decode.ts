@@ -129,7 +129,7 @@ function hasPayload(input: string, pos: number, count: number): boolean {
  * leading whitespace and an optional sign are allowed but trailing garbage is
  * not. Never looks beyond the fixed payload window.
  */
-export function parseBoundedInt(window: string): number | null {
+function parseBoundedInt(window: string): number | null {
     if (!/^[ \t\n\r\f\v]*[+-]?[0-9]+$/.test(window)) {
         return null;
     }
