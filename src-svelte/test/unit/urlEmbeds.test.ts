@@ -171,10 +171,10 @@ describe('detectEmbedUrl', () => {
     // Retired entry, pinned so anyone who re-adds it does it from the measurement and not from a
     // stale doc. AlloCine's /videokast/ section answers 410 Gone and its live /video/video-<id>/
     // page is a webpage, not an embeddable player: see the comment above the entry's old place in
-    // `embedMatchers` and the matching rows in embed-builders.test.ts. The husk route the legacy
-    // AngularJS plugin still builds — `_video/iblogvision.aspx?cmedia=<id>`, status 200, empty
-    // `og:title`, no `<video>`, and an empty frame when framed — is pinned here too, because a
-    // status 200 is exactly what a port of that plugin would read as proof.
+    // `embedMatchers` and the matching rows in embed-builders.test.ts. The URL the legacy
+    // AngularJS plugin still builds — `_video/iblogvision.aspx?cmedia=<id>` — is pinned here too:
+    // it answers 200 while carrying nothing that plays, which is exactly what a port of that
+    // plugin would read as proof that an entry belongs.
     it('names no embed for AlloCine links, retired or live', () => {
         expect(detectEmbedUrl('https://www.allocine.fr/videokast/video-12345')).toBeNull();
         expect(detectEmbedUrl('https://www.allocine.fr/video/video-19557975/')).toBeNull();

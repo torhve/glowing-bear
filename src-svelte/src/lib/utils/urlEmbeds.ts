@@ -275,27 +275,29 @@ const embedMatchers: UrlMatcher[] = [
             return m ? { kind: 'iframe', frame: 'plain', src: `https://pastebin.com/embed/${m[1]}`, width: '100%', height: '350' } : null;
         },
     },
-    // No AlloCine entry, deliberately. Measured against allocine.fr: the page this entry matched
-    // (`/videokast/video-<id>`) answers 410 Gone, and the frame URL it built
-    // (`/_iframe/videokast/?video=<id>&result=media`) answers a 404 page *inside the frame* —
-    // "ERREUR 404 - PAGE INTROUVABLE" under AlloCine's own header bar. The live section is
-    // `/video/video-<id>/`, a whole webpage: at the app's 315px player height the frame is spent
-    // on site nav, an ad slot and the video title, and AlloCine's consent script throws inside a
-    // foreign frame. Its player page needs two ids (`/video/player_gen_cmedia=<mediaId>&cfilm=
-    // <filmId>.html`, 404 without `cfilm`) that no pasted link carries, and the app cannot dig
-    // them out either: a cross-origin fetch of an AlloCine page fails with
-    // `TypeError: Failed to fetch`.
+    // No AlloCine entry: the app cannot build an AlloCine embed out of anything a user can paste,
+    // and the alternatives were probed rather than assumed. Probed against allocine.fr while
+    // writing `11416c1e`; the byte-level results and how each route was tested live in the
+    // campaign's working notes (N24) so this comment ages with the site instead of breaking
+    // beside it. What was true then:
     //
-    // The route the legacy AngularJS plugin still builds was measured as well, because a 200 is
-    // easy to mistake for a player: `_video/iblogvision.aspx?cmedia=<id>` answers 200 / 27,730
-    // bytes with an empty `og:title`, the site's generic `<title>`, 55 characters of visible text
-    // in the whole document and no `<video>` anywhere. Framed with a real cmedia id taken from the
-    // live site's own player link, and again with a `/video/video-<id>` id, it paints nothing at
-    // all: an empty frame, one 0×0 `about:blank` iframe, and AlloCine's own consent script
-    // throwing `Blocked a frame with origin "https://www.allocine.fr" from accessing a
-    // cross-origin frame`. A status 200 that renders no media is not an embed.
+    //   - `/videokast/video-<id>`, which this entry matched, is gone (410). The frame URL it
+    //     built, `_iframe/videokast/?video=<id>&result=media`, served a 404 page *inside the
+    //     player frame* — AlloCine's own "PAGE INTROUVABLE" error under its header bar.
+    //   - `/video/video-<id>/`, the live section, is framable but is a whole webpage: at the
+    //     app's player height the frame holds site nav, an ad slot and the title, with no video
+    //     element, and AlloCine's own consent script throws inside a foreign frame.
+    //   - `_video/iblogvision.aspx?cmedia=<id>`, the URL the legacy AngularJS plugin still
+    //     builds (`src-angular/js/plugins.js`), answers 200 with no media in it — no video
+    //     element, and framed it paints nothing. A status 200 is not proof that something plays.
+    //   - `/video/player_gen_cmedia=<mediaId>&cfilm=<filmId>.html`, the real player page, needs
+    //     two ids no pasted link carries, and the app cannot fetch an AlloCine page to dig them
+    //     out: a cross-origin `fetch` of one is refused.
     //
-    // An AlloCine link stays a link.
+    // An AlloCine link stays a link. The pinned rows in `urlEmbeds.test.ts` and
+    // `embed-builders.test.ts` assert *this table's* behaviour, not allocine.fr's current answer,
+    // so they hold whatever the site does next — and they go red if anyone re-adds an entry.
+    // Re-probe the site before reviving one.
     {
         name: 'Asciinema',
         test: (url) => /asciinema\.org\/a\/([0-9a-z]+)/.test(url),

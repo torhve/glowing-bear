@@ -102,18 +102,15 @@ const ROWS: Row[] = [
 
     { url: 'https://gist.github.com/torvid/1a2b3c4d5e6f', name: 'GitHub Gist', built: `iframe src=null srcdoc="<script src=\\"https://gist.github.com/torvid/1a2b3c4d5e6f.js\\"></script>" size=100%x300px border="0" fullscreen=null` },
     { url: 'https://pastebin.com/AbCdEfGh', name: 'Pastebin', built: `iframe src="https://pastebin.com/embed/AbCdEfGh" srcdoc=null size=100%x350 border="0" fullscreen=""` },
-    // AlloCine has no entry, and these two rows keep the reason alive. Measured against
-    // allocine.fr: the page this table used to match answers 410 Gone, and the frame URL it
-    // used to build answers a 404 page *inside the frame* ("ERREUR 404 - PAGE INTROUVABLE").
-    // The live section is /video/video-<id>/, a whole webpage: framed at the app's 315px
-    // player height it spends the frame on the site nav, an ad slot and the video title, and
-    // AlloCine's own consent script throws inside a foreign frame. Its player URL needs two
-    // ids (/video/player_gen_cmedia=<mediaId>&cfilm=<filmId>.html, 404 without cfilm) that no
-    // pasted link carries, and digging them out is not available to the app: a cross-origin
-    // fetch of that page fails with "TypeError: Failed to fetch". An AlloCine link stays a link.
-    // The third row is the shape the legacy AngularJS plugin still builds
-    // (`_video/iblogvision.aspx?cmedia=<id>`): status 200, 27,730 bytes, empty `og:title`, no
-    // `<video>`, and an empty frame when framed — a 200 that renders no media is not an embed.
+    // AlloCine has no entry, and these three rows keep the reason alive: the page this table used
+    // to match is gone (410), the frame URL it used to build answers a 404 page *inside the
+    // frame*, the live /video/video-<id>/ section is the whole ad-supported site rather than a
+    // player, and its real player page needs two ids no pasted link carries while a cross-origin
+    // fetch of an AlloCine page is refused. The third row is the URL the legacy AngularJS plugin
+    // still builds (`_video/iblogvision.aspx?cmedia=<id>`): status 200, and nothing in it that
+    // plays — a 200 is not proof of an embed. The byte-level probe behind all of this lives in
+    // the campaign's working notes (N24); these rows assert our table's behaviour, not
+    // allocine.fr's current answer.
     { url: 'https://www.allocine.fr/videokast/video-28123456', name: null, built: 'nothing' },
     { url: 'https://www.allocine.fr/video/video-19557975/', name: null, built: 'nothing' },
     { url: 'https://www.allocine.fr/_video/iblogvision.aspx?cmedia=20615027', name: null, built: 'nothing' },
