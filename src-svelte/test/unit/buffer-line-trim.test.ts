@@ -1,3 +1,14 @@
+/**
+ * What dropping lines from a capped buffer owes the counters that count them.
+ *
+ * Three paths trim a buffer's line list — the legacy event handler, the API store
+ * reducer and `setActiveBuffer` — and they do not agree about compensation: the
+ * first two subtract the removed prefix from `localUnread`, the third does not,
+ * because activating a buffer zeroes that counter anyway. The file is named for
+ * the question rather than for the ticket that opened it (`char-trim-buffer-lines`),
+ * because the compensation difference is the thing a future change has to be
+ * measured against.
+ */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import {

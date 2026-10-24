@@ -237,7 +237,7 @@ export function resolvePendingReadBoundary(buffer: BufferData): boolean {
  * This was written twice, byte for byte: a private copy in the legacy line
  * handler and an exported copy in the API reducers. Both transports already
  * take their read-boundary primitives from here, so this is where the one copy
- * belongs. `char-trim-buffer-lines.test.ts` pins what a trim owes the counters.
+ * belongs. `buffer-line-trim.test.ts` pins what a trim owes the counters.
  *
  * - `localUnread` counts the newest lines and a trim removes the oldest, so the
  *   compensation only bites when the removed prefix reaches the unread tail.
