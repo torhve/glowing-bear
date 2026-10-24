@@ -151,6 +151,21 @@ test('a Yr.no location link becomes the forecast chart yr.no serves', async () =
         .toBe('782x391');
 });
 
+test('an AlloCine link stays a plain link, with no embed offered', async () => {
+    // The entry was deleted rather than repaired, and this is the user-visible half of that
+    // decision. Measured against allocine.fr: `/videokast/video-<id>` answers 410 Gone and the
+    // frame URL the entry built answers a 404 page inside the frame, while the live
+    // `/video/video-<id>/` page is the whole ad-supported site rather than a player. See the
+    // comment left in its place in `embedMatchers`. What a user should get now is the link —
+    // clickable — and no "Show …" button promising media that cannot be shown.
+    await setSettings(page, { noembed: true });
+    await botSay('https://www.allocine.fr/video/video-19557975/');
+    const row = rowForMessage('allocine.fr/video/video-19557975');
+    await expect(row.getByRole('link', { name: /allocine\.fr/ })).toBeVisible({ timeout: 10000 });
+    await expect(row.locator('[data-testid="show-embed"]')).toHaveCount(0);
+    await expect(row.locator('[data-testid="plugin-embed"]')).toHaveCount(0);
+});
+
 test('noembed=false shows embeds automatically', async () => {
     await setSettings(page, { noembed: false });
     await botSay('https://picsum.photos/200/300.jpg?7');

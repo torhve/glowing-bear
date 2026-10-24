@@ -168,9 +168,17 @@ describe('detectEmbedUrl', () => {
         expect(result).toEqual({ name: 'TikTok' });
     });
 
-    it('detects AlloCine URLs', () => {
-        const result = detectEmbedUrl('https://www.allocine.fr/videokast/video-12345');
-        expect(result).toEqual({ name: 'AlloCine video' });
+    // Retired entry, pinned so anyone who re-adds it does it from the measurement and not from a
+    // stale doc. AlloCine's /videokast/ section answers 410 Gone and its live /video/video-<id>/
+    // page is a webpage, not an embeddable player: see the comment above the entry's old place in
+    // `embedMatchers` and the matching rows in embed-builders.test.ts. The husk route the legacy
+    // AngularJS plugin still builds — `_video/iblogvision.aspx?cmedia=<id>`, status 200, empty
+    // `og:title`, no `<video>`, and an empty frame when framed — is pinned here too, because a
+    // status 200 is exactly what a port of that plugin would read as proof.
+    it('names no embed for AlloCine links, retired or live', () => {
+        expect(detectEmbedUrl('https://www.allocine.fr/videokast/video-12345')).toBeNull();
+        expect(detectEmbedUrl('https://www.allocine.fr/video/video-19557975/')).toBeNull();
+        expect(detectEmbedUrl('https://www.allocine.fr/_video/iblogvision.aspx?cmedia=20615027')).toBeNull();
     });
 
     it('returns null for plain URLs', () => {
