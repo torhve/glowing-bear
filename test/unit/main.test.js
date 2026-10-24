@@ -1,3 +1,0 @@
-
-import "./filters";
-import "./plugins";
