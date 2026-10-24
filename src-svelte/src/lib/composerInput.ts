@@ -21,7 +21,14 @@ export interface ComposerHolder {
  * can only write to the composer of the page it is rendered in, and a composer that is
  * not mounted simply leaves `current` null, which is what the queries returned then.
  */
-export const [getComposerInput, setComposerInput, hasComposerInput] = createContext<ComposerHolder>();
+const [getComposerInput, setComposerInput, hasComposerInput] = createContext<ComposerHolder>();
+
+/**
+ * Publishes the page's holder. Nothing outside this module reads the context accessors:
+ * `readComposerInput` is the only way in, which is what keeps "there is no composer here" a
+ * value a caller can handle instead of a context the caller has to know about.
+ */
+export { setComposerInput };
 
 /**
  * The holder for the current page, or an inert one when this component is rendered

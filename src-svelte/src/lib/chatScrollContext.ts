@@ -10,8 +10,15 @@ import type { ChatScrollCommandsHolder } from '#lib/chatViewport.ts';
  * page it is rendered in, and a view that is not mounted simply leaves
  * `current` null.
  */
-export const [getChatScrollCommands, setChatScrollCommands, hasChatScrollCommands] =
+const [getChatScrollCommands, setChatScrollCommands, hasChatScrollCommands] =
     createContext<ChatScrollCommandsHolder>();
+
+/**
+ * Publishes the page's holder. Nothing outside this module reads the context accessors:
+ * `readChatScrollCommands` is the only way in, which is what keeps "there is no chat view
+ * here" a value a caller can handle instead of a context the caller has to know about.
+ */
+export { setChatScrollCommands };
 
 /**
  * The holder for the current page, or an inert one when this component is
