@@ -115,9 +115,37 @@ describe('detectEmbedUrl', () => {
         expect(result).toEqual({ name: 'Asciinema' });
     });
 
-    it('detects Yr.no meteogram URLs', () => {
-        const result = detectEmbedUrl('https://www.yr.no/place/Norway/Oslo/Oslo/#');
-        expect(result).toEqual({ name: 'Meteogram' });
+    it('detects Yr.no location links carrying a location id', () => {
+        // Shapes copied from yr.no itself: a Norwegian forecast page, an English
+        // one, a US location, Nynorsk and Sami spellings, yr.no's own widget URL,
+        // and the same link without `www.`.
+        for (const url of [
+            'https://www.yr.no/nb/varsel/daglig-tabell/1-72837/Norge/Oslo/Oslo',
+            'https://www.yr.no/en/forecast/daily-table/1-2144/Norway/Trondheim',
+            'https://www.yr.no/nn/innhald/1-72837/meteogram.svg',
+            'https://www.yr.no/sme/sisdoallu/1-72837/meteogram.svg',
+            'https://www.yr.no/nb/innhold/1-72837/meteogram.svg?mode=light',
+            'https://yr.no/nb/varsel/1-72837/Norge/Oslo',
+        ]) {
+            expect(detectEmbedUrl(url), `${url} names no embed`).toEqual({ name: 'Meteogram' });
+        }
+    });
+
+    it('leaves a Yr.no link that names no location as a plain link', () => {
+        // yr.no answers a location id that does not exist with HTTP 503 and its
+        // outage page rather than 404, so a button offered for a URL with no id
+        // is a broken image offered in advance. The retired `place/` form — the
+        // one this entry used to match, and the one the app still builds a
+        // weathericon URL from — is here because it must now name nothing.
+        for (const url of [
+            'https://www.yr.no/nb/',
+            'https://www.yr.no/sok/oslo',
+            'https://www.yr.no/place/Norway/Oslo/Oslo/',
+            'https://www.yr.no/nb/nyheter/2024-05-17/saken',
+            'https://www.yr.no/nb/innhold/9-99999999999/meteogram.svg',
+        ]) {
+            expect(detectEmbedUrl(url), `${url} should not name an embed`).toBeNull();
+        }
     });
 
     it('detects GitHub Gist URLs', () => {

@@ -127,6 +127,30 @@ test('NSFW image shows yellow warning button', async () => {
     expect(color).toMatch(/yellow|rgb\(240|rgb\(217|rgb\(250|rgb\(230|rgba\(234|rgba\(244|rgba\(220|oklch\(|oklab\(/i);
 });
 
+test('a Yr.no location link becomes the forecast chart yr.no serves', async () => {
+    // The live half of the Meteogram entry. It spent its life matching yr.no's
+    // retired `place/` URLs and building `api.met.no/weathericon/2.0/legacymeteogram`
+    // out of the place names in the path read as `lat` and `lon`, against a product
+    // that answers HTTP 404: a button labelled "Show Meteogram" over a broken image,
+    // which no test ever loaded. This one loads it, so the URL the app builds has to
+    // stay the one yr.no answers with a chart.
+    await setSettings(page, { noembed: true });
+    await botSay('https://www.yr.no/nb/varsel/daglig-tabell/1-72837/Norge/Oslo/Oslo');
+    const row = rowForMessage('yr.no/nb/varsel/daglig-tabell/1-72837');
+    const showBtn = row.locator('[data-testid="show-embed"]');
+    await expect(showBtn).toBeVisible({ timeout: 10000 });
+    await expect(showBtn).toHaveAccessibleName('Show Meteogram');
+    await showBtn.click();
+
+    const chart = row.locator('[data-testid="plugin-embed"] img');
+    await expect(chart).toHaveAttribute('src', 'https://www.yr.no/nb/innhold/1-72837/meteogram.svg?mode=light');
+    // Decoding at the chart's own size is what "not a broken image" means here.
+    await expect
+        .poll(async () => chart.evaluate((el: HTMLImageElement) => el.decode()
+            .then(() => `${el.naturalWidth}x${el.naturalHeight}`, () => 'undecoded')), { timeout: 20000 })
+        .toBe('782x391');
+});
+
 test('noembed=false shows embeds automatically', async () => {
     await setSettings(page, { noembed: false });
     await botSay('https://picsum.photos/200/300.jpg?7');

@@ -76,6 +76,33 @@ function parentHost(): string {
     return window.location.hostname;
 }
 
+/**
+ * A yr.no link in one of the four languages the site serves, carrying a location id.
+ *
+ * The id shape is deliberately narrow — one or two digits, a hyphen, four to
+ * eight — because the loose form `\d+-\d+` also matches the `2024-05` inside a
+ * dated path, and this entry would then invent a widget URL for a page that
+ * names no location. The shapes it has to accept are real ones taken from yr.no
+ * URLs: `1-72837` (Oslo), `2-3196359` (United States), `11-3154`, `1-96814`.
+ * A link with no id is not a location and is left as a plain link: yr.no
+ * answers an id that does not exist with HTTP 503 and its outage page, not 404,
+ * so there is nothing downstream that could tell a bad id from an outage.
+ */
+const yrLocationUrl = /^https?:\/\/(?:www\.)?yr\.no\/(en|nb|nn|sme)\/[^\s"']*\b(\d{1,2}-\d{4,8})\b/i;
+
+/**
+ * The segment yr.no puts between the language and the location id in its own
+ * widget URLs. It is localized, not fixed: `/nn/innhold/` and `/en/innhold/`
+ * answer 404 while `/nn/innhald/` and `/en/content/` answer 200, so a single
+ * spelling would work in exactly one language.
+ */
+const yrContentSegments: Record<string, string> = {
+    en: 'content',
+    nb: 'innhold',
+    nn: 'innhald',
+    sme: 'sisdoallu',
+};
+
 const embedMatchers: UrlMatcher[] = [
     {
         name: 'YouTube video',
@@ -165,24 +192,64 @@ const embedMatchers: UrlMatcher[] = [
     },
     {
         /**
-         * Broken, and kept broken until someone decides what it should be.
+         * yr.no's own forecast chart, built from the location id in the URL.
          *
-         * The pattern matches yr.no's place URLs, which are place-name paths
-         * (`/place/Norway/Oslo/Oslo/`) and carry no coordinates, so the two path
-         * segments read here as `lat` and `lon` are the words "Oslo" and "Oslo".
-         * The `weathericon/2.0/legacymeteogram` product answers HTTP 404 with
-         * "The specified product does not exist" today, and yr.no's own
-         * `meteogram.png` is gone too. The result is a broken image behind a
-         * button that says "Show Meteogram".
+         * This entry used to match `yr.no/place/<country>/<region>/<city>/#` and
+         * build `api.met.no/weathericon/2.0/legacymeteogram?lat=…&lon=…` out of
+         * path segments that carry place names, never coordinates: the two values
+         * read as `lat` and `lon` were the words "Oslo" and "Oslo". Measured
+         * today, every piece of it is gone. `yr.no/place/Norway/Oslo/Oslo/`
+         * answers 404, `weathericon/2.0/legacymeteogram` answers 404 with "The
+         * specified product does not exist", and yr.no's retired embed API is
+         * gone as well — `api/v0/locations/1-72837/forecast.svg` 404, and its
+         * geocoding query `api/v0/locations/query?q=Trondheim` 410 Gone. The
+         * button said "Show Meteogram" and always produced a broken image.
+         *
+         * What yr.no sanctions and serves now is a location id taken from a
+         * location URL, plus a localized content segment
+         * (https://developer.yr.no/doc/guides/available-widgets/). Measured:
+         *
+         *   /nb/innhold/1-72837/meteogram.svg               200 image/svg+xml
+         *   /en/content/1-72837/meteogram.svg               200
+         *   /nn/innhald/1-72837/meteogram.svg               200
+         *   /sme/sisdoallu/1-72837/meteogram.svg            200
+         *   /nn/innhold/…, /en/innhold/…, /content/…        404
+         *   /en/forecast/daily-table/1-72837/Norway/Oslo    200 — where the id is copied from
+         *   /nb/innhold/9-9999999/meteogram.svg             503 "Tekniske problemer"
+         *   /place/Norway/Oslo/Oslo/                        404
+         *
+         * Rendered as an image rather than the iframe yr.no's own docs show. The
+         * SVG declares `width="782" height="391"` and carries the chart's fonts
+         * and sizes in its own `<style>` block; the external
+         * `static.nrk.no/nrk-sans` stylesheet contributes one `@font-face`, and
+         * the inline `text { font-family: … }` rule already lists system
+         * fallbacks. Measured in Chromium: as an `<img>` it loads complete at
+         * 782x391 with 5470 distinct colours painted — header, day labels, hour
+         * labels, legend and both axes present, clouds and curves drawn. In an
+         * iframe the same document paints at 786x395, chart plus frame chrome and
+         * a scrollbar, for a font nobody would notice. An image asks the browser
+         * for no permissions at all; a frame of someone else's document does.
+         *
+         * `?mode=dark` is measured (mean luminance 26 against 239, 94% of pixels
+         * dark) and is not used here: this table maps a URL to an element and has
+         * no theme input, and the seam for that would be a palette argument on
+         * `buildEmbed` that the fifteen other entries would carry unused. A URL
+         * that is already a `meteogram.svg` never reaches this entry anyway —
+         * `classifyMediaUrl` claims any URL ending in an image extension before
+         * the table is consulted, so a chart pasted with `?mode=dark` on it
+         * reaches the page as the image it asked for.
          */
         name: 'Meteogram',
-        test: (url) => /yr\.no\/place\/[^/]+\/[^/]+\/[^/]+\/#/.test(url),
+        test: (url) => yrLocationUrl.test(url),
         render: (url) => {
-            const parts = url.split('/');
-            if (parts.length < 7) return null;
+            const match = yrLocationUrl.exec(url);
+            const lang = match?.[1]?.toLowerCase();
+            const locationId = match?.[2];
+            const segment = lang ? yrContentSegments[lang] : undefined;
+            if (!lang || !locationId || !segment) return null;
             return {
                 kind: 'img',
-                src: `https://api.met.no/weatherapi/weathericon/2.0/legacymeteogram?lat=${parts[5]}&lon=${parts[6]}`,
+                src: `https://www.yr.no/${lang}/${segment}/${locationId}/meteogram.svg?mode=light`,
                 alt: 'Weather meteogram',
             };
         },

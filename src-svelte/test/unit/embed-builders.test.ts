@@ -1,12 +1,13 @@
 /**
  * What each embeddable URL becomes, end to end.
  *
- * Two places decide what an embed is. `lib/utils/urlEmbeds.ts` holds a matcher
- * table that `BufferLineRow` uses to decide a URL is embeddable and to name it —
- * that name is the label on the "Show …" button. `PluginEmbed` then re-matches
- * the same URL with its own copy of every pattern to build the thing that gets
- * injected. The label and the embed come from two lists of the same 16 regular
- * expressions, and nothing asserted they agreed.
+ * One table decides what a URL is called and what it becomes. `lib/utils/urlEmbeds.ts`
+ * holds the matchers: `BufferLineRow` takes the name for the "Show …" label from the
+ * matching entry and `PluginEmbed` builds the element out of that same entry. They used
+ * to be two copies of sixteen regular expressions that could drift apart, which is what
+ * `70663db6` removed. Standing in front of the table is `classifyMediaUrl`, which claims
+ * any URL whose path ends in a media extension, so a link that is already a file — a
+ * pasted `meteogram.svg`, say — reaches the page unchanged and never consults the table.
  *
  * This pins both halves for one corpus: what the table calls the URL, and what
  * the frame that reaches the page points at, how big it is, and what it is
@@ -16,13 +17,9 @@
  * scripts and are isolated without `allow-same-origin` while every other frame
  * keeps it, is only visible in a browser.
  *
- * Two rows record behaviour that is wrong on purpose, so a later change is
+ * One row records behaviour that is wrong on purpose, so a later change is
  * measured against something:
  *
- *   - `https://www.yr.no/place/Norway/Oslo/Oslo/#` is named "Meteogram" and
- *     builds an image whose `lat`/`lon` are the place names from the URL path.
- *     yr.no `place/` URLs carry place names, never coordinates, and the
- *     `weathericon/2.0/legacymeteogram` product answers HTTP 404 today.
  *   - A TikTok URL is named by the table but builds nothing here, because
  *     `BufferLineRow` hands TikTok a callback rather than a URL string and this
  *     path only ever receives strings.
@@ -108,10 +105,23 @@ const ROWS: Row[] = [
     { url: 'https://www.allocine.fr/videokast/video-28123456', name: 'AlloCine video', built: `iframe src="https://www.allocine.fr/_iframe/videokast/?video=28123456&result=media" srcdoc=null size=100%x100% border="0" fullscreen=""` },
     { url: 'https://asciinema.org/a/357111', name: 'Asciinema', built: `iframe src=null srcdoc="<script src=\\"https://asciinema.org/a/357111.js\\"></script>" size=100%x300px border="0" fullscreen=null` },
 
-    // Named "Meteogram", built from place names as coordinates, against a product
-    // that answers 404. Pinned as wrong, not as correct.
-    { url: 'https://www.yr.no/place/Norway/Oslo/Oslo/#', name: 'Meteogram', built: 'img src="https://api.met.no/weatherapi/weathericon/2.0/legacymeteogram?lat=Oslo&lon=Oslo"' },
-    { url: 'https://www.yr.no/place/Norway/Oslo/Oslo/', name: null, built: 'nothing' },
+    // Yr.no: the location id from the URL plus the localized content segment,
+    // which is what yr.no documents and serves. Measured against yr.no itself —
+    // 200 `image/svg+xml` for `/nb/innhold/1-72837/`, `/en/content/1-72837/`,
+    // `/nn/innhald/1-72837/` and `/sme/sisdoallu/1-72837/` on `meteogram.svg`,
+    // 404 for `/nn/innhold/`, `/en/innhold/` and a language-less `/content/`,
+    // and 404 for the `place/Norway/Oslo/Oslo/` path this entry used to match and
+    // used to read place names out of as `lat` and `lon`.
+    { url: 'https://www.yr.no/nb/varsel/daglig-tabell/1-72837/Norge/Oslo/Oslo', name: 'Meteogram', built: 'img src="https://www.yr.no/nb/innhold/1-72837/meteogram.svg?mode=light"' },
+    { url: 'https://www.yr.no/en/forecast/daily-table/1-2144/Norway/Trondheim', name: 'Meteogram', built: 'img src="https://www.yr.no/en/content/1-2144/meteogram.svg?mode=light"' },
+    // A URL that is already a widget SVG never reaches this entry: `classifyMediaUrl`
+    // claims any URL whose path ends in an image extension before the table is
+    // consulted, so it arrives as the image it already is, palette included. The
+    // table still names it, and that name is the label on the button above it.
+    { url: 'https://www.yr.no/nn/innhald/11-3154/meteogram.svg', name: 'Meteogram', built: 'img src="https://www.yr.no/nn/innhald/11-3154/meteogram.svg"' },
+    { url: 'https://www.yr.no/nb/innhold/1-72837/meteogram.svg?mode=dark', name: 'Meteogram', built: 'img src="https://www.yr.no/nb/innhold/1-72837/meteogram.svg?mode=dark"' },
+    // The retired form: named nothing, built nothing, because it names no location.
+    { url: 'https://www.yr.no/place/Norway/Oslo/Oslo/#', name: null, built: 'nothing' },
 
     // The table names TikTok; this path builds nothing, because the real caller
     // sends a callback for it rather than a URL string.
