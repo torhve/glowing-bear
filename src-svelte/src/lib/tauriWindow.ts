@@ -132,4 +132,4 @@ async function setBadgeCount(opts: { count: number; type: 'notification' | 'unre
     }
 }
 
-export { isTauri, isWindowsTauri, isMacOSTauri, ensureTauriWindow, minimizeWindow, toggleMaximizeWindow, closeWindow, showWindow, setBadgeCount, isMacOSPlatform };
+export { isTauri, isWindowsTauri, isMacOSTauri, ensureTauriWindow, minimizeWindow, toggleMaximizeWindow, closeWindow, showWindow, setBadgeCount };

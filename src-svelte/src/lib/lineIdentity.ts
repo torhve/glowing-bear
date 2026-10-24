@@ -16,7 +16,7 @@
  * sites on these names. `ChatView.svelte`'s `line:` fallback is a render key for rows
  * WeeChat gave no id to, not an identity, and deliberately does not live here.
  */
-export const WEECHAT_LINE_ID_PREFIX = 'weechat:';
+const WEECHAT_LINE_ID_PREFIX = 'weechat:';
 
 /** The identity of one of WeeChat's line numbers. */
 export function weechatLineId(id: string | number): string {

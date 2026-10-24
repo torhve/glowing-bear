@@ -41,15 +41,15 @@ export const PIN_CAP_MS = 400;
 /** Frames of unchanged scrollHeight that count as settled layout. */
 export const PIN_SETTLE_FRAMES = 2;
 /** Failed read-separator lookups tolerated before falling back to the bottom. */
-export const READMARKER_MAX_FAILURES = 2;
+const READMARKER_MAX_FAILURES = 2;
 /** Viewport fraction the read separator is aimed at when unread overflows. */
 export const READMARKER_VIEWPORT_RATIO = 0.45;
 /** PageUp/PageDown step as a fraction of the viewport. */
 export const PAGE_SCROLL_RATIO = 0.8;
 /** scrollTop below which the reader is considered to have reached the oldest row. */
-export const TOP_FETCH_SCROLL_THRESHOLD = 50;
+const TOP_FETCH_SCROLL_THRESHOLD = 50;
 /** Line height assumed before any row has rendered. */
-export const DEFAULT_SAMPLE_LINE_HEIGHT = 16;
+const DEFAULT_SAMPLE_LINE_HEIGHT = 16;
 
 /** How many rendered rows one line-height measurement is allowed to inspect. */
 const SAMPLE_ROW_LIMIT = 12;

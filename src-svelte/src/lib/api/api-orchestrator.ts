@@ -65,7 +65,7 @@ export interface RetryDriver {
 
 /** Live-verified baseline: Relay API 0.6.0 (number 1536). Older API servers
  *  lack endpoints this migration depends on (completion, batched arrays). */
-export const MIN_API_VERSION_NUMBER = 1536;
+const MIN_API_VERSION_NUMBER = 1536;
 
 export interface OrchestratorOptions {
     endpoint: ApiEndpoint;

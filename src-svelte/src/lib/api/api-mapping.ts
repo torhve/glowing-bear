@@ -93,7 +93,7 @@ export function isServerHiddenLine(line: LineSnapshot): boolean {
     return !line.displayed || line.tags.includes('irc_smart_filter');
 }
 
-export function mapNick(wire: RestNick): NickSnapshot | null {
+function mapNick(wire: RestNick): NickSnapshot | null {
     const id = asNickId(wire.id);
     const parent = asParentGroupId(wire.parent_group_id);
     if (id === null || parent === null) return null;

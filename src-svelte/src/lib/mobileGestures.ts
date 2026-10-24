@@ -9,7 +9,7 @@
  */
 
 /** A horizontal drag this wide is a swipe in progress, so the browser must not scroll under it. */
-export const DRAG_BLOCK_DX = 10;
+const DRAG_BLOCK_DX = 10;
 
 /** Horizontal travel a finished touch needs to count as a swipe left or right. */
 export const SWIPE_MIN_DX = 50;

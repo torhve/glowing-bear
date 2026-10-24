@@ -169,7 +169,7 @@ function findUniqueLineIndex(lines: BufferLine[], lineId: string): number | null
  * not reach far enough back to contain it, and guessing -1 would mark a buffer
  * read at a position the server never confirmed.
  */
-export function setReadBoundaryFromAnchorId(buffer: BufferData, lineId: string): void {
+function setReadBoundaryFromAnchorId(buffer: BufferData, lineId: string): void {
     const index = findUniqueLineIndex(buffer.lines, lineId);
     if (index === null) {
         setReadBoundaryUnknown(buffer);
@@ -1224,7 +1224,7 @@ export function initialHistoryWindow(): number {
  * less than a screenful, has nothing for the read marker to sit against. Only
  * the fetch itself differs between them, and it must — that half is transport.
  */
-export const SWITCH_FETCH_BELOW_LINES = 20;
+const SWITCH_FETCH_BELOW_LINES = 20;
 export const SWITCH_FETCH_REQUEST_LINES = 100;
 
 /**

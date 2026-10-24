@@ -30,7 +30,7 @@ const UTF8 = new TextEncoder();
 /* Web Crypto (secure contexts) unlocks the SHA-512 family; without it we
  * advertise only the algorithms the pure-JS fallback can compute. Never
  * silently downgrade after a failed authentication. */
-export function hasSubtleCrypto(): boolean {
+function hasSubtleCrypto(): boolean {
     return typeof crypto !== 'undefined' && typeof crypto.subtle !== 'undefined';
 }
 
