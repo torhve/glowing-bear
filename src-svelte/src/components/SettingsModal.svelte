@@ -9,6 +9,7 @@
   import { activeTransport } from '#lib/stores/connectionStore.ts';
   import { clamp } from '#lib/num.ts';
   import { FONT_SIZE_DEFAULT_CSS, FONT_SIZE_DEFAULT_PX, parseFontSizePx } from '#lib/fontSize.ts';
+  import { FONT_FAMILY_DEFAULT_CSS } from '#lib/fontFamily.ts';
   import BaseDialog from '#components/BaseDialog.svelte';
   import Palette from '@lucide/svelte/icons/palette';
   import Monitor from '@lucide/svelte/icons/monitor';
@@ -95,7 +96,10 @@
       themeDark: 'dark',
       themeLight: 'light',
       fontsize: '14px',
-      fontfamily: 'Inconsolata, Consolas, Monaco, Ubuntu Mono, monospace',
+      // An empty family is not "no font": it means nothing is written over the
+      // stylesheet's own `--font-mono`, so the reset lands on the same family a
+      // fresh install gets instead of a stack this modal invented.
+      fontfamily: '',
       customCSS: '',
       iToken: '',
       iAlb: '',
@@ -196,7 +200,7 @@
               type="text"
               value={$settings.fontfamily}
               oninput={(e: Event) => updateSettings({ fontfamily: (e.target as HTMLInputElement).value })}
-              placeholder="Inconsolata, Consolas, Monaco, monospace"
+              placeholder={FONT_FAMILY_DEFAULT_CSS}
               class={FORM_FIELD_CLASS}
             />
           </div>

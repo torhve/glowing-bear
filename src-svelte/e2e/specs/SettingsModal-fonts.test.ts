@@ -27,11 +27,50 @@ test.beforeEach(async () => {
 
 // --- Font Family Tests ---
 
+/**
+ * Family lists compared as families.
+ *
+ * Chromium drops the quotes a family name does not need when it serialises a
+ * computed `font-family`, so `"Fira Mono", Consolas, …` is the same list the
+ * stylesheet wrote as `"Fira Mono", "Consolas", …`. Comparing the strings would
+ * compare the serializer instead of the fonts.
+ */
+function familyList(value: string): string[] {
+    return value
+        .split(',')
+        .map((part) => part.trim().replace(/^["']|["']$/g, '').toLowerCase())
+        .filter(Boolean);
+}
+
+/** The families the running app actually renders on `body`. */
+async function paintedBodyFamilies(page: import('@playwright/test').Page): Promise<string[]> {
+    return page.evaluate(() => getComputedStyle(document.body).fontFamily).then(familyList);
+}
+
 test('should have font family text input in settings modal', async () => {
     await openSettings(page);
     const input = page.getByTestId('font-family-input');
     await expect(input).toBeVisible();
-    await expect(input).toHaveAttribute('placeholder', 'Inconsolata, Consolas, Monaco, monospace');
+});
+
+test('the placeholder names the family an empty field actually gets', async () => {
+    await openSettings(page);
+    const input = page.getByTestId('font-family-input');
+
+    // Left empty, nothing is written over the stylesheet's own `--font-mono`,
+    // so the app default paints. The placeholder used to promise
+    // "Inconsolata, Consolas, Monaco, monospace" — a stack the app renders in
+    // no path at all — which is how a user ends up trusting a default that
+    // does not exist. It is now checked against the paint rather than a string.
+    await input.fill('');
+    await expect(async () => {
+        expect(await paintedBodyFamilies(page), 'the empty field does not paint an app default').toContain('monospace');
+    }).toPass({ timeout: 2000, intervals: [50] });
+
+    const placeholder = await input.getAttribute('placeholder');
+    expect(placeholder, 'no placeholder').not.toBeNull();
+    expect(familyList(placeholder ?? ''), 'the placeholder describes a family the app never renders')
+        .toEqual(await paintedBodyFamilies(page));
 });
 
 test('should accept custom font family value', async () => {
@@ -79,6 +118,54 @@ test('should load font family from localStorage on reload', async () => {
     await openSettings(page);
 
     await expect(input).toHaveValue(customFont);
+});
+
+test('a family CSS refuses paints the app default, not the proportional UI font', async () => {
+    await openSettings(page);
+    const input = page.getByTestId('font-family-input');
+
+    // Every one of these reaches the same `unset` path: the custom property is
+    // present, so `var(--font-mono)` has no fallback to apply, and the chat
+    // body inherits Tailwind's proportional stack. A monospace IRC client
+    // quietly stops being monospace while Settings still shows what was typed.
+    const refused = ['   ', 'Foo, ', 'inherit', 'var(--x)'];
+    const appDefault = familyList('"Fira Mono", "Consolas", "Monaco", "Courier New", monospace');
+
+    for (const typed of refused) {
+        await input.fill(typed);
+        await expect(async () => {
+            const painted = await paintedBodyFamilies(page);
+            expect(painted, `${JSON.stringify(typed)} reached CSS and the chat lost its monospace font`)
+                .toEqual(appDefault);
+        }).toPass({ timeout: 2000, intervals: [50] });
+
+        // The refusal happens where the value is applied, not in the field:
+        // the user's own text stays visible.
+        await expect(input).toHaveValue(typed);
+    }
+
+    await input.fill('');
+});
+
+test('a family CSS accepts paints that family', async () => {
+    await openSettings(page);
+    const input = page.getByTestId('font-family-input');
+
+    // The other half of the rule: passing a value through is not a guess about
+    // what the user meant, it is what the engine can actually do. `Georgia` was
+    // measured painting Georgia even with no generic fallback in the list.
+    for (const typed of ['Menlo, monospace', 'Georgia']) {
+        await input.fill(typed);
+        await expect(async () => {
+            expect(await paintedBodyFamilies(page), `${JSON.stringify(typed)} did not paint`)
+                .toEqual(familyList(typed));
+        }).toPass({ timeout: 2000, intervals: [50] });
+    }
+
+    await input.fill('');
+    await expect(async () => {
+        expect(await paintedBodyFamilies(page)).toContain('monospace');
+    }).toPass({ timeout: 2000, intervals: [50] });
 });
 
 // --- Font Size Tests ---

@@ -17,6 +17,8 @@
  * and empty, which lands in the same `unset` path.
  */
 
+import { cssPaints } from '#lib/cssValue.ts';
+
 /** The size the app falls back to when the stored value says nothing usable. */
 export const FONT_SIZE_DEFAULT_PX = 14;
 
@@ -39,39 +41,17 @@ export function parseFontSizePx(value: string | null | undefined): number | null
 /**
  * Values the engine accepts but that still hand the size back to the browser.
  *
- * A `var()` in this value can only name a custom property the app never defines,
- * or the very property this value is written into, and a CSS-wide keyword
- * discards the app's size outright. Both were measured in Chromium against the
- * app's own shape — `--font-size` on the root, an inline size on `body`, rows
- * reading `var(--font-size, 14px)`: `var(--x)`, `var(--missing)`,
- * `calc(var(--x))`, `inherit`, `initial`, `unset` and `revert` each keep the
- * root fallback at 14px while the inheriting body sits at the browser's 16px.
- * `CSS.supports` answers `true` for every one of them, so the engine's syntactic
- * answer is not the whole answer and these are refused here by name.
+ * Measured in Chromium against the app's own shape — `--font-size` on the root,
+ * an inline size on `body`, rows reading `var(--font-size, 14px)`: `var(--x)`,
+ * `var(--missing)`, `calc(var(--x))`, `inherit`, `initial`, `unset` and
+ * `revert` each keep the root fallback at 14px while the inheriting body sits
+ * at the browser's 16px, and `CSS.supports` answers `true` for every one of
+ * them. That is why `lib/cssValue.ts` refuses them by name instead of asking
+ * the engine alone, and why a hand-written grammar is not used either: for
+ * `15px`, `15 px`, `1.2em`, `12pt`, `large`, `Georgia`, `Foo, `, empty,
+ * whitespace-only, `calc(10px + 2vw)`, `min(12px, 2vw)` and `15rem`, jsdom and
+ * Chromium return the identical table.
  */
-const CSS_WIDE_KEYWORDS = new Set(['inherit', 'initial', 'unset', 'revert', 'revert-layer']);
-
-/**
- * Whether CSS will paint this value as a size of its own, asked of CSS rather
- * than guessed. `CSS.supports` is the engine's own answer, measured to agree
- * with what the engine then computes: for `15px`, `15 px`, `1.2em`, `12pt`,
- * `large`, `Georgia`, `Foo, `, empty, whitespace-only, `calc(10px + 2vw)`,
- * `min(12px, 2vw)` and `15rem`, jsdom and Chromium return the identical table.
- * A hand-written grammar would have had to guess about `calc()`, keywords like
- * `large`, and units this app never uses; there is no reason to guess when the
- * thing being asked is the thing that decides.
- *
- * An environment with no `CSS.supports` answers *no*: with no engine to ask,
- * nothing can paint a value anyway, so the default is the only honest answer
- * rather than an unchecked pass-through. `+page.svelte` calls this from an
- * `$effect`, which never runs during SSR, so the branch is unreachable there.
- */
-function cssAcceptsFontSize(value: string): boolean {
-    if (typeof CSS === 'undefined' || typeof CSS.supports !== 'function') return false;
-    const lower = value.toLowerCase();
-    if (lower.includes('var(') || CSS_WIDE_KEYWORDS.has(lower)) return false;
-    return CSS.supports('font-size', value);
-}
 
 /**
  * The stored value in a spelling CSS accepts, or the default.
@@ -82,13 +62,15 @@ function cssAcceptsFontSize(value: string): boolean {
  * `large`) is a deliberate choice rather than a malformed one. Everything else —
  * a font family typed into the size field, a half-typed list, whitespace — is a
  * declaration CSS rejects, and letting it through makes the property `unset`,
- * which paints the browser's default rather than this app's default. So the
- * decision belongs here, where the value is read, and not left to the cascade.
+ * which paints the browser's default rather than this app's default. The
+ * decision therefore belongs here, where the value is read, and not left to the
+ * cascade — and "will CSS paint this value?" is asked once, in
+ * `lib/cssValue.ts`, shared with the `fontfamily` setting.
  */
 export function fontSizeCss(value: string | null | undefined): string {
     const px = parseFontSizePx(value);
     if (px !== null) return `${px}px`;
     const trimmed = (value ?? '').trim();
-    if (trimmed === '' || !cssAcceptsFontSize(trimmed)) return FONT_SIZE_DEFAULT_CSS;
+    if (trimmed === '' || !cssPaints('font-size', trimmed)) return FONT_SIZE_DEFAULT_CSS;
     return trimmed;
 }

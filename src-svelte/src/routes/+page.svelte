@@ -1,6 +1,7 @@
 <script lang="ts">
   import '../app.css';
   import type { BufferData } from '#lib/types.ts';
+  import { fontFamilyCss } from '#lib/fontFamily.ts';
   import { fontSizeCss } from '#lib/fontSize.ts';
   import ConnectionForm from '#components/ConnectionForm.svelte';
   import ConnectionBanner from '#components/ConnectionBanner.svelte';
@@ -161,7 +162,19 @@
   });
 
   $effect(() => {
-    document.documentElement.style.setProperty('--font-mono', $settings.fontfamily || 'Fira Mono, Consolas, Monaco, Courier New, monospace');
+    // The family is free text like the size, and `lib/fontFamily.ts` decides
+    // whether the stored value is something CSS will paint. When it is not —
+    // whitespace, a half-typed list, `inherit`, a `var()` — nothing is written
+    // at all, so `@theme`'s own `--font-mono` declaration paints. Writing the
+    // value verbatim was the defect: a present-but-unpaintable value makes the
+    // property `unset` at computed-value time, and the chat inherits the
+    // proportional UI font while Settings still shows what was typed.
+    const fontFamily = fontFamilyCss($settings.fontfamily);
+    if (fontFamily === null) {
+      document.documentElement.style.removeProperty('--font-mono');
+    } else {
+      document.documentElement.style.setProperty('--font-mono', fontFamily);
+    }
     // One value, two writers: the custom property the chat rows read and the
     // body size they inherit are the same fact, so they cannot drift apart.
     const fontSize = fontSizeCss($settings.fontsize);
