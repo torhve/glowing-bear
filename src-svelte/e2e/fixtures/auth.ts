@@ -2,6 +2,7 @@ import type { Browser, BrowserContext, Page, Route } from '@playwright/test';
 import { connectToWeechat, clearSettings, waitForAppReady } from '../helpers/connection';
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
 import { installFocusLog } from '../helpers/focuslog';
+import { installPageActivityRecorder } from '../helpers/appState';
 
 export interface CreateConnectedPageOptions {
   /** Settings to apply after clearing localStorage (e.g. { savepassword: false, enableEmojify: true }) */
@@ -41,6 +42,11 @@ export async function createConnectedPage(
     if (options?.blockCdn !== false) {
         await page.route('**/cdnjs.cloudflare.com/**', (route: Route) => route.abort());
     }
+
+    // Installed before the first navigation: what this recorder is meant to witness — a reload,
+    // an SPA history write, an uncaught error — happens to the page while a helper is mid-action,
+    // and an init script added after this goto would miss the one load that matters.
+    await installPageActivityRecorder(page);
 
     await page.goto('http://localhost:8001/');
     await waitForAppReady(page);

@@ -5,6 +5,7 @@ import { switchToBuffer, switchToBufferMobile, waitForBufferMobile } from '../he
 import { irc } from '../helpers/irc-control';
 import { fixtureCommand } from '../helpers/relay-admin';
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
+import { waitForRow } from '../helpers/waits';
 
 declare global {
     interface Window {
@@ -202,13 +203,26 @@ test('a hotlist label is trimmed where the strip says, and still opens its buffe
     // #glowing-bear. What arrives is a sidebar row, and the sidebar is closed at this viewport, so
     // waitForBufferMobile widens, reads the row, and comes back.
     await waitForBufferMobile(page, LONG_CHANNEL, 20000);
-    await page.evaluate(() => window.__hideBufferListOnMobile?.());
-    await expect(page.getByTestId('buffer-list')).not.toBeAttached();
+
+    // Read the channel before counting anything in it. The fixture bot greets every join —
+    // `welcomeMessage: 'Well met!'` in src-svelte/test/irc-server/IRCServer.ts:50, and visible in
+    // this very channel's WeeChat log (/tmp/gbtest-weechat/logs/irc.gbtest.#gblong….weechatlog) —
+    // so a channel this spec joins arrives carrying a line the spec never sent. Counting unread
+    // without first reading the channel hands that greeting to the probe, and the number then
+    // depends on whether the greeting landed before or after the buffer became active: measured
+    // here, the count read (2), and it passed in a full pass while failing 3/3 in a five-file
+    // subset of the same pass.
+    await switchToBufferMobile(page, LONG_CHANNEL);
+    await waitForRow(page, 'Well met!', 20000);
+
+    // Leave it *read*, and prove the strip holds nothing for it before the probe is sent: without
+    // that baseline, the number asserted below could belong to anything the join delivered.
+    await switchToBufferMobile(page, 'glowing-bear');
+    const item = page.getByTestId('hotlist-buffer-item').filter({ hasText: LONG_CHANNEL.slice(0, 15) });
+    await expect(item).toHaveCount(0, { timeout: 20000 });
 
     // A buffer the chat is not looking at, with unread in it: the case the strip exists for.
     await irc.sendMessage(LONG_CHANNEL, 'trim probe');
-
-    const item = page.getByTestId('hotlist-buffer-item').filter({ hasText: LONG_CHANNEL.slice(0, 15) });
     await expect(item).toHaveCount(1, { timeout: 20000 });
 
     const label = (await item.first().textContent()) ?? '';
@@ -216,8 +230,10 @@ test('a hotlist label is trimmed where the strip says, and still opens its buffe
     expect(label, `the label kept the whole name: ${JSON.stringify(label)}`).not.toContain(LONG_CHANNEL);
     expect(label).toContain('\u2026');
 
-    // Trimming a label may not cost the entry the count it exists to show.
-    await expect(item.first().getByTestId('hotlist-count')).toContainText('(1)');
+    // Trimming a label may not cost the entry the count it exists to show. Exact, because the
+    // arrange above established that this probe is the only unread line the channel holds — a
+    // "contains (1)" would also pass on a (10) and on a count this spec did not cause.
+    await expect(item.first().getByTestId('hotlist-count')).toHaveText('(1)');
 
     // And the short label is still a route to the whole buffer.
     await item.first().click();

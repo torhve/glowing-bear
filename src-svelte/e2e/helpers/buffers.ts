@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect } from "@playwright/test";
+import { readAppState } from "./appState";
 
 // Buffer list displays trimmedName (stripped of #, &, etc.), so match against that.
 function getBufferText(name: string): string {
@@ -47,7 +48,21 @@ export async function switchToBuffer(
         state: "visible",
         timeout: opts?.timeout ?? 10000,
     });
-    await bufferItem.click({ timeout: opts?.timeout ?? 10000 });
+    try {
+        await bufferItem.click({ timeout: opts?.timeout ?? 10000 });
+    } catch (error) {
+        // A click that never lands is usually a symptom the locator cannot see. Say what the app
+        // was actually doing, because "TimeoutError: locator.click" is not the information a
+        // reader needs: an app already sitting on the connect form with an empty sidebar produces
+        // this exact timeout, and reads completely differently.
+        const observed = await readAppState(page).catch(
+            () => "app state unreadable (page navigating or closed)",
+        );
+        throw new Error(
+            `switchToBuffer(${name}): the click on its sidebar row never landed — ${observed}`,
+            { cause: error },
+        );
+    }
     // Check only the channel-name span — topic bar shows "{shortName} - {topicText}" format
     // so matching against the full element text can fail when topic contains similar substrings.
     await expect(page.getByTestId("topic-bar").locator(".topic-channel-name")).toContainText(
