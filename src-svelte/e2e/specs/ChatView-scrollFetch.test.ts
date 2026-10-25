@@ -16,19 +16,15 @@ test.afterAll(async () => {
     await page.close();
 });
 
-// Note: The "Fetch more lines" button requires hdata support (real WeeChat relay).
-// Timeouts no longer set allLinesFetched=true (transient error fix in connectionManager).
-// These tests verify the scroll handler logic and graceful error handling.
-
-test('"Fetch more lines" button not visible with test server (no hdata)', async () => {
-    // Test server doesn't implement hdata protocol, so fetchMoreLines times out.
-    // Timeouts no longer set allLinesFetched=true (fix above).
-    // NOTE: Skipped in serial mode because prior tests may accumulate >210 lines,
-    // which resets allLinesFetched to false in models.ts line truncation logic.
-    test.skip();
-    const fetchBtn = page.getByText('Fetch more lines');
-    await expect(fetchBtn).not.toBeVisible();
-});
+// What this file tests is the scroll handler, not the older-lines fetch itself: that is driven
+// against the real relay in `FreeBufferPaging.test.ts`, `ReadMarker-fetchMoreLines.test.ts`,
+// `ScrollbackCeiling.test.ts` and `ScrollbackDepth.test.ts`, all through `fetch-more-lines`.
+//
+// A test used to sit here — "Fetch more lines button not visible with test server (no hdata)",
+// skipped from its first line with `test.skip()` — whose premise was that the fixture is a stub
+// server without hdata. gbtest is a real WeeChat 4.10.1 relay, and hdata is how every buffer in
+// this suite gets its lines. The button appears whenever a buffer's history is not exhausted,
+// which those four specs assert in both directions.
 
 test('chat container handles scroll event at top without throwing', async () => {
     const chatContainer = page.locator('[data-testid="chat-messages"]');
