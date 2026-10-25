@@ -1,18 +1,25 @@
 import { test, expect } from '@playwright/test';
 import { createConnectedPage } from '../fixtures/auth';
 import { botSay, botPm } from '../helpers/messages';
-import { switchToBuffer } from '../helpers/buffers';
-
+import { switchToBuffer, switchToBufferMobile, waitForBufferMobile } from '../helpers/buffers';
+import { irc } from '../helpers/irc-control';
+import { fixtureCommand } from '../helpers/relay-admin';
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
 
 declare global {
     interface Window {
         __showBufferListOnMobile?: () => void;
+        __hideBufferListOnMobile?: () => void;
     }
 }
 
 let page: import('@playwright/test').Page;
 
+// A channel name long enough to pass the trim point the hotlist strip states for itself
+// (BufferHotlist.svelte, truncateName: past 18 characters, cut to 15 plus an ellipsis). The stamp
+// is inside the first 15 characters, so a leftover from an aborted run cannot be mistaken for this
+// run's buffer, and the `#gb` prefix puts it inside the mask globalTeardown already cleans.
+const LONG_CHANNEL = `#gblong${Date.now()}`;
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
@@ -22,6 +29,10 @@ test.beforeAll(async ({ browser }) => {
 });
 
 test.afterAll(async () => {
+    // The channel this spec joins has to leave the fixture the way it was found. `/part` leaves
+    // the buffer behind on this relay, and a leftover row is unread the next run inherits, so the
+    // only cleanup that has ever worked here is closing by exact name.
+    fixtureCommand(`buffer close irc.gbtest.${LONG_CHANNEL}`);
     await page.close();
 });
 
@@ -168,7 +179,49 @@ test('clicking hotlist item switches buffer', async () => {
     ).toContainText(/g?gbbot\d*/, { timeout: 10000 });
 });
 
-// TODO: fix buffer creation via relay — sendWeechatCommand doesn't reliably create buffers in test environment
-test.skip('long buffer names are truncated', async () => {
-    // Skipped: requires WeeChat to create a new buffer via relay, which is not reliable in the test IRC server setup
+// This one sat skipped behind "fix buffer creation via relay — sendWeechatCommand doesn't reliably
+// create buffers". No spec that needs a second channel has ever created one through the relay: the
+// bot joins the channel and the app's own composer types /join, which is what the capped-badge,
+// scrollback and history specs do. So the trim point the hotlist strip states for itself
+// (truncateName, 18 characters down to 15 plus an ellipsis) is testable, and now is.
+test('a hotlist label is trimmed where the strip says, and still opens its buffer', async () => {
+    // The strip only renders while the buffer list is closed, which on mobile is the state after
+    // a buffer has been chosen. switchToBufferMobile leaves the page exactly there.
+    await switchToBufferMobile(page, 'glowing-bear');
+
+    await irc.botJoin(LONG_CHANNEL);
+
+    // Typed into #glowing-bear, not into core.weechat where the app starts: WeeChat refuses
+    // channel commands in a core buffer.
+    const input = page.getByTestId('message-input');
+    await input.click();
+    await input.fill(`/join ${LONG_CHANNEL}`);
+    await input.press('Enter');
+
+    // Measured here: joining does not move the chat to the buffer it joined — the header stays on
+    // #glowing-bear. What arrives is a sidebar row, and the sidebar is closed at this viewport, so
+    // waitForBufferMobile widens, reads the row, and comes back.
+    await waitForBufferMobile(page, LONG_CHANNEL, 20000);
+    await page.evaluate(() => window.__hideBufferListOnMobile?.());
+    await expect(page.getByTestId('buffer-list')).not.toBeAttached();
+
+    // A buffer the chat is not looking at, with unread in it: the case the strip exists for.
+    await irc.sendMessage(LONG_CHANNEL, 'trim probe');
+
+    const item = page.getByTestId('hotlist-buffer-item').filter({ hasText: LONG_CHANNEL.slice(0, 15) });
+    await expect(item).toHaveCount(1, { timeout: 20000 });
+
+    const label = (await item.first().textContent()) ?? '';
+    expect(label).toContain(LONG_CHANNEL.slice(0, 15));
+    expect(label, `the label kept the whole name: ${JSON.stringify(label)}`).not.toContain(LONG_CHANNEL);
+    expect(label).toContain('\u2026');
+
+    // Trimming a label may not cost the entry the count it exists to show.
+    await expect(item.first().getByTestId('hotlist-count')).toContainText('(1)');
+
+    // And the short label is still a route to the whole buffer.
+    await item.first().click();
+    await expect(
+        page.getByTestId('topic-bar').locator('.topic-channel-name'),
+    ).toContainText(LONG_CHANNEL);
 });
