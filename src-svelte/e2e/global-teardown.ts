@@ -12,7 +12,7 @@ import { closeTestBuffers, relayBufferNames } from './helpers/relay-admin';
  * buffers — `#glowing-bear`, the `gbtest` server, `gbbot2`, `relay.relay.list` — do
  * not match. */
 const TEST_BUFFER_PREFIXES = [
-    'irc.gbtest.#gb',           // #gb-idle-, #gbmshallow/#gbmcapped, #gbhist-, #gb-smsg-, …
+    'irc.gbtest.#gb',           // #gb-idle-, #gbown…, #gbmshallow/#gbmcapped, #gbhist-, #gb-smsg-, …
     'irc.gbtest.#core-clear-probe',
     'exec.exec.',               // buffers left by exec-based specs
 ];
