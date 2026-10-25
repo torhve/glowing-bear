@@ -1,211 +1,192 @@
 import { test, expect } from '@playwright/test';
 import { createConnectedPage } from '../fixtures/auth';
-import { switchToBuffer, closeMobileOverlay } from '../helpers/buffers';
+import {
+    switchToBuffer,
+    closeMobileOverlay,
+    bufferItemForName,
+    waitForBuffer,
+} from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
-
+import { fixtureCommand } from '../helpers/relay-admin';
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
+import { waitForBotNickApplied, waitForRow } from '../helpers/waits';
 
 let page: import('@playwright/test').Page;
 
 test.describe.configure({ mode: 'serial' });
 
+/**
+ * The PM buffer this spec asserts on is named after the bot's current nick — WeeChat calls the
+ * query buffer `irc.gbtest.<nick>` — and two other specs in this pass rename that bot
+ * (`BufferLineRow.test.ts`, `Irc-integration.test.ts`). Without pinning the nick here the spec
+ * would assert against whichever nick the previous file happened to leave behind.
+ */
+const BOT_NICK = 'gbbot2';
+const PM_BUFFER = `irc.gbtest.${BOT_NICK}`;
+
 test.beforeAll(async ({ browser }) => {
     page = await createConnectedPage(browser);
     setupEffectOrphanFilter(page);
+    await switchToBuffer(page, '#glowing-bear');
+    await irc.botNick(BOT_NICK);
+    await waitForBotNickApplied(page, BOT_NICK, '#glowing-bear', 'pm-nick-pin');
 });
 
 test.afterAll(async () => {
+    // Put the fixture back the way the rest of the pass expects it. This spec closes the query
+    // buffer on purpose, and a PM from the bot brings it back — measured here: the row is gone
+    // after the close and reappears on the next PM. Waiting for it makes the restore a check
+    // rather than a hope.
+    await irc.sendPm('testuser', `pm-restore-${Date.now()}`);
+    await waitForBuffer(page, BOT_NICK, 20000);
     await page.close();
 });
 
 test.beforeEach(async () => {
     setupEffectOrphanFilter(page);
-    // Close any mobile overlay that might block interactions
     await closeMobileOverlay(page);
-    // Switch to a known channel buffer to establish clean state
     await switchToBuffer(page, '#glowing-bear');
 });
 
-/**
- * Send a unique PM message and wait for relay propagation.
- * Uses timestamp-based unique text so cross-test pollution doesn't interfere.
- */
-async function sendUniquePm() {
-    const msg = `pm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    await irc.sendPm('testuser', msg);
-    // Callers poll for the observable effect (buffer item / message row / badge),
-    // so no fixed relay-propagation sleep is needed here.
-    return msg;
+/** Whether the sidebar currently has a row named exactly the bot's nick. */
+function pmRowPresent(): Promise<boolean> {
+    return page.evaluate((nick) => {
+        const names = [...document.querySelectorAll('[data-testid="buffer-item"] .buffer-name')];
+        return names.some((el) => (el.textContent ?? '').trim() === nick);
+    }, BOT_NICK);
 }
 
 /**
- * Find a PM buffer item in the buffer list.
- * PM buffers from gbtest show as "gbbot" or "gbbot2" optionally with number suffix.
- * Excludes system buffers (relay.list, weechat, gbtest) and channels (#, &).
+ * The unread number the sidebar shows on the PM row: 0 when the row carries no badge, and -1
+ * when the row is gone, so a missing buffer reads as a failure naming itself instead of a
+ * timeout. Polling this exact number is what makes a badge assertion attributable: "at least
+ * one" is also satisfied by a line that was still travelling when the baseline was taken.
  */
-function findPmBufferItem() {
-    const items = page.getByTestId('buffer-item');
-    return {
-        items,
-        async getAll() {
-            const count = await items.count();
-            const results: Array<{
-                locator: import('@playwright/test').Locator;
-                name: string;
-            }> = [];
-            for (let i = 0; i < count; i++) {
-                const text = await items.nth(i).textContent();
-                const trimmed = text?.trim();
-                // Match gbbot, gbbot2, etc. with optional trailing buffer number
-                if (trimmed && /^g?gbbot\d*(\s+\d+)?$/.test(trimmed)) {
-                    results.push({ locator: items.nth(i), name: trimmed });
-                }
-            }
-            return results;
-        },
-    };
-}
-
-test('creates buffer on PM from bot', async () => {
-    await sendUniquePm();
-
-    // Wait for the PM buffer item to appear in the buffer list
-    await expect(async () => {
-        const pms = await findPmBufferItem().getAll();
-        expect(pms.length).toBeGreaterThan(0);
-        await expect(pms[0].locator).toBeVisible();
-    }).toPass({ timeout: 30000 });
-});
-
-test('switches to PM buffer and shows message', async () => {
-    const msg = await sendUniquePm();
-
-    // Try each candidate PM buffer until we find one containing our message.
-    // Bot nick may vary across test runs due to cross-test pollution. The whole
-    // scan is polled so we also wait for the PM buffer to appear.
-    await expect(async () => {
-        for (const pm of await findPmBufferItem().getAll()) {
-            await pm.locator.click({ timeout: 5000 });
-            const msgCell = page.getByRole('cell', { name: msg }).first();
-            if (await msgCell.isVisible({ timeout: 3000 }).catch(() => false)) {
-                return;
-            }
-        }
-        throw new Error('No PM buffer contains the message yet');
-    }).toPass({ timeout: 30000 });
-});
-
-test('badge renders on inactive PM buffer', async () => {
-    // Send a PM while on channel — badge should appear on PM buffer item.
-    // Note: unread count rendering depends on complex internal state (sync phases,
-    // hotlist handling, notify settings). This test verifies the badge eventually
-    // appears; if it doesn't within the timeout, we skip rather than fail, since
-    // the core functionality (message delivery) is verified by other tests.
-    await sendUniquePm();
-
-    await expect(async () => {
-        for (const pm of await findPmBufferItem().getAll()) {
-            const badge = pm.locator.getByTestId('unread-badge');
-            try {
-                await expect(badge).toBeVisible({ timeout: 3000 });
-                return;
-            } catch {
-                continue;
-            }
-        }
-        throw new Error('No badge found');
-    })
-        .toPass({ timeout: 15000 })
-        .catch(() => {
-            // Badge not rendering — likely due to internal state issues.
-            // Skip this test since message delivery is verified elsewhere.
-            test.skip();
+function pmUnread(): Promise<number> {
+    return page.evaluate((nick) => {
+        const rows = [...document.querySelectorAll('[data-testid="buffer-item"]')];
+        const row = rows.find((el) => {
+            const name = el.querySelector('.buffer-name');
+            return (name?.textContent ?? '').trim() === nick;
         });
-});
+        if (!row) return -1;
+        const badge = row.querySelector('[data-testid="unread-badge"]');
+        const value = badge ? Number.parseInt(badge.textContent ?? '', 10) : 0;
+        return Number.isNaN(value) ? 0 : value;
+    }, BOT_NICK);
+}
 
-test('unread clears on buffer switch', async () => {
-    const msg = await sendUniquePm();
+async function expectPmUnread(value: number): Promise<void> {
+    await expect.poll(pmUnread, { timeout: 15000, intervals: [250] }).toBe(value);
+}
 
-    // Find the correct PM buffer by trying each candidate (polled until found)
-    await expect(async () => {
-        for (const pm of await findPmBufferItem().getAll()) {
-            await pm.locator.click({ timeout: 5000 });
-            if (
-                await page
-                    .getByRole('cell', { name: msg })
-                    .first()
-                    .isVisible({ timeout: 3000 })
-                    .catch(() => false)
-            ) {
-                return;
-            }
-        }
-        throw new Error('No PM buffer contains the message yet');
-    }).toPass({ timeout: 30000 });
+/** A PM sent from the fixture bot to the app's own user, with text unique to this call. */
+async function sendUniquePm(): Promise<string> {
+    const text = `pm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    await irc.sendPm('testuser', text);
+    return text;
+}
 
-    // Switch back to channel — this should clear unread counts on PM buffer
+/** Open the PM buffer and wait until the app is showing it. */
+async function openPmBuffer(): Promise<void> {
+    await bufferItemForName(page, BOT_NICK).first().click();
+    await expect(page.locator('.topic-channel-name').first()).toHaveText(BOT_NICK);
+}
+
+/**
+ * Arrange the buffer this spec asserts on, and arrange it *delivered*: send a PM, wait for the
+ * query buffer to exist, open it, and wait until that PM's line is on screen.
+ *
+ * Measured here: the sidebar row and the chat line are not simultaneous — opening the buffer as
+ * soon as the row appears still reported the line as not rendered. Waiting for the row alone
+ * therefore leaves a PM in flight, and a line landing after a "no unread" baseline re-creates
+ * the badge a later assertion is trying to attribute to its own message. That is how this file's
+ * badge spec passed for a while without sending the message it claimed to test.
+ *
+ * Creating the buffer by sending to it is also what replaces the two `test.skip()` guards
+ * removed from this file: they skipped whenever no earlier run had happened to leave a PM buffer
+ * behind, so the spec ran on a warm fixture and silently did nothing on a cold one. A closed
+ * query buffer is re-created by the next PM (measured).
+ */
+/** Send a PM and wait for the query buffer row, leaving the chat where it was. */
+async function sendPmUntilBufferExists(): Promise<string> {
+    const text = await sendUniquePm();
+    await waitForBuffer(page, BOT_NICK, 20000);
+    return text;
+}
+
+async function ensurePmBuffer(): Promise<string> {
+    const text = await sendPmUntilBufferExists();
+    await openPmBuffer();
+    await waitForRow(page, text, 15000);
+    return text;
+}
+
+/**
+ * Move the chat back to the channel with the PM buffer read and showing no badge, so the only
+ * thing that can put a number on that row afterwards is a message sent after this point.
+ */
+async function parkOnChannelWithCleanBadge(): Promise<void> {
     await switchToBuffer(page, '#glowing-bear');
+    await expectPmUnread(0);
+}
 
-    // Send another unique PM — this should create a new unread on the PM buffer
-    const msg2 = await sendUniquePm();
+test('a PM from the bot creates the query buffer the message lands in', async () => {
+    // Arrange the absence first: without this, "creates" would be true only because the buffer
+    // happened to already exist.
+    fixtureCommand(`buffer close ${PM_BUFFER}`);
+    await expect.poll(pmRowPresent, { timeout: 15000, intervals: [250] }).toBe(false);
 
-    // Find the correct PM buffer again and verify the new message appears
-    await expect(async () => {
-        for (const pm of await findPmBufferItem().getAll()) {
-            await pm.locator.click({ timeout: 5000 });
-            if (
-                await page
-                    .getByRole('cell', { name: msg2 })
-                    .first()
-                    .isVisible({ timeout: 3000 })
-                    .catch(() => false)
-            ) {
-                return;
-            }
-        }
-        throw new Error('No PM buffer contains the new message yet');
-    }).toPass({ timeout: 30000 });
+    const text = await sendPmUntilBufferExists();
+    await openPmBuffer();
+    await waitForRow(page, text, 15000);
 });
 
-test('closes PM buffer cleanly', async () => {
-    // Try to find any existing gbbot PM buffer from previous tests
-    const pms = await findPmBufferItem().getAll();
-    if (pms.length === 0) {
-        test.skip();
-        return;
-    }
-    // Use first PM buffer found
-    const pmName = pms[0].name;
+test('clicking the PM row switches the chat to that buffer', async () => {
+    // The chat sits on the channel (beforeEach) and the buffer is only known to exist; the row
+    // click is the one thing that can move the chat, so the message has to turn up in the buffer
+    // the topic bar names afterwards.
+    const text = await sendPmUntilBufferExists();
+    await openPmBuffer();
+    await waitForRow(page, text, 15000);
+    await expect(page.locator('.topic-channel-name').first()).toContainText(BOT_NICK);
+});
 
-    // Find the buffer item by its display name (more reliable than stale index)
-    const bufferItems = page.getByTestId('buffer-item');
-    const itemCount = await bufferItems.count();
-    let targetItem: import('@playwright/test').Locator | null = null;
-    for (let i = 0; i < itemCount; i++) {
-        const text = await bufferItems.nth(i).textContent();
-        if (text?.trim() === pmName) {
-            targetItem = bufferItems.nth(i);
-            break;
-        }
-    }
-    if (!targetItem) {
-        test.skip();
-        return;
-    }
+test('an unread badge appears on a PM buffer the chat is not looking at', async () => {
+    await ensurePmBuffer();
+    await parkOnChannelWithCleanBadge();
 
-    await targetItem.click({ timeout: 10000 });
-    await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 5000 });
+    // The chat is on the channel and the row reads zero: this PM is the only candidate.
+    await sendUniquePm();
+    await expectPmUnread(1);
+});
 
-    // Click the close button in the topic bar.
-    // PM buffers may not actually close in WeeChat but the click shouldn't crash.
-    const closeBtn = page
-        .getByTestId('topic-bar-container')
-        .getByTestId('close-buffer');
-    const closeVisible = await closeBtn.isVisible().catch(() => false);
-    if (closeVisible) {
-        await closeBtn.click();
-    }
+test('switching to the PM buffer clears its unread, and a later PM starts a new count', async () => {
+    await ensurePmBuffer();
+    await parkOnChannelWithCleanBadge();
 
-    // Chat view should still be visible (app didn't crash)
+    await sendUniquePm();
+    await expectPmUnread(1);
+
+    // Reading the buffer is what removes the badge...
+    await openPmBuffer();
+    await expectPmUnread(0);
+
+    // ...and the buffer counts unread again afterwards instead of staying permanently read.
+    await switchToBuffer(page, '#glowing-bear');
+    await sendUniquePm();
+    await expectPmUnread(1);
+});
+
+test('closing the PM buffer from the topic bar removes it and leaves the app working', async () => {
+    await ensurePmBuffer();
+
+    const closeBtn = page.getByTestId('topic-bar-container').getByTestId('close-buffer');
+    await expect(closeBtn).toBeVisible();
+    await closeBtn.click();
+
+    // Measured on this relay a query buffer really does close: the row goes away and stays away,
+    // and the chat keeps working instead of pointing at a closed buffer.
+    await expect.poll(pmRowPresent, { timeout: 15000, intervals: [250] }).toBe(false);
     await expect(page.getByTestId('chat-view')).toBeVisible();
 });

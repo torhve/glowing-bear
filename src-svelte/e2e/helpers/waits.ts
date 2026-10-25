@@ -1,5 +1,5 @@
 import { Page, expect } from '@playwright/test';
-import { irc } from './irc-control';
+import { irc, sendSequence } from './irc-control';
 import { switchToBuffer } from './buffers';
 
 /**
@@ -219,4 +219,115 @@ export async function waitForBotNickApplied(page: Page, nick: string, channel: s
             { timeout, intervals: [250] },
         )
         .toBe('applied');
+}
+
+/**
+ * Make the chat container scrollable by planting lines in `channel`, and fail if planting
+ * cannot get it there.
+ *
+ * Three scroll specs park the viewport on purpose and then assert the app leaves it where they
+ * put it. That needs a container with a real scroll range, and all three used the same shape to
+ * get there: send a fixed number of pad lines, measure, and `test.skip()` when the range came up
+ * short — the suite quietly deleting its own test whenever the shared channel happened to be
+ * thin (plan §22). Planting to a target is the same work with the opposite failure mode: the
+ * spec arranges the condition it asserts on, and if the arrangement fails it fails, naming what
+ * it measured.
+ *
+ * `minExtra` (400 px) comes from the specs' own arithmetic, not from taste. They park at 40 % of
+ * the scroll range and then assert they are still more than 100 px from the bottom, so a range
+ * near 100 px cannot satisfy the test that asked for one.
+ *
+ * Measured on gbtest at the suite's Desktop Chrome viewport (1280×720): the chat container is
+ * 598 px tall, a fully fetched buffer renders 100 rows with 1290 px of range, 30 planted lines
+ * add about 500 px, and rendering stops past 200 rows (2991 px of range there). 400 px therefore
+ * needs roughly 23 planted rows from an empty buffer and is reachable from any starting state,
+ * and `maxLines` sits just past the 200-row ceiling that measurement found: a chat that stops
+ * growing before the target is a harness failure, said out loud instead of skipped.
+ */
+export interface ScrollableChat {
+    planted: number;
+    rows: number;
+    extra: number;
+    scrollHeight: number;
+    clientHeight: number;
+}
+
+interface ChatMetrics {
+    rows: number;
+    extra: number;
+    scrollHeight: number;
+    clientHeight: number;
+}
+
+/** The chat container's scroll range and rendered-row count, read in one evaluation. */
+function chatMetrics(page: Page): Promise<ChatMetrics | null> {
+    return page.evaluate(() => {
+        const el = document.querySelector('[data-testid="chat-messages"]') as HTMLElement | null;
+        if (!el) return null;
+        return {
+            rows: document.querySelectorAll('[data-testid="bufferline-row"]').length,
+            scrollHeight: el.scrollHeight,
+            clientHeight: el.clientHeight,
+            extra: el.scrollHeight - el.clientHeight,
+        };
+    });
+}
+
+export async function ensureScrollableChat(
+    page: Page,
+    channel: string,
+    opts: { minExtra?: number; batch?: number; maxLines?: number } = {},
+): Promise<ScrollableChat> {
+    const minExtra = opts.minExtra ?? 400;
+    const batch = opts.batch ?? 30;
+    const maxLines = opts.maxLines ?? 240;
+
+    const start = await chatMetrics(page);
+    if (!start) {
+        throw new Error('ensureScrollableChat: no [data-testid="chat-messages"] container to make scrollable');
+    }
+
+    let seen = start;
+    let planted = 0;
+    while (seen.extra < minExtra && planted < maxLines) {
+        const size = Math.min(batch, maxLines - planted);
+        const stamp = Date.now();
+        const texts = Array.from({ length: size }, (_, i) => `scroll-pad-${stamp}-${planted + i}`);
+        await sendSequence(channel, texts);
+        planted += size;
+        // A batch counts as landed when its last line is on screen. Measuring before that reads
+        // a container that has not grown yet and would plant again for nothing.
+        await waitForRow(page, texts[size - 1], 20000);
+        const next = await chatMetrics(page);
+        if (!next) {
+            throw new Error('ensureScrollableChat: the chat container disappeared while planting');
+        }
+        if (next.rows <= seen.rows) {
+            throw new Error(
+                `planting ${planted} lines into ${channel} stopped growing the chat: rows ${seen.rows} -> ` +
+                    `${next.rows}, ${next.extra}px of scroll range (needed ${minExtra}px). A rendered-row ceiling ` +
+                    `that leaves no scroll range is a fixture failure, not a reason to skip the test.`,
+            );
+        }
+        seen = next;
+    }
+
+    if (seen.extra < minExtra) {
+        throw new Error(
+            `the chat in ${channel} never became scrollable: planted ${planted} lines, ${seen.rows} rows rendered, ` +
+                `scrollHeight ${seen.scrollHeight} vs clientHeight ${seen.clientHeight} = ${seen.extra}px of range ` +
+                `(needed ${minExtra}px)`,
+        );
+    }
+
+    // Every caller parks the viewport immediately after this call, and a follow pin still
+    // running would overwrite that park.
+    await waitForChatSettled(page);
+    return {
+        planted,
+        rows: seen.rows,
+        extra: seen.extra,
+        scrollHeight: seen.scrollHeight,
+        clientHeight: seen.clientHeight,
+    };
 }

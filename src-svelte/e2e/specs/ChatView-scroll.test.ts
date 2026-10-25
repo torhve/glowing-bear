@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { createConnectedPage } from "../fixtures/auth";
 import { waitForBuffer, switchToBuffer } from "../helpers/buffers";
 import { irc } from "../helpers/irc-control";
-import { waitForChatSettled, waitForUnreadAtLeast } from "../helpers/waits";
+import { ensureScrollableChat, waitForChatSettled, waitForUnreadAtLeast } from "../helpers/waits";
 
 let page: import("@playwright/test").Page;
 
@@ -339,30 +339,13 @@ test("should NOT auto-scroll when user scrolled up in active buffer and messages
     await switchToBuffer(page, "#glowing-bear");
     await waitForScrollSettled();
 
-    // Send enough messages to ensure scrollable content.
-    for (let i = 0; i < 20; i++) {
-        await irc.sendMessage("#glowing-bear", `scroll-pad-${Date.now()}-${i}`);
-    }
-    // Wait for all lines to render in DOM
-    await page.waitForFunction(
-        () => {
-            const rows = document.querySelectorAll('[data-testid="bufferline-row"]');
-            return rows.length >= 20;
-        },
-        { timeout: 15000 },
-    );
+    // Arrange the precondition this test asserts on instead of hoping the shared channel is
+    // already long enough: plant lines until the container has a real scroll range, and let a
+    // planting that cannot reach the target fail the spec. The same call closes ChatView's
+    // follow-settle window, which is what makes the park below register as a deliberate
+    // scroll-away rather than as noise the follow loop should overwrite.
+    await ensureScrollableChat(page, "#glowing-bear");
     await waitForScrollSettled(8000);
-
-    // Verify the chat container is actually scrollable before proceeding.
-    // Also ensures ChatView's follow-settle window has expired, so the park below is
-    // registered as a deliberate scroll-away.
-    await waitForChatSettled(page);
-    const state = await getChatScrollState();
-    if (!state || state.scrollHeight - state.clientHeight < 100) {
-        // Not enough content to scroll — skip rather than fail
-        test.skip();
-        return;
-    }
 
     // Scroll up to ~60% from top (intentionally away from bottom)
     const scrollBefore = await page.evaluate(() => {
@@ -460,29 +443,12 @@ test("should NOT auto-scroll when scrolled up slightly and messages arrive on ac
     await switchToBuffer(page, "#glowing-bear");
     await waitForScrollSettled();
 
-    // Send enough messages to ensure scrollable content and a visible readmarker.
-    for (let i = 0; i < 30; i++) {
-        await irc.sendMessage("#glowing-bear", `scroll-pad-${Date.now()}-${i}`);
-    }
-    await page.waitForFunction(
-        () => {
-            const rows = document.querySelectorAll('[data-testid="bufferline-row"]');
-            return rows.length >= 30;
-        },
-        { timeout: 15000 },
-    );
-    // Wait for all messages to render and scroll to stabilize at bottom.
-    // After sending 30 rapid messages, the container needs extra time to
-    // finish rendering and scroll-into-view in the full suite where state
-    // accumulates across tests.
+    // Same arrangement as the test above: plant to a scroll range this spec can park inside,
+    // instead of sending a fixed pad count and skipping when it did not produce one.
+    await ensureScrollableChat(page, "#glowing-bear");
+    // After a planting batch the container needs extra time to finish rendering and settle at
+    // the bottom in the full suite, where state accumulates across tests.
     await waitForScrollSettled(20000);
-
-    // Verify the chat container is actually scrollable.
-    const state = await getChatScrollState();
-    if (!state || state.scrollHeight - state.clientHeight < 100) {
-        test.skip();
-        return;
-    }
 
     // The follow pin loop and its settle window must be over after the flood so the
     // park below registers as a deliberate scroll-away instead of being overwritten.

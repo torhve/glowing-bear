@@ -3,7 +3,7 @@ import { createConnectedPage } from "../fixtures/auth";
 import { waitForBuffer, switchToBuffer } from "../helpers/buffers";
 import { irc } from "../helpers/irc-control";
 import { setupEffectOrphanFilter } from "../helpers/pageerror";
-import { waitForChatSettled } from "../helpers/waits";
+import { ensureScrollableChat, waitForChatSettled } from "../helpers/waits";
 
 let page: import("@playwright/test").Page;
 
@@ -191,25 +191,11 @@ test("long wrapping message should NOT auto-scroll when user scrolled up", async
     await switchToBuffer(page, "#glowing-bear");
     await waitForScrollSettled();
 
-    // Send enough padding messages first to ensure the container is scrollable
-    for (let i = 0; i < 15; i++) {
-        await irc.sendMessage("#glowing-bear", `scroll-pad-${Date.now()}-${i}`);
-    }
-    await page.waitForFunction(
-        () => {
-            const rows = document.querySelectorAll('[data-testid="bufferline-row"]');
-            return rows.length >= 15;
-        },
-        { timeout: 15000 },
-    );
-    await waitForChatSettled(page);
+    // Plant to a scroll range this spec can park inside. The guard removed here sent 15 pad
+    // lines, measured the container, and skipped the test when they had not produced one — which
+    // reports a fixture state as if it were a product fact.
+    await ensureScrollableChat(page, "#glowing-bear");
     await waitForScrollSettled(10000);
-
-    const state = await getChatScrollState();
-    if (!state || state.scrollHeight - state.clientHeight < 100) {
-        test.skip();
-        return;
-    }
 
     // Scroll up to ~60% from top (clearly not at bottom)
     const scrollBefore = await page.evaluate(() => {
