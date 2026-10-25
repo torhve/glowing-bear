@@ -2,17 +2,24 @@ import { test, expect } from "@playwright/test";
 import { createConnectedPage } from "../fixtures/auth";
 import { waitForBuffer, switchToBuffer } from "../helpers/buffers";
 import { irc } from "../helpers/irc-control";
+import { closeSpecChatChannel, openSpecChatChannel } from "../helpers/spec-chat-channel";
 import { ensureScrollableChat, waitForChatSettled, waitForUnreadAtLeast } from "../helpers/waits";
 
 let page: import("@playwright/test").Page;
+// A channel this spec owns: the scroll tests plant into here instead of into #glowing-bear, which
+// every other serial spec counts rows in.
+let ownedChannel: string;
 
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async ({ browser }) => {
     page = await createConnectedPage(browser);
+    ownedChannel = await openSpecChatChannel(page, "scroll");
 });
 
 test.afterAll(async () => {
+    // Leaving the channel is not cleanup on this relay: only an exact buffer close removes it.
+    if (ownedChannel) closeSpecChatChannel(ownedChannel);
     if (page) await page.close();
 });
 
@@ -335,16 +342,17 @@ test("should scroll down when user types and sends a message while at bottom", a
 test("should NOT auto-scroll when user scrolled up in active buffer and messages arrive", async () => {
     // Regression test: incoming messages should not scroll the view to bottom
     // when the user has intentionally scrolled up to read older messages.
-    await waitForBuffer(page, "#glowing-bear", 15000);
-    await switchToBuffer(page, "#glowing-bear");
+    // The channel this spec joined in beforeAll and closes in afterAll: the depth planted below is
+    // depth no other spec inherits, and the range parked in is one this test arranged itself.
+    await waitForBuffer(page, ownedChannel, 15000);
+    await switchToBuffer(page, ownedChannel);
     await waitForScrollSettled();
 
-    // Arrange the precondition this test asserts on instead of hoping the shared channel is
-    // already long enough: plant lines until the container has a real scroll range, and let a
-    // planting that cannot reach the target fail the spec. The same call closes ChatView's
-    // follow-settle window, which is what makes the park below register as a deliberate
-    // scroll-away rather than as noise the follow loop should overwrite.
-    await ensureScrollableChat(page, "#glowing-bear");
+    // Plant lines until the container has a real scroll range, and let a planting that cannot reach
+    // the target fail the spec. The same call closes ChatView's follow-settle window, which is what
+    // makes the park below register as a deliberate scroll-away rather than as noise the follow loop
+    // should overwrite.
+    await ensureScrollableChat(page, ownedChannel);
     await waitForScrollSettled(8000);
 
     // Scroll up to ~60% from top (intentionally away from bottom)
@@ -375,8 +383,8 @@ test("should NOT auto-scroll when user scrolled up in active buffer and messages
     // Send new messages while user is scrolled up
     const msg1 = "scrolled-up-test-1-" + Date.now();
     const msg2 = "scrolled-up-test-2-" + Date.now();
-    await irc.sendMessage("#glowing-bear", msg1);
-    await irc.sendMessage("#glowing-bear", msg2);
+    await irc.sendMessage(ownedChannel, msg1);
+    await irc.sendMessage(ownedChannel, msg2);
 
     // Wait for the messages to render in the DOM
     await expect(
@@ -439,13 +447,14 @@ test("should NOT auto-scroll when user scrolled up in active buffer and messages
 test("should NOT auto-scroll when scrolled up slightly and messages arrive on active buffer", async () => {
     // Regression test for bug: user has readmarker, scrolled down past it (to read recent content),
     // new message arrives -> old code scrolled to readmarker; fixed code does nothing.
-    await waitForBuffer(page, "#glowing-bear", 15000);
-    await switchToBuffer(page, "#glowing-bear");
+    // Same arrangement as the test above, on the same channel this spec owns.
+    await waitForBuffer(page, ownedChannel, 15000);
+    await switchToBuffer(page, ownedChannel);
     await waitForScrollSettled();
 
-    // Same arrangement as the test above: plant to a scroll range this spec can park inside,
-    // instead of sending a fixed pad count and skipping when it did not produce one.
-    await ensureScrollableChat(page, "#glowing-bear");
+    // Plant to a scroll range this spec can park inside, instead of sending a fixed pad count and
+    // skipping when it did not produce one.
+    await ensureScrollableChat(page, ownedChannel);
     // After a planting batch the container needs extra time to finish rendering and settle at
     // the bottom in the full suite, where state accumulates across tests.
     await waitForScrollSettled(20000);
@@ -454,17 +463,20 @@ test("should NOT auto-scroll when scrolled up slightly and messages arrive on ac
     // park below registers as a deliberate scroll-away instead of being overwritten.
     await waitForChatSettled(page);
 
-    // Scroll up just enough to hide the readmarker (~2 lines worth, ~40px).
-    // This simulates: user was at bottom, scrolled down to read recent messages,
-    // readmarker is now off-screen below.
+    // Park part-way up, still reading recent content: the unread line lands at the very end of
+    // the buffer, so the readmarker stays below the viewport the way it does for a reader who
+    // scrolled down to the tail and stopped short of it.
     const scrollBefore = await page.evaluate(() => {
         const container = document.querySelector(
             '[data-testid="chat-messages"]',
         ) as HTMLElement;
         if (!container) return null;
         const maxScrollTop = container.scrollHeight - container.clientHeight;
-        // Position ~40px above bottom (clearly not at bottom, but close)
-        const targetScrollTop = Math.max(0, maxScrollTop - 40);
+        // Park 200px above the bottom, because the park has to be wider than the shift the test
+        // tolerates. At this distance the held view stayed inside 80px and a forced follow moved
+        // the reader 216px, so the two states land on opposite sides of the line; a park nearer
+        // than the tolerance cannot separate them, which is what a ~40px park used to mean here.
+        const targetScrollTop = Math.max(0, maxScrollTop - 200);
         container.scrollTop = targetScrollTop;
         container.dispatchEvent(new Event("scroll", { bubbles: true }));
         return {
@@ -479,11 +491,11 @@ test("should NOT auto-scroll when scrolled up slightly and messages arrive on ac
             scrollBefore!.scrollHeight -
             scrollBefore!.clientHeight -
             scrollBefore!.scrollTop;
-    expect(diffFromBottom).toBeGreaterThan(20);
+    expect(diffFromBottom).toBeGreaterThan(150);
 
     // Send new messages while user is scrolled up slightly
     const msg1 = "scrolled-slightly-test-1-" + Date.now();
-    await irc.sendMessage("#glowing-bear", msg1);
+    await irc.sendMessage(ownedChannel, msg1);
 
     // Wait for the message to render in the DOM
     await expect(
@@ -508,10 +520,11 @@ test("should NOT auto-scroll when scrolled up slightly and messages arrive on ac
     const scrollShift = Math.abs(
             scrollAfter!.scrollTop - scrollBefore!.scrollTop,
     );
-        // View should not have scrolled significantly — within 80px of original position.
-        // (scrollHeight grows by ~20px per new line; scrollTop naturally shifts by that amount.
-        // With accumulated content from prior serial tests, layout recalculation can cause
-        // larger shifts due to cascading effects.)
+    // The view should not have moved: 80px of tolerance against a 200px park. Trimming a front
+    // row at the line cap re-anchors the browser's scroll position by about one row height
+    // (~50px measured), and scrollHeight grows ~20px per new line, so a held view is not exactly
+    // 0. Anything that drags this reader to the tail, or jumps them to the readmarker, moves
+    // hundreds of pixels and cannot hide inside that band.
     expect(scrollShift).toBeLessThan(80);
 
     // Readmarker should be visible since there are unread messages

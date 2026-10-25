@@ -1,20 +1,27 @@
 import { test, expect } from "@playwright/test";
 import { createConnectedPage } from "../fixtures/auth";
-import { waitForBuffer, switchToBuffer } from "../helpers/buffers";
+import { switchToBuffer } from "../helpers/buffers";
 import { irc } from "../helpers/irc-control";
 import { setupEffectOrphanFilter } from "../helpers/pageerror";
 import { ensureScrollableChat, waitForChatSettled } from "../helpers/waits";
+import { closeSpecChatChannel, openSpecChatChannel } from "../helpers/spec-chat-channel";
 
 let page: import("@playwright/test").Page;
+// A channel this spec owns: the planting below is what makes the chat scrollable here, and doing it
+// in #glowing-bear would hand that depth to every later spec in the same worker.
+let ownedChannel: string;
 
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async ({ browser }) => {
     page = await createConnectedPage(browser);
     setupEffectOrphanFilter(page);
+    ownedChannel = await openSpecChatChannel(page, "longline");
 });
 
 test.afterAll(async () => {
+    // Leaving the channel is not cleanup on this relay: only an exact buffer close removes it.
+    if (ownedChannel) closeSpecChatChannel(ownedChannel);
     if (page) await page.close();
 });
 
@@ -188,13 +195,15 @@ test("long wrapping message should still trigger scroll follow when at bottom", 
 test("long wrapping message should NOT auto-scroll when user scrolled up", async () => {
     // When the user has intentionally scrolled up to read older messages,
     // a long wrapping message arriving should NOT cause the view to scroll.
-    await switchToBuffer(page, "#glowing-bear");
+    // The channel this spec joined in beforeAll and closes in afterAll: the depth planted here is
+    // depth no other spec inherits, and the scroll range parked in is one this test arranged itself.
+    await switchToBuffer(page, ownedChannel);
     await waitForScrollSettled();
 
-    // Plant to a scroll range this spec can park inside. The guard removed here sent 15 pad
-    // lines, measured the container, and skipped the test when they had not produced one — which
-    // reports a fixture state as if it were a product fact.
-    await ensureScrollableChat(page, "#glowing-bear");
+    // Plant to a scroll range this spec can park inside. The guard removed here sent 15 pad lines,
+    // measured the container, and skipped the test when they had not produced one — which reports a
+    // fixture state as if it were a product fact.
+    await ensureScrollableChat(page, ownedChannel);
     await waitForScrollSettled(10000);
 
     // Scroll up to ~60% from top (clearly not at bottom)
@@ -223,7 +232,7 @@ test("long wrapping message should NOT auto-scroll when user scrolled up", async
     // Send the long wrapping message via IRC while user is scrolled up
     const msgText = `long-wrap-no-scroll-${Date.now()}`;
     const fullMessage = `${msgText}: ${longMessage}`;
-    await irc.sendMessage("#glowing-bear", fullMessage);
+    await irc.sendMessage(ownedChannel, fullMessage);
 
     // Wait for the message to render
     await page.waitForFunction(
