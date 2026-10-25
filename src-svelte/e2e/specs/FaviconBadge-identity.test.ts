@@ -149,7 +149,9 @@ test.describe('favicon badge repaint identity', () => {
         // later specs in the serial project are not handed a different buffer.
         startBuffer = await page.evaluate(() => {
             const m = /Glowing Bear - (.+?) - IRC:/.exec(document.title);
-            return m ? m[1] : null;
+            // The group is `.+?`, so a match always carries a non-empty name; the index type does
+            // not know that, and `startBuffer` is declared `string | null`.
+            return m ? (m[1] ?? null) : null;
         });
         await watchFavicon(page);
     });
@@ -207,7 +209,14 @@ test.describe('favicon badge repaint identity', () => {
 
         const hrefAfter = await href(page);
         await page.evaluate((theme) => {
-            document.documentElement.setAttribute('data-theme', theme);
+            // `current` is whatever the attribute was when the test read it, absent included:
+            // passing null to setAttribute would write the string "null", so an absent theme is
+            // restored by removing the attribute.
+            if (theme === null) {
+                document.documentElement.removeAttribute('data-theme');
+            } else {
+                document.documentElement.setAttribute('data-theme', theme);
+            }
         }, current);
 
         expect(hrefAfter).not.toBe(hrefBefore);

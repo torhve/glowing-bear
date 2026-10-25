@@ -33,7 +33,10 @@ function chatState(needle?: string) {
         const ordered = Array.from(container.querySelectorAll('[data-testid="bufferline-row"], .readmarker'));
         const rows = Array.from(container.querySelectorAll('[data-testid="bufferline-row"]'));
         const firstUnread = needle ? rows.findIndex((row) => row.textContent?.includes(needle)) : -1;
-        const markerIndex = ordered.indexOf(marker);
+        // A buffer with no separator has no position in the order. indexOf(marker) would already
+        // answer -1 for a null marker, and every use of this index below is guarded on the marker
+        // existing, so the -1 is written where the type can see it.
+        const markerIndex = marker ? ordered.indexOf(marker) : -1;
         const badge = marker?.querySelector('.readmarker-badge')?.textContent?.trim() ?? null;
         return {
             lines: rows.length,

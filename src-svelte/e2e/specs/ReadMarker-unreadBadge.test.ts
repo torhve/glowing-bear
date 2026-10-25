@@ -103,6 +103,14 @@ test('places the marker before interleaved unread status lines and counts six me
     const userMessages = Array.from({ length: 6 }, (_, i) => `readmarker-user-message-${runId}-${i}`);
     const statusAfter = Array.from({ length: 8 }, (_, i) => `readmarker-status-after-${runId}-${i}`);
 
+    // The status line the separator is located against. Array.from made four of them and the loop
+    // above sends them all; the index type has not read that, and a missing first marker would
+    // mean the test had nothing to wait for.
+    const firstStatusMarker = statusBefore[0];
+    if (firstStatusMarker === undefined) {
+        throw new Error('no first status marker to locate the readmarker against');
+    }
+
     for (const text of statusBefore) {
         await irc.raw(`:gbbot!gbbot@localhost JOIN #glowing-bear :${text}`);
     }
@@ -129,7 +137,7 @@ test('places the marker before interleaved unread status lines and counts six me
             markerBeforeFirstStatus: !!marker && !!firstUnreadStatus && ordered.indexOf(marker) < ordered.indexOf(firstUnreadStatus),
             badge: marker?.querySelector('.readmarker-badge')?.textContent?.trim() ?? null,
         };
-    }, statusBefore[0]);
+    }, firstStatusMarker);
 
     expect(state.markerBeforeFirstStatus).toBe(true);
     expect(state.badge).toBe('6 new');

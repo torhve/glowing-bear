@@ -1,0 +1,23 @@
+{
+  // Every Playwright spec, helper and fixture in `src-svelte/e2e` is typechecked. Nothing else in
+  // this repository reads their types: `tsconfig.json` covers `src-svelte/src`,
+  // `tsconfig.tests.json` covers `src-svelte/test/unit`, eslint lints `src-svelte/e2e` without
+  // typing it, and Playwright's own runner transpiles specs with esbuild and reports no type
+  // errors at all. Typing this tree once by hand is how three specs that had been silently
+  // asserting nothing were found (plan §11, N25); a spec that cannot be read by a typechecker
+  // stays that way.
+  //
+  // `bench/` is excluded for the same reason `tsconfig.tests.json` excludes `test/unit/perf` and
+  // `test/unit/prof`: the suite that gates this repository never runs them. They are manual
+  // harnesses with their own Playwright configs (`playwright.bench.config.ts`,
+  // `playwright.prodbench.config.ts`), and a gate that analyses less than the repository contains
+  // has to say why inside the file doing the excluding rather than leave the gap to be
+  // rediscovered.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false
+  },
+  "include": ["src-svelte/e2e/**/*.ts"],
+  "exclude": ["src-svelte/e2e/bench/**"]
+}

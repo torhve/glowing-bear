@@ -364,13 +364,12 @@ test.describe('bot message', () => {
             const table = el.closest('table')?.querySelector('tbody');
             if (!table) return -1;
             const rows = table.querySelectorAll('tr');
-            let readmarkerIndex = -1;
-            for (let i = 0; i < rows.length; i++) {
-                if (rows[i].classList.contains('readmarker')) {
-                    readmarkerIndex = i;
-                    break;
-                }
-            }
+            // findIndex answers -1 for a table with no separator, which is what the manual walk
+            // and its initial value meant. Walking by index would mean reading rows[i] knowing
+            // only that i < rows.length.
+            const readmarkerIndex = Array.from(rows).findIndex(
+                (row) => row.classList.contains('readmarker'),
+            );
             return readmarkerIndex;
         });
 

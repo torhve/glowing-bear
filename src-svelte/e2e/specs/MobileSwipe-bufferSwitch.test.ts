@@ -96,6 +96,20 @@ async function swipeUpTopBar(fromY: number, distance: number): Promise<void> {
     await swipeOnElement(page, '[data-testid="top-bar"]', 180, fromY, 180, fromY - distance);
 }
 
+/**
+ * One row out of a list the spec just measured. `stableRows` is what proves the list is long
+ * enough for the index being asked for; the index type has not read that proof, and a row missing
+ * at that index means the list no longer matches the arrangement the swipe is asserted against —
+ * which is a failure worth naming instead of handing `undefined` to a buffer switch.
+ */
+function rowAt(rows: string[], index: number, what: string): string {
+    const name = rows[index];
+    if (name === undefined) {
+        throw new Error(`stableRows returned ${rows.length} rows and no row at index ${index} (${what})`);
+    }
+    return name;
+}
+
 test.describe('vertical swipe switches buffers along the sidebar order', () => {
     test('a swipe up moves to the row above, a swipe down back to the row below', async () => {
         const rows = await stableRows();
@@ -103,11 +117,12 @@ test.describe('vertical swipe switches buffers along the sidebar order', () => {
 
         // Second to last, so both neighbours exist in a list that just held still.
         const start = rows.length - 2;
-        await switchToBufferMobile(page, rows[start]);
-        expect(await activeBufferName()).toBe(rows[start]);
+        const startName = rowAt(rows, start, 'the row above the last');
+        await switchToBufferMobile(page, startName);
+        expect(await activeBufferName()).toBe(startName);
 
         await swipeUpTopBar(300, 120);
-        await expect.poll(() => offsetFrom(rows[start]), { timeout: 5000 }).toBe(-1);
+        await expect.poll(() => offsetFrom(startName), { timeout: 5000 }).toBe(-1);
 
         // Measured from the row the swipe landed on, so this assertion also says
         // "exactly one row", in the direction the finger moved.
@@ -118,7 +133,7 @@ test.describe('vertical swipe switches buffers along the sidebar order', () => {
 
     test('a vertical drag short of the threshold is a scroll, not a buffer switch', async () => {
         const rows = await stableRows();
-        await switchToBufferMobile(page, rows[rows.length - 2]);
+        await switchToBufferMobile(page, rowAt(rows, rows.length - 2, 'the row above the last'));
         const before = await activeBufferName();
 
         // Well under the vertical threshold, over the horizontal drag threshold.
@@ -128,7 +143,7 @@ test.describe('vertical swipe switches buffers along the sidebar order', () => {
 
     test('the first row has no row above it, so a swipe up there stays put', async () => {
         const rows = await stableRows();
-        await switchToBufferMobile(page, rows[0]);
+        await switchToBufferMobile(page, rowAt(rows, 0, 'the first row'));
         const first = await activeBufferName();
 
         await swipeUpTopBar(300, 200);

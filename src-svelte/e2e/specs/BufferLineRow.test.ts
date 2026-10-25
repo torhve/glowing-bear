@@ -476,7 +476,7 @@ test.describe('prefix truncation', () => {
         // Regression: prefix column stays within its cap and the nick box must not
         // extend left of the cell into the time column
         const geom = await page.evaluate((m) => {
-            const cell = Array.from(document.querySelectorAll('td.message')).find(td => (td.dataset.message ?? '').includes(m));
+            const cell = Array.from(document.querySelectorAll<HTMLTableCellElement>('td.message')).find(td => (td.dataset.message ?? '').includes(m));
             const tr = cell?.closest('tr');
             const prefixTd = tr?.querySelector('td.prefix');
             const link = tr?.querySelector('.mention-link');

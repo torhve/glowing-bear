@@ -47,7 +47,11 @@ async function lastRowBottomGap() {
         if (!c) return null;
         const rows = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="bufferline-row"]'));
         if (rows.length === 0) return null;
-        const rr = rows[rows.length - 1].getBoundingClientRect();
+        // rows.length was checked above and the index is the last one; the index type has not
+        // read the check, so the absence is handled rather than asserted away.
+        const last = rows[rows.length - 1];
+        if (!last) return null;
+        const rr = last.getBoundingClientRect();
         const cr = c.getBoundingClientRect();
         return Math.round(cr.bottom - rr.bottom);
     }, CONTAINER);

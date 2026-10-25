@@ -19,9 +19,29 @@ test.beforeEach(async () => {
     setupEffectOrphanFilter(page);
 });
 
-function press(p: import('@playwright/test').Page, opts: KeyboardEventInit & { code: string; key: string; keyCode: number }) {
+/**
+ * A synthetic key event as plain data. `KeyboardEventInit` carries a `view` field typed `Window`,
+ * and carrying it through Playwright's serialisable argument mapping rewrites unrelated browser
+ * types on the way in — the error that came out named `ClipboardItem`, not the key being pressed.
+ * The fields this suite actually sends are named here instead.
+ */
+type KeyEventData = {
+    code: string;
+    key: string;
+    keyCode: number;
+    ctrlKey?: boolean;
+    altKey?: boolean;
+    shiftKey?: boolean;
+    metaKey?: boolean;
+};
+
+function press(p: import('@playwright/test').Page, opts: KeyEventData) {
     return p.evaluate((o) => {
-        document.dispatchEvent(new KeyboardEvent('keydown', { ...o, bubbles: true }));
+        // `keyCode` is a legacy KeyboardEvent field that Chromium's init dictionary accepts but
+        // TypeScript's KeyboardEventInit does not name. Assembling the dictionary through
+        // Object.assign keeps the exact object the constructor receives — same keys, same values —
+        // instead of asserting the extra field away with a cast.
+        document.dispatchEvent(new KeyboardEvent('keydown', Object.assign({ bubbles: true }, o)));
     }, opts);
 }
 
@@ -29,7 +49,7 @@ async function activeId(p: import('@playwright/test').Page) {
     return p.evaluate(() => (document.activeElement as HTMLElement)?.id ?? '');
 }
 
-async function openWith(p: import('@playwright/test').Page, modalId: string, key: KeyboardEventInit & { code: string; key: string; keyCode: number }) {
+async function openWith(p: import('@playwright/test').Page, modalId: string, key: KeyEventData) {
     // Close first so every test exercises a real open transition.
     await p.evaluate((id) => (document.getElementById(id) as HTMLElement)?.hidePopover(), modalId);
     await expect(p.locator(`#${modalId}`)).not.toBeVisible({ timeout: 5000 });

@@ -146,6 +146,9 @@ async function pickRowAbove(p: import('@playwright/test').Page, exclude: string)
         const idx = rows.findIndex((r) => r.textContent?.includes(needle));
         if (idx < 1) return '';
         const row = rows[idx - 1];
+        // idx >= 1 was checked above, so the row before it exists; the index type has not read
+        // that check, and a row vanishing between the two reads is worth stopping on.
+        if (!row) return '';
         const rect = row.getBoundingClientRect();
         if (rect.bottom <= box.top || rect.top >= box.bottom) return '';
         return row.textContent ?? '';

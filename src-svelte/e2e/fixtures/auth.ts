@@ -1,4 +1,4 @@
-import { Browser, BrowserContext, Page, Route } from '@playwright/test';
+import type { Browser, BrowserContext, Page, Route } from '@playwright/test';
 import { connectToWeechat, clearSettings, waitForAppReady } from '../helpers/connection';
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
 import { installFocusLog } from '../helpers/focuslog';

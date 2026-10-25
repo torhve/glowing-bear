@@ -1,4 +1,5 @@
-import { Page, expect } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect } from "@playwright/test";
 
 // Buffer list displays trimmedName (stripped of #, &, etc.), so match against that.
 function getBufferText(name: string): string {

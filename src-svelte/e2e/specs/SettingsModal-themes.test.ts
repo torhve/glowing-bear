@@ -51,7 +51,16 @@ test('both theme selectors list every shipped palette', async () => {
     for (const testId of ['theme-dark-selector', 'theme-light-selector']) {
         const options = page.getByTestId(testId).locator('option');
         await expect(options).toHaveCount(16);
-        const values = await options.evaluateAll((opts) => opts.map((o) => o.value));
+        const values = await options.evaluateAll((opts) =>
+            opts.map((o) => {
+                // evaluateAll hands over generic elements; `value` is the option element's own,
+                // and these are the theme names the assertions below read.
+                if (!(o instanceof HTMLOptionElement)) {
+                    throw new Error(`the theme selector holds a <${o.tagName}> that is not an <option>`);
+                }
+                return o.value;
+            }),
+        );
         expect(values).toContain('dark');
         expect(values).toContain('light');
         expect(values).toContain('blue-modern');

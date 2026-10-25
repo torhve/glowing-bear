@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
 export async function openSettings(page: Page) {
     await page.getByTestId('settings-button').click();

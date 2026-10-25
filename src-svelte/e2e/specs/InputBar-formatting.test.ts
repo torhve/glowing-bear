@@ -328,7 +328,15 @@ test('Color inserted at the caret when the picker is opened by mouse', async () 
     await resetInputState(page);
 
     await input.fill('abcd');
-    await input.evaluate((el) => el.setSelectionRange(2, 2));
+    await input.evaluate((el) => {
+        // The composer is a <textarea>, but a locator hands its callback a generic DOM element.
+        // A caret position only exists on the textarea, so the narrowing is checked rather than
+        // asserted away.
+        if (!(el instanceof HTMLTextAreaElement)) {
+            throw new Error(`[data-testid="message-input"] is a ${el.tagName}, not a textarea`);
+        }
+        el.setSelectionRange(2, 2);
+    });
     await waitForInputCaret(page, 2);
 
     // Opening the picker hands focus to the first swatch, so the insertion has to come from

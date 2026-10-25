@@ -1,4 +1,5 @@
-import { Page, expect } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { irc } from './irc-control';
 
 export async function sendMessage(page: Page, message: string) {

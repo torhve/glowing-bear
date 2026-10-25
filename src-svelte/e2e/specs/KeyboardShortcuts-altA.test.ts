@@ -33,7 +33,11 @@ async function pressAltA() {
 // Helper: get current buffer name from topic bar
 async function getCurrentBufferName(): Promise<string> {
     const topicBar = page.getByTestId('topic-bar');
-    return await topicBar.textContent();
+    const text = await topicBar.textContent();
+    if (text === null) {
+        throw new Error('getCurrentBufferName: the topic bar reported no text to name a buffer by');
+    }
+    return text;
 }
 
 // Helper: find a PM buffer in the buffer list (gbbot PMs create buffers like "gbbot"

@@ -31,7 +31,11 @@ test('should have wconfig populated after connect', async () => {
     // Config fetches happen asynchronously after connect — poll until populated
     await expect(async () => {
         const val = await getConfigValue(page, 'weechat.look.buffer_time_format');
-        expect(val).toBeTruthy();
+        if (typeof val !== 'string') {
+            // toPass retries this body until the relay has answered, so naming what is missing is
+            // the failure — not a crash on reading .length of nothing.
+            throw new Error(`weechat.look.buffer_time_format read back as ${String(val)}`);
+        }
         expect(val.length).toBeGreaterThan(0);
     }).toPass({ timeout: 10000, intervals: [500] });
 });

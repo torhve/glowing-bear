@@ -93,7 +93,14 @@ test('expanded media shows an obvious Collapse button and returns to the collaps
     // The collapse control sits below the media, not overlaid on it.
     // Measure both boxes in one task, after the image has decoded, so the
     // container height cannot change between the two reads.
-    await row.locator('[data-testid="plugin-embed"] img').evaluate((img) => img.decode());
+    await row.locator('[data-testid="plugin-embed"] img').evaluate((el) => {
+        // A locator hands its callback a generic element; decode() belongs to the HTML image, and
+        // the two-box measurement below is only worth taking once that image has finished.
+        if (!(el instanceof HTMLImageElement)) {
+            throw new Error('the embed row holds an <img> that is not an HTMLImageElement');
+        }
+        return el.decode();
+    });
     const boxes = await row.locator('[data-testid="plugin-embed"]').evaluate((el) => {
         const media = el.getBoundingClientRect();
         const btn = el.parentElement!.querySelector<HTMLElement>('[data-testid="hide-embed"]')!.getBoundingClientRect();
