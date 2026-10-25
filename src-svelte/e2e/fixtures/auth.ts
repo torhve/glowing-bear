@@ -10,8 +10,12 @@ export interface CreateConnectedPageOptions {
   blockCdn?: boolean;
   /** Script to run before any page JS (e.g. to mock browser APIs) */
   initScript?: string | (() => string | void);
-  /** Extra async setup after the page is ready but before connect (e.g. inject swipe helpers) */
-  beforeConnect?: (page: Page) => Promise<unknown>;
+  /**
+   * Extra setup after the page is ready but before connect (e.g. inject swipe helpers, attach a
+   * console listener). The fixture awaits it, so a callback may be sync or async — forcing one to
+   * be `async` just to satisfy this slot would be a promise nobody awaits for a reason.
+   */
+  beforeConnect?: (page: Page) => unknown;
   /** Relay port (default 9010 API relay; 9001 is the legacy relay) */
   port?: string;
 }

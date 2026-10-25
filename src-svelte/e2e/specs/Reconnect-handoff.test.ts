@@ -62,7 +62,10 @@ test.describe('Reconnect handoff', () => {
         await retry(page);
 
         await expect(page.getByText(marker), 'a reconnect must not replace the transcript with the new session alone').toBeVisible();
-        await expect(page.getByTestId('message-input')).toHaveAttribute('placeholder', /^Message #glowing-bear$/, 'the composer is live again');
+        // The message belongs to `expect`, not to the matcher: the third slot here is matcher
+        // options (`{ timeout }`), and a string in it is a message the report never shows.
+        await expect(page.getByTestId('message-input'), 'the composer is live again')
+            .toHaveAttribute('placeholder', /^Message #glowing-bear$/);
 
         // Remote controls are absent from a retained view, so their presence is
         // the cheapest proof that the handoff finished and the view is a live

@@ -61,7 +61,15 @@ async function waitUntilConnected(page: import('@playwright/test').Page, timeout
         null,
         { timeout: timeoutMs },
     );
-    return handle.jsonValue() as number;
+    // The predicate's truthy branch is a number and `waitForFunction` only resolves on a truthy
+    // result, so this *is* a number — but that is a fact about the predicate, so it is checked here
+    // instead of asserted by a cast. A `false` slipping through a `as number` would be compared
+    // against a deadline as if it were a clock reading.
+    const reading = await handle.jsonValue();
+    if (typeof reading !== 'number') {
+        throw new Error(`expected the page's clock reading, got ${JSON.stringify(reading)}`);
+    }
+    return reading;
 }
 
 test.describe('coming back to the tab does not make the user wait out the backoff', () => {
