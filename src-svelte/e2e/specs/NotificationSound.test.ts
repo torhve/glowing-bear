@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { setSettings, reconnect } from '../helpers/connection';
-import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
+import { waitForBuffer, switchToBuffer, bufferItemForName } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
 
 import { createConnectedPage } from '../fixtures/auth';
@@ -62,27 +62,87 @@ async function getAudioCalls(p: import('@playwright/test').Page): Promise<string
 
 
 
-test.skip('sound plays on highlight when setting enabled', async () => {
-    // Skipped: unreliable in headless browsers - Audio constructor mocking
-    // doesn't reliably capture calls from WebSockets/IRC handler flow.
-    // The playNotificationSound() function correctly creates new Audio('/assets/audio/sonar.mp3')
-    // when soundnotification is true and a highlight arrives on an inactive buffer.
-    const audioCalls = await getAudioCalls(page);
-    expect(audioCalls.length).toBeGreaterThanOrEqual(0);
+const SOUND_ASSET = '/assets/audio/sonar.mp3';
+
+/**
+ * Every invocation of the app's own `playNotificationSound`, read out of the counter the function
+ * keeps for itself (notifications.ts). It is recorded before the setting is consulted, so it says
+ * the notify rule fired — not whether anything was allowed to play.
+ */
+function soundCalls(p: import('@playwright/test').Page): Promise<string[]> {
+    return p.evaluate(() => ((window as any).__playNotificationSoundCalls as string[]) ?? []);
+}
+
+function resetSoundCounters(p: import('@playwright/test').Page) {
+    return p.evaluate(() => {
+        (window as any).__audioCalls = [];
+        (window as any).__playNotificationSoundCalls = [];
+    });
+}
+
+/** The Audio constructors the page recorded, for this notification's asset only. */
+function builtSounds(p: import('@playwright/test').Page): Promise<string[]> {
+    return getAudioCalls(p).then((calls) => calls.filter((src) => src === SOUND_ASSET));
+}
+
+/**
+ * Send the app a private message while the chat is looking at another buffer — the case the sound
+ * rule exists for — and then prove the line landed, through the unread badge on the query buffer's
+ * own sidebar row. Without that second half, a message that never arrived and a sound that was
+ * correctly withheld are the same observation.
+ */
+async function pmElsewhere(p: import('@playwright/test').Page, text: string) {
+    await irc.sendPm('testuser', text);
+    await expect(
+        bufferItemForName(p, 'gbbot2').getByTestId('unread-badge'),
+    ).toBeVisible({ timeout: 20000 });
+}
+
+test('a private message on a buffer the chat is not looking at plays the sound', async () => {
+    await reconnect(page, { extraSettings: { soundnotification: true } });
+    await waitForBuffer(page, '#glowing-bear', 15000);
+    await switchToBuffer(page, '#glowing-bear');
+    await resetSoundCounters(page);
+
+    await pmElsewhere(page, `sound probe ${Date.now()}`);
+
+    // The rule fired, and an Audio for the notification asset was actually constructed.
+    await expect(async () => {
+        expect(await soundCalls(page)).not.toHaveLength(0);
+    }).toPass({ timeout: 15000, intervals: [250] });
+    await expect(async () => {
+        expect(await builtSounds(page)).toContain(SOUND_ASSET);
+    }).toPass({ timeout: 10000, intervals: [250] });
 });
 
-test('sound does not play when soundnotification is disabled', async () => {
+// The test here used to be "sound does not play when soundnotification is disabled", and it was
+// not a check: it switched to #glowing-bear (so any message there is in the buffer being looked at
+// and owes no sound anyway), sent a PM addressed to `gbbot` — a nick no client on this fixture has
+// — and asserted that nothing had been constructed. A message that never arrived and a sound that
+// was correctly withheld produced the same result. Both halves are now measured.
+test('the same message plays nothing while the sound setting is off', async () => {
     await reconnect(page, { extraSettings: { soundnotification: false } });
-    await waitForBuffer(page, '#glowing-bear', 10000);
+    await waitForBuffer(page, '#glowing-bear', 15000);
     await switchToBuffer(page, '#glowing-bear');
+    await resetSoundCounters(page);
 
-    await irc.sendPm('gbbot', 'no-sound-test');
+    await pmElsewhere(page, `silent probe ${Date.now()}`);
 
-    // Verify no audio was created
+    // The notify rule fired for the very same message. That is the half that makes the next
+    // assertion mean something: what is missing is the Audio, because the setting says so.
     await expect(async () => {
-        const audioCalls = await getAudioCalls(page);
-        expect(audioCalls.length).toBe(0);
-    }).toPass({ timeout: 5000, intervals: [200] });
+        expect(await soundCalls(page)).not.toHaveLength(0);
+    }).toPass({ timeout: 15000, intervals: [250] });
+
+    // One more line through the same path, this time in the buffer the chat is looking at, so the
+    // emptiness below is a settled state and not a race that has not landed yet.
+    const stamp = `while-looking-here ${Date.now()}`;
+    await irc.sendMessage('#glowing-bear', stamp);
+    await expect(
+        page.getByTestId('bufferline-row').filter({ hasText: stamp }).first(),
+    ).toBeVisible({ timeout: 20000 });
+
+    expect(await builtSounds(page), 'a sound was built while the setting said not to').toHaveLength(0);
 });
 
 test('sound setting toggle persists', async () => {
