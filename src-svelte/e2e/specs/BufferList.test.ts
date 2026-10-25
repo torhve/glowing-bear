@@ -74,28 +74,36 @@ test('should show buffer search input in topbar', async () => {
     await expect(page.locator('#buffer-search')).not.toBeVisible({ timeout: 5000 });
 });
 
-// Skipped — FormInput one-way value binding does not reliably trigger Svelte 5 reactivity from Playwright interactions.
-// When FormInput is updated to use bind:value, uncomment this test.
-test.skip('should filter buffers when searching', async () => {
+// This one carried the note "when FormInput is updated to use bind:value, uncomment this test".
+// That update never happened and it was never the blocker: the input publishes its own event
+// (FormInput.svelte:58-61) and the dialog reads it into bufferSearchQuery
+// (BufferSearchModal.svelte:198). Measured here: typing
+// `#glowing-bear` takes the result list from 5 rows to 2.
+//
+// What made it look broken was the assertion, not the binding. The dialog matches short name,
+// full name, buffer number and the buffer's title (BufferSearchModal.svelte:30-37), so a row can
+// legitimately survive a query it does not spell out — gbtest's `python.grep` buffer carries
+// `#glowing-bear` in its title and stayed in the list. The rule worth pinning is that the query
+// keeps what it reaches and drops what it does not.
+test('searching buffers keeps the match and drops what the query does not reach', async () => {
     await page.getByTestId('search-button').click();
     const searchInput = page.locator('#buffer-search');
     await expect(searchInput).toBeVisible({ timeout: 5000 });
-    const allResultsBefore = page.locator('[data-search-index]');
-    const countBefore = await allResultsBefore.count();
-    expect(countBefore).toBeGreaterThanOrEqual(1);
+
+    const rows = page.locator('[data-search-index]');
+    const countBefore = await rows.count();
+    expect(countBefore).toBeGreaterThanOrEqual(4);
+
     await searchInput.fill('#glowing-bear');
-    await expect(async () => {
-        const n = await allResultsBefore.count();
-        expect(n).toBeLessThanOrEqual(countBefore);
-        expect(n).toBeGreaterThanOrEqual(1);
-    }).toPass({ timeout: 5000 });
-    const filteredCount = await allResultsBefore.count();
-    for (let i = 0; i < filteredCount; i++) {
-        const text = await allResultsBefore.nth(i).textContent();
-        expect(text?.toLowerCase()).toContain('#glowing-bear'.toLowerCase());
-    }
+
+    await expect(rows.filter({ hasText: '#glowing-bear' })).toHaveCount(1);
+    await expect(rows.filter({ hasText: 'core.weechat' })).toHaveCount(0);
+    await expect(rows.filter({ hasText: 'relay.list' })).toHaveCount(0);
+    await expect(rows.filter({ hasText: 'gbbot2' })).toHaveCount(0);
+    await expect(rows).not.toHaveCount(countBefore);
+
     await page.keyboard.press('Escape');
-    await expect(searchInput).not.toBeVisible({ timeout: 5000 }).catch(() => {});
+    await expect(searchInput).not.toBeVisible({ timeout: 5000 });
 });
 
 test('should close buffer search with Escape key', async () => {
@@ -128,10 +136,12 @@ test('should show buffers div with border and padding', async () => {
     expect(borderStyle).toBe('solid');
 });
 
-test.describe.skip('buffer search arrow navigation', () => {
-    // Skipped — search modal uses Svelte 5 one-way value binding on FormInput
-    // which doesn't reliably trigger reactivity from Playwright interactions.
-    // The search functionality works correctly in the app; this is a test infrastructure issue.
+test.describe('buffer search arrow navigation', () => {
+    // This describe carried the same note as the filter test above — "the one-way binding needs
+    // bind:value, this is a test infrastructure issue" — and the workaround that note implies:
+    // set the input through page.evaluate and dispatch a synthetic input event. Measured here, a
+    // plain fill on #buffer-search filters the list, so the workaround was solving a problem this
+    // app does not have. It is gone; these tests type into the dialog.
 
     test.beforeEach(async () => {
         // Close search modal if already open (from previous test)
@@ -145,97 +155,63 @@ test.describe.skip('buffer search arrow navigation', () => {
         await searchBtn.click({ timeout: 10000 });
         const searchInput = page.locator('#buffer-search');
         await expect(searchInput).toBeVisible({ timeout: 5000 });
-        // Clear input using evaluate for Svelte 5 reactivity
-        await page.evaluate(() => {
-            const input = document.getElementById('buffer-search') as HTMLInputElement;
-            if (input) {
-                input.value = '';
-                input.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-        });
+        await searchInput.fill('');
     });
 
     test('should open search dropdown with matching results', async () => {
         const searchInput = page.locator('#buffer-search');
-        // Use evaluate + dispatchEvent for Svelte 5 reactivity on one-way bound input
-        // Search for 'g' which matches gbtest, glowing-bear, gbbot2
-        await page.evaluate(() => {
-            const input = document.getElementById('buffer-search') as HTMLInputElement;
-            if (input) {
-                input.value = 'g';
-                input.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-        });
+        // 'g' reaches gbtest, glowing-bear, gbbot2 and the grep buffer.
+        await searchInput.fill('g');
         const results = page.locator('[data-search-index]');
         await expect(results).not.toHaveCount(0, { timeout: 5000 });
     });
 
     test('should highlight first result by default', async () => {
         const searchInput = page.locator('#buffer-search');
-        await page.evaluate(() => {
-            const input = document.getElementById('buffer-search') as HTMLInputElement;
-            if (input) {
-                input.value = 'g';
-                input.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-        });
+        await searchInput.fill('g');
         await expect(page.locator('[data-search-index="0"]')).toHaveClass(/bg-accent/, { timeout: 5000 });
     });
 
     test('should move highlight down on ArrowDown', async () => {
         const searchInput = page.locator('#buffer-search');
-        await page.evaluate(() => {
-            const input = document.getElementById('buffer-search') as HTMLInputElement;
-            if (input) {
-                input.value = 'g';
-                input.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-        });
+        await searchInput.fill('g');
+
         const results = page.locator('[data-search-index]');
-        const count = await results.count();
-        if (count >= 2) {
-            await page.dispatchEvent('#buffer-search', 'keydown', { key: 'ArrowDown' });
-            await expect(page.locator('[data-search-index="0"]')).not.toHaveClass(/bg-accent/);
-            await expect(page.locator('[data-search-index="1"]')).toHaveClass(/bg-accent/);
-        } else {
-            test.skip();
-        }
+        // A stated precondition, not a guard that skips: if the fixture ever stops offering two
+        // matching buffers this test has to say so instead of quietly disappearing from the run.
+        await expect.poll(async () => await results.count()).toBeGreaterThanOrEqual(2);
+
+        await page.dispatchEvent('#buffer-search', 'keydown', { key: 'ArrowDown' });
+        await expect(page.locator('[data-search-index="0"]')).not.toHaveClass(/bg-accent/);
+        await expect(page.locator('[data-search-index="1"]')).toHaveClass(/bg-accent/);
     });
 
     test('should move highlight up on ArrowUp', async () => {
         const searchInput = page.locator('#buffer-search');
-        await page.evaluate(() => {
-            const input = document.getElementById('buffer-search') as HTMLInputElement;
-            if (input) {
-                input.value = '#';
-                input.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-        });
+        // 'g', not '#': the query has to reach at least three buffers for a highlight to move
+        // between rows, and '#' reaches only the two IRC channels gbtest keeps. That is why this
+        // test used to disappear from a run whenever the fixture was thin.
+        await searchInput.fill('g');
+
         const results = page.locator('[data-search-index]');
-        const count = await results.count();
-        if (count >= 3) {
-            await page.dispatchEvent('#buffer-search', 'keydown', { key: 'ArrowDown' });
-            await page.dispatchEvent('#buffer-search', 'keydown', { key: 'ArrowDown' });
-            await expect(page.locator('[data-search-index="2"]')).toHaveClass(/bg-accent/);
-            await page.dispatchEvent('#buffer-search', 'keydown', { key: 'ArrowUp' });
-            await expect(page.locator('[data-search-index="1"]')).toHaveClass(/bg-accent/);
-        } else {
-            test.skip();
-        }
+        await expect.poll(async () => await results.count()).toBeGreaterThanOrEqual(3);
+
+        await page.dispatchEvent('#buffer-search', 'keydown', { key: 'ArrowDown' });
+        await page.dispatchEvent('#buffer-search', 'keydown', { key: 'ArrowDown' });
+        await expect(page.locator('[data-search-index="2"]')).toHaveClass(/bg-accent/);
+        await page.dispatchEvent('#buffer-search', 'keydown', { key: 'ArrowUp' });
+        await expect(page.locator('[data-search-index="1"]')).toHaveClass(/bg-accent/);
     });
 
     test('should wrap from last to first on ArrowDown', async () => {
         const searchInput = page.locator('#buffer-search');
-        await page.evaluate(() => {
-            const input = document.getElementById('buffer-search') as HTMLInputElement;
-            if (input) {
-                input.value = 'g';
-                input.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-        });
+        await searchInput.fill('g');
+
         const results = page.locator('[data-search-index]');
+        await expect.poll(async () => await results.count()).toBeGreaterThanOrEqual(1);
         const count = await results.count();
-        expect(count).toBeGreaterThanOrEqual(1);
+
+        // Walking one row past the end has to land back on the first row.
         for (let i = 0; i < count; i++) {
             await page.dispatchEvent('#buffer-search', 'keydown', { key: 'ArrowDown' });
         }
@@ -244,66 +220,48 @@ test.describe.skip('buffer search arrow navigation', () => {
 
     test('should wrap from first to last on ArrowUp', async () => {
         const searchInput = page.locator('#buffer-search');
-        await page.evaluate(() => {
-            const input = document.getElementById('buffer-search') as HTMLInputElement;
-            if (input) {
-                input.value = 'g';
-                input.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-        });
+        await searchInput.fill('g');
+
         const results = page.locator('[data-search-index]');
+        await expect.poll(async () => await results.count()).toBeGreaterThanOrEqual(1);
         const count = await results.count();
-        expect(count).toBeGreaterThanOrEqual(1);
+
+        // And the other way round: one row before the top is the bottom row.
         await page.dispatchEvent('#buffer-search', 'keydown', { key: 'ArrowUp' });
-        const lastIdx = count - 1;
-        await expect(page.locator(`[data-search-index="${lastIdx}"]`)).toHaveClass(/bg-accent/);
+        await expect(page.locator(`[data-search-index="${count - 1}"]`)).toHaveClass(/bg-accent/);
     });
 
     test('should activate the highlighted result on Enter', async () => {
         const searchInput = page.locator('#buffer-search');
-        await page.evaluate(() => {
-            const input = document.getElementById('buffer-search') as HTMLInputElement;
-            if (input) {
-                input.value = 'g';
-                input.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-        });
+        await searchInput.fill('g');
+
         const results = page.locator('[data-search-index]');
-        const count = await results.count();
-        expect(count).toBeGreaterThanOrEqual(1);
+        await expect.poll(async () => await results.count()).toBeGreaterThanOrEqual(2);
+
         await page.dispatchEvent('#buffer-search', 'keydown', { key: 'ArrowDown' });
         await searchInput.press('Enter');
+        // Enter acts on the highlighted row: the dialog closes and the chat is looking at that
+        // buffer again.
         await expect(searchInput).not.toBeVisible({ timeout: 5000 });
         await expect(page.getByTestId('chat-view')).toBeVisible();
     });
 
     test('should reset highlight to top when query changes', async () => {
         const searchInput = page.locator('#buffer-search');
-        await page.evaluate(() => {
-            const input = document.getElementById('buffer-search') as HTMLInputElement;
-            if (input) {
-                input.value = 'g';
-                input.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-        });
+        await searchInput.fill('g');
+
         const results = page.locator('[data-search-index]');
-        const count = await results.count();
-        if (count >= 3) {
-            await page.dispatchEvent('#buffer-search', 'keydown', { key: 'ArrowDown' });
-            await page.dispatchEvent('#buffer-search', 'keydown', { key: 'ArrowDown' });
-            await expect(page.locator('[data-search-index="2"]')).toHaveClass(/bg-accent/);
-            // Update query using evaluate for Svelte 5 reactivity
-            await page.evaluate(() => {
-                const input = document.getElementById('buffer-search') as HTMLInputElement;
-                if (input) {
-                    input.value = 'gl';
-                    input.dispatchEvent(new Event('input', { bubbles: true }));
-                }
-            });
-            await expect(page.locator('[data-search-index="0"]')).toHaveClass(/bg-accent/, { timeout: 5000 });
-        } else {
-            test.skip();
-        }
+        await expect.poll(async () => await results.count()).toBeGreaterThanOrEqual(3);
+
+        await page.dispatchEvent('#buffer-search', 'keydown', { key: 'ArrowDown' });
+        await page.dispatchEvent('#buffer-search', 'keydown', { key: 'ArrowDown' });
+        await expect(page.locator('[data-search-index="2"]')).toHaveClass(/bg-accent/);
+
+        // Narrowing the query re-ranks the list, so the highlight restarts at the top instead of
+        // following a buffer that has moved somewhere else in it — the dialog's own oninput resets
+        // selectedIndex (BufferSearchModal.svelte:198).
+        await searchInput.fill('gl');
+        await expect(page.locator('[data-search-index="0"]')).toHaveClass(/bg-accent/, { timeout: 5000 });
     });
 
     test('should close search on Escape', async () => {
