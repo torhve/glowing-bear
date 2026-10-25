@@ -1,4 +1,5 @@
-import { Page, expect } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { irc, sendSequence } from './irc-control';
 import { switchToBuffer } from './buffers';
 
@@ -297,7 +298,16 @@ export async function ensureScrollableChat(
         planted += size;
         // A batch counts as landed when its last line is on screen. Measuring before that reads
         // a container that has not grown yet and would plant again for nothing.
-        await waitForRow(page, texts[size - 1], 20000);
+        // `size` is always at least one, but the index type cannot know that under
+        // noUncheckedIndexedAccess. Naming the case is cheaper than a cast in a file the
+        // typecheck gate is supposed to read honestly.
+        const lastPlanted = texts[size - 1];
+        if (lastPlanted === undefined) {
+            throw new Error(
+                `ensureScrollableChat: planting ${size} lines into ${channel} produced no text to wait for`,
+            );
+        }
+        await waitForRow(page, lastPlanted, 20000);
         const next = await chatMetrics(page);
         if (!next) {
             throw new Error('ensureScrollableChat: the chat container disappeared while planting');
