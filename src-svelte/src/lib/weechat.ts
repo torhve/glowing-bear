@@ -228,6 +228,17 @@ interface FormatDesyncOpts {
     id?: number | null;
 }
 
+// desync, test and ping are built here and never sent, and that is a decision rather than a gap.
+//
+// The legacy send surface is deliberately partial. The app answers a relay's `_pong`
+// (stores/handlers.ts registers `_pong: handlePong`) and the API transport keeps its own connection
+// alive with a timed `POST /api/ping` (api/api-session.ts), but nothing under src-svelte/src emits
+// desync, test or ping. These builders, and the three statics that expose them, exist because the
+// protocol defines the message shapes, and src-svelte/test/unit/protocol.test.ts is what pins those
+// shapes against the pre-4.3 fixture in src-svelte/test/fixtures/weechat-old.js. Deleting them would
+// claim the legacy protocol has no such commands — a claim this file does not make, and one the
+// parity fixture would not survive. Kept as the wire shape, not as a feature.
+
 // Format desync command: "(id) desync buffer1,buffer2[,option1,option2]\n"
 // Matches WeeChat relay protocol spec for desync requests.
 function formatDesync(opts: FormatDesyncOpts): string {
@@ -340,6 +351,8 @@ export class Protocol {
     static formatLocalvarSet(opts: FormatLocalvarSetOpts): string { return formatLocalvarSet(opts); }
     static formatQuit(): string { return formatQuit(); }
     static formatCompletion(opts: FormatCompletionOpts): string { return formatCompletion(opts); }
+    // desync / test / ping: built for the protocol's shape and pinned by protocol.test.ts, and
+    // never emitted by this app. The decision is written on the `formatDesync` builder above.
     static formatDesync(opts: FormatDesyncOpts): string { return formatDesync(opts); }
     static formatTest(opts: FormatTestOpts): string { return formatTest(opts); }
     static formatPing(opts: FormatPingOpts): string { return formatPing(opts); }
