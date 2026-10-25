@@ -61,7 +61,6 @@ const INCOMING = 25;
  */
 async function openChannel(name: string) {
     await irc.botJoin(name);
-    await irc.waitForChannel(name);
 
     const input = page.getByTestId('message-input');
     await switchToBuffer(page, '#glowing-bear');

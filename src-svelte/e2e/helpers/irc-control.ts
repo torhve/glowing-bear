@@ -30,6 +30,11 @@ function sendCommand(data: Record<string, unknown>): Promise<ControlResponse> {
     });
 }
 
+// Every command below is one the fixture's own IRC server answers
+// (src-svelte/test/irc-server/IRCServer.ts, control-command switch). `waitForChannel` used to sit
+// here too: the server's default branch replied "Unknown command: wait_for_channel" and no caller
+// read the reply, so a spec that called it believed it had waited for something it had not waited
+// for. A helper that cannot fail is not a check.
 export const irc = {
     sendMessage: (channel: string, text: string) =>
         sendCommand({ cmd: 'send_message', channel, text }),
@@ -58,8 +63,6 @@ export const irc = {
     raw: (raw: string) =>
         sendCommand({ cmd: 'raw', raw }),
 
-    waitForChannel: (channel: string) =>
-        sendCommand({ cmd: 'wait_for_channel', channel }),
 
     sendPm: (nick: string, text: string) =>
         sendCommand({ cmd: 'send_pm', nick, text }),
