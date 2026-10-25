@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { setSettings, reconnect } from '../helpers/connection';
+import { openSettings } from '../helpers/settings';
 import { createConnectedPage } from '../fixtures/auth';
 
 let page: import('@playwright/test').Page;
@@ -156,4 +157,39 @@ test('no error message shown after intentional disconnect via TopBar button', as
 
     // No error message should be visible — user initiated disconnect is not an error
     await expect(page.getByTestId('error-message')).not.toBeVisible();
+});
+
+// The rule this file did not cover until now: a key a dialog consumed is not a tap on the chat.
+// Measured before the rule existed — two immediate Escapes with Settings open dropped the session,
+// because closing the dialog and reaching for Escape again is one ordinary gesture.
+test('a dialog consumes its own Escape, and the second one does not disconnect', async () => {
+    await reconnect(page);
+    await expect(page.getByTestId('chat-view')).toBeVisible();
+
+    await openSettings(page);
+
+    // Both keys are issued back to back on purpose. The interval between them is what the 500 ms
+    // window measures, and a wait in between would let the assertion pass for the wrong reason.
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+
+    await expect(page.getByTestId('settings-modal')).toBeHidden();
+    await expect(page.getByTestId('chat-view')).toBeVisible();
+    await expect(page.getByTestId('host-input')).not.toBeVisible();
+});
+
+// The exemption is about dialogs, not about where focus happens to be: the chat gesture still
+// works from the composer, mid-message, which is the case that made the rule worth writing down.
+test('the composer is not a dialog — two immediate Escapes while mid-message still disconnect', async () => {
+    await reconnect(page);
+    const input = page.getByTestId('message-input');
+    await input.click();
+    await input.fill('/me hello');
+    await expect(input).toBeFocused();
+
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+
+    await expect(page.getByTestId('host-input')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId('chat-view')).not.toBeVisible();
 });

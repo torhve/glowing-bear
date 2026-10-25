@@ -403,9 +403,27 @@
   }
 
   function handleGlobalKeyboard(e: KeyboardEvent) {
-    // Escape handling first — always processes regardless of focused element
-    // (blurs input on single tap, disconnects on double tap)
+    // Escape on the chat: one tap blurs the composer, a second within the window disconnects.
+    //
+    // A dialog owns Escape while one is open, and that key is not a tap on the chat. Measured in
+    // Chromium: `dialog[popover]:popover-open` still matches at both the capture and the bubble
+    // phase of the keypress that closes a dialog — the dismiss is that keypress's default action,
+    // which runs only after every listener has seen the event. So this test sees the dialog the
+    // key belongs to, and the key is deliberately left un-prevented: preventing it here would
+    // take the dismiss away from the dialog.
+    //
+    // The gesture this prevents is the ordinary one: Escape closes the dialog, the hand reaches
+    // for Escape again, and the second press lands inside the 500 ms window — measured before the
+    // rule existed, that pair dropped the session. A key a dialog consumed neither blurs the
+    // composer nor arms the double tap, and it ends a half-armed chat sequence: "double Escape"
+    // means two keys the chat actually received. The composer is not a dialog, so two Escapes
+    // from mid-message still disconnect, which `DisconnectReconnect.test.ts` now pins as well.
     if (e.code === 'Escape') {
+      if (isPopoverOpen()) {
+        lastEscapeTime = 0;
+        return;
+      }
+
       // Always blur the input so subsequent Alt shortcuts (e.g. Alt+1 quick key) work
       const input = composer.current;
       if (document.activeElement === input) {
