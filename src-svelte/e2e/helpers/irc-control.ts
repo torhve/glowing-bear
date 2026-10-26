@@ -57,6 +57,18 @@ export const irc = {
     botNick: (nickname: string) =>
         sendCommand({ cmd: 'nick', nickname }),
 
+    /**
+     * Which registered clients the fixture server holds in a channel.
+     *
+     * Read-only, and the only way to prove a membership change took effect: a spec that parts or
+     * rejoins the shared bot otherwise leaves the channel's membership to whatever the last spec
+     * did, and a later spec asserts on a nicklist it never arranged.
+     */
+    channelMembers: (channel: string) =>
+        sendCommand({ cmd: 'status', channel }).then((res) =>
+            Array.isArray(res.members) ? (res.members as string[]) : [],
+        ),
+
     setTopic: (channel: string, text: string) =>
         sendCommand({ cmd: 'topic', channel, text }),
 

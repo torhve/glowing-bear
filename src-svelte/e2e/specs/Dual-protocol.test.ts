@@ -102,10 +102,15 @@ test.describe('Dual-protocol transport selection', () => {
     test('legacy transport completes nicks client-side', async ({ browser }) => {
         const page = await freshPage(browser);
         await connectLegacyToWeechat(page);
+        // The completion below completes against the fixture bot's nick, so that nick is arranged
+        // here instead of inherited. Measured with the bot absent from the channel — which a spec
+        // that plants real `PART` lines does to the shared channel — the legacy nicklist held only
+        // `testuser` and `testuser5`, and the completion left the input at the typed prefix.
+        await irc.botJoin('#glowing-bear');
         await waitForBuffer(page, '#glowing-bear');
         await switchToBuffer(page, '#glowing-bear');
-        await page.getByTestId('nicklist').locator('[data-testid="nick-item"]').first()
-            .waitFor({ state: 'visible', timeout: 10000 });
+        await page.getByTestId('nicklist').locator('[data-testid="nick-item"]').filter({ hasText: 'gbb' })
+            .first().waitFor({ state: 'visible', timeout: 10000 });
 
         // The legacy handshake populates wconfig in bulk (the API path has no
         // config endpoint); client-side completion reads nick_completer from it.

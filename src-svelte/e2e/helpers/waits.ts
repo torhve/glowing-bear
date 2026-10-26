@@ -62,7 +62,7 @@ export async function waitForNickVisible(page: Page, nick: string, timeout = 150
  * looking at: there is no rendered row to wait for, but the buffer list's badge is the
  * app's own record of how many of those lines have arrived.
  */
-async function readUnreadBadge(page: Page, bufferName: string): Promise<number> {
+export async function readUnreadBadge(page: Page, bufferName: string): Promise<number> {
     // Read the badge in one page evaluation: a locator would fail actionability while
     // the badge does not exist yet, which is the normal state at the start of the wait.
     return page.evaluate((name) => {

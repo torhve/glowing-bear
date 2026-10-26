@@ -3,6 +3,8 @@ import { createConnectedPage } from '../fixtures/auth';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { disconnect, reconnect } from '../helpers/connection';
 import { irc } from '../helpers/irc-control';
+import { closeSpecChatChannel, openSpecChatChannel } from '../helpers/spec-chat-channel';
+import { readUnreadBadge, waitForBotNickApplied, waitForNoUnread } from '../helpers/waits';
 
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
 
@@ -24,6 +26,18 @@ test.beforeAll(async ({ browser }) => {
 });
 
 test.afterAll(async () => {
+    // The status lines this file plants are real `PART` lines and WeeChat honours them, so the
+    // shared bot leaves `#glowing-bear`'s nicklist: measured afterwards the legacy transport's
+    // nicklist held only `testuser` and `testuser5`, and `Dual-protocol`'s nick completion produced
+    // no replacement at all. Put the bot back and prove it, or every later spec in the pass runs
+    // against a channel this file emptied.
+    await irc.botJoin('#glowing-bear');
+    const members = await irc.channelMembers('#glowing-bear');
+    if (!members.some((nick) => nick.startsWith('gbb'))) {
+        throw new Error(
+            `afterAll could not return the fixture bot to #glowing-bear; members are ${members.join(', ') || '(none)'}`,
+        );
+    }
     console.log('\n\n========== CONSOLE LOG SUMMARY ==========');
     console.log('Total console messages:', consoleLogs.length);
     const relevant = consoleLogs.filter(l =>
@@ -91,6 +105,16 @@ test('readmarker appears when switching back after receiving messages elsewhere'
 test('places the marker before interleaved unread status lines and counts six messages', async () => {
     await waitForBuffer(page, '#glowing-bear', 15000);
     await switchToBuffer(page, '#glowing-bear');
+
+    // WeeChat renders a JOIN/PART line only for the nick it currently holds, and this test plants
+    // them under a hardcoded `gbbot` prefix, so the nick is pinned here rather than inherited.
+    // Measured with a scratch probe: with the bot left renamed to `gbbot2` by an earlier spec, 12
+    // of the 18 planted markers never reached the chat (45 rows, `waitForFunction` timing out at
+    // 2000 ms); renaming the bot to `gbbot` first landed all 18 (64 rows, nothing missing). The
+    // file passed inside the serial prefix only because a spec before it happened to rename the
+    // bot back, and failed every time the file ran alone.
+    await irc.botNick('gbbot');
+    await waitForBotNickApplied(page, 'gbbot', '#glowing-bear', 'readmarker-nick');
     const chatContainer = page.locator('[data-testid="chat-messages"]');
     await chatContainer.evaluate((el) => {
         (el as HTMLElement).scrollTop = (el as HTMLElement).scrollHeight;
@@ -206,54 +230,43 @@ test('readmarker appears after scroll-to-bottom followed by new unreads', async 
 });
 
 // Verify that unread counts on OTHER buffers (not the one we switched to)
-// are not corrupted by the setActiveBuffer immutable update.
-test('other buffer unread counts preserved when switching active buffer', async () => {
+// Verify that a buffer nobody is looking at keeps its unread count while the active buffer moves.
+test('a buffer keeps its unread count when the active buffer moves on', async () => {
     await waitForBuffer(page, '#glowing-bear', 15000);
 
-    // Ensure #glowing-bear starts with clean unread state by switching to it first.
+    // Arrange the baseline the assertion needs: read the target first, so the only unread it can
+    // hold afterwards is the unread this test sends.
     await switchToBuffer(page, '#glowing-bear');
-    await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 5000 });
+    await waitForNoUnread(page, '#glowing-bear');
 
-    // Switch to gbtest so #glowing-bear is inactive
+    // The buffer this test moves to is one it created and will close. It used to move to
+    // `buffer-item` index 1 of "anything that is not glowing-bear" — whichever fixture buffer
+    // happened to sit there — and skipped outright when fewer than two rows existed, so on a cold
+    // fixture the assertion never ran at all.
+    const away = await openSpecChatChannel(page, 'rmaway');
+
     await waitForBuffer(page, 'gbtest', 10000);
     await switchToBuffer(page, 'gbtest');
+    await waitForNoUnread(page, '#glowing-bear');
 
-    // Send messages to #glowing-bear (creates unread)
-    await irc.sendMessage('#glowing-bear', 'other-buffer-count-test-' + Date.now());
+    const runId = Date.now();
+    await irc.sendMessage('#glowing-bear', `other-buffer-count-${runId}-1`);
+    await irc.sendMessage('#glowing-bear', `other-buffer-count-${runId}-2`);
+    await expect
+        .poll(() => readUnreadBadge(page, '#glowing-bear'), { timeout: 20000, intervals: [250] })
+        .toBe(2);
 
-    // Wait for unread badge to appear in the buffer list
-    const glowItem = page.getByTestId('buffer-item').filter({ hasText: 'glowing-bear' }).first();
-    await expect(glowItem).toBeVisible({ timeout: 10000 });
-    // Badge is positioned absolutely on the right edge of the buffer item
-    await glowItem.getByTestId('unread-badge').waitFor({ state: 'visible', timeout: 20000 });
+    // Moving the active buffer again must not touch a buffer nobody is looking at. Read it once,
+    // immediately: a polled assertion of an unchanged number can pass on DOM that has not updated
+    // yet, which proves nothing.
+    await switchToBuffer(page, away);
+    expect(await readUnreadBadge(page, '#glowing-bear')).toBe(2);
+    await expect
+        .poll(() => readUnreadBadge(page, '#glowing-bear'), { timeout: 10000, intervals: [250] })
+        .toBe(2);
 
-    // Read unread badge text for #glowing-bear from the DOM before second switch.
-    const getUnreadBadge = async (name: string) => {
-        return (await page.getByTestId('buffer-item').filter({ hasText: name }).first().getByTestId('unread-badge').textContent()) || '';
-    };
-
-    const beforeText = await getUnreadBadge('glowing-bear');
-    const beforeTotal = parseInt(beforeText, 10) || 0;
-
-    // Now switch to a different buffer (not #glowing-bear)
-    const otherItems = page.locator('[data-testid="buffer-item"]').filter({ hasNotText: 'glowing-bear' });
-    const otherCount = await otherItems.count();
-    if (otherCount > 1) {
-        await otherItems.nth(1).click();
-
-        // Wait for setActiveBuffer console log
-        await waitForConsoleLog('[setActiveBuffer]');
-
-        // Read unread badge text for #glowing-bear after switching away
-        const afterText = await getUnreadBadge('glowing-bear');
-        const afterTotal = parseInt(afterText, 10) || 0;
-
-        // The total unread should be preserved (not zeroed by setActiveBuffer for non-active buffers)
-        expect(beforeTotal).toBeGreaterThan(0);
-        expect(afterTotal).toBeGreaterThan(0);
-    } else {
-        test.skip(true, 'Need at least 2 non-glowing-bear buffers for this test');
-    }
+    closeSpecChatChannel(away);
+    await switchToBuffer(page, '#glowing-bear');
 });
 
 test('keeps the new-message separator fixed for the active viewing session', async () => {

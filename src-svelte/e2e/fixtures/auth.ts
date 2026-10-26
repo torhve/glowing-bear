@@ -55,6 +55,10 @@ export async function createConnectedPage(
     // an SPA history write, an uncaught error — happens to the page while a helper is mid-action,
     // and an init script added after this goto would miss the one load that matters.
     await installPageActivityRecorder(page);
+    // The activity recorder lives in the page, so a navigation destroys its own evidence with the
+    // document it came from. This witness lives in the harness process and survives: it is what
+    // distinguishes "the app reloaded under a mid-action spec" from "the app never connected".
+    attachNavigationWitness(page);
 
     await page.goto('http://localhost:8001/');
     await waitForAppReady(page);

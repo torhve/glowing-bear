@@ -1,5 +1,12 @@
 import type { FullConfig } from '@playwright/test';
 import { closeFixtureQueryBuffers, closeTestBuffers, relayBufferNames } from './helpers/relay-admin';
+import { irc } from './helpers/irc-control';
+
+/** The nick the fixture's own bot starts with (`test/irc-server/IRCServer.ts`). */
+const FIXTURE_BOT_NICK = 'gbbot';
+
+/** The channel the fixture autojoins and nearly every spec shares. */
+const FIXTURE_CHANNEL = '#glowing-bear';
 
 /* gbtest itself persists across test runs on purpose: the channel, the PM and the
  * relay stay up so a run does not have to rebuild them. What must NOT persist is the
@@ -25,6 +32,24 @@ export default async function globalTeardown(_config: FullConfig) {
         // is fixed when WeeChat creates them, so leaving one behind decides which private buffer a
         // later run is allowed to wait for.
         const closedQueries = await closeFixtureQueryBuffers();
+        // The bot's nick is fixture state as well. Specs rename it so their private buffer gets a
+        // name they chose, and WeeChat renders a JOIN/PART line only for the nick it currently
+        // holds: measured with the bot left renamed to `gbbot2`, 12 of 18 planted status markers
+        // never reached the chat, so a run that renamed the bot decides whether a later run's
+        // status lines exist at all.
+        await irc.botNick(FIXTURE_BOT_NICK);
+        // Membership is fixture state on the same terms. Raw `PART` lines a spec plants are honoured
+        // by WeeChat and take the bot out of the shared channel's nicklist — measured: after
+        // `ReadMarker-unreadBadge` ran, the legacy transport's nicklist held only `testuser` and
+        // `testuser5`, and a later spec's nick completion produced no replacement (`Received: "gbb"`).
+        // Rejoining is idempotent on the fixture server, and the membership is read back rather than
+        // assumed, because a restore that silently did nothing would leave the next run inheriting
+        // the same nickless channel.
+        await irc.botJoin(FIXTURE_CHANNEL);
+        const members = await irc.channelMembers(FIXTURE_CHANNEL);
+        if (!members.includes(FIXTURE_BOT_NICK)) {
+            console.log(`[global-teardown] ${FIXTURE_CHANNEL} did not regain ${FIXTURE_BOT_NICK}; members are ${members.join(', ') || '(none)'}`);
+        }
         // Naming what survives, so a leak outside the rules above shows up as a
         // growing list in the run output instead of silently slowing every later run.
         const remaining = await relayBufferNames();
