@@ -7,38 +7,39 @@ import {
     waitForBuffer,
 } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
-import { fixtureCommand } from '../helpers/relay-admin';
+import { closeSpecPrivateBuffer, openSpecPrivateBuffer } from '../helpers/spec-chat-channel';
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
-import { waitForBotNickApplied, waitForRow } from '../helpers/waits';
+import { waitForRow } from '../helpers/waits';
 
 let page: import('@playwright/test').Page;
 
 test.describe.configure({ mode: 'serial' });
 
 /**
- * The PM buffer this spec asserts on is named after the bot's current nick — WeeChat calls the
- * query buffer `irc.gbtest.<nick>` — and two other specs in this pass rename that bot
- * (`BufferLineRow.test.ts`, `Irc-integration.test.ts`). Without pinning the nick here the spec
- * would assert against whichever nick the previous file happened to leave behind.
+ * The private buffer this spec asserts on is `irc.gbtest.<nick>`, and WeeChat fixes that name when
+ * the first PM creates the buffer — renaming the peer afterwards does not rename the buffer
+ * (measured: bot renamed, change confirmed in the chat, PM sent under the new nick, sidebar still
+ * holding the row named for the old one). So the nick is pinned and the buffer is created here, by
+ * this spec, rather than inherited from whichever spec last touched the shared bot — this file used
+ * to assume the name while `BufferLineRow.test.ts` and `Irc-integration.test.ts` renamed the same
+ * bot to other things.
  */
 const BOT_NICK = 'gbbot2';
-const PM_BUFFER = `irc.gbtest.${BOT_NICK}`;
 
 test.beforeAll(async ({ browser }) => {
     page = await createConnectedPage(browser);
     setupEffectOrphanFilter(page);
     await switchToBuffer(page, '#glowing-bear');
-    await irc.botNick(BOT_NICK);
-    await waitForBotNickApplied(page, BOT_NICK, '#glowing-bear', 'pm-nick-pin');
+    // Drops whatever private buffer the fixture still holds, pins the nick, and sends the PM that
+    // makes WeeChat create the buffer under it. The name asserted below is arranged by this spec.
+    await openSpecPrivateBuffer(page, BOT_NICK, 'pm');
 });
 
 test.afterAll(async () => {
-    // Put the fixture back the way the rest of the pass expects it. This spec closes the query
-    // buffer on purpose, and a PM from the bot brings it back — measured here: the row is gone
-    // after the close and reappears on the next PM. Waiting for it makes the restore a check
-    // rather than a hope.
-    await irc.sendPm('testuser', `pm-restore-${Date.now()}`);
-    await waitForBuffer(page, BOT_NICK, 20000);
+    // Leave nothing for the next spec or run to inherit. This spec used to recreate the buffer as
+    // a courtesy — which is what decided its name for everybody that came after it — and now closes
+    // it instead, because a spec that needs a private buffer arranges its own.
+    closeSpecPrivateBuffer(BOT_NICK);
     await page.close();
 });
 
@@ -134,7 +135,7 @@ async function parkOnChannelWithCleanBadge(): Promise<void> {
 test('a PM from the bot creates the query buffer the message lands in', async () => {
     // Arrange the absence first: without this, "creates" would be true only because the buffer
     // happened to already exist.
-    fixtureCommand(`buffer close ${PM_BUFFER}`);
+    closeSpecPrivateBuffer(BOT_NICK);
     await expect.poll(pmRowPresent, { timeout: 15000, intervals: [250] }).toBe(false);
 
     const text = await sendPmUntilBufferExists();

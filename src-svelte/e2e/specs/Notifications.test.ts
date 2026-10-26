@@ -3,6 +3,7 @@ import { connectToWeechat, clearSettings, setSettings, waitForAppReady } from '.
 import { switchToBuffer, waitForBuffer } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
 import { createConnectedPage } from '../fixtures/auth';
+import { closeSpecPrivateBuffer, openSpecPrivateBuffer } from '../helpers/spec-chat-channel';
 
 let page: import('@playwright/test').Page;
 
@@ -54,9 +55,15 @@ test.beforeAll(async ({ browser }) => {
             }
         },
     });
+
+    // Private-message tests below assert on the query buffer the PM lands in. WeeChat names that
+    // buffer when it creates it, so this spec arranges it: pin the nick, send the PM, wait for the
+    // row it produces.
+    await openSpecPrivateBuffer(page, 'gbbot2', 'notify');
 });
 
 test.afterAll(async () => {
+    closeSpecPrivateBuffer('gbbot2');
     await page.close();
 });
 
@@ -199,15 +206,16 @@ test('sound plays when soundnotification is enabled', async () => {
         });
     });
 
-    // Switch to #glowing-bear so PM creates an inactive query buffer
+    // Switch to #glowing-bear so the PM lands in a buffer the chat is not looking at
     await switchToBuffer(page, '#glowing-bear');
 
     // Send a PM (triggers notify_private → playNotificationSound)
     await irc.sendPm('testuser', 'Sound test message!');
 
-    // Wait for PM buffer to appear in buffer list — relay propagation + buffer creation
-    // can take time. The notification handler fires only after the buffer exists.
-    await waitForBuffer(page, 'gbbot', 15000).catch(() => {});
+    // The private buffer this line lands in is the one arranged in beforeAll, named for the nick
+    // this spec pinned. The wait used to swallow its own failure, which made "the message never
+    // arrived" indistinguishable from "the notification never fired".
+    await waitForBuffer(page, 'gbbot2', 15000);
 
     // Check that playNotificationSound was called (via debug hook)
     await expect(async () => {

@@ -161,3 +161,38 @@ export async function closeTestBuffers(prefixes: string[]): Promise<number> {
     }
     return names.length;
 }
+
+/**
+ * Close the query (private) buffers the shared fixture holds on the `gbtest` server.
+ *
+ * A WeeChat query buffer keeps the name it was created with — the peer's nick at the moment the
+ * first PM arrived — and renaming the peer afterwards does not rename the buffer. Measured with a
+ * scratch probe: the bot was renamed to a fresh nick, the change was confirmed by a channel line
+ * carrying the new prefix, a PM was sent under the new nick, and the sidebar still held the row
+ * named for the *old* nick; the wait for a row named for the new one timed out. The fixture's own
+ * logs say the same thing from the other side (`irc.gbtest.gbbot.weechatlog` contains
+ * `gbbot2 is now known as gbbot`).
+ *
+ * That makes "wait for the private buffer named X" a claim about fixture history: the name was
+ * chosen by whichever spec created the buffer first, and specs were split between waiting for
+ * `gbbot` and waiting for `gbbot2` on one shared buffer. Clearing the query buffers leaves a run
+ * with no inherited name, so a spec that needs a private buffer has to create the one it asserts
+ * on (see `openSpecPrivateBuffer`).
+ */
+export async function closeFixtureQueryBuffers(): Promise<number> {
+    const SERVER_PREFIX = 'irc.gbtest.';
+    // A query buffer is `irc.<server>.<peer>`; a channel peer starts with '#', and the server
+    // buffer itself is `irc.server.<name>`, which this prefix never matches.
+    const names = (await relayBufferNames()).filter((name) => {
+        if (!name.startsWith(SERVER_PREFIX)) return false;
+        const peer = name.slice(SERVER_PREFIX.length);
+        return peer.length > 0 && !peer.startsWith('#');
+    });
+    for (const name of names) {
+        fixtureCommand(`buffer close ${name}`);
+    }
+    if (names.length > 0) {
+        await clearServerHotlist().catch(() => undefined);
+    }
+    return names.length;
+}

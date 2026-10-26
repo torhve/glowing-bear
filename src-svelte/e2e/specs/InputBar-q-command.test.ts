@@ -3,6 +3,7 @@ import { createConnectedPage } from '../fixtures/auth';
 import { switchToBuffer, waitForBuffer } from '../helpers/buffers';
 import { sendWeechatCommand } from '../helpers/connection';
 import { expectInputFocused } from '../helpers/input';
+import { closeFixtureQueryBuffers } from '../helpers/relay-admin';
 
 let page: import('@playwright/test').Page;
 
@@ -10,9 +11,18 @@ test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
     page = await createConnectedPage(browser);
+
+    // `/q <nick>` below is what creates the query buffer, and its name is decided when WeeChat
+    // creates it. A query buffer the fixture still holds for this peer under some other nick would
+    // answer the query, so the row these tests wait for would depend on what an earlier spec left
+    // behind instead of on what this spec typed.
+    await closeFixtureQueryBuffers();
 });
 
 test.afterAll(async () => {
+    // The buffers these tests created by typing /q are closed here, so the next spec starts from
+    // the same clean fixture this one started from.
+    await closeFixtureQueryBuffers();
     await page.close();
 });
 

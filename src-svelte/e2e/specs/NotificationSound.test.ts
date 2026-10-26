@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { setSettings, reconnect } from '../helpers/connection';
 import { waitForBuffer, switchToBuffer, bufferItemForName } from '../helpers/buffers';
 import { irc } from '../helpers/irc-control';
+import { closeSpecPrivateBuffer, openSpecPrivateBuffer } from '../helpers/spec-chat-channel';
 
 import { createConnectedPage } from '../fixtures/auth';
 
@@ -40,9 +41,16 @@ test.beforeAll(async ({ browser }) => {
         },
         settings: { savepassword: false, autoconnect: false, soundnotification: true },
     });
+
+    // Each test sends a PM while the chat looks at a channel and then proves the line landed
+    // through the unread badge on the private buffer's own row. That row is named when WeeChat
+    // creates the buffer, so the buffer is created here, under a nick this spec chose, instead of
+    // being inherited from whatever private buffer the fixture happened to hold.
+    await openSpecPrivateBuffer(page, 'gbbot2', 'notifsound');
 });
 
 test.afterAll(async () => {
+    closeSpecPrivateBuffer('gbbot2');
     await page.close();
 });
 

@@ -2,9 +2,8 @@ import { test, expect } from '@playwright/test';
 import { createConnectedPage } from '../fixtures/auth';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { botPm } from '../helpers/messages';
-import { irc } from '../helpers/irc-control';
+import { closeSpecPrivateBuffer, openSpecPrivateBuffer } from '../helpers/spec-chat-channel';
 import { openSettings, closeSettings } from '../helpers/settings';
-import { waitForBotNickApplied } from '../helpers/waits';
 
 let page: import('@playwright/test').Page;
 
@@ -12,20 +11,23 @@ test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ browser }) => {
     page = await createConnectedPage(browser);
+
+    // Every test below names the private buffer 'gbbot2'. A query buffer is named when WeeChat
+    // creates it, so that name is arranged here rather than inherited from whatever private buffer
+    // an earlier spec or run left behind.
+    await openSpecPrivateBuffer(page, 'gbbot2', 'bubble');
 });
 
 test.afterAll(async () => {
+    closeSpecPrivateBuffer('gbbot2');
     await page.close();
 });
 
 test.beforeEach(async () => {
     await waitForBuffer(page, '#glowing-bear', 15000);
     await switchToBuffer(page, '#glowing-bear');
-    // Restore bot nick to default so botPm targets the gbbot2 buffer. The relay sends
-    // no nicklist diff for the bot's NICK, so the prefix a probe line is stored under
-    // is what proves the change actually landed.
-    await irc.botNick('gbbot2');
-    await waitForBotNickApplied(page, 'gbbot2', '#glowing-bear', 'bubble-nick-reset');
+    // The bot nick and the private buffer are arranged once, in beforeAll. Nothing in this file
+    // renames the bot, so re-pinning it per test would only re-enter shared fixture state.
 });
 
 // Enable bubble mode by toggling the checkbox in the Settings modal.
