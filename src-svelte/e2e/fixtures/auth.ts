@@ -2,7 +2,7 @@ import type { Browser, BrowserContext, Page, Route } from '@playwright/test';
 import { connectToWeechat, clearSettings, waitForAppReady } from '../helpers/connection';
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
 import { installFocusLog } from '../helpers/focuslog';
-import { attachNavigationWitness, installPageActivityRecorder } from '../helpers/appState';
+import { attachNavigationWitness, installPageActivityRecorder, rememberDocumentToken } from '../helpers/appState';
 
 export interface CreateConnectedPageOptions {
   /** Settings to apply after clearing localStorage (e.g. { savepassword: false, enableEmojify: true }) */
@@ -62,6 +62,10 @@ export async function createConnectedPage(
 
     await page.goto('http://localhost:8001/');
     await waitForAppReady(page);
+    // The token identifies the document this page's session lives in. Everything a helper reports
+    // later is judged against it: same token means the app still owns this document, a new token
+    // means something replaced it while a test was acting on it.
+    await rememberDocumentToken(page);
     setupEffectOrphanFilter(page);
     await installFocusLog(page);
     await clearSettings(page);

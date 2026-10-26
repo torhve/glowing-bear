@@ -24,17 +24,75 @@ import type { Page } from '@playwright/test';
  */
 const harnessNavigations = new WeakMap<Page, Array<{ at: number; url: string }>>();
 
+/** Harness-side page events: the page-side recorder cannot report its own document's death. */
+const harnessPageEvents = new WeakMap<Page, Array<{ at: number; kind: string; detail: string }>>();
+
+/** The token of the document the harness built its session in, per page. */
+const harnessDocTokens = new WeakMap<Page, string>();
+
 /** Watch the frame from the harness side. Call before the page's first navigation. */
 export function attachNavigationWitness(page: Page): void {
     const entries: Array<{ at: number; url: string }> = [];
+    const events: Array<{ at: number; kind: string; detail: string }> = [];
     harnessNavigations.set(page, entries);
+    harnessPageEvents.set(page, events);
+    const push = (kind: string, detail: string) => {
+        events.push({ at: Date.now(), kind, detail });
+        if (events.length > 40) events.shift();
+    };
     page.on('framenavigated', (frame) => {
         if (frame === page.mainFrame()) entries.push({ at: Date.now(), url: frame.url() });
     });
+    page.on('crash', () => push('page-crash', page.url()));
+    page.on('close', () => push('page-close', page.url()));
+    page.on('pageerror', (error) => push('pageerror', error.message.slice(0, 140)));
+    // A page the test never asked for is a fixture leak, and a leaked page is one explanation for a
+    // helper acting on a document that never connected.
+    page.context().on('page', (opened) => push('context-page', opened.url() || '(new page)'));
 }
 
+/**
+ * Remember the token of the document the session was built in. Call after the first navigation.
+ *
+ * Every fresh document mints a new token, so a failure can separate two things that look identical
+ * from the outside: the app losing its session inside the document it was connected in, and that
+ * document being replaced underneath the test. An unchanged token with an empty lifecycle ring means
+ * the instrumentation or the page object is the suspect, not the app.
+ */
+export async function rememberDocumentToken(page: Page): Promise<void> {
+    try {
+        const token = await page.evaluate(
+            () => (window as Window & { __e2eDocToken?: string }).__e2eDocToken,
+        );
+        if (token) harnessDocTokens.set(page, token);
+    } catch {
+        // A page that cannot answer yet has no token to remember; the failure text says it is unrecorded.
+    }
+}
+
+/**
+ * Whether the dev server is still serving, read from the harness.
+ *
+ * Playwright owns the `webServer` process, so a failure cannot otherwise say whether the server died
+ * or restarted underneath the run — and a dev server that goes away reloads every open page, which is
+ * the same fresh-document shape as the app losing its own session.
+ */
+async function probeDevServer(): Promise<string> {
+    const startedAt = Date.now();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 1500);
+    try {
+        const response = await fetch('http://localhost:8001/', { signal: controller.signal });
+        return `dev server ${response.status} in ${Date.now() - startedAt}ms`;
+    } catch (error) {
+        const reason = (error as Error).name === 'AbortError' ? 'no answer within 1500ms' : (error as Error).message;
+        return `dev server unreachable (${reason})`;
+    } finally {
+        clearTimeout(timer);
+    }
+}
 export async function readAppState(page: Page): Promise<string> {
-    const state = await page.evaluate(() => {
+    const state = await page.evaluate(async () => {
         const chat = document.querySelector('[data-testid="chat-view"]');
         const connectForm = document.querySelector('[data-testid="host-input"]');
         const rows = [...document.querySelectorAll('[data-testid="buffer-item"] .buffer-name')]
@@ -46,6 +104,17 @@ export async function readAppState(page: Page): Promise<string> {
                 __gbE2eDebugEntries?: () => Array<{ t: number; event: string; detail?: string }>;
             }
         ).__gbE2eDebugEntries?.() ?? [];
+        // The app ships a service worker, and a worker claiming or reloading a client produces the
+        // same fresh-document shape as a dev-server reload. Say which it is instead of guessing.
+        let swState: string;
+        try {
+            const registration = await navigator.serviceWorker?.getRegistration?.();
+            swState = registration
+                ? `${navigator.serviceWorker?.controller ? 'controlling this client' : 'registered, not controlling'} at ${registration.scope}`
+                : 'no registration';
+        } catch {
+            swState = 'unreadable';
+        }
         return {
             screen: connectForm ? 'connect form' : chat ? 'chat' : 'neither chat nor connect form',
             bufferRows: rows.length,
@@ -61,6 +130,8 @@ export async function readAppState(page: Page): Promise<string> {
                 // session go away".
                 ageSeconds: Math.round((e.t - Date.now()) / 100) / 10,
             })),
+            docToken: (window as Window & { __e2eDocToken?: string }).__e2eDocToken ?? '(unstamped)',
+            sw: swState,
         };
     });
 
@@ -88,7 +159,26 @@ export async function readAppState(page: Page): Promise<string> {
         .join(', ');
     const navigated = seen.length ? `; harness saw ${seen.length} main-frame navigation(s): ${seenText}` : '';
 
-    return `app was on the ${state.screen} with ${rows}; connection: ${lifecycle}; page recorded: ${activity}${navigated}; title ${JSON.stringify(state.title)}`;
+    // The token is the discriminator. Same token and an empty lifecycle ring points at the harness or
+    // the recorder; a different token points at whatever replaced the document; a page the test never
+    // opened points at a fixture leak. Each of those reads differently here on purpose.
+    const expectedToken = harnessDocTokens.get(page);
+    const documentText = !expectedToken
+        ? `document token ${state.docToken} was never recorded by the harness`
+        : state.docToken === expectedToken
+            ? `document ${state.docToken}, the same one the session was built in`
+            : `DOCUMENT REPLACED: the session was built in ${expectedToken}, this document is ${state.docToken}`;
+
+    const pageEvents = harnessPageEvents.get(page) ?? [];
+    const eventText = pageEvents.length
+        ? `; harness page events: ${pageEvents
+            .map((e) => `${e.kind} @${Math.round((e.at - readAt) / 100) / 10}s${e.detail ? ` (${e.detail})` : ''}`)
+            .join(', ')}`
+        : '';
+
+    const devServer = await probeDevServer();
+
+    return `app was on the ${state.screen} with ${rows}; ${documentText}; connection: ${lifecycle}; page recorded: ${activity}${navigated}${eventText}; ${devServer}; service worker: ${state.sw}; title ${JSON.stringify(state.title)}`;
 }
 
 /** readAppState, never the cause of a failure: a page that is closing reads as unreadable state. */
@@ -114,8 +204,12 @@ export async function describeAppState(page: Page): Promise<string> {
 export function pageActivityInitScript(): void {
     type Entry = { t: number; kind: string; detail: string };
     const trace: Entry[] = [];
-    const w = window as Window & { __e2eActivity?: Entry[] };
+    const w = window as Window & { __e2eActivity?: Entry[]; __e2eDocToken?: string };
     w.__e2eActivity = trace;
+    // One token per document, stamped where the recorder is stamped. A reload or a navigation runs
+    // this again and mints a new one, so the harness can tell a replaced document from a document
+    // that merely lost its session — the two things that look identical from a locator timeout.
+    w.__e2eDocToken = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
     const push = (kind: string, detail: string) => {
         trace.push({ t: Date.now(), kind, detail });

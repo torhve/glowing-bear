@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { createConnectedPage } from '../fixtures/auth';
+import { readAppState } from '../helpers/appState';
 import { disconnect } from '../helpers/connection';
 
 // The connection lifecycle ring is what lets a harness failure say *why* the app had no session
@@ -46,4 +47,21 @@ test('a deliberate Leave names the teardown and who ran it', async () => {
     const stop = ring!.find((e) => e.event === 'orchestrator:stop');
     expect(stop, 'no orchestrator:stop entry recorded for a Leave').not.toBeUndefined();
     expect(stop!.detail, 'the stop entry carries no call site').toBeTruthy();
+});
+
+test('a state read says whether the document is the one the session was built in', async () => {
+    const connected = await readAppState(page);
+    expect(connected, 'the harness recorded no document token for this page')
+        .toContain('the same one the session was built in');
+
+    // A reload is exactly the failure shape this reporting exists for: a fresh document with no
+    // lifecycle ring and no page-side activity, because both live in the document that just died.
+    // The page cannot testify to its own death, so the harness-side witness and the token have to.
+    await page.reload({ waitUntil: 'networkidle' });
+    const replaced = await readAppState(page);
+    expect(replaced, 'a reload must read as a replaced document, not as a session the app dropped')
+        .toContain('DOCUMENT REPLACED');
+    expect(replaced).toMatch(/harness saw \d+ main-frame navigation/);
+    expect(replaced, 'the dev server is reported from the harness, so a dead server is visible')
+        .toContain('dev server 200');
 });
