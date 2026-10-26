@@ -1,6 +1,16 @@
 <script lang="ts">
-  import type { EventHandler } from 'svelte/elements';
+  import type { FormEventHandler } from 'svelte/elements';
   import { FORM_FIELD_CLASS } from '#lib/formControlClass.ts';
+
+  interface Props {
+    id: string;
+    value: string;
+    /** Matches what `<textarea>` accepts: Svelte types `oninput` as Event-based. */
+    oninput: FormEventHandler<HTMLTextAreaElement>;
+    rows?: number;
+    placeholder?: string;
+    'data-testid'?: string;
+  }
 
   let {
     id,
@@ -9,14 +19,7 @@
     rows = 4,
     placeholder = '',
     'data-testid': dataTestId = '',
-  } = $props<{
-    id: string;
-    value: string;
-    oninput: EventHandler<InputEvent, HTMLTextAreaElement>;
-    rows?: number;
-    placeholder?: string;
-    'data-testid'?: string;
-  }>();
+  }: Props = $props();
 </script>
 
 <!--

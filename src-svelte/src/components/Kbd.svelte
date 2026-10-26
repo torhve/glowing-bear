@@ -3,15 +3,17 @@
    * Kbd — Individual key display rendered as a `<kbd>` element.
    * Used for showing keyboard shortcuts in UI documentation and help text.
    */
+  interface Props {
+    class?: string;
+    children?: import('svelte').Snippet;
+    [key: string]: unknown;
+  }
+
   let {
     class: extraClass = '',
     children,
     ...attrs
-  } = $props<{
-    class?: string;
-    children?: import('svelte').Snippet;
-    [key: string]: unknown;
-  }>();
+  }: Props = $props();
 </script>
 
 <kbd

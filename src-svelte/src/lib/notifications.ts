@@ -34,8 +34,10 @@ async function ensureTauriNotification(): Promise<void> {
 async function setupTauriNotificationListener(): Promise<void> {
     if (!isTauri() || !tauriNotif) return;
     try {
-        await tauriNotif.onAction((notification: import('@tauri-apps/plugin-notification').Options) => {
-            const bufferId = notification.extra?.bufferId as string | undefined;
+        // Plugin 2.7 reports the action, not the Options the notification was sent
+        // with: the payload rides on `event.notification`, which a platform may omit.
+        await tauriNotif.onAction((event: import('@tauri-apps/plugin-notification').ActionPerformed) => {
+            const bufferId = event.notification?.extra?.bufferId as string | undefined;
             if (bufferId) {
                 setActiveBuffer(bufferId);
             }

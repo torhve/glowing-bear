@@ -3,17 +3,19 @@
    * KbdGroup — Horizontal group of keys with consistent gap.
    * Renders as a `<kbd>` element containing multiple `<Kbd>` children and optional `<Sep>` separators.
    */
+  interface Props {
+    ref?: HTMLElement | null;
+    class?: string;
+    children?: import('svelte').Snippet;
+    [key: string]: unknown;
+  }
+
   let {
     ref = $bindable(null),
     class: extraClass = '',
     children,
     ...restProps
-  } = $props<{
-    ref?: HTMLElement | null;
-    class?: string;
-    children?: import('svelte').Snippet;
-    [key: string]: unknown;
-  }>();
+  }: Props = $props();
 </script>
 
 <kbd

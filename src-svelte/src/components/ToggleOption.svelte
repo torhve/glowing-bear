@@ -4,15 +4,7 @@
   import type { LucideIcon } from '@lucide/svelte';
   import type { Settings } from '#lib/types.ts';
 
-  let {
-    id,
-    name,
-    icon: Icon,
-    checked,
-    onchange,
-    testid = undefined,
-    children,
-  } = $props<{
+  interface Props {
     id: string;
     /** The setting this row writes: `name` and both data attributes carry it. */
     name: keyof Settings;
@@ -27,7 +19,17 @@
     testid?: string;
     /** The label text a user reads, after the icon. */
     children: Snippet;
-  }>();
+  }
+
+  let {
+    id,
+    name,
+    icon: Icon,
+    checked,
+    onchange,
+    testid = undefined,
+    children,
+  }: Props = $props();
 </script>
 
 <label class="settings-option flex items-center justify-between py-2" data-settings-option={name}>

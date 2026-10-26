@@ -3,20 +3,22 @@
   import type { ChangeEventHandler } from 'svelte/elements';
   import { FORM_FIELD_CLASS } from '#lib/formControlClass.ts';
 
-  let {
-    id,
-    value,
-    onchange,
-    'data-testid': dataTestId = '',
-    children,
-  } = $props<{
+  interface Props {
     id: string;
     value: string;
     onchange: ChangeEventHandler<HTMLSelectElement>;
     'data-testid'?: string;
     /** The `<option>` elements. */
     children: Snippet;
-  }>();
+  }
+
+  let {
+    id,
+    value,
+    onchange,
+    'data-testid': dataTestId = '',
+    children,
+  }: Props = $props();
 </script>
 
 <!--

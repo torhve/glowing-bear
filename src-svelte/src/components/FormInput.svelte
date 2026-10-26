@@ -3,6 +3,25 @@
   import type { HTMLInputTypeAttribute, KeyboardEventHandler, EventHandler } from 'svelte/elements';
   import { FORM_SURFACE } from '#lib/formControlClass.ts';
 
+  /** The attribute union `<input>` accepts; `svelte/elements` does not export it. */
+  type Autocapitalize = 'off' | 'none' | 'on' | 'sentences' | 'words' | 'characters';
+
+  interface Props {
+    id: string;
+    value?: string | number | readonly string[];
+    type?: HTMLInputTypeAttribute;
+    placeholder?: string;
+    extraClass?: string;
+    disabled?: boolean;
+    autocapitalize?: Autocapitalize;
+    onkeydown?: KeyboardEventHandler<HTMLInputElement>;
+    oninput?: EventHandler<Event, HTMLInputElement>;
+    onblur?: EventHandler<FocusEvent, HTMLInputElement>;
+    size?: 'sm' | 'md' | 'lg';
+    variant?: 'default' | 'search';
+    'data-testid'?: string;
+  }
+
   let {
     id,
     value = '',
@@ -17,21 +36,7 @@
     size = 'md',
     variant = 'default',
     'data-testid': dataTestId = ''
-  } = $props<{
-    id: string;
-    value?: string | number | readonly string[];
-    type?: HTMLInputTypeAttribute;
-    placeholder?: string;
-    extraClass?: string;
-    disabled?: boolean;
-    autocapitalize?: string;
-    onkeydown?: KeyboardEventHandler<HTMLInputElement>;
-    oninput?: EventHandler<Event, HTMLInputElement>;
-    onblur?: EventHandler<FocusEvent, HTMLInputElement>;
-    size?: 'sm' | 'md' | 'lg';
-    variant?: 'default' | 'search';
-    'data-testid'?: string;
-  }>();
+  }: Props = $props();
 
   function getSizeClass(s: 'sm' | 'md' | 'lg'): string {
     switch (s) {
@@ -55,7 +60,9 @@
 
   const combinedClass = $derived(`form-input ${FORM_SURFACE} hover:border-text-muted placeholder-text-muted transition-colors ${getSizeClass(size)} ${getVariantClass(variant)} ${extraClass}`);
 
-  function handleInput(e: Event) {
+  // `<input>` hands us the event with `currentTarget` already narrowed to this
+  // element, which is the signature a caller's `oninput` is typed to receive.
+  function handleInput(e: Event & { currentTarget: EventTarget & HTMLInputElement }) {
     const target = e.target as HTMLInputElement;
     internalValue = target.value;
     oninput?.(e);

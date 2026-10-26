@@ -8,6 +8,15 @@
   type BadgeVariant = 'default' | 'success' | 'warning' | 'danger';
   type BadgeMode = 'filled' | 'outline' | 'subtle' | 'solid' | 'bright';
 
+  interface Props {
+    variant?: BadgeVariant;
+    mode?: BadgeMode;
+    icon?: Component;
+    class?: string;
+    children?: import('svelte').Snippet;
+    [key: string]: unknown;
+  }
+
   let {
     variant = 'default',
     mode = 'filled',
@@ -15,14 +24,7 @@
     class: extraClass = '',
     children,
     ...attrs
-  } = $props<{
-    variant?: BadgeVariant;
-    mode?: BadgeMode;
-    icon?: Component;
-    class?: string;
-    children?: import('svelte').Snippet;
-    [key: string]: unknown;
-  }>();
+  }: Props = $props();
 
   /* Build Tailwind class string for any variant + mode combination */
   function badgeClassFor(variant: BadgeVariant, mode: BadgeMode): string {
