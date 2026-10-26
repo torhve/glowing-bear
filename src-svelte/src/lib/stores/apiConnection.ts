@@ -46,6 +46,11 @@ import { clearHistoryOutcomes } from '#lib/stores/historyState.ts';
 import type { ApiSession } from '#lib/api/api-session.ts';
 import type { ApiBufferId } from '#lib/api/api-ids.ts';
 import { DEBUG_NICKLIST, DEBUG_WEECHAT_COMMANDS, DEBUG_CONNECTION } from '#lib/debug.ts';
+import { connectionDebugLog, installConnectionDebugRead } from '#lib/connectionDebugLog.ts';
+
+// Test-only: publishes the lifecycle ring on `window` when a spec opted in with
+// `__gbE2eDebug`. No-op otherwise, and it runs before any connection work can happen.
+installConnectionDebugRead();
 
 let orchestrator: ApiOrchestrator | null = null;
 
@@ -163,6 +168,7 @@ async function pollHotlist(): Promise<void> {
 
 export async function connect(profile: ConnectionProfile): Promise<void> {
     const { host, port, path, tls } = profile;
+    connectionDebugLog('connect:start', `${host}:${port}${tls ? ' (tls)' : ''}`);
     // Manual reconnect takeover while auto-reconnect is pending.
     if (manualReconnectRequested) {
         manualReconnectRequested = false;
@@ -181,6 +187,9 @@ export async function connect(profile: ConnectionProfile): Promise<void> {
     lastRecordedReceived = 0;
 
     const previous = orchestrator;
+    // The silent exit: disposing the previous orchestrator writes a 'disconnected' status that
+    // names no failure anywhere. Recorded whenever the harness has asked for lifecycle events.
+    if (previous) connectionDebugLog('connect:dispose-previous');
     previous?.dispose();
 
     return new Promise<void>((resolve, reject) => {
@@ -247,6 +256,7 @@ export async function connect(profile: ConnectionProfile): Promise<void> {
                     // for a settings decision. A caller awaiting connect() must
                     // learn the app is not going to retry, or it waits on a
                     // promise nobody will settle.
+                    connectionDebugLog(scheduled ? 'retry:scheduled' : 'retry:declined', error.slice(0, 120));
                     settleConnectFailure(error);
                     return scheduled;
                 },
@@ -260,6 +270,7 @@ export async function connect(profile: ConnectionProfile): Promise<void> {
         self = orch;
 
         const handleOrchestratorStatus = (status: OrchestratorStatus, owner: ApiOrchestrator) => {
+            connectionDebugLog(`status:${status.state}`, `g${status.generation} a${status.attempt}${status.error ? ` — ${status.error.slice(0, 120)}` : ''}`);
             if (owner !== orchestrator) return; // stale generator
             // Publish the version the orchestrator fetched from the relay so
             // the UI (TopBar, settings footer) can show WeeChat / Relay API

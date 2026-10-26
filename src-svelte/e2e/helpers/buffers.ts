@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect } from "@playwright/test";
-import { readAppState } from "./appState";
+import { describeAppState, readAppState } from "./appState";
 
 // Buffer list displays trimmedName (stripped of #, &, etc.), so match against that.
 function getBufferText(name: string): string {
@@ -29,7 +29,7 @@ export async function waitForBuffer(page: Page, name: string, timeout = 10000) {
             .locator('[data-testid="buffer-item"] .buffer-name')
             .allTextContents();
         throw new Error(
-            `no sidebar row named "${name}" within ${timeout}ms; rows present: ${present.join(", ") || "(none)"}`,
+            `no sidebar row named "${name}" within ${timeout}ms; rows present: ${present.join(", ") || "(none)"} — ${await describeAppState(page)}`,
             { cause: error },
         );
     }

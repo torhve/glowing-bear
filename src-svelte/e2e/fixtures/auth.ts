@@ -2,7 +2,7 @@ import type { Browser, BrowserContext, Page, Route } from '@playwright/test';
 import { connectToWeechat, clearSettings, waitForAppReady } from '../helpers/connection';
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
 import { installFocusLog } from '../helpers/focuslog';
-import { installPageActivityRecorder } from '../helpers/appState';
+import { attachNavigationWitness, installPageActivityRecorder } from '../helpers/appState';
 
 export interface CreateConnectedPageOptions {
   /** Settings to apply after clearing localStorage (e.g. { savepassword: false, enableEmojify: true }) */
@@ -42,6 +42,14 @@ export async function createConnectedPage(
     if (options?.blockCdn !== false) {
         await page.route('**/cdnjs.cloudflare.com/**', (route: Route) => route.abort());
     }
+
+    // Opt the app into its test-only connection lifecycle ring (src/lib/connectionDebugLog.ts).
+    // Without this flag the app records nothing at all; with it, every connect attempt, transport
+    // dispose, retry decision and status transition lands in a ring that readAppState quotes
+    // whenever a helper gives up. That is the only way to see a session that went away silently.
+    await page.addInitScript(() => {
+        (window as Window & { __gbE2eDebug?: boolean }).__gbE2eDebug = true;
+    });
 
     // Installed before the first navigation: what this recorder is meant to witness — a reload,
     // an SPA history write, an uncaught error — happens to the page while a helper is mid-action,

@@ -40,6 +40,7 @@ import {
     type ConnectionProfile,
 } from '#lib/stores/connectionLifecycle.ts';
 import { clearCaptureIntent, releaseIfProfileChanged, releaseRetainedSnapshot } from '#lib/stores/retainedChat.ts';
+import { connectionDebugLog } from '#lib/connectionDebugLog.ts';
 
 export type RelayTransport = 'api' | 'legacy';
 
@@ -257,6 +258,7 @@ export function disconnect(): void {
     // Explicit departure is not a loss. Clear any pending capture intent before
     // the two transport wipes run, so a stale intent can never make an
     // intentional Leave capture a session.
+    connectionDebugLog('disconnect', 'application-level Leave / teardown');
     clearCaptureIntent();
     // One teardown for whichever transport is active, and one outcome. The
     // inactive transport is quiesced, not wiped: it has no session to close, and

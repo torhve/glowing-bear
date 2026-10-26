@@ -18,6 +18,7 @@ import { ApiSession, ApiSessionError, type ApiSessionClose, type ApiSessionRespo
 import { dispatchEvent, mapBufferList, mapHotlist } from '#lib/api/api-mapping.ts';
 import type { ApiReducers } from '#lib/api/api-contracts.ts';
 import { UPGRADE_RECONNECT_DELAY_MS } from '#lib/stores/connectionLifecycle.ts';
+import { connectionDebugLogFromCaller } from '#lib/connectionDebugLog.ts';
 
 /** Mirrors models.ts beginSyncPhase/endSyncPhase generation-token API. */
 export interface SyncPhaseTokens {
@@ -165,6 +166,10 @@ export class ApiOrchestrator {
     /** Local disconnect. Never sends /quit — WeeChat must not be shut down
      *  by a client leaving. */
     stop(): void {
+        // The one exit that produces a 'disconnected' status without naming a failure anywhere.
+        // Who called it is the whole question when a session vanishes mid-run, so the call site is
+        // recorded — and only when the harness has opted into the lifecycle ring.
+        connectionDebugLogFromCaller('orchestrator:stop');
         this.stopped = true;
         this.runningGeneration = null;
         this.clearRetry();
@@ -187,6 +192,7 @@ export class ApiOrchestrator {
 
     /** Full teardown (HMR cleanup / component destroy). */
     dispose(): void {
+        connectionDebugLogFromCaller('orchestrator:dispose');
         this.stop();
     }
 
