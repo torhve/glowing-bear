@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { APP_URL } from '../appUrl';
 
 /**
  * What the app itself is showing, read at the moment a helper gives up.
@@ -82,7 +83,7 @@ async function probeDevServer(): Promise<string> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 1500);
     try {
-        const response = await fetch('http://localhost:8001/', { signal: controller.signal });
+        const response = await fetch(`${APP_URL}/`, { signal: controller.signal });
         return `dev server ${response.status} in ${Date.now() - startedAt}ms`;
     } catch (error) {
         const reason = (error as Error).name === 'AbortError' ? 'no answer within 1500ms' : (error as Error).message;

@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
 import path from 'path';
+import { APP_URL } from './appUrl';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -85,7 +86,7 @@ export default defineConfig({
         ['list'],
     ],
     use: {
-        baseURL: 'http://localhost:8001',
+        baseURL: APP_URL,
         trace: 'on-first-retry',
         screenshot: 'only-on-failure',
         video: 'off',
@@ -126,7 +127,7 @@ export default defineConfig({
     webServer: {
         command: 'npm run dev',
         cwd: '../..',
-        url: 'http://localhost:8001',
+        url: APP_URL,
         reuseExistingServer: !process.env.CI,
         timeout: 120000,
     },

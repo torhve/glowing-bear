@@ -3,6 +3,7 @@ import { connectToWeechat, clearSettings, waitForAppReady } from '../helpers/con
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
 import { installFocusLog } from '../helpers/focuslog';
 import { attachNavigationWitness, installPageActivityRecorder, rememberDocumentToken } from '../helpers/appState';
+import { APP_URL } from '../appUrl';
 
 export interface CreateConnectedPageOptions {
   /** Settings to apply after clearing localStorage (e.g. { savepassword: false, enableEmojify: true }) */
@@ -60,7 +61,7 @@ export async function createConnectedPage(
     // distinguishes "the app reloaded under a mid-action spec" from "the app never connected".
     attachNavigationWitness(page);
 
-    await page.goto('http://localhost:8001/');
+    await page.goto(`${APP_URL}/`);
     await waitForAppReady(page);
     // The token identifies the document this page's session lives in. Everything a helper reports
     // later is judged against it: same token means the app still owns this document, a new token
