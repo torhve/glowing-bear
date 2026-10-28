@@ -46,6 +46,15 @@ The app is a **dual-protocol client**. `connectionManager.ts` chooses one transp
 
 `src-svelte/src/lib/chatViewport.ts` is the sole owner of every application chat scroll write — `ChatView.svelte` renders and projects the model, and no component writes `scrollTop` or calls `scrollIntoView` on the chat container. Read `docs/chat-scroll-ownership.md` before changing chat scroll behaviour: it records the transition policy, intent provenance, the measured reason each constant has its value, and the parts that look like oversights but are deliberate.
 
+### Chat history depth (one cursor per buffer — never regress)
+
+`BufferData.historyLimit` is the only depth cursor a buffer has. It starts screen-derived (`maxBufferLines`, clamped 200–1000) and a widening page — a reader paging upward, the reader's explicit control, or the page gate hunting for a line worth showing in a buffer that renders nothing — raises it one doubling toward `HISTORY_LINE_CEILING = 4096`, which is WeeChat's own `history.max_buffer_lines_number` (live probe: a channel planted with 6 000 lines can only ever return 4 096).
+
+- **A widening page asks for exactly the cap it just raised.** Both relays answer a lines request as "the newest N raw lines", and the legacy transport *replaces* the window a page is answered with and trims it to the cap on arrival. A page deeper than the cap therefore loses its oldest lines first — and on a smart-filtered channel the oldest lines are the only visible ones. `runHistoryPage` states the widened cap and the page size as one number so this is a rule, not a coincidence of the smallest page (100) and the smallest cap (200).
+- **`displayed: 0` lines are never stored and must never be charged for cap space.** Counting them spent the retention budget on lines that were never pushed and dropped real conversation; see the 2026-10-28 note in `docs/perf-ui-2026-10.md` for the measurement.
+- **`historySearchIsOver(buffer)` is the single stop condition.** The gate returns `'none'` on it and `runHistoryPage` refuses a widening page on it. Past the ceiling both relays answer the identical window, which is the request storm this path exists to avoid (measured 2 825 identical `last_line(-100)` requests on one channel).
+- **Accepted cost:** the gate may ratchet a buffer to the ceiling with no reader involved, and the buffer keeps it. Read the perf note before changing the ceiling or the gate's reach; the row/DOM/heap/latency numbers are already measured there.
+- Coverage: `test/unit/hidden-window-paging.test.ts`, `test/unit/history-page-runner.test.ts`, `test/unit/history-limit-growth.test.ts`, `e2e/specs/History-filteredWindow.test.ts` (both relays, counts the windows actually put on the wire), `e2e/specs/History-requestDiscipline.test.ts`.
 
 ## Commands
 
