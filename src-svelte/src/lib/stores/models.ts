@@ -1167,12 +1167,12 @@ export function historyCappedFor(buffer: BufferData): boolean {
  * `deeper` — it has, and every line in it was hidden. WeeChat counts the
  * newest-N window over RAW lines, so a join/part-heavy channel can answer N
  * smart-filtered lines and zero visible ones. Asking for the same N again would
- * return the same N, so a deeper page grows the buffer's cap (doubling toward
- * the ceiling) and each request reaches further back. The grown cap is also
- * what keeps the older visible lines from being trimmed away as the oldest of
- * an oversized page.
- * `none` — history start was reached, there is something to show, or the window
- * is already as deep as the relay can be asked for.
+ * return the same N, so each further page doubles the window it reaches back
+ * into. That window is `growHistoryLimit` — the same number the buffer is then
+ * allowed to hold, so no page can fetch more than the buffer may keep. The hunt
+ * ends when something renders, history start is reached, or the cap has reached
+ * the deepest window either relay answers for.
+ * `none` — one of those three happened.
  */
 export type HistoryGateAction = 'none' | 'newest' | 'deeper';
 
@@ -1184,11 +1184,17 @@ export function historyGateAction(buffer: BufferData): HistoryGateAction {
 }
 
 /**
- * Raise one buffer's cap for a deliberate page, doubling toward the ceiling.
+ * Raise one buffer's cap one doubling step toward the ceiling, and return it.
  *
- * A cap is retention permission, not allocation — raising it costs nothing
- * until lines actually arrive — so it can be raised before the request that
- * fills it. Returns the cap the page should be sized to.
+ * A cap is retention permission, not allocation — raising it costs nothing until
+ * lines actually arrive — so it can be raised before the request that fills it.
+ *
+ * One cursor, deliberately: what a page asks for and what the buffer may then
+ * hold are the same number, because a legacy history page *replaces* the window
+ * (`handleLineInfo` with `clearLinesBufferId`) and is trimmed to the cap as it
+ * arrives. Ask deeper than the cap and the lines that page found — always the
+ * oldest of a filtered window — are dropped on arrival. Sized in lockstep, no
+ * page can fetch something the buffer is not allowed to keep.
  */
 export function growHistoryLimit(bufferId: string): number {
     const buffer = getBuffer(bufferId);
@@ -1269,7 +1275,12 @@ export function shouldFetchOnBufferSwitch(buffer: BufferData): boolean {
 export interface HistoryPageRequest {
     /** Lines the caller asked for. 0 means "whatever the window needs", see `historyPageSize`. */
     numLines: number;
-    /** A page the reader asked for widens the window this buffer may retain. */
+    /**
+     * A page somebody asked for, as opposed to the window a buffer opens with:
+     * the reader paging upward, the reader's explicit control, or the history
+     * gate hunting for a line worth showing. It widens this buffer's own cap
+     * (`growHistoryLimit`), and the page is sized to the widened cap.
+     */
     deliberate: boolean;
     /**
      * The transport's pending set and this buffer's key in it. They stay per transport on
@@ -1312,6 +1323,11 @@ export async function runHistoryPage(
 
     // Prevent redundant fetches when all lines have already been loaded
     if (buffer.allLinesFetched) return;
+
+    // A widening page at the ceiling has nothing left to widen, and both relays
+    // answer a lines request as "the newest N raw lines": asking for that window
+    // again returns it unchanged, which is the loop this path exists to avoid.
+    if (deliberate && buffer.lines.length === 0 && historyCappedFor(buffer)) return;
 
     const pendingKey = pendingKeyFor(buffer);
     if (pending.has(pendingKey)) return;

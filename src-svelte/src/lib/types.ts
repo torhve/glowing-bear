@@ -193,8 +193,10 @@ export interface BufferData extends BufferPresentation {
     lines: BufferLine[];
     allLinesFetched: boolean;
     /** Line cap this buffer is allowed to retain. Absent means the screen-derived
-     *  maxBufferLines; each deliberate page upward raises it toward a ceiling, so
-     *  scrollback depth follows what the reader actually asked for. */
+     *  maxBufferLines. Any page that widens the window raises it — a reader
+     *  paging upward, or the history gate hunting for a visible line in a buffer
+     *  that renders nothing — so the window a page asks for is never deeper than
+     *  what the buffer is allowed to keep. See `growHistoryLimit`. */
     historyLimit?: number;
 
     /** True once THIS session has fetched the server's newest window for this
