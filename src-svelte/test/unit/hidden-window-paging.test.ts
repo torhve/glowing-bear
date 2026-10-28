@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
 import {
-    buffers, createBuffer, growHistoryLimit, historyCappedFor, historyGateAction,
+    buffers, createBuffer, createBufferLine, growHistoryLimit, historyCappedFor, historyGateAction,
     initialHistoryWindow, lineLimitFor, linesPerScreen, runHistoryPage,
 } from '#lib/stores/models.ts';
 import { handleLineInfo } from '#lib/stores/handlers.ts';
@@ -230,6 +230,29 @@ describe('a channel whose newest lines are all filtered', () => {
         expect(kept.filter((message) => message.startsWith('visible')), 'the page kept what it could show')
             .toHaveLength(30);
         expect(held().lines.length).toBeLessThanOrEqual(200);
+    });
+
+    it('offers no deeper page once the search is over', () => {
+        // The gate and the page runner consult one predicate (`historySearchIsOver`),
+        // so this is what keeps them from drifting: if the gate still asked here, the
+        // reader's control would be offered for a buffer that has nowhere left to
+        // reach, and ChatView would be showing a fetch affordance for a page that can
+        // only repeat the deepest window.
+        install({ newestWindowFetched: true, historyLimit: RELAY_DEPTH_CEILING });
+        expect(historyGateAction(held()), 'nothing on screen, cap at the ceiling').toBe('none');
+
+        install({
+            newestWindowFetched: true,
+            historyLimit: RELAY_DEPTH_CEILING,
+            lines: [createBufferLine({
+                buffer: ID, date: 1_700_000_000, prefix: 'nick', message: 'a visible line',
+                tags_array: ['irc_privmsg'], displayed: 1, highlight: 0,
+            })],
+        });
+        expect(historyGateAction(held()), 'something is already on screen').toBe('none');
+
+        install({ newestWindowFetched: true, historyLimit: 400 });
+        expect(historyGateAction(held()), 'empty, and depth still to gain').toBe('deeper');
     });
 
 
