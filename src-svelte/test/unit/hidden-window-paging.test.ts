@@ -178,6 +178,61 @@ describe('a channel whose newest lines are all filtered', () => {
         expect(asks.length).toBeLessThanOrEqual(3);
     });
 
+    it('cuts an explicit ask to the window the buffer is allowed to keep', async () => {
+        // Until now the two facts only lined up by coincidence: the smallest page is
+        // 100 lines and the smallest cap is 200, so "sized to the cap" held because
+        // no caller asked for more. A page deeper than the retention cap is relay
+        // work the buffer throws away — and on the legacy path it throws it away by
+        // trimming, which is where a filtered channel's real conversation is.
+        install();
+        const asks: { pageLines: number; capAfter: number }[] = [];
+        await runHistoryPage(ID, {
+            numLines: 8000,
+            deliberate: true,
+            pending: new Set<string>(),
+            pendingKeyFor: (buffer) => buffer.id,
+            heldWindow: (buffer) => Math.max(initialHistoryWindow(), buffer.lines.length),
+            fetch: async (_buffer, pageLines) => {
+                asks.push({ pageLines, capAfter: lineLimitFor(held()) });
+                return { received: 0, complete: false };
+            },
+        });
+
+        expect(asks).toHaveLength(1);
+        const ask = asks[0]!;
+        expect(ask.pageLines, 'an 8 000-line ask against a screen cap').toBe(ask.capAfter);
+    });
+
+    it('charges the retention budget to the lines it can actually keep', () => {
+        // A history page carries smart-filtered lines too, and the store loop never
+        // pushes them. Counting them for cap space spent the budget on lines that
+        // were never stored, and the skip landed on the oldest lines of the page —
+        // exactly where a join/part-heavy channel's conversation is. Measured before
+        // the fix: 800 raw lines against a 200-line cap, 30 visible lines at the
+        // oldest end of the answer, 0 of them kept.
+        install({ newestWindowFetched: true, historyLimit: 200 });
+        // Newest first, as a relay page arrives: the oldest 30 are the visible ones.
+        const page = Array.from({ length: 800 }, (_, i) => ({
+            buffer: ID,
+            id: 900 + i,
+            date: 1_700_000_000 + i,
+            date_printed: 1_700_000_000 + i,
+            prefix: i < 770 ? '-->' : 'nick',
+            message: i < 770 ? `hidden ${i}` : `visible ${i}`,
+            tags_array: i < 770 ? ['irc_join', 'irc_smart_filter'] : ['irc_privmsg'],
+            displayed: i < 770 ? 0 : 1,
+            highlight: 0,
+        }));
+
+        handleLineInfo({ objects: [{ content: page }] } as unknown as ProtocolMessage, true, ID);
+
+        const kept = held().lines.map((row) => row.text);
+        expect(kept.filter((message) => message.startsWith('visible')), 'the page kept what it could show')
+            .toHaveLength(30);
+        expect(held().lines.length).toBeLessThanOrEqual(200);
+    });
+
+
     it('does not send a page that could only repeat the deepest window', async () => {
         // The gate stops itself, but the reader's own control does not: this is the
         // guard that keeps a repeated Control+D on an empty buffer from re-asking

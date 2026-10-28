@@ -1161,6 +1161,19 @@ export function historyCappedFor(buffer: BufferData): boolean {
 }
 
 /**
+ * The one place that decides a search for a visible line is over: the buffer shows
+ * nothing, and its cap already sits at the deepest window either relay answers for.
+ *
+ * Both history paths consult it — the gate stops asking, and `runHistoryPage`
+ * refuses a widening page — because they reach this state by different routes (the
+ * gate by doubling, the reader by paging upward) and must not disagree about when
+ * further asking is pointless.
+ */
+export function historySearchIsOver(buffer: BufferData): boolean {
+    return buffer.lines.length === 0 && historyCappedFor(buffer);
+}
+
+/**
  * What the page's history gate asks for when a buffer is on screen.
  *
  * `newest` — this session has not yet seen the relay's newest window.
@@ -1179,7 +1192,7 @@ export type HistoryGateAction = 'none' | 'newest' | 'deeper';
 export function historyGateAction(buffer: BufferData): HistoryGateAction {
     if (buffer.allLinesFetched) return 'none';
     if (!buffer.newestWindowFetched) return 'newest';
-    if (buffer.lines.length > 0 || historyCappedFor(buffer)) return 'none';
+    if (buffer.lines.length > 0 || historySearchIsOver(buffer)) return 'none';
     return 'deeper';
 }
 
@@ -1324,16 +1337,28 @@ export async function runHistoryPage(
     // Prevent redundant fetches when all lines have already been loaded
     if (buffer.allLinesFetched) return;
 
-    // A widening page at the ceiling has nothing left to widen, and both relays
-    // answer a lines request as "the newest N raw lines": asking for that window
-    // again returns it unchanged, which is the loop this path exists to avoid.
-    if (deliberate && buffer.lines.length === 0 && historyCappedFor(buffer)) return;
+    // A widening page with nothing on screen and the cap already at the ceiling has
+    // nothing left to widen, and both relays answer a lines request as "the newest
+    // N raw lines": asking for that window again returns it unchanged, which is the
+    // loop this path exists to avoid. `historyGateAction` stops on the same
+    // predicate; this covers the route that does not come from the gate.
+    if (deliberate && historySearchIsOver(buffer)) return;
 
     const pendingKey = pendingKeyFor(buffer);
     if (pending.has(pendingKey)) return;
     pending.add(pendingKey);
 
-    const pageLines = historyPageSize(numLines, deliberate ? growHistoryLimit(bufferId) : heldWindow(buffer));
+    // A widening page asks for exactly the window it just raised the buffer to
+    // keep: `growHistoryLimit` returns the cap after widening, and the page is
+    // sized to that number. Stated as one value rather than as a clamp between
+    // two constants, because the two only happened to fit before (the smallest
+    // page is 100 lines, the smallest cap is 200) and a caller that asked for
+    // more than the buffer may retain would have the relay do work the buffer
+    // then throws away — by trimming, which is where a filtered channel's real
+    // conversation sits.
+    const pageLines = deliberate
+        ? growHistoryLimit(bufferId)
+        : historyPageSize(numLines, heldWindow(buffer));
 
     try {
         const result = await fetch(buffer, pageLines, bufferId);

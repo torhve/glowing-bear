@@ -1671,9 +1671,17 @@ export function handleLineInfo(
     // appended oldest-first, so only the newest (limit - existingCount) per buffer
     // can survive. Building the guaranteed-trimmed ones is wasted work on large
     // histories — rich-text parsing is the cost — so they are skipped here.
+    // The budget is counted over the lines this handler can actually store. A
+    // history page from WeeChat also carries smart-filtered lines with
+    // `displayed: 0`, and the loop below never pushes those: counting them here
+    // charged them for cap space they never used, and the skip then landed on the
+    // oldest lines of the page — which is exactly where a join/part-heavy
+    // channel's real conversation is. Measured before the fix: an 800-line page
+    // against a 200-line cap, 30 visible lines at the oldest end, 0 of them kept.
     const perBufferSkip = new Map<string, number>();
     const perBufferCount = new Map<string, number>();
     for (const lineMsg of reversed) {
+        if (!lineMsg.displayed) continue;
         perBufferCount.set(lineMsg.buffer, (perBufferCount.get(lineMsg.buffer) ?? 0) + 1);
     }
     for (const [id, count] of perBufferCount) {
@@ -1687,6 +1695,7 @@ export function handleLineInfo(
     }
 
     for (const lineMsg of reversed) {
+        if (!lineMsg.displayed) continue;
         const buffer = updatedBuffers[lineMsg.buffer];
         if (!buffer) continue;
         const skip = perBufferSkip.get(lineMsg.buffer) ?? 0;
