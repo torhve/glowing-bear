@@ -1161,6 +1161,29 @@ export function historyCappedFor(buffer: BufferData): boolean {
 }
 
 /**
+ * What the page's history gate asks for when a buffer is on screen.
+ *
+ * `newest` — this session has not yet seen the relay's newest window.
+ * `deeper` — it has, and every line in it was hidden. WeeChat counts the
+ * newest-N window over RAW lines, so a join/part-heavy channel can answer N
+ * smart-filtered lines and zero visible ones. Asking for the same N again would
+ * return the same N, so a deeper page grows the buffer's cap (doubling toward
+ * the ceiling) and each request reaches further back. The grown cap is also
+ * what keeps the older visible lines from being trimmed away as the oldest of
+ * an oversized page.
+ * `none` — history start was reached, there is something to show, or the window
+ * is already as deep as the relay can be asked for.
+ */
+export type HistoryGateAction = 'none' | 'newest' | 'deeper';
+
+export function historyGateAction(buffer: BufferData): HistoryGateAction {
+    if (buffer.allLinesFetched) return 'none';
+    if (!buffer.newestWindowFetched) return 'newest';
+    if (buffer.lines.length > 0 || historyCappedFor(buffer)) return 'none';
+    return 'deeper';
+}
+
+/**
  * Raise one buffer's cap for a deliberate page, doubling toward the ceiling.
  *
  * A cap is retention permission, not allocation — raising it costs nothing

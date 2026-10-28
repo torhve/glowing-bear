@@ -16,7 +16,7 @@
   import { settings, updateSettings, applyHashParams } from '#lib/stores/settings.ts';
   import { applyConfiguredTheme, startThemeFollow, themeSlotsKey, themeStore } from '#lib/stores/theme.ts';
   import { get } from 'svelte/store';
-  import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig, checkAndNavigatePendingNotificationBuffer } from '#lib/stores/models.ts';
+  import { connected, buffers, currentBuffer, activeBufferId, activeBufferChanged, clearAllUnread, previousBufferId, wconfig, checkAndNavigatePendingNotificationBuffer, historyGateAction } from '#lib/stores/models.ts';
   import { sidebarOrder } from '#lib/stores/bufferProjections.ts';
   import { classifyGlobalCommand, isJumpArm, jumpDigit, quickKeyDigit } from '#lib/keyBindings.ts';
   import { connectionState, setReconnectAttempts, setNextReconnectAt, setErrors } from '#lib/stores/connectionStore.ts';
@@ -224,20 +224,19 @@
     if (!$connected) return;
     const buf = $currentBuffer;
     if (!buf) return;
-    // `lines.length === 0` keeps advancing the window (each fetch doubles the
-    // raw-line count) while a buffer renders empty: WeeChat counts the newest-N
-    // history window over RAW lines, so a join/part-heavy channel can return N
-    // smart-filtered lines and zero visible ones. Paging continues until visible
-    // lines appear or the server reaches history start (allLinesFetched).
     // `newestWindowFetched` is the freshness question — has THIS session asked the
     // relay for its current newest window? A retained window answers "how many
     // lines am I holding", which is a different question and the wrong one here.
-    if ((!buf.newestWindowFetched || buf.lines.length === 0) && !buf.allLinesFetched) {
+    // When every line in the newest window is hidden, the gate keeps asking for
+    // a larger window until visible lines appear, history start is reached or
+    // the depth ceiling stops it (see historyGateAction).
+    const action = historyGateAction(buf);
+    if (action !== 'none') {
       const targetId = buf.id;
       setHistoryOutcome(targetId, 'loading');
       void (async () => {
         try {
-          await fetchMoreLines(100);
+          await fetchMoreLines(100, targetId, action === 'deeper');
           // Named rather than swallowed. The chat can tell "still loading" from
           // "this failed" only if somebody records which one happened, and a
           // buffer that renders nothing while offering a retry button forever
