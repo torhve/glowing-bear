@@ -17,15 +17,11 @@ Source code in `src-svelte/src/` has `components/`, `lib/`, `lib/api/`, `lib/sto
 
 The API surface is not guessed: `api-dossier/README.md` records what a real WeeChat 4.10.1 relay returns (endpoint shapes, error codes, unsupported endpoints, auth negotiation, freshness events), with probe scripts under `probes/` and captured frames under `frames/` and `raw/`. Read it before changing anything in `lib/api/` — it lists the traps (404 endpoints, `lines_free` overriding `lines` on free buffers, buffer reuse for `/grep`, `infolist` being unsupported).
 
-### Relay transports (dual protocol — never regress)
+### Relay transports (dual protocol)
 
 The app is a **dual-protocol client**. `connectionManager.ts` chooses one transport per connection profile (`host:port:tls`): `api` when the address answers the API probe, `legacy` otherwise; settings can pin `protocol: "api" | "legacy" | "auto"`. The choice is cached per profile and holds only what a session proved, so reconnects do not re-probe; the rules and where each is tested are in `test/unit/transport-choice-recovery.test.ts` and `e2e/specs/Dual-protocol.test.ts`.
 
 - Exactly one transport is active per connection. Never add a mid-connection fallback: a failed API connection must not silently switch to legacy, and a legacy connection must not be re-tried over the API.
-
-- `transportByProfile` is written only when an attempt reaches `connected`, and an attempt that never reached one clears the entry for that address. Caching a choice before it connected is how a pinned protocol outlives its own failure (issue #12): the user puts Settings → Relay protocol back on `auto` and auto replays the transport that just failed, with no way out except editing localStorage. A session that later dropped keeps its entry — a dropped session is a transport loss, not a protocol fact. `api`/`legacy` are preferences, not guarantees: when nothing answers as the pinned protocol the failure is named `protocolUnansweredError` and the connection form offers the way back (Auto, or the other protocol), because the settings modal belongs to a chat shell a failed connection never opens.
-
-- The phase-13 items that removed binary decoding, decompression and the legacy frame grammar from the API path are **deliberate**; do not re-tick them. `fflate` stays in the app because the legacy transport still needs zlib — deleting it breaks the legacy path, not the API path.
 
 - gbtest runs both relays on separate ports (API 9010, legacy 9001) so both transports are exercised; E2E connects to one or the other, never both at once.
 
@@ -42,11 +38,11 @@ The app is a **dual-protocol client**. `connectionManager.ts` chooses one transp
 - A stronger check is a local, untracked tool: `oracle/weechat_color_scan.c` vendors `gui_color_code_size()` and `gui_color_attr_get_flag()` verbatim from WeeChat 4.10.1, `npm run oracle:weechat-format` compiles it (needs `cc`) over a 13,928-input ASCII corpus and writes `oracle/corpus.txt` + `oracle/weechat-oracle.txt`, and `test/oracle.test.ts` then fails unless every library-vs-scanner difference is one of the ledger's rules (and unless each rule still occurs). Those three files are generated evidence, gitignored on purpose — the repo carries the conclusion, not ~700 KB of evidence. Regenerate when the scanner, the generator or the corpus changes; regeneration is idempotent and re-pins the sha256 header, so that check only catches an oracle left stale beside an edited scanner. Re-vendoring a deleted scanner is a manual step: the ledger's upstream line ranges say where the scanner came from, not every wrapper byte. The oracle covers consumption only, not style application.
 - Visible color/attribute rendering is covered by `src-svelte/e2e/specs/MessageColors.test.ts` (serial project: it sends channel messages).
 
-### Chat scroll ownership (single writer — never regress)
+### Chat scroll ownership
 
 `src-svelte/src/lib/chatViewport.ts` is the sole owner of every application chat scroll write — `ChatView.svelte` renders and projects the model, and no component writes `scrollTop` or calls `scrollIntoView` on the chat container. Read `docs/chat-scroll-ownership.md` before changing chat scroll behaviour: it records the transition policy, intent provenance, the measured reason each constant has its value, and the parts that look like oversights but are deliberate.
 
-### Chat history depth (one cursor per buffer — never regress)
+### Chat history depth
 
 `BufferData.historyLimit` is the only depth cursor a buffer has. It starts screen-derived (`maxBufferLines`, clamped 200–1000) and a widening page — a reader paging upward, the reader's explicit control, or the page gate hunting for a line worth showing in a buffer that renders nothing — raises it one doubling toward `HISTORY_LINE_CEILING = 4096`, which is WeeChat's own `history.max_buffer_lines_number` (live probe: a channel planted with 6 000 lines can only ever return 4 096).
 
@@ -169,7 +165,7 @@ The codebase avoids `{@html}` entirely. For messages and topics, use the `<Linki
 
 ### Function Comments
 
-Every non-trivial function needs a brief comment above it explaining intent.
+Every non-trivial function needs a brief and terse comment above it explaining intent.
 
 ### Sync Phase (never timer-based)
 
@@ -193,12 +189,11 @@ as unread because the baseline already accounts for them.
 - Read-boundary resolution is a separate per-buffer lifecycle (`readBoundaryKnown`,
   `readBoundaryId`, `pendingReadBoundaryUnread`, `setReadBoundary`,
   `resolvePendingReadBoundary`). Never gate it on the global sync flag.
-- Regression coverage: `src-svelte/test/unit/sync-flag-lifecycle.test.ts` and
-  `src-svelte/test/unit/notification-sync-gate.test.ts`.
 
 ## Tauri Desktop
 
 Wrapped in Tauri 2.x for desktop distribution. Custom titlebar via `TauriTitlebar.svelte`. Window API access via `$lib/tauriWindow`. Tauri config in `src-tauri/tauri.conf.json`.
+
 
 ## Testing Framework
 
@@ -240,4 +235,4 @@ Do not push.
 
 ## Legacy AngularJS Code
 
-The original AngularJS application is preserved in `src-angular/`. Do not modify it unless explicitly requested. The active development target is the Svelte version.
+The original AngularJS application is preserved in `src-angular/`. Do not modify it. The active development target is the Svelte version.
