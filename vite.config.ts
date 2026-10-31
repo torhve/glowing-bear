@@ -83,6 +83,10 @@ export default defineConfig({
                 '**/test-results/**',
                 '**/playwright-report/**',
                 '**/doc/**',
+                '**/docs/**',
+                // Nothing imports markdown, so it must not reach the watch graph: a watched
+                // non-module change reloads every open page.
+                '**/*.md',
                 '**/plans/**',
                 '**/specs/**',
                 '**/library/**',
