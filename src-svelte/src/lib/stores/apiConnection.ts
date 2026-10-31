@@ -27,7 +27,7 @@ import {
     cancelPendingRetry,
     beginManualReconnect,
     clearDisconnectToast,
-    HANDSHAKE_TIMEOUT_MS,
+    handshakeTimeoutMs,
     nameConnectionFailure,
     debounceHotlistQuery,
     pendingRetryState,
@@ -213,7 +213,7 @@ export async function connect(profile: ConnectionProfile): Promise<void> {
             // HTTP phases of an attempt are already bounded by api-client's own
             // timeout; this one covers the WebSocket opening, which no request
             // timeout can reach.
-            connectTimeoutMs: HANDSHAKE_TIMEOUT_MS,
+            connectTimeoutMs: handshakeTimeoutMs(),
             // First connect, scheduled retry and manual takeover all start an
             // attempt here, so the counters cannot be started from one entry
             // point in this module and miss the others.

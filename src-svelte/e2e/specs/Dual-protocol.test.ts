@@ -1,11 +1,12 @@
 import { test, expect } from '@playwright/test';
 import { execSync } from 'node:child_process';
-import { connectToWeechat, connectLegacyToWeechat, waitForAppReady, waitForTransport, setSettings, disconnect } from '../helpers/connection';
+import { connectToWeechat, connectLegacyToWeechat, waitForAppReady, waitForTransport, setSettings, disconnect, clearSettingsBeforeLoad } from '../helpers/connection';
 
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { fillInput } from '../helpers/input';
 import { irc } from '../helpers/irc-control';
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
+import { installFastTiming } from '../helpers/timing';
 import { openSettings } from '../helpers/settings';
 
 // Dual-protocol transport selection, tested against the two REAL relays the
@@ -24,9 +25,14 @@ function gbWeechatVersion(): string {
 async function freshPage(browser: import('@playwright/test').Browser) {
     const page = await browser.newPage();
     setupEffectOrphanFilter(page);
+    // Every recovery claim in this file is about WHICH transport comes back, not
+    // about how long the ladder waits before trying. The shipped 30s/10s/3s waits
+    // belong to the unit suite's fake timers; helpers/timing.ts shortens them here
+    // so a recovery assertion is not 30 seconds of wall clock per case.
+    await installFastTiming(page);
+
+    await clearSettingsBeforeLoad(page);
     await page.goto('http://localhost:8001/');
-    await page.evaluate(() => localStorage.removeItem('gb-settings'));
-    await page.reload();
     await waitForAppReady(page);
     await expect(page.getByTestId('host-input')).toBeVisible({ timeout: 10000 });
     return page;

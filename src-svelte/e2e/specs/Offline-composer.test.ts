@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, setSettings, waitForAppReady } from '../helpers/connection';
+import { connectToWeechat, setSettings, waitForAppReady, clearSettingsBeforeLoad } from '../helpers/connection';
 import { switchToBuffer, waitForBuffer } from '../helpers/buffers';
 import { waitForChatSettled, waitForRow } from '../helpers/waits';
 import { irc } from '../helpers/irc-control';
@@ -27,9 +27,8 @@ test.describe('Offline composer', () => {
 
     test.beforeEach(async ({ page }) => {
         setupEffectOrphanFilter(page);
+        await clearSettingsBeforeLoad(page);
         await page.goto('http://localhost:8001/');
-        await page.evaluate(() => localStorage.removeItem('gb-settings'));
-        await page.reload();
         await waitForAppReady(page);
     });
 

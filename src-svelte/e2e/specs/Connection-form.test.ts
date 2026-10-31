@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, disconnect, fillPortInput, waitForAppReady, setSettings } from '../helpers/connection';
+import { connectToWeechat, disconnect, fillPortInput, waitForAppReady, setSettings, clearSettingsBeforeLoad } from '../helpers/connection';
 import { fillInput } from '../helpers/input';
 
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
@@ -11,9 +11,8 @@ test.describe('Connection Form', () => {
     test.beforeEach(async ({ page }) => {
         setupEffectOrphanFilter(page)
         // Always start with clean state: clear settings and force reload
+        await clearSettingsBeforeLoad(page);
         await page.goto('http://localhost:8001/');
-        await page.evaluate(() => localStorage.removeItem('gb-settings'));
-        await page.reload();
         await waitForAppReady(page);
         // Verify we're disconnected (connection form should be visible)
         await expect(page.getByTestId('host-input')).toBeVisible({ timeout: 10000 });
@@ -151,9 +150,8 @@ test.describe.configure({ mode: 'serial' });
 test.describe('Disconnect handling', () => {
     test.beforeEach(async ({ page }) => {
         setupEffectOrphanFilter(page)
+        await clearSettingsBeforeLoad(page);
         await page.goto('http://localhost:8001/');
-        await page.evaluate(() => localStorage.removeItem('gb-settings'));
-        await page.reload();
         await waitForAppReady(page);
     });
 

@@ -10,6 +10,25 @@ export async function clearSettings(page: Page, preserveLastBuffer = false) {
     }, preserveLastBuffer);
 }
 
+/**
+ * Clear stored settings before the app's first module runs, so one navigation is enough.
+ *
+ * An init script runs before any page JS, so the first load already sees the storage the
+ * spec wants. Clearing after a load instead needs a second load to take effect.
+ */
+export async function clearSettingsBeforeLoad(page: Page, keys: string[] = ['gb-settings']): Promise<void> {
+    await page.addInitScript((removed) => {
+        // Once per page. An init script runs on every navigation, and a spec that writes
+        // settings and reloads is asserting the app reads them back — clearing on that
+        // reload would test the opposite of what the spec claims. sessionStorage is per
+        // tab, so a fresh page or context starts cleared again.
+        const marker = 'gb-e2e-settings-cleared';
+        if (sessionStorage.getItem(marker)) return;
+        sessionStorage.setItem(marker, '1');
+        for (const key of removed) localStorage.removeItem(key);
+    }, keys);
+}
+
 export async function setSettings(page: Page, settings: Record<string, unknown>) {
     await page.evaluate((s) => (window as any).__setGbSettings?.(s), settings);
 }

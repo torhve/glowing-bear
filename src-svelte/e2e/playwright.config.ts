@@ -11,29 +11,32 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // so they can run concurrently with each other in a separate parallel pass.
 // Everything else shares the live gbtest #glowing-bear state and must stay
 // serial (workers=1) to avoid cross-test contamination.
+// A spec here must not write channel state. Switching to a buffer and pressing Enter in the
+// message input writes it, and so does state keyed to a buffer name a concurrent copy claims.
+// KeyboardShortcuts, App-layout, InputBar-formatting, InputBar-paste and
+// InputBar-conversationDrafts stay out for that reason; InputBar-emojify and
+// InputBar-typeToFocus render the composer without sending, so they stay in.
 const UI_ONLY_SPECS = [
-    'App-layout',
     'AutoconnectSpam',
     'ChatView-mobileSwipe',
     'Connection-form',
     'ConnectionForm-clockSkew',
     'ConnectionForm-password',
+    'ConnectionForm',
     'DisconnectReconnect',
     'FocusReconnect',
     'FirstConnectRetry',
     'ErrorPage-unmatchedRoute',
     'Hash-params',
     'HashAlgorithmMismatch',
+    'Harness-connectionLifecycle',
     'HandshakeDeadline',
     'InputBar-emojify',
-    'InputBar-formatting',
-    'InputBar-paste',
     'InputBar-typeToFocus',
-    'InputBar-conversationDrafts',
-    'KeyboardShortcuts',
     'ModalAutoFocus',
     'Nicklist-mobileSwipe',
     'Nicklist-mutuallyExclusive',
+    'NativeCryptoAuth',
     'ReconnectLoopGuard',
     'SettingsModal-customCSS',
     'SettingsModal-fonts',

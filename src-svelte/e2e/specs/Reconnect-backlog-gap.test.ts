@@ -1,11 +1,9 @@
 import { test, expect } from '@playwright/test';
-import {
-    connectToWeechat,
+import { connectToWeechat,
     connectLegacyToWeechat,
     setSettings,
     waitForAppReady,
-    waitForTransport,
-} from '../helpers/connection';
+    waitForTransport, clearSettingsBeforeLoad } from '../helpers/connection';
 import { switchToBuffer, waitForBuffer } from '../helpers/buffers';
 import { waitForChatSettled, waitForRow } from '../helpers/waits';
 import { sendSequence } from '../helpers/irc-control';
@@ -30,9 +28,8 @@ type Transport = 'api' | 'legacy';
 
 async function prime(page: import('@playwright/test').Page, transport: Transport) {
     setupEffectOrphanFilter(page);
+    await clearSettingsBeforeLoad(page);
     await page.goto('http://localhost:8001/');
-    await page.evaluate(() => localStorage.removeItem('gb-settings'));
-    await page.reload();
     await waitForAppReady(page);
     await setSettings(page, { autoconnect: false });
     if (transport === 'api') {

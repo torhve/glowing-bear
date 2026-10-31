@@ -23,10 +23,11 @@
  */
 import { test, expect } from '@playwright/test';
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
-import { connectLegacyToWeechat, setSettings } from '../helpers/connection';
+import { connectLegacyToWeechat, setSettings, clearSettingsBeforeLoad } from '../helpers/connection';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
 import { waitForChatSettled } from '../helpers/waits';
 import { waitForAppReady } from '../helpers/connection';
+import { fastMs, installFastTiming } from '../helpers/timing';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -75,9 +76,9 @@ async function waitUntilConnected(page: import('@playwright/test').Page, timeout
 test.describe('coming back to the tab does not make the user wait out the backoff', () => {
     test.beforeEach(async ({ page }) => {
         setupEffectOrphanFilter(page);
+        await installFastTiming(page);
+        await clearSettingsBeforeLoad(page);
         await page.goto('http://localhost:8001/');
-        await page.evaluate(() => localStorage.removeItem('gb-settings'));
-        await page.reload();
         await waitForAppReady(page);
     });
 
@@ -92,10 +93,12 @@ test.describe('coming back to the tab does not make the user wait out the backof
 
         const { armedUntil, dispatchedAt } = await dropAndDispatch(page);
         expect(armedUntil, 'a retry is scheduled').toBeGreaterThan(0);
-        // The first ladder step is 30 s and the focus threshold is 10 s, so a
-        // correctly armed first retry is unambiguously in front of the threshold.
+        // The first ladder step is 30 s and the focus threshold 10 s, so a correctly
+        // armed first retry sits unambiguously in front of the threshold. This page
+        // shortens both waits (helpers/timing.ts), so the claim is against the
+        // threshold as the page sees it, not against the shipped number.
         expect(armedUntil - dispatchedAt, 'the wait left is long enough to cut in front of')
-            .toBeGreaterThan(10_000);
+            .toBeGreaterThan(fastMs(10_000));
 
         const connectedAt = await waitUntilConnected(page, 20_000);
         expect(connectedAt, 'the session came back').toBeGreaterThan(0);

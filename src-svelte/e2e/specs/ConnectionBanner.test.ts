@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, connectLegacyToWeechat, setSettings, waitForAppReady, waitForTransport } from '../helpers/connection';
+import { connectToWeechat, connectLegacyToWeechat, setSettings, waitForAppReady, waitForTransport, clearSettingsBeforeLoad } from '../helpers/connection';
 import { switchToBuffer, waitForBuffer } from '../helpers/buffers';
 import { waitForChatSettled, waitForRow } from '../helpers/waits';
 import { expectInputFocused } from '../helpers/input';
@@ -20,9 +20,8 @@ test.describe('Connection banner', () => {
 
     test.beforeEach(async ({ page }) => {
         setupEffectOrphanFilter(page);
+        await clearSettingsBeforeLoad(page);
         await page.goto('http://localhost:8001/');
-        await page.evaluate(() => localStorage.removeItem('gb-settings'));
-        await page.reload();
         await waitForAppReady(page);
     });
 

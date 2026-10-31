@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { connectToWeechat, setSettings, waitForAppReady } from '../helpers/connection';
+import { connectToWeechat, setSettings, waitForAppReady, clearSettingsBeforeLoad } from '../helpers/connection';
 import { switchToBuffer, waitForBuffer } from '../helpers/buffers';
 import { waitForChatSettled, waitForRow } from '../helpers/waits';
 import { irc, sendSequence } from '../helpers/irc-control';
@@ -71,9 +71,8 @@ test.describe('History request discipline', () => {
         // are not in its history at all.
         await irc.botJoin(CHANNEL);
 
+        await clearSettingsBeforeLoad(page);
         await page.goto('http://localhost:8001/');
-        await page.evaluate(() => localStorage.removeItem('gb-settings'));
-        await page.reload();
         await waitForAppReady(page);
         await setSettings(page, { autoconnect: false });
         await connectToWeechat(page, '9010');

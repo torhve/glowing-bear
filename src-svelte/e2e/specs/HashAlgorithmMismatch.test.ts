@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { connectToWeechat, waitForAppReady } from '../helpers/connection';
+import { connectToWeechat, waitForAppReady, clearSettingsBeforeLoad } from '../helpers/connection';
 
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
 
@@ -11,9 +11,8 @@ test.describe('Hash algorithm mismatch error display', () => {
     });
 
     test('should display hash algorithm error message when server rejects plain auth', async ({ page }) => {
+        await clearSettingsBeforeLoad(page);
         await page.goto('http://localhost:8001/');
-        await page.evaluate(() => localStorage.removeItem('gb-settings'));
-        await page.reload();
         await waitForAppReady(page);
         await expect(page.getByTestId('host-input')).toBeVisible({ timeout: 10000 });
 
@@ -30,9 +29,8 @@ test.describe('Hash algorithm mismatch error display', () => {
     });
 
     test('should render both passwordError and hashAlgorithmDisagree independently', async ({ page }) => {
+        await clearSettingsBeforeLoad(page);
         await page.goto('http://localhost:8001/');
-        await page.evaluate(() => localStorage.removeItem('gb-settings'));
-        await page.reload();
         await waitForAppReady(page);
         await expect(page.getByTestId('host-input')).toBeVisible({ timeout: 10000 });
 
@@ -47,9 +45,8 @@ test.describe('Hash algorithm mismatch error display', () => {
 
     test('connection form shows hash algorithm error after injected state', async ({ page }) => {
         // Fresh setup - start clean
+        await clearSettingsBeforeLoad(page);
         await page.goto('http://localhost:8001/');
-        await page.evaluate(() => localStorage.removeItem('gb-settings'));
-        await page.reload();
         await waitForAppReady(page);
         await expect(page.getByTestId('host-input')).toBeVisible({ timeout: 10000 });
 

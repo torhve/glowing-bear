@@ -36,6 +36,7 @@ import {
     retryAvailability as sharedRetryAvailability,
     retryNow as sharedRetryNow,
     teardownAll,
+    timingScale,
     transportAdapterFor,
     type ConnectionProfile,
 } from '#lib/stores/connectionLifecycle.ts';
@@ -89,7 +90,7 @@ async function probeApiRelay(host: string, port: number, path: string, tls: bool
     try {
         const endpoint = resolveApiEndpoint({ host, port, tls, path: path || undefined });
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), HANDSHAKE_PROBE_TIMEOUT_MS);
+        const timer = setTimeout(() => controller.abort(), HANDSHAKE_PROBE_TIMEOUT_MS * timingScale());
         try {
             const res = await fetch(`${endpoint.httpBase}/api/handshake`, {
                 method: 'POST',

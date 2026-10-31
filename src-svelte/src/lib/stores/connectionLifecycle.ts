@@ -121,6 +121,38 @@ export const HANDSHAKE_TIMEOUT_MS = 10_000;
 export const UPGRADE_RECONNECT_DELAY_MS = 2000;
 
 /**
+ * The waits above are patience for a real relay. A spec that asserts what happens
+ * AFTER one of them — which transport the retry used, whether the timer it replaced
+ * was cancelled, which error type the form shows — pays the shipped 30s for a number
+ * the unit suite already asserts with fake timers. The harness asks for those waits to
+ * be shortened instead, and the assertion is unchanged.
+ *
+ * A dev-build affordance only. The harness sets `window.__gbE2eTimingScale` from an
+ * init script that runs before the app's first module, and `import.meta.env.DEV` is
+ * false in a shipped bundle, so the values above stand in production. One scale for
+ * all four waits, because they are related: a short ladder with the shipped
+ * visibility threshold would leave no wait long enough for the takeover to be due.
+ */
+const HARNESS_TIMING_SCALE = readHarnessTimingScale();
+
+/** The factor applied to the retry waits; 1 unless a dev harness asked otherwise. */
+export function timingScale(): number {
+    return HARNESS_TIMING_SCALE;
+}
+
+/** Read the harness request, tolerating a page that never set it and a build with no window. */
+function readHarnessTimingScale(): number {
+    if (!import.meta.env.DEV || typeof window === 'undefined') return 1;
+    const requested = (window as Window & { __gbE2eTimingScale?: unknown }).__gbE2eTimingScale;
+    return typeof requested === 'number' && requested > 0 && requested < 1 ? requested : 1;
+}
+
+/** How long an attempt may go unanswered before the handshake deadline fires. */
+export function handshakeTimeoutMs(): number {
+    return HANDSHAKE_TIMEOUT_MS * HARNESS_TIMING_SCALE;
+}
+
+/**
  * Delay before a retry, where `attempt` is the number of retries that have
  * ALREADY failed — the first retry is `attempt 0` and waits `baseMs`.
  *
@@ -132,8 +164,8 @@ export const UPGRADE_RECONNECT_DELAY_MS = 2000;
  */
 export function reconnectDelay(attempt: number): number {
     return Math.min(
-        RECONNECT_BACKOFF.baseMs * Math.pow(RECONNECT_BACKOFF.factor, attempt),
-        RECONNECT_BACKOFF.maxMs,
+        RECONNECT_BACKOFF.baseMs * HARNESS_TIMING_SCALE * Math.pow(RECONNECT_BACKOFF.factor, attempt),
+        RECONNECT_BACKOFF.maxMs * HARNESS_TIMING_SCALE,
     );
 }
 
@@ -355,7 +387,7 @@ export function registerFocusReconnect(
         if (!pending.active) return;
         if (get(settings).useTotp) return;
         const remaining = (pending.nextRetryAt ?? 0) - Date.now();
-        if (remaining <= FOCUS_RECONNECT_THRESHOLD_MS) return;
+        if (remaining <= FOCUS_RECONNECT_THRESHOLD_MS * HARNESS_TIMING_SCALE) return;
         reconnectNow();
     };
 

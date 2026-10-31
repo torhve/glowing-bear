@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { pbkdf2Sync } from 'node:crypto';
-import { connectLegacyToWeechat, connectToWeechat, setSettings, waitForAppReady } from '../helpers/connection';
+import { connectLegacyToWeechat, connectToWeechat, setSettings, waitForAppReady, clearSettingsBeforeLoad } from '../helpers/connection';
 import { switchToBuffer } from '../helpers/buffers';
 import { irc, sendSequence } from '../helpers/irc-control';
 import { fixtureCommand } from '../helpers/relay-admin';
@@ -165,9 +165,8 @@ test.describe('Filtered-window history paging', () => {
         setupEffectOrphanFilter(page);
         const windows = watchHistoryRequests(page);
 
+        await clearSettingsBeforeLoad(page);
         await page.goto('/');
-        await page.evaluate(() => localStorage.removeItem('gb-settings'));
-        await page.reload();
         await waitForAppReady(page);
         await setSettings(page, { autoconnect: false });
         await connectToWeechat(page, '9010');
@@ -181,9 +180,8 @@ test.describe('Filtered-window history paging', () => {
         setupEffectOrphanFilter(page);
         const windows = watchHistoryRequests(page);
 
+        await clearSettingsBeforeLoad(page);
         await page.goto('/');
-        await page.evaluate(() => localStorage.removeItem('gb-settings'));
-        await page.reload();
         await waitForAppReady(page);
         await setSettings(page, { autoconnect: false });
         await connectLegacyToWeechat(page);

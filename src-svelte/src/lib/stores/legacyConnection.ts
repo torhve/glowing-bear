@@ -12,7 +12,7 @@ import {
     beginManualReconnect,
     cancelPendingRetry,
     pendingRetryState,
-    HANDSHAKE_TIMEOUT_MS,
+    handshakeTimeoutMs,
     scheduleRetry,
     switchBufferCommon,
     teardownAll,
@@ -388,8 +388,8 @@ export async function connect(profile: ConnectionProfile) {
             // that await pending for the life of the page.
             const reject = pendingConnectReject;
             pendingConnectReject = null;
-            reject?.(new Error(`Relay did not complete the WebSocket handshake within ${HANDSHAKE_TIMEOUT_MS / 1000}s`));
-        }, HANDSHAKE_TIMEOUT_MS);
+            reject?.(new Error(`Relay did not complete the WebSocket handshake within ${handshakeTimeoutMs() / 1000}s`));
+        }, handshakeTimeoutMs());
 
         ws.onopen = async () => {
             // If connect() was called again while this WebSocket was connecting,
