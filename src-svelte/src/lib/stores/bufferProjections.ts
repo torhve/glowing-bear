@@ -23,7 +23,7 @@ import {
     activeBufferId,
     buffers,
     compareBuffersHotlist,
-    getEffectiveUnread,
+    sidebarRowQualifies,
     sortBuffers,
 } from '#lib/stores/models.ts';
 import { settings } from '#lib/stores/settings.ts';
@@ -138,7 +138,7 @@ export const sidebarRows = selectiveDerived(
         const ordered = orderedVisibleBuffers();
         if (!onlyUnread) return ordered;
         return ordered.filter(
-            (row) => getEffectiveUnread(row) > 0 || row.id === activeId || row.pinned,
+            (row) => sidebarRowQualifies(row, activeId),
         );
     },
     sameArrayByReference,

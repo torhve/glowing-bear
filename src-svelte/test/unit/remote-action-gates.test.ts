@@ -35,21 +35,24 @@ import {
     releaseRetainedSnapshot,
     selectRetainedBuffer,
 } from '#lib/stores/retainedChat.ts';
-import { chatDisplay, retainedRows } from '#lib/stores/chatPresentation.ts';
+import { activeRowId, chatDisplay, retainedRows } from '#lib/stores/chatPresentation.ts';
+import { updateSettings } from '#lib/stores/settings.ts';
 import type { BufferData } from '#lib/types.ts';
 
 const CHANNEL = 'irc.gbtest.#glowing-bear';
 const CORE = 'core.weechat';
 const KEY_CHANNEL = '1791000000000201';
 const KEY_CORE = '1791000000000202';
+const KEY_PINNED = '1791000000000203';
+const KEY_IDLE = '1791000000000204';
 
-function seed(key: string, fullName: string, shortName: string, number: number): BufferData {
+function seed(key: string, fullName: string, shortName: string, number: number, pinned = false): BufferData {
     const buffer = createBuffer({
         pointers: [key],
         full_name: fullName,
         short_name: shortName,
         number,
-        local_variables: { type: 'channel', server: 'gbtest', plugin: 'irc' },
+        local_variables: { type: 'channel', server: 'gbtest', plugin: 'irc', ...(pinned ? { pinned: 'true' } : {}) },
     });
     buffers.update((current) => ({ ...current, [key]: buffer }));
     return buffer;
@@ -88,6 +91,38 @@ function captureOneSession(): void {
     buffers.set({});
     activeBufferId.set('');
 }
+/**
+ * A retained session whose rows differ only by unread state, pin, and selection:
+ * `#unread` has counts, `#pinned` is pinned, `core` is the read conversation,
+ * `#idle` is none of those.
+ */
+function captureOneFilterSession(): void {
+    setActiveConnectionProfile('relay.example', 443, undefined, true);
+    seed(KEY_CHANNEL, 'irc.gbtest.#unread', '#unread', 10);
+    seed(KEY_CORE, CORE, 'core', 1);
+    seed(KEY_PINNED, 'irc.gbtest.#pinned', '#pinned', 3, true);
+    seed(KEY_IDLE, 'irc.gbtest.#idle', '#idle', 4);
+    buffers.update((current) => ({
+        ...current,
+        [KEY_CHANNEL]: { ...current[KEY_CHANNEL]!, unread: 2 },
+    }));
+    setActiveBuffer(KEY_CORE);
+    const result = captureRetainedState(1);
+    if (!result.captured) throw new Error(`capture failed: ${result.reason}`);
+    buffers.set({});
+    activeBufferId.set('');
+}
+
+/**
+ * Removes one conversation from the retained snapshot, the way a dropped buffer
+ * does. Used by the fallback tests to force the view onto another conversation.
+ */
+function dropRetainedConversation(key: string): void {
+    const snapshot = getRetainedSnapshot();
+    if (!snapshot) throw new Error('no snapshot to edit');
+    snapshot.buffers.delete(key);
+    if (snapshot.activeKey === key) snapshot.activeKey = null;
+}
 
 beforeEach(() => {
     buffers.set({});
@@ -95,6 +130,7 @@ beforeEach(() => {
     releaseRetainedSnapshot('explicit-leave');
     clearActiveConnectionProfile();
     setConnectionStatus('disconnected');
+    updateSettings({ onlyUnread: false });
 });
 
 describe('deliveryPossible: one answer to "can this reach the relay"', () => {
@@ -202,5 +238,110 @@ describe('retainedRows: the sidebar describes the retained view', () => {
         expect(row.apiBufferId, 'a sidebar row must not be addressable').toBeUndefined();
         expect(row.clearEpoch).toBeUndefined();
         expect(row.newestWindowFetched, 'the history gate stays inert for a frozen buffer').toBe(true);
+    });
+});
+
+/**
+ * The sidebar's `onlyUnread` membership rule belongs to the list, not to the
+ * transport. A retained view is the same list over frozen data, so the setting
+ * has to keep hiding rows while the session is lost — otherwise a dropped
+ * connection silently reveals every channel the reader had asked to suppress.
+ */
+describe('retainedRows: onlyUnread keeps applying while the view is retained', () => {
+    it('hides a retained row with no unread, no pin, and no selection', () => {
+        captureOneFilterSession();
+        updateSettings({ onlyUnread: true });
+
+        expect(get(retainedRows).map((row) => row.shortName)).toEqual(['core', '#pinned', '#unread']);
+    });
+
+    it('shows every retained row when the setting is off', () => {
+        captureOneFilterSession();
+
+        expect(get(retainedRows).map((row) => row.shortName)).toEqual(['core', '#pinned', '#idle', '#unread']);
+    });
+
+    it('follows the retained selection, not the live one', () => {
+        captureOneFilterSession();
+        updateSettings({ onlyUnread: true });
+
+        // Live `activeBufferId` was wiped to '' with the session, so the row the
+        // retained view is pointing at has to come from the snapshot.
+        selectRetainedBuffer(KEY_CHANNEL);
+        expect(get(retainedRows).map((row) => row.shortName)).toEqual(['#pinned', '#unread']);
+    });
+});
+
+/**
+ * The chat and the sidebar must agree about which retained conversation is
+ * showing. `chatDisplay` keeps the reader's own conversation; when that one is
+ * gone it falls back, and the fallback has to land on a conversation the reader
+ * can actually see in the sidebar.
+ */
+describe('chatDisplay: the retained fallback agrees with the filtered sidebar', () => {
+
+    it('falls back to a conversation the filtered sidebar lists', () => {
+        captureOneFilterSession();
+        updateSettings({ onlyUnread: true });
+        dropRetainedConversation(KEY_CORE);
+
+        // `core` was number 1, so an unfiltered fallback would show a conversation
+        // the sidebar deliberately hides; the fallback takes the first row the
+        // filtered list actually has, which is the pinned one.
+        expect(get(chatDisplay).buffer?.shortName).toBe('#pinned');
+        expect(get(retainedRows).map((row) => row.shortName)).toEqual(['#pinned', '#unread']);
+    });
+
+    it('keeps a row for the conversation it falls back to', () => {
+        captureOneFilterSession();
+        updateSettings({ onlyUnread: true });
+        dropRetainedConversation(KEY_CORE);
+        dropRetainedConversation(KEY_CHANNEL);
+        dropRetainedConversation(KEY_PINNED);
+
+        // Nothing left qualifies under `onlyUnread` by unread or pin alone. The
+        // chat still shows the lowest-numbered retained conversation, and the
+        // sidebar keeps a row beside it: the conversation on screen always has
+        // one.
+        expect(get(chatDisplay).buffer?.shortName).toBe('#idle');
+        expect(get(retainedRows).map((row) => row.shortName)).toEqual(['#idle']);
+    });
+});
+
+/**
+ * The sidebar marks one row as the conversation on screen. A retained view has to
+ * answer that from the view itself: the wipe cleared `activeBufferId`, so a
+ * sidebar that reads only live selection marks nothing while the session is lost.
+ */
+describe('activeRowId: the sidebar marks the conversation the chat renders', () => {
+    it('names the retained selection when the live selection is gone', () => {
+        captureOneFilterSession();
+        updateSettings({ onlyUnread: true });
+
+        // `#idle` has no unread and no pin. It earns a row only as the
+        // conversation the view is pointing at.
+        selectRetainedBuffer(KEY_IDLE);
+        expect(get(activeRowId)).toBe(KEY_IDLE);
+        expect(get(retainedRows).map((row) => row.shortName)).toEqual(['#pinned', '#idle', '#unread']);
+    });
+
+    it('names the fallback conversation when the reader was in a dropped one', () => {
+        captureOneFilterSession();
+        updateSettings({ onlyUnread: true });
+        dropRetainedConversation(KEY_CORE);
+
+        // The chat shows the fallback, so the marked row is the fallback too,
+        // not the conversation the lost session was pointing at.
+        expect(get(chatDisplay).buffer?.shortName, 'the chat moved to the fallback').toBe('#pinned');
+        expect(get(activeRowId), 'the marked row follows the chat').toBe(KEY_PINNED);
+    });
+
+    it('names the live selection while the session is connected', () => {
+        seed(KEY_CHANNEL, CHANNEL, '#glowing-bear', 10);
+        seed(KEY_CORE, CORE, 'core', 1);
+        setActiveBuffer(KEY_CORE);
+        setConnectionStatus('connected');
+
+        expect(get(activeRowId)).toBe(KEY_CORE);
     });
 });

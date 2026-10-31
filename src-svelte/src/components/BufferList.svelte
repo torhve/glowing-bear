@@ -1,9 +1,9 @@
 <script lang="ts">
   import type { BufferPresentation } from '#lib/types.ts';
-  import { buffers, activeBufferId, getEffectiveUnread } from '#lib/stores/models.ts';
+  import { buffers, getEffectiveUnread } from '#lib/stores/models.ts';
   import { sidebarOrder, sidebarRows } from '#lib/stores/bufferProjections.ts';
   import { switchBuffer } from '#lib/stores/connectionManager.ts';
-  import { chatDisplay, retainedRows } from '#lib/stores/chatPresentation.ts';
+  import { activeRowId, chatDisplay, retainedRows } from '#lib/stores/chatPresentation.ts';
   import { selectRetainedBuffer } from '#lib/stores/retainedChat.ts';
   import { settings, updateSettings } from '#lib/stores/settings.ts';
   import { getBufferIconName, getDisplayName, makeKeyboardActivatable } from '#lib/utils.ts';
@@ -100,7 +100,7 @@
   // Text color follows Tailwind nav pattern: active = full brightness,
     // inactive = muted, hover brightens. Notifications still use accent.
   function getNotifyClass(buffer: BufferPresentation): string {
-    if (buffer.id === $activeBufferId) return 'text-text font-semibold';
+    if (buffer.id === $activeRowId) return 'text-text font-semibold';
     const eff = getEffectiveUnread(buffer);
     if (buffer.notification >= 3) return 'text-accent font-bold';
     if (eff > 0) return 'text-accent font-medium';
@@ -110,7 +110,7 @@
   // Return icon color class — follows active/hover state for visual cohesion
     // Active icons use full opacity; inactive icons are slightly muted
   function getIconClass(buffer: BufferPresentation): string {
-    if (buffer.id === $activeBufferId) return 'text-accent opacity-100';
+    if (buffer.id === $activeRowId) return 'text-accent opacity-100';
     return 'text-text-muted opacity-75 group-hover:opacity-100 transition-colors';
   }
 
@@ -173,9 +173,10 @@
               ontouchend={handleLongPressEnd}
               ontouchcancel={handleLongPressEnd}
               data-testid="buffer-item"
-                     {@attach tooltipAttachment(buffer)}
+              aria-current={buffer.id === $activeRowId ? 'true' : undefined}
+              {@attach tooltipAttachment(buffer)}
               style="--i: {i}"
-              class="buffer-item-enter buffer-item group flex items-center gap-0.5 cursor-pointer rounded-r-md hover:bg-surface-raised active:bg-accent/10 transition-colors duration-150 touch-manipulation select-none {buffer.id === $activeBufferId ? 'border-s-[3px] border-s-accent bg-surface-raised' : 'border-s-[3px] border-s-transparent'}"
+              class="buffer-item-enter buffer-item group flex items-center gap-0.5 cursor-pointer rounded-r-md hover:bg-surface-raised active:bg-accent/10 transition-colors duration-150 touch-manipulation select-none {buffer.id === $activeRowId ? 'border-s-[3px] border-s-accent bg-surface-raised' : 'border-s-[3px] border-s-transparent'}"
             >
               {#if getBufferIcon(buffer)}
                 {@const Icon = getBufferIcon(buffer)}

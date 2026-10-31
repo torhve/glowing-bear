@@ -103,6 +103,18 @@ export function isRelayStatusBuffer(buffer: BufferPresentation): boolean {
     return buffer.plugin === 'relay' || buffer.type === 'relay';
 }
 
+/**
+ * Whether a buffer earns a sidebar row while `onlyUnread` is on: unread activity,
+ * the conversation the reader is in, or a pin.
+ *
+ * `activeId` is a parameter, not a store read, because the sidebar renders two
+ * views with two different answers to "which conversation is this?" — the live
+ * selection, and the retained view's own selection. One rule, two inputs.
+ */
+export function sidebarRowQualifies(buffer: BufferPresentation, activeId: string): boolean {
+    return getEffectiveUnread(buffer) > 0 || buffer.id === activeId || buffer.pinned;
+}
+
 /** Classify display lines independently from notification eligibility. */
 export function isUserMessageLine(line: BufferLine): boolean {
     if (line.isDateSeparator) return false;
