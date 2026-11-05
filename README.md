@@ -242,6 +242,7 @@ Glowing Bear follows the system's light/dark setting and picks a built-in palett
 - **Image upload** — drag-and-drop or click to upload images via Imgur
 - **URL embeds** — rich previews for links; media expands from a button and collapses with a one-click button below the media
 - **Emoji shortcodes** — optional `:beer:` → 🍺 replacement while typing
+- **Duplicate link warning** — Enter asks before posting a link that already appears in the messages this buffer has loaded, showing who posted it and when. Settings → Behaviour turns it off.
 - **Desktop notifications** — system notifications and favicon badge for mentions and highlights
 - **KaTeX math rendering** — optional LaTeX math support
 - **Connection stats** — hover the status indicator to see bytes sent/received, message count, uptime, and time since last message

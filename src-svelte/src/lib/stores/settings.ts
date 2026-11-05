@@ -40,7 +40,9 @@ export const settings = writable<Settings>({
     protocol: 'auto',
     // 'number' is the order the sidebar already shows; the buffer-search dialog
     // is the only consumer.
-    bufferSearchSort: 'number'
+    bufferSearchSort: 'number',
+    // On for everyone: a profile saved before this key existed must still read as on.
+    warnDuplicateLinks: true
 });
 
 // The key the theme store wrote before issue #13 introduced the two slots.

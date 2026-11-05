@@ -53,6 +53,18 @@ The app is a **dual-protocol client**. `connectionManager.ts` chooses one transp
 - **Known limitation of the stop condition:** while a buffer sits in the exhausted state it renders nothing, the gate offers no page, and `ChatView` shows no history control. Removing the filter on the WeeChat side does not re-open the hunt from the client; the state ends when that buffer is cleared or reopened.
 - Coverage: `test/unit/hidden-window-paging.test.ts`, `test/unit/history-page-runner.test.ts`, `test/unit/history-limit-growth.test.ts`, `e2e/specs/History-filteredWindow.test.ts` (both relays, counts the windows actually put on the wire), `e2e/specs/History-requestDiscipline.test.ts`.
 
+### Duplicate link warning
+
+`src-svelte/src/lib/duplicateLinks.ts` owns the whole comparison — `findDuplicateLinks(pending, lines)`, `DuplicateMatch`, and one internal `linkKey`. `InputBar.svelte`'s `handleSend(confirmed)` is its only caller. Read `plan-duplicate-link-warning.md` before changing it; that file holds the approved normalisation rules and the measured scan cost.
+
+- **Send-time only.** The scan runs inside `handleSend`, before the composer is cleared. Never move it to a `$derived`, an `$effect`, or a store subscription: that re-reads up to 4 096 retained lines for every incoming message. A full 4 096-line miss measures ~7 ms, so no index, cache, or `MAX_LINK_LINES_SCANNED` constant exists on purpose.
+- **One tokenizer.** The matcher takes its links from `tokenizeLinks` in `lib/linkTokens.ts` — the same call `LinkifiedText` renders with. A second URL extractor in `duplicateLinks.ts` is the one way to make the warning disagree with what the chat turns into a link.
+- **Enter and the send button ask; "Send anyway" answers.** The gate requires `confirmed === true` and only the dialog's **Send anyway** passes it, so a DOM binding that handed `handleSend` an event object could not silence the question. **Send anyway** first re-checks the composer text, `bufferId`, `sameOwner(boundRef, owner)`, and liveness. A mismatch sends nothing, keeps the text, and sets `composerNotice`. A failed scan is caught and the text is delivered — this check never eats a message.
+- **`composerNotice` is read through `untrack` by its clearing effect** in `InputBar.svelte`, which depends on `isLive` and `currentBufferId` rather than on the notice itself. Read reactively, that effect wiped every refusal the live composer raised. The notice clears when a new question opens, when a send lands, when the reader changes conversation, and when a reconnect makes the old offline notice false.
+- **The knob is one boolean.** `Settings.warnDuplicateLinks` defaults to `true` and is optional in the type, so a profile saved before it keeps loading. No per-buffer override and no "how far back" control.
+
+Coverage: `test/unit/duplicateLinks.test.ts`, `test/unit/input-bar-duplicate-gate.test.ts`, `e2e/specs/InputBar-duplicateLink.test.ts` (serial lane — it writes channel state).
+
 ## Commands
 
 ```bash

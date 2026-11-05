@@ -99,3 +99,29 @@ describe('theme slots (issue #13)', () => {
         expect(get(store).protocol).toBe('auto');
     });
 });
+
+describe('an option added after a profile was saved', () => {
+    it('warns about a duplicate link for a profile saved before the option existed', async () => {
+        // `warnDuplicateLinks` is optional in `Settings` so an older profile keeps loading;
+        // the reader of the setting still has to get an answer. A profile that names every
+        // other key and not this one is exactly what an upgrade hands the app.
+        localStorage.setItem('gb-settings', JSON.stringify({
+            hostField: 'relay.example',
+            port: '443',
+            tls: true,
+            themeDark: 'catppuccin-mocha',
+            themeLight: 'base16-solarized-light',
+            noembed: false,
+        }));
+        const store = await loadSettingsModule();
+        expect(get(store)).not.toHaveProperty('theme');
+        expect(get(store).noembed, 'the stored answers still load').toBe(false);
+        expect(get(store).warnDuplicateLinks, 'a profile that never saw the option warns on').toBe(true);
+    });
+
+    it('keeps a profile that turned the duplicate-link warning off', async () => {
+        localStorage.setItem('gb-settings', JSON.stringify({ warnDuplicateLinks: false }));
+        const store = await loadSettingsModule();
+        expect(get(store).warnDuplicateLinks).toBe(false);
+    });
+});

@@ -19,6 +19,8 @@
   import { SvelteSet } from 'svelte/reactivity';
   import ImageUploadPreview from './ImageUploadPreview.svelte';
   import MultiLinePasteDialog from './MultiLinePasteDialog.svelte';
+  import DuplicateLinkDialog from './DuplicateLinkDialog.svelte';
+  import { findDuplicateLinks, type DuplicateMatch } from '#lib/duplicateLinks.ts';
   import { DEBUG_INPUT } from '#lib/debug.ts';
   import { addToast } from '#lib/toast.ts';
   import { activeConnectionProfile } from '#lib/connectionProfile.ts';
@@ -77,6 +79,10 @@
   const current = $derived($chatDisplay.buffer);
   const isLive = $derived($chatDisplay.live);
 
+  // Which conversation is on screen, as a string. An effect that asks "is this still the same
+  // buffer?" reads this instead of `current`, because a new message republishes the presentation
+  // object while the id stays the same.
+  const currentBufferId = $derived(current?.id ?? null);
   const profileKey = $derived($activeConnectionProfile?.key ?? null);
   const conversationKey = $derived(conversationKeyFor(current));
   const ownerRef = $derived<DraftRef | null>(
@@ -132,6 +138,20 @@
   let previewOwner = $state<DraftRef | null>(null);
   // Ref to MultiLinePasteDialog component for programmatic dialog show/hide
   let multiLinePasteDialogRef = $state<{ dialog: HTMLDialogElement | undefined }>();
+  // A duplicate-link warning the reader has not answered yet: the exact text it was asked
+  // about, the conversation and buffer its scan read, and what that scan found. Null means
+  // no question is open, and the whole record goes away when the dialog closes — a scan is
+  // never carried into the next send.
+  let pendingDuplicate = $state<{
+    text: string;
+    owner: DraftRef | null;
+    bufferId: string;
+    bufferName: string;
+    windowSize: number;
+    matches: DuplicateMatch[];
+  } | null>(null);
+  // Ref to DuplicateLinkDialog component for programmatic dialog show/hide
+  let duplicateDialogRef = $state<{ dialog: HTMLDialogElement | undefined }>();
   let nextImageId = $state(1);
 
   let showColorPicker = $state(false);
@@ -185,9 +205,15 @@
 
   // The explanation belongs to the attempt that failed, so it clears when the
   // composer becomes able to answer — a notice left standing after a successful
-  // reconnect would describe a connection that no longer exists.
+  // reconnect would describe a connection that no longer exists. It is read without
+  // subscribing to it, because a refusal the live composer raised itself (a duplicate-link
+  // send that no longer matched what is on screen) has to stay readable until the next
+  // attempt clears it at the top of `handleSend`.
   $effect(() => {
-    if (isLive && composerNotice !== null) composerNotice = null;
+    // The conversation is named by its id, not by the presentation object: a new message
+    // republishes that object, and a refusal must not disappear because the chat above changed.
+    const answerable = isLive && currentBufferId !== null;
+    if (answerable && untrack(() => composerNotice) !== null) composerNotice = null;
   });
 
   // The hint has to describe the screen the reader is looking at. Naming the
@@ -305,7 +331,11 @@
     buffers.set(updated);
   }
 
-  async function handleSend() {
+  // `confirmed` is set only by the "Send anyway" answer to the duplicate-link warning. Every
+  // other caller — Enter and the send button — passes nothing. The gate asks for
+  // `confirmed === true` rather than for a truthy value, so a DOM binding that hands this
+  // function a MouseEvent or KeyboardEvent can never answer the warning by accident.
+  async function handleSend(confirmed = false) {
     if (message.length === 0) return;
 
     // Refused before the composer is emptied. The send below clears the textarea
@@ -315,6 +345,36 @@
     if (!isLive || current === null) {
       composerNotice = 'Not connected — your text is kept.';
       return;
+    }
+
+    // Warn before posting a link this buffer already holds. It runs here, on a send, and
+    // nowhere else: from a `$derived`, an `$effect` or a store subscription the same scan
+    // would re-read up to 4 096 lines for every incoming message. Text that starts with `/`
+    // is a WeeChat command rather than a post to this buffer, so `/msg other <url>` is not
+    // judged against the buffer it happens to be typed in.
+    if (confirmed !== true && current !== null && $settings.warnDuplicateLinks !== false && !message.startsWith('/')) {
+      const scanLines = get(buffers)[current.id]?.lines ?? [];
+      try {
+        const matches = findDuplicateLinks(message, scanLines);
+        if (matches.length > 0) {
+          pendingDuplicate = {
+            text: message,
+            owner: boundRef,
+            bufferId: current.id,
+            bufferName: current.shortName,
+            windowSize: scanLines.length,
+            matches,
+          };
+          // A new question replaces an older explanation, so the notice never outlives the
+          // attempt it came from.
+          composerNotice = null;
+          duplicateDialogRef?.dialog?.showPopover();
+          return;
+        }
+      } catch (error) {
+        // Fail open: a duplicate check must never be the reason a message is not delivered.
+        console.error('duplicate link check failed', error);
+      }
     }
 
     composerNotice = null;
@@ -1044,6 +1104,39 @@
     inputRef?.focus();
   }
 
+  /**
+   * Answer the duplicate-link warning: post the text that was scanned, or keep it to edit.
+   *
+   * "Send anyway" re-checks everything the scan was made against. Text edited while the
+   * dialog was open, a buffer switch, or a connection that went away all mean the matches on
+   * screen describe something other than what would be sent, so nothing is sent and the
+   * reader is told to press Enter again on what they can now see. Escape and the close button
+   * reach this through the dialog's own Edit action.
+   */
+  function finishDuplicateSend(action: 'send' | 'edit') {
+    const pending = pendingDuplicate;
+    pendingDuplicate = null;
+    duplicateDialogRef?.dialog?.hidePopover();
+    if (pending === null) return;
+    if (action === 'edit') {
+      inputRef?.focus();
+      return;
+    }
+    const unchanged = message === pending.text
+      && isLive
+      && current !== null
+      && current.id === pending.bufferId
+      && sameOwner(boundRef, pending.owner);
+    if (!unchanged) {
+      composerNotice = isLive
+        ? 'The message or the buffer changed — nothing was sent. Press Enter again to send what you now see.'
+        : 'Not connected — your text is kept.';
+      inputRef?.focus();
+      return;
+    }
+    void handleSend(true);
+  }
+
   // Handle paste events. Reading the clipboard's images is #lib/clipboardImages.ts's
   // job — its strategy order is a browser fact, and Firefox's clipboard files have to
   // start reading inside this handler. The event stays here, because whether a paste is
@@ -1156,6 +1249,8 @@
       pendingMultiLineText = null;
       pendingMultiLineOwner = null;
       multiLinePasteDialogRef?.dialog?.hidePopover();
+      pendingDuplicate = null;
+      duplicateDialogRef?.dialog?.hidePopover();
       showColorPicker = false;
       showFormatToolbar = false;
       if (inputRef) {
@@ -1320,7 +1415,7 @@
       </button>
 
       <button
-        onclick={handleSend}
+        onclick={() => handleSend()}
         disabled={!canSend}
         data-testid="send-button"
         class="input-bar-send flex-shrink-0 px-3 py-2 bg-accent hover:bg-accent-hover disabled:bg-border disabled:cursor-not-allowed text-white rounded transition-colors btn-glow"
@@ -1381,6 +1476,15 @@
   onJoin={() => finishMultiLinePaste('join')}
   onSeparate={() => finishMultiLinePaste('separate')}
   onCancel={() => finishMultiLinePaste('cancel')}
+/>
+
+<DuplicateLinkDialog
+  bind:this={duplicateDialogRef}
+  matches={pendingDuplicate?.matches ?? []}
+  bufferName={pendingDuplicate?.bufferName ?? ''}
+  windowSize={pendingDuplicate?.windowSize ?? 0}
+  onSendAnyway={() => finishDuplicateSend('send')}
+  onEdit={() => finishDuplicateSend('edit')}
 />
 
 <style>

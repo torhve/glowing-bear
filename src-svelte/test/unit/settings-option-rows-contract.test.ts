@@ -9,7 +9,7 @@
  *
  *   - `id` is not derived from the setting key (`showNicklist` → `show-nicklist`,
  *     but `noembed` → `noembed`), so it has to stay an explicit value;
- *   - four rows carry a `data-testid` the E2E specs click through, the rest do not;
+ *   - some rows carry a `data-testid` the E2E specs click through, the rest render none;
  *   - `savepassword` does not toggle like the others — turning it off also clears
  *     the stored password, so its change handler is a different function;
  *   - `protocol` is one of the 15 rows but is a `<select>`, not a checkbox.
@@ -51,10 +51,8 @@ const SPAN_CLASS = ['flex', 'gap-2', 'items-center', 'settings-option-label', 't
 const CHECKBOX_CLASS = ['h-4', 'w-4'];
 
 /**
- * The checkboxes that carry a `data-testid`. Five do; only four of those are read by
- * an E2E spec today. The fifth is pinned anyway — a test id that no test uses is
- * still a name something outside this repo can depend on, and "no spec reads it" is
- * not the same as "nothing reads it".
+ * The checkboxes that carry a `data-testid`. Six do, and an E2E spec reads each one through
+ * that id. A row without one renders no attribute at all.
  */
 const TESTID_BY_KEY: Record<string, string> = {
     stylizePrivateChats: 'stylizePrivateChats-checkbox',
@@ -62,9 +60,10 @@ const TESTID_BY_KEY: Record<string, string> = {
     enableEmojify: 'enableEmojify-checkbox',
     useFavico: 'favico-checkbox',
     soundnotification: 'sound-checkbox',
+    warnDuplicateLinks: 'warn-duplicate-links',
 };
 
-/** The 13 checkbox rows that are always present: setting key and the `id` the label points at. */
+/** The 14 checkbox rows that are always present: setting key and the `id` the label points at. */
 const CHECKBOX_ROWS: Array<[keyof Settings, string]> = [
     ['showNicklist', 'show-nicklist'],
     ['noembed', 'noembed'],
@@ -75,6 +74,7 @@ const CHECKBOX_ROWS: Array<[keyof Settings, string]> = [
     ['enableFormatting', 'enable-formatting'],
     ['enableQuickKeys', 'enable-quick-keys'],
     ['enableEmojify', 'enable-emojify'],
+    ['warnDuplicateLinks', 'warn-duplicate-links'],
     ['useFavico', 'use-favico'],
     ['soundnotification', 'sound-notification'],
     ['enableMathjax', 'enable-mathjax'],
@@ -117,7 +117,7 @@ describe('the checkbox rows', () => {
             expect(tokens(input), String(key)).toEqual(CHECKBOX_CLASS);
             expect(input!.getAttribute('data-settings-checkbox'), String(key)).toBe(String(key));
 
-            // The test ids are the E2E surface, and only four rows have one.
+            // The test ids are the E2E surface, and only six rows have one.
             expect(input!.getAttribute('data-testid'), String(key)).toBe(TESTID_BY_KEY[String(key)] ?? null);
         }
     });

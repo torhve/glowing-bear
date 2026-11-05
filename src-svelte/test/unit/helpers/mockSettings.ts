@@ -49,6 +49,7 @@ export const TEST_SETTINGS: Settings = {
     stylizePrivateChats: false,
     enableEmojify: true,
     enableFormatting: true,
+    warnDuplicateLinks: true,
     protocol: 'auto',
     bufferSearchSort: 'number',
 };

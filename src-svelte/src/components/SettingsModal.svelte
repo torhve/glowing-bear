@@ -30,6 +30,7 @@
   import ArrowLeftRight from '@lucide/svelte/icons/arrow-left-right';
   import MessageCircle from '@lucide/svelte/icons/message-circle';
   import SmilePlus from '@lucide/svelte/icons/smile-plus';
+  import CopyX from '@lucide/svelte/icons/copy-x';
   import Eye from '@lucide/svelte/icons/eye';
   import Volume2 from '@lucide/svelte/icons/volume-2';
   import Sigma from '@lucide/svelte/icons/sigma';
@@ -116,7 +117,8 @@
       showNicklist: true,
       stylizePrivateChats: false,
       enableEmojify: true,
-      enableFormatting: true
+      enableFormatting: true,
+      warnDuplicateLinks: true
     });
   }
 
@@ -309,6 +311,12 @@
             testid="enableEmojify-checkbox"
             onchange={() => updateSettings({ enableEmojify: !$settings.enableEmojify })}>
             Replace emoji shortcodes while typing (<code>:beer:</code> → 🍺)
+          </ToggleOption>
+
+          <ToggleOption id="warn-duplicate-links" name="warnDuplicateLinks" icon={CopyX}
+            checked={$settings.warnDuplicateLinks !== false} testid="warn-duplicate-links"
+            onchange={() => updateSettings({ warnDuplicateLinks: $settings.warnDuplicateLinks === false })}>
+            Warn if trying to send a duplicate link
           </ToggleOption>
         </div>
       </section>

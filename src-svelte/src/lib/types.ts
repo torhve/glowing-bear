@@ -349,6 +349,9 @@ export interface Settings {
     /** Sort mode for the buffer-search dialog only. Absent from settings saved
      *  before this option existed, so readers must fall back to 'number'. */
     bufferSearchSort?: BufferSearchSort;
+    /** Ask before posting a link this buffer already holds. Optional for the same
+     *  reason as `bufferSearchSort`: a profile saved before it keeps loading. */
+    warnDuplicateLinks?: boolean;
     angularTimeFormat?: string;
     supports_formatting_date?: boolean;
 }
