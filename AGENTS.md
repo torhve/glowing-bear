@@ -53,32 +53,6 @@ The app is a **dual-protocol client**. `connectionManager.ts` chooses one transp
 - **Known limitation of the stop condition:** while a buffer sits in the exhausted state it renders nothing, the gate offers no page, and `ChatView` shows no history control. Removing the filter on the WeeChat side does not re-open the hunt from the client; the state ends when that buffer is cleared or reopened.
 - Coverage: `test/unit/hidden-window-paging.test.ts`, `test/unit/history-page-runner.test.ts`, `test/unit/history-limit-growth.test.ts`, `e2e/specs/History-filteredWindow.test.ts` (both relays, counts the windows actually put on the wire), `e2e/specs/History-requestDiscipline.test.ts`.
 
-### Buffer search matching and its topic excerpt
-
-`src-svelte/src/lib/bufferSearchMatch.ts` holds the one rule the buffer search dialog shows its
-results by: which buffers pass the filter, and which words get marked on them.
-`BufferSearchModal.svelte` keeps no matching logic of its own, so a row cannot appear with
-nothing on it explaining why it appeared (issue #19).
-
-- **The topic line is cut in characters, not by CSS overflow.** `topicCapacity` subtracts the
-  paddings and the number badge the component itself writes on the row, against measurements the
-  dialog takes while it is open: the results box width; the longest topic on show divided by its
-  own length in `text-sm`; and 20 digits in `text-xs font-bold` for both chips. The topic ruler
-  holds real text rather than a proxy character, because Settings can replace the monospace stack
-  with any family CSS. The unread chip is drawn over the row's right edge, so its digits are
-  charged against the topic line too: 75 characters at a 672px dialog with a two-digit buffer
-  number, 71 once a two-digit chip sits beside it.
-- **The excerpt always holds the whole match.** It opens at the earliest word opening that can
-  still hold it, closes on the last word end the room affords, and marks every cut with U+2026.
-  A row whose topic did not hold the query prints no topic line at all.
-- **The keyboard-selected row paints `bg-accent-strong`, not `bg-accent`.** White text on the
-  plain accent measures 3.3 in the dark palette; mixing 20% black lifts it to 4.9, and the short
-  name, full name and topic line all need that on the selected row.
-- Coverage: `test/unit/buffer-search-match.test.ts` (filter, marking, cut rules, capacity
-  arithmetic), `e2e/specs/BufferSearch-topicMatch.test.ts` (the line on a real row the spec
-  planted, in both palettes with painted contrast measured at ≥ 4.5, and at the 1280px and 380px
-  dialog widths with no topic line left for the browser to cut).
-
 ## Commands
 
 ```bash
