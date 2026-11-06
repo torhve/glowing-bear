@@ -1606,6 +1606,9 @@
   --color-text-muted: var(--gb-text-muted);
   --color-accent: var(--gb-accent);
   --color-accent-hover: var(--gb-accent-hover);
+  /* A deeper accent, for a surface that carries text of its own on it. White text on
+     --gb-accent measures 3.3 in the dark palette; mixing 20% black lifts it to 4.9. */
+  --color-accent-strong: color-mix(in oklab, var(--gb-accent) 80%, #000000);
   --color-danger: var(--gb-danger);
   --color-success: var(--gb-success);
   --color-warning: var(--gb-warning);
@@ -1807,6 +1810,25 @@
 }
 
 @layer components {
+  /* A search match inside a buffer search row. The text keeps the row's own colour, so a
+     match never costs contrast. The ribbon tint and its underline carry the mark, and the
+     underline still reads in a theme where a 15% tint disappears. */
+  .buffer-search-item mark {
+    color: inherit;
+    background: var(--gb-ribbon-light);
+    border-radius: 2px;
+    text-decoration-line: underline;
+    text-decoration-color: var(--gb-ribbon);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 2px;
+  }
+
+  /* On the accent row the amber tint vanishes into the blue, so the match sits in a
+     darkened chip and underlines with its own colour. */
+  .buffer-search-item-active mark {
+    background: rgb(0 0 0 / 0.22);
+    text-decoration-color: currentColor;
+  }
   .container-inline {
     container-type: inline-size;
   }

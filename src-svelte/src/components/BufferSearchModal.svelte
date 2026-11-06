@@ -4,6 +4,10 @@
   import { settings, updateSettings } from '#lib/stores/settings.ts';
   import { switchBuffer } from '#lib/stores/connectionManager.ts';
   import { clamp } from '#lib/num.ts';
+  import {
+    CUT_MARKER, bufferMatchesQuery, splitQueryMatches, topicCapacity, topicExcerpt,
+    topicMatchesQuery, type RowMetrics,
+  } from '#lib/bufferSearchMatch.ts';
   import { focusWhenPopoverOpens } from '#lib/dialogFocus.ts';
 
   import BaseDialog from '#components/BaseDialog.svelte';
@@ -27,15 +31,36 @@
   // closes the dialog it rendered even if another element ever carries that id.
   let baseDialog: { dialog: HTMLDialogElement | undefined } | undefined = $state();
 
+  // A topic excerpt has to be cut to the width the row really has, so the dialog measures
+  // that width: the room its results box has, and how wide one character is in each of the
+  // two fonts a row is built from. Two hidden rulers are the second half, because a topic
+  // line and a buffer-number badge do not share a font size.
+  const RULER_CHARS = 20;
+  const RULER_SAMPLE_CHARS = 120;
+  let resultsBox = $state<HTMLDivElement | null>(null);
+  let topicRuler = $state<HTMLSpanElement | null>(null);
+  let badgeRuler = $state<HTMLSpanElement | null>(null);
+  let resultsWidth = $state(0);
+  let rowMetrics = $state<RowMetrics>({ resultsWidth: 0, charWidth: 0, badgeCharWidth: 0 });
+
+  // One folded query drives both halves of the dialog: which rows it keeps, and what it
+  // marks on the rows it keeps. They cannot drift apart, so a row never appears without
+  // something on it that says why.
+  let searchNeedle = $derived(bufferSearchQuery.toLowerCase());
+
   let filteredBuffers = $derived(
-    $visibleBuffers.filter((buf: BufferPresentation) => {
-      if (!bufferSearchQuery) return true;
-      const query = bufferSearchQuery.toLowerCase();
-      return buf.shortName.toLowerCase().includes(query) ||
-        buf.fullName.toLowerCase().includes(query) ||
-        (buf.rtitle || '').toLowerCase().includes(query) ||
-        String(buf.number).includes(query);
-    })
+    $visibleBuffers.filter((buf: BufferPresentation) => bufferMatchesQuery(buf, searchNeedle))
+  );
+
+  // The longest topic the dialog currently shows. The topic ruler holds it and is divided by
+  // its own length, so the width comes from the glyphs a row really draws. Settings lets a
+  // font family replace the monospace stack with any family CSS, and then a proxy character
+  // stops being the width of the text it stands for.
+  let topicRulerSample = $derived(
+    (filteredBuffers.reduce(
+      (longest: string, buf: BufferPresentation) => (buf.rtitle.length > longest.length ? buf.rtitle : longest),
+      '',
+    ) || '0'.repeat(RULER_CHARS)).slice(0, RULER_SAMPLE_CHARS)
   );
 
   // Which order the dialog shows. 'number' is the sidebar's own order — pinned
@@ -150,6 +175,25 @@
       el?.scrollIntoView({ block: 'nearest' });
     }
   });
+
+  // Take the measurements while the dialog is open, and again whenever the results box
+  // changes width. A closed popover lays its rows out at zero width, so nothing here reads
+  // the DOM while it is closed; `bind:offsetWidth` reports the real width when it opens.
+  // Each run is three reads on elements the dialog already has — never per row — and it runs
+  // when the box changes width or the ruler's sample changes, not on every keystroke.
+  $effect(() => {
+    if (!isOpen || resultsWidth === 0) return;
+    const sample = topicRulerSample;
+    const box = resultsBox;
+    const topic = topicRuler;
+    const badge = badgeRuler;
+    if (!box || !topic || !badge) return;
+    rowMetrics = {
+      resultsWidth: box.clientWidth,
+      charWidth: topic.offsetWidth / sample.length,
+      badgeCharWidth: badge.offsetWidth / RULER_CHARS,
+    };
+  });
 </script>
 
 <BaseDialog bind:this={baseDialog} id="buffer-search-modal" labelledby="buffer-search-title" noAnimation onbeforetoggle={handleBeforeToggle} ontoggle={handleToggle}>
@@ -204,36 +248,84 @@
       </div>
     </div>
 
-    <div class="buffer-search-results flex-1 overflow-y-auto p-2">
+    <div class="buffer-search-results relative flex-1 overflow-y-auto p-2" bind:this={resultsBox} bind:offsetWidth={resultsWidth}>
+      <!-- Rulers the dialog measures one character against, in each font a row really uses.
+           Hidden, but laid out: an element with no box measures zero. -->
+      <span
+        bind:this={topicRuler}
+        aria-hidden="true"
+        class="buffer-search-ruler absolute -left-[9999px] top-0 whitespace-pre text-sm opacity-0 pointer-events-none select-none"
+      >{topicRulerSample}</span>
+      <span
+        bind:this={badgeRuler}
+        aria-hidden="true"
+        class="buffer-search-ruler absolute -left-[9999px] top-0 whitespace-pre text-xs font-bold opacity-0 pointer-events-none select-none"
+      >{'0'.repeat(RULER_CHARS)}</span>
       {#each groupedBuffers as group, idx (group.number)}
+        {@const shortName = group.buffers.map(b => b.shortName).join(', ')}
+        {@const fullName = group.buffers.map(b => b.fullName).join(', ')}
+        {@const isActive = idx === activeIndex}
+        <!-- A row that matched on its channel topic says so on a third line. A group merges
+             buffers under one number, so the line shows the first member whose topic matched. -->
+        {@const topicHit = searchNeedle === ''
+          ? undefined
+          : group.buffers.find(b => topicMatchesQuery(b, searchNeedle))}
+        <!-- Each row can print one chip at its right edge: a notification count, or an unread
+             count. It is drawn over the row, so it costs the topic line room as well. -->
+        {@const loud = group.buffers.some(b => b.notification >= 3)}
+        {@const notice = loud
+          ? group.buffers.reduce((sum, b) => sum + b.notification, 0)
+          : group.buffers.reduce((sum, b) => sum + (b.notification > 0 ? b.notification : b.unread), 0)}
+        {@const badgeDigits = (loud || notice > 0) ? String(notice).length : 0}
+        {@const topic = topicHit
+          ? topicExcerpt(topicHit.rtitle, searchNeedle, topicCapacity(String(group.number).length, rowMetrics, badgeDigits))
+          : null}
         <button
           onclick={() => handleBufferClick(group.buffers[0]!)}
-          class="buffer-search-item w-full px-3 py-3 text-left flex items-center relative rounded hover:bg-surface-raised transition-colors {idx === activeIndex ? '!bg-accent' : ''}"
+          class="buffer-search-item w-full px-3 py-3 text-left flex items-center relative rounded hover:bg-surface-raised transition-colors {isActive ? 'buffer-search-item-active !bg-accent-strong' : ''}"
           data-search-index={idx}
         >
-          <div class="flex items-center gap-2 min-w-0">
-            <span class="buffer-search-number flex-shrink-0 px-1.5 py-0.5 text-xs font-bold rounded bg-surface-raised border border-border text-white">
+          <div class="flex items-center gap-2 min-w-0 flex-1">
+            <span class="buffer-search-number flex-shrink-0 px-1.5 py-0.5 text-xs font-bold rounded bg-surface-raised border border-border {isActive ? 'text-white' : 'text-text'}">
               {group.number}
             </span>
             <div class="min-w-0 flex-1">
-              <div class="buffer-search-shortname text-base font-bold truncate text-white">{group.buffers.map(b => b.shortName).join(', ')}</div>
-              <div class="buffer-search-fullname text-sm truncate text-white/70">{group.buffers.map(b => b.fullName).join(', ')}</div>
+              <div class="buffer-search-shortname text-base font-bold truncate {isActive ? 'text-white' : 'text-text'}">
+                {#each splitQueryMatches(shortName, searchNeedle) as piece, i (i)}
+                  {#if piece.hit}<mark>{piece.text}</mark>{:else}{piece.text}{/if}
+                {/each}
+              </div>
+              <div class="buffer-search-fullname text-sm truncate {isActive ? 'text-white' : 'text-text-secondary'}">
+                {#each splitQueryMatches(fullName, searchNeedle) as piece, i (i)}
+                  {#if piece.hit}<mark>{piece.text}</mark>{:else}{piece.text}{/if}
+                {/each}
+              </div>
+              {#if topic}
+                <div class="buffer-search-topic text-sm truncate {isActive ? 'text-white' : 'text-text-secondary'}" data-testid="buffer-search-topic">
+                  <span class="sr-only">Channel topic: </span>
+                  {#if topic.lead}<span>{CUT_MARKER} </span>{/if}
+                  {#each splitQueryMatches(topic.text, searchNeedle) as piece, i (i)}
+                    {#if piece.hit}<mark>{piece.text}</mark>{:else}{piece.text}{/if}
+                  {/each}
+                  {#if topic.trail}<span> {CUT_MARKER}</span>{/if}
+                </div>
+              {/if}
             </div>
           </div>
 
-          {#if group.buffers.some(b => b.notification >= 3)}
+          {#if loud}
             <span class="buffer-search-badge notification-badge absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-xs font-bold rounded bg-danger/60 text-white">
-              {group.buffers.reduce((sum, b) => sum + b.notification, 0)}
+              {notice}
             </span>
-          {:else if group.buffers.some(b => b.notification > 0 || b.unread > 0)}
+          {:else if notice > 0}
             <span class="buffer-search-badge unread-badge absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-xs font-bold rounded bg-warning/60 text-white">
-              {group.buffers.reduce((sum, b) => sum + (b.notification > 0 ? b.notification : b.unread), 0)}
+              {notice}
             </span>
           {/if}
         </button>
       {/each}
       {#if groupedBuffers.length === 0 && bufferSearchQuery}
-        <div class="buffer-search-no-results px-3 py-8 text-center text-white/50 text-sm">No buffers found</div>
+        <div class="buffer-search-no-results px-3 py-8 text-center text-text-secondary text-sm">No buffers found</div>
       {/if}
     </div>
   </div>

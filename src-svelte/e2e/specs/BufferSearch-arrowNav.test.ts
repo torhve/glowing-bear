@@ -48,8 +48,10 @@ async function activeIndexOf(p: import('@playwright/test').Page): Promise<number
     return p.evaluate(() => {
         const box = document.querySelector('.buffer-search-results');
         if (!box) return -1;
+        // The component's own marker for the selected row, not the colour utility painted on
+        // it: the palette behind that marker is a styling choice this spec has no reason to read.
         const active = Array.from(box.querySelectorAll('[data-search-index]'))
-            .find((el) => el.classList.contains('!bg-accent'));
+            .find((el) => el.classList.contains('buffer-search-item-active'));
         return active ? Number(active.getAttribute('data-search-index')) : -1;
     });
 }
@@ -142,7 +144,7 @@ test('selected item scrolls into view', async () => {
             const container = document.querySelector('.buffer-search-results') as HTMLElement | null;
             if (!container) return null;
             const items = Array.from(container.querySelectorAll('[data-search-index]'));
-            const active = items.find((el) => el.classList.contains('!bg-accent'));
+            const active = items.find((el) => el.classList.contains('buffer-search-item-active'));
             if (!active) return null;
             const box = container.getBoundingClientRect();
             const row = active.getBoundingClientRect();
