@@ -2,6 +2,10 @@
 
 Browser frontend for WeeChat IRC via WebSockets — **no backend**. Client-side SvelteKit 3.x + Svelte 5 + TypeScript (strict) + Tailwind CSS v4. Wrapped in Tauri 2.x for desktop. Includes basic PWA via SvelteKit's service worker at `src-svelte/src/service-worker/index.ts` (fetch-through, no caching). Talks to WeeChat over two relay transports: the 4.10.1+ `api` relay (REST + WebSocket) and the legacy `weechat` WebSocket protocol (WeeChat >= 3.x). The buffer hdata `id` (LONGLONG) exists only in WeeChat 4.3+ and is treated as optional.
 
+## Writing
+
+Do not add a section for a new feature: git, the code and the tests already record it. Add one only for a rule a later agent could otherwise break, as one paragraph naming the owner file, the rule, and the doc or test holding the measured evidence, with the long explanation in `docs/` and a pointer here. The same rule covers a plan's docs step: do not restate the code, and delete the history and measurements that no longer hold.
+
 ## Project Structure
 
 Source code in `src-svelte/src/` has `components/`, `lib/`, `lib/api/`, `lib/stores/`, `routes/`, and `service-worker/` (own `tsconfig.json` extending `$app/tsconfig/service-worker`, excluded from the root tsconfig). SvelteKit 3 has no `svelte.config.js` — all Kit config lives in the `sveltekit({...})` plugin options in `vite.config.ts`. Other root config files: `package.json`, `vitest.config.ts`, `eslint.config.js`, `tsconfig.json`, `tsconfig.app.json`. Static assets in `static/`; the icon set (`static/*.png`, `*.ico`, `*.icns`) and `static/manifest.webmanifest` are generated from `static/glowing-bear.svg` by `npm run generate-icons` / `npm run generate-icns` (wired into `predev`, `prebuild` and `pretauri*`) and are gitignored — never commit them. Test suites in `src-svelte/test/unit/` and `src-svelte/e2e/specs/`. Gbtest environment in `test/fixtures/gbtest/`. Live-verified WeeChat API evidence in `src-svelte/test/fixtures/api-dossier/`.
@@ -19,7 +23,7 @@ The API surface is not guessed: `api-dossier/README.md` records what a real WeeC
 
 ### Relay transports (dual protocol)
 
-The app is a **dual-protocol client**. `connectionManager.ts` chooses one transport per connection profile (`host:port:tls`): `api` when the address answers the API probe, `legacy` otherwise; settings can pin `protocol: "api" | "legacy" | "auto"`. The choice is cached per profile and holds only what a session proved, so reconnects do not re-probe; the rules and where each is tested are in `test/unit/transport-choice-recovery.test.ts` and `e2e/specs/Dual-protocol.test.ts`.
+The app is a **dual-protocol client**. `connectionManager.ts` chooses one transport per connection profile (`host:port:tls`): `api` when the address answers the API probe, `legacy` otherwise; settings can pin `protocol: "api" | "legacy" | "auto"`. The choice is cached per profile and holds only what a session proved, so reconnects do not re-probe; the rules and where each is tested are in `docs/relay-protocol-choice.md`, `test/unit/transport-choice-recovery.test.ts` and `e2e/specs/Dual-protocol.test.ts`.
 
 - Exactly one transport is active per connection. Never add a mid-connection fallback: a failed API connection must not silently switch to legacy, and a legacy connection must not be re-tried over the API.
 
