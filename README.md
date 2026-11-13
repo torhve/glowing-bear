@@ -28,6 +28,14 @@ npm run build
 
 This produces a `build/` directory containing all the files you need. Point your web server at it. For HTTPS hosting, see the [Getting Started](#getting-started-for-users) section below.
 
+Each [release](https://github.com/torhve/glowing-bear/releases) also carries that directory as `glowing-bear-web-<version>.zip`, with `SHA256SUMS` beside it. Unpack it and serve the directory over HTTP — the app does not run from `file://`. The zip is built to serve the root of an origin. To host under a path, such as `https://example.com/bear/`, build it yourself with that prefix, because the address is fixed at build time. Serve the directory at a URL that ends with a slash: at `/bear` without it the browser asks for the app's files one level too high, so a connect form paints while every file it needs returns 404:
+
+```bash
+BASE_PATH=/bear npm run build
+```
+
+`README-DEPLOY.txt` inside the zip states the fallback and cache rules your web server needs.
+
 ### Progressive Web App
 
 Glowing Bear includes a basic service worker (via SvelteKit's `src-svelte/src/service-worker/`). On supported browsers and devices, you can install it as an app:

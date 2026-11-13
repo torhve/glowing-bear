@@ -12,40 +12,23 @@ permissions:
 
 jobs:
     build:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v7
-
-            - uses: actions/setup-node@v6
-              with:
-                  node-version: 22
-                  cache: 'npm'
-
-            - name: Install dependencies
-              run: npm ci
-
-            - name: Sync SvelteKit
-              run: |
-                  mkdir -p src-svelte/.svelte-kit
-                  echo '{"compilerOptions":{}}' > src-svelte/.svelte-kit/tsconfig.json
-                  npx svelte-kit sync
-
-            - name: Build
-              env:
-                  BASE_PATH: '/glowing-bear'
-              run: npm run build
-
-            - name: Upload artifact
-              uses: actions/upload-pages-artifact@v5
-              with:
-                  path: 'build'
+        name: 'Build the site'
+        uses: ./.github/workflows/_build-web.yml
+        with:
+            # The Pages site lives at github.io/glowing-bear, so this is the one
+            # build that is not built for the root of an origin. Kit bakes the
+            # address in: a zip built for another address cannot serve here.
+            base_path: '/glowing-bear'
+            pages_artifact: true
 
     deploy:
+        name: 'Deploy to GitHub Pages'
         environment:
             name: github-pages
             url: ${{ steps.deployment.outputs.page_url }}
         runs-on: ubuntu-latest
         needs: build
+        timeout-minutes: 10
         steps:
             - name: Deploy to GitHub Pages
               id: deployment

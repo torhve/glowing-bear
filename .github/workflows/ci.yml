@@ -49,3 +49,11 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # The release workflow packages this same build. Packaging here too means a
+      # broken packager fails the push that broke it, not the release that needs it.
+      - name: Package the web release artifact
+        run: npm run package:web
+
+      - name: Check the artifact checksum
+        run: ( cd dist && sha256sum -c SHA256SUMS )

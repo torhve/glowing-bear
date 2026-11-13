@@ -52,6 +52,9 @@ npm run test:e2e                # must be a CLEAN run — see the flake note bel
 
 # Production build (static web)
 npm run build
+# The downloadable web artifact: dist/glowing-bear-web-<version>.zip + SHA256SUMS
+npm run package:web
+( cd dist && shasum -a 256 -c SHA256SUMS )   # macOS; `sha256sum -c` on Linux
 
 # Tauri desktop build (required — catches platform-specific issues)
 npm run tauri build
@@ -130,6 +133,11 @@ The **Build & Release** workflow compiles simultaneously on three platforms:
 
 Once all jobs pass, artifacts attach automatically to the GitHub release page.
 
+The **Web release** workflow runs at the same time. It attaches the web build a
+self-hosting user wants — `glowing-bear-web-<version>.zip` and `SHA256SUMS` — built
+for the root of an origin, so one zip serves any host. Its name comes from
+`package.json`; the job fails rather than ship a zip named for another version.
+
 ---
 
 ## Quick reference checklist
@@ -141,6 +149,7 @@ Once all jobs pass, artifacts attach automatically to the GitHub release page.
 - [ ] `npm run test:e2e` passes
 - [ ] `npm run build` succeeds
 - [ ] `npm run tauri build` succeeds
+- [ ] `npm run package:web` produces a zip whose checksum verifies
 - [ ] Commit pushed to `main`
 - [ ] CI workflow green on GitHub
 - [ ] Git tag created and pushed (`git tag v0.X.Y && git push origin v0.X.Y`)

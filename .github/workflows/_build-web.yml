@@ -1,0 +1,134 @@
+name: 'Build web (reusable)'
+
+# The web build one step removed from its consumers: Deploy Pages builds the site
+# for its own base path, and Web release builds it for the root of an origin and
+# packages the downloadable zip. Both repeated the same install and build steps;
+# they call this instead.
+#
+# `base_path` is the one input that changes the bytes. Kit bakes the address into
+# the built site, so a build made for one address cannot serve another — see the
+# note in README-DEPLOY.txt, which package-web.mjs writes into the zip.
+
+on:
+    workflow_call:
+        inputs:
+            base_path:
+                description: 'BASE_PATH to build for. Empty builds for the root of an origin.'
+                required: false
+                type: string
+                default: ''
+            artifact_name:
+                description: 'Name of the artifact that holds the built site'
+                required: false
+                type: string
+                default: 'web-build'
+            pages_artifact:
+                description: 'Publish the build as the GitHub Pages artifact instead of a plain one'
+                required: false
+                type: boolean
+                default: false
+            package_zip:
+                description: 'Also package build/ into a downloadable zip artifact'
+                required: false
+                type: boolean
+                default: false
+
+jobs:
+    build:
+        name: 'Build'
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        steps:
+            - uses: actions/checkout@v7
+
+            - uses: actions/setup-node@v6
+              with:
+                  node-version: 22
+                  cache: 'npm'
+
+            - name: Install dependencies
+              # `npm ci` runs `postinstall`, which runs `npm run sync` — the step that
+              # regenerates Kit 3's `node_modules/$app` tsconfig shims.
+              #
+              # The two workflows this file replaces also created
+              # `src-svelte/.svelte-kit/tsconfig.json` from a stub first. That is the
+              # Kit 2 layout: measured on Kit 3.1.0 with `rm -rf src-svelte/.svelte-kit`
+              # followed by `npm ci` and `npm run build`, the build succeeds and writes
+              # build/index.html, so the stub is not what makes a CI build work.
+              run: npm ci
+
+            - name: Build
+              env:
+                  BASE_PATH: ${{ inputs.base_path }}
+              run: npm run build
+
+            # Two shapes of the same build, and each caller asks for the one it
+            # consumes. GitHub Pages takes its artifact from the job that built the
+            # site (one Pages artifact per run, and the `github-pages` environment in
+            # the caller's deploy job reads it), so the Pages caller does not route the
+            # site through a plain artifact and back.
+            #
+            # No `permissions:` key in this file on purpose: the reusable workflow
+            # inherits the caller's, and the Pages caller is the one that grants
+            # `pages: write` and `id-token: write` that upload-pages-artifact needs.
+            - name: Upload the site for GitHub Pages
+              if: ${{ inputs.pages_artifact }}
+              uses: actions/upload-pages-artifact@v5
+              with:
+                  path: 'build'
+
+            # `path: build` uploads the contents of build/, so the download lands the
+            # site directly in the directory the consumer names.
+            - name: Upload the built site
+              if: ${{ !inputs.pages_artifact }}
+              uses: actions/upload-artifact@v7
+              with:
+                  name: ${{ inputs.artifact_name }}
+                  path: build
+                  if-no-files-found: error
+
+    package:
+        name: 'Package the downloadable zip'
+        needs: build
+        if: ${{ inputs.package_zip }}
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        steps:
+            - uses: actions/checkout@v7
+
+            - uses: actions/setup-node@v6
+              with:
+                  node-version: 22
+                  cache: 'npm'
+
+            - name: Install dependencies
+              # package-web.mjs zips with fflate, a runtime dependency of the app.
+              run: npm ci
+
+            - name: Download the built site
+              uses: actions/download-artifact@v8
+              with:
+                  name: ${{ inputs.artifact_name }}
+                  path: build
+
+            - name: Check the downloaded site
+              # A layout surprise in the artifact hop would otherwise package an
+              # empty zip; the script would then fail on a missing index.html with
+              # a message about `npm run build`, which is not what happened here.
+              run: |
+                  test -f build/index.html || { echo "build/index.html is missing — artifact layout is not the site root"; exit 1; }
+
+            - name: Package
+              # Pass the address the caller asked to build, quoted. An empty
+              # value is then one empty argument, which the script reads as the
+              # origin root; unquoted it would swallow the next word.
+              run: node scripts/package-web.mjs --base-path "${{ inputs.base_path }}"
+
+            - name: Upload the zip
+              uses: actions/upload-artifact@v7
+              with:
+                  name: web-release-zip
+                  path: |
+                      dist/glowing-bear-web-*.zip
+                      dist/SHA256SUMS
+                  if-no-files-found: error

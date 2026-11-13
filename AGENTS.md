@@ -56,12 +56,22 @@ The app is a **dual-protocol client**. `connectionManager.ts` chooses one transp
 - **Accepted cost, and its exact scope:** the gate may ratchet a buffer to the ceiling with no reader involved. The cursor is per-buffer (`BufferData.historyLimit`, grown only for the buffer named) and is cleared only where the buffer itself is cleared — buffer replacement in `handlers.ts`, `updateBufferDeep`, and the `/grep` buffer clear in `InputBar.svelte` — so it survives a relay reconnect. The row/DOM/heap/latency numbers in the perf note are reader-driven measurements; what was measured live for the automatic hunt is request counts.
 - **Known limitation of the stop condition:** while a buffer sits in the exhausted state it renders nothing, the gate offers no page, and `ChatView` shows no history control. Removing the filter on the WeeChat side does not re-open the hunt from the client; the state ends when that buffer is cleared or reopened.
 - Coverage: `test/unit/hidden-window-paging.test.ts`, `test/unit/history-page-runner.test.ts`, `test/unit/history-limit-growth.test.ts`, `e2e/specs/History-filteredWindow.test.ts` (both relays, counts the windows actually put on the wire), `e2e/specs/History-requestDiscipline.test.ts`.
+### Web release artifact
+
+`scripts/package-web.mjs` turns the built site into what a self-hosting user downloads: `npm run package:web` → `dist/glowing-bear-web-<version>.zip` plus `SHA256SUMS`, which `release-web.yml` attaches to the GitHub release beside the Tauri bundles. `release-web.yml` and `deploy-pages.yml` both get their `build/` from `.github/workflows/_build-web.yml`, so the zip a user downloads and the site Pages serves come from one build definition.
+
+The rule a later edit can break: the release zip is built with `BASE_PATH` unset and Pages with `BASE_PATH=/glowing-bear`, and that difference is not a flag the zip can absorb later. Kit bakes the served address into the built files. Measured against that zip with a plain static server and stated in its `README-DEPLOY.txt`: `index.html` names its assets relative to its own directory (`./_app/immutable/...`), so it serves from the origin root and from a directory root whose address ends with a slash — served as `/bear` without the slash it paints a connect form whose 14 bundles all 404, a dead app that looks alive. `404.html` names them from the root (`/_app/immutable/...`), so the fallback for an unknown path works only where the site owns the origin root, at any depth. A host under a prefix therefore needs its own `BASE_PATH` build, which is why the release ships one zip and not two.
+
+Never write a root-absolute path to a shipped file in `src/`: hand it to `asset()` from `$app/paths`. The two notification assets did until `notifications.ts` was fixed, and the failure was invisible locally — `/assets/audio/sonar.mp3` and `/glowing_bear_128x128.png` resolve at the origin root, so they work when you run the build from `build/` and 404 on the Pages deployment. Owner: `src-svelte/test/unit/notification-asset-paths.test.ts` pins the resolved URL for both deployments; `test/unit/mocks/app-paths.ts` is the `$app/paths` stub, and `asset()` there returns a document-relative `./x` because that is what the built app emits — measured as `src="./glowing-bear.svg"` in the root build and in the `BASE_PATH=/glowing-bear` build alike. A test must resolve such a URL against `document.baseURI` to see the base; a stub that returned an absolute path would let a test assert a string no build ever produces.
+
+`scripts/package-web.mjs` reads the served address back out of `build/404.html` and refuses to package a build answering to another address than the zip claims (`--base-path` states the claim; default is the origin root). Keep that refusal: a prefixed build left in `build/` packages as a release zip that looks fine and 404s its own fallback, and it happened that way in the session that added the check.
 
 ## Commands
 
 ```bash
 npm run dev                    # Dev server (localhost:8001)
 npm run build                  # Production build (static output to build/)
+npm run package:web            # build/ → dist/: release zip + SHA256SUMS
 npm run check                  # svelte-check
 npm run check:tests            # tsc over every `src-svelte/test/unit` file (only `perf/` and `prof/` are excluded — `npm run test:perf` is its own gate)
 npm run lint                   # eslint src-svelte/src src-svelte/test src-svelte/e2e

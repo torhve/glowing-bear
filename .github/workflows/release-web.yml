@@ -1,0 +1,70 @@
+name: 'Web release'
+
+# The downloadable web build: a zip of the site plus its checksum, attached to the
+# same GitHub release that carries the .dmg, .deb and .msi from build-tauri.yml.
+#
+# It is not a Tauri build. The site in the zip is the site that GitHub Pages serves;
+# the difference is the address it is built for — this one is built for the root of an
+# origin, Pages for /glowing-bear. Both call _build-web.yml for the build itself, so
+# the file a visitor downloads is the file the release cut is known to produce.
+#
+# `workflow_dispatch` runs the build and keeps the zip as a run artifact. It uploads
+# nothing to a release, because a manual run has no release to upload to.
+
+on:
+    release:
+        types: [published]
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+jobs:
+    web:
+        name: 'Build and package the web site'
+        uses: ./.github/workflows/_build-web.yml
+        with:
+            # Empty: the downloadable build serves the root of an origin, so the same
+            # zip works on any host. A prefix needs its own build — see README-DEPLOY.txt.
+            base_path: ''
+            artifact_name: web-build
+            package_zip: true
+
+    release:
+        name: 'Attach the web zip to the release'
+        needs: web
+        if: github.event_name == 'release'
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        permissions:
+            contents: write
+        steps:
+            - name: Download the package
+              uses: actions/download-artifact@v8
+              with:
+                  name: web-release-zip
+                  path: dist
+
+            # The zip's name comes from package.json's version (scripts/package-web.mjs),
+            # the tag from the release. RELEASE.md makes them equal; say so loudly here
+            # rather than ship `glowing-bear-web-0.26.0.zip` under a v0.27.0 release.
+            - name: Check the package names this release
+              env:
+                  TAG: ${{ github.event.release.tag_name }}
+              run: |
+                  expected="glowing-bear-web-${TAG#v}.zip"
+                  test -f "dist/$expected" || {
+                      echo "expected dist/$expected; found:"
+                      ls -1 dist
+                      echo "package.json's version must match the tag before the release is cut — see RELEASE.md step 1."
+                      exit 1
+                  }
+
+            - name: Check the checksum travels correctly
+              run: ( cd dist && sha256sum -c SHA256SUMS )
+
+            - name: Upload to the release
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  TAG: ${{ github.event.release.tag_name }}
+              run: gh release upload "$TAG" dist/glowing-bear-web-*.zip dist/SHA256SUMS --clobber
