@@ -46,7 +46,11 @@ describe('Sound Notification', () => {
 
     it('creates Audio with correct source path', () => {
         playNotificationSound();
-        expect(AudioMock).toHaveBeenCalledWith('/assets/audio/sonar.mp3');
+        // `asset()` output, resolved by the browser against the document. The
+        // hand-written '/assets/audio/sonar.mp3' it replaces names the origin
+        // root, so it 404s under a base path; `notification-asset-paths.test.ts`
+        // pins the resolution for both deployments.
+        expect(AudioMock).toHaveBeenCalledWith('./assets/audio/sonar.mp3');
     });
 
     it('calls play on the audio element', () => {

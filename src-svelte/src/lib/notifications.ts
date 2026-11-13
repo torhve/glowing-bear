@@ -1,6 +1,7 @@
 // Notification service for Glowing Bear
 // Ported from notifications.js
 
+import { asset } from '$app/paths';
 import { settings, updateSettings } from './stores/settings';
 import { setActiveBuffer } from './stores/models';
 import { badgeState, documentTitle, type BadgeState } from './stores/indicatorState';
@@ -126,7 +127,7 @@ export async function createHighlight(buffer: BufferData, message: string): Prom
     const title = `[${bufferName}]`;
     const options: NotificationOptions = {
         body: message.substring(0, 200),
-        icon: '/glowing_bear_128x128.png',
+        icon: asset('glowing_bear_128x128.png'),
         tag: buffer.id,
         requireInteraction: false
     };
@@ -288,7 +289,11 @@ export function playNotificationSound(): void {
 
     if (DEBUG_NOTIFICATIONS) console.log('[notification] playing notification sound');
     try {
-        const audio = new Audio('/assets/audio/sonar.mp3');
+        // `asset()` asks for the file the way the rest of the app does, so the
+        // browser resolves it inside whichever deployment the page is served
+        // from. A root-absolute '/assets/...' names the origin root, so it 404s
+        // under a base path.
+        const audio = new Audio(asset('assets/audio/sonar.mp3'));
         audio.volume = 0.5;
         audio.play().catch(e => {
             console.warn('Audio playback failed:', e);
