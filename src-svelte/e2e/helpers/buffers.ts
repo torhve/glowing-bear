@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { expect } from "@playwright/test";
 import { describeAppState, readAppState } from "./appState";
+import { relayBufferNames } from "./relay-admin";
 
 // Buffer list displays trimmedName (stripped of #, &, etc.), so match against that.
 function getBufferText(name: string): string {
@@ -16,22 +17,41 @@ export function bufferItemForName(page: Page, name: string) {
         .filter({ has: page.locator(".buffer-name").filter({ hasText: exact }) });
 }
 
+/**
+ * What the sidebar and the fixture really hold, for a row that never appeared.
+ *
+ * Both waits below look for the same locator, and only one of them reported anything
+ * beyond a Playwright timeout. The sidebar rows separate "the buffer arrived under
+ * another name" from "there is no such row". The relay's own list separates "the client
+ * never heard of this buffer" from "the fixture does not have it" — a spec waiting for a
+ * buffer another spec creates reads exactly like a lost sync, and did.
+ */
+async function missingRowReport(page: Page, name: string, timeout: number): Promise<string> {
+    const present = await page
+        .locator('[data-testid="buffer-item"] .buffer-name')
+        .allTextContents();
+    // A fixture that has gone answers late or not at all. A diagnostic must not replace
+    // the failure it describes with a helper failure of its own, so this is bounded and
+    // every error path returns text.
+    const relayList = await Promise.race([
+        relayBufferNames().then(
+            (names) => names.join(", "),
+            () => "unreadable",
+        ),
+        new Promise<string>((resolve) => setTimeout(() => resolve("read timed out"), 2000)),
+    ]).catch(() => "unreadable");
+    return (
+        `no sidebar row named "${name}" within ${timeout}ms; rows present: ` +
+        `${present.join(", ") || "(none)"}; relay buffers: ${relayList} — ${await describeAppState(page)}`
+    );
+}
+
 export async function waitForBuffer(page: Page, name: string, timeout = 10000) {
     const item = bufferItemForName(page, name).first();
     try {
         await item.waitFor({ state: "visible", timeout });
     } catch (error) {
-        // The sidebar rows are the thing that diverged, so name them: a failure then says
-        // whether the buffer never arrived or arrived under a different name. On the shared
-        // fixture a bot's query buffer has been seen as both `gbbot` and `gbbot2`, and the
-        // relay's buffer list alone cannot say which row the client was shown.
-        const present = await page
-            .locator('[data-testid="buffer-item"] .buffer-name')
-            .allTextContents();
-        throw new Error(
-            `no sidebar row named "${name}" within ${timeout}ms; rows present: ${present.join(", ") || "(none)"} — ${await describeAppState(page)}`,
-            { cause: error },
-        );
+        throw new Error(await missingRowReport(page, name, timeout), { cause: error });
     }
 }
 
@@ -44,10 +64,14 @@ export async function switchToBuffer(
 
     // Wait for element to be stable before clicking — prevents "element not stable" failures
     // that occur after viewport changes, reconnections, or other DOM-mutating operations.
-    await bufferItem.waitFor({
-        state: "visible",
-        timeout: opts?.timeout ?? 10000,
-    });
+    try {
+        await bufferItem.waitFor({
+            state: "visible",
+            timeout: opts?.timeout ?? 10000,
+        });
+    } catch (error) {
+        throw new Error(await missingRowReport(page, name, opts?.timeout ?? 10000), { cause: error });
+    }
     try {
         await bufferItem.click({ timeout: opts?.timeout ?? 10000 });
     } catch (error) {

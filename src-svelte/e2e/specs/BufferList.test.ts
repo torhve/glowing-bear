@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { connectToWeechat, clearSettings, waitForAppReady } from '../helpers/connection';
 import { irc } from '../helpers/irc-control';
 import { switchToBuffer, waitForBuffer } from '../helpers/buffers';
+import { closeSpecChatChannel, openSpecChatChannel } from '../helpers/spec-chat-channel';
 
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
 import { createConnectedPage } from '../fixtures/auth';
@@ -74,36 +75,46 @@ test('should show buffer search input in topbar', async () => {
     await expect(page.locator('#buffer-search')).not.toBeVisible({ timeout: 5000 });
 });
 
-// This one carried the note "when FormInput is updated to use bind:value, uncomment this test".
-// That update never happened and it was never the blocker: the input publishes its own event
-// (FormInput.svelte:58-61) and the dialog reads it into bufferSearchQuery
-// (BufferSearchModal.svelte:198). Measured here: typing
-// `#glowing-bear` takes the result list from 5 rows to 2.
+// The dialog keeps a row when the query reaches its short name, full name, buffer number or
+// title (bufferSearchMatch.ts:38-45), and marks what it matched on the rows it keeps. Which
+// fields a query can reach is a pure function's job and is pinned in
+// src-svelte/test/unit/buffer-search-match.test.ts. What belongs to the browser is the dialog's
+// own promise: it keeps what the query reaches and drops what it does not.
 //
-// What made it look broken was the assertion, not the binding. The dialog matches short name,
-// full name, buffer number and the buffer's title (BufferSearchModal.svelte:30-37), so a row can
-// legitimately survive a query it does not spell out — gbtest's `python.grep` buffer carries
-// `#glowing-bear` in its title and stayed in the list. The rule worth pinning is that the query
-// keeps what it reaches and drops what it does not.
+// So this spec joins the two channels it asserts on. An absolute row count was never a claim
+// about the dialog — it was a claim about how many buffers the fixture happened to be holding,
+// and on a fresh fixture that number is three.
 test('searching buffers keeps the match and drops what the query does not reach', async () => {
-    await page.getByTestId('search-button').click();
-    const searchInput = page.locator('#buffer-search');
-    await expect(searchInput).toBeVisible({ timeout: 5000 });
+    const kept = await openSpecChatChannel(page, 'searchkeep');
+    const dropped = await openSpecChatChannel(page, 'searchdrop');
+    try {
+        await page.getByTestId('search-button').click();
+        const searchInput = page.locator('#buffer-search');
+        await expect(searchInput).toBeVisible({ timeout: 5000 });
 
-    const rows = page.locator('[data-search-index]');
-    const countBefore = await rows.count();
-    expect(countBefore).toBeGreaterThanOrEqual(4);
+        const rows = page.locator('[data-search-index]');
+        const rowFor = (channel: string) => rows.filter({ hasText: channel });
 
-    await searchInput.fill('#glowing-bear');
+        // Both rows this spec created are listed before any query. Without this the assertions
+        // below could pass on a dialog that listed neither row.
+        await expect(rowFor(kept)).toHaveCount(1);
+        await expect(rowFor(dropped)).toHaveCount(1);
 
-    await expect(rows.filter({ hasText: '#glowing-bear' })).toHaveCount(1);
-    await expect(rows.filter({ hasText: 'core.weechat' })).toHaveCount(0);
-    await expect(rows.filter({ hasText: 'relay.list' })).toHaveCount(0);
-    await expect(rows.filter({ hasText: 'gbbot2' })).toHaveCount(0);
-    await expect(rows).not.toHaveCount(countBefore);
+        await searchInput.fill(kept);
+        await expect(rowFor(kept)).toHaveCount(1);
+        await expect(rowFor(dropped)).toHaveCount(0);
 
-    await page.keyboard.press('Escape');
-    await expect(searchInput).not.toBeVisible({ timeout: 5000 });
+        // The other half: the row that survives is the one the query reaches, not the one the
+        // dialog happened to list first.
+        await searchInput.fill(dropped);
+        await expect(rowFor(dropped)).toHaveCount(1);
+        await expect(rowFor(kept)).toHaveCount(0);
+    } finally {
+        await page.keyboard.press('Escape').catch(() => {});
+        await switchToBuffer(page, '#glowing-bear').catch(() => {});
+        closeSpecChatChannel(kept);
+        closeSpecChatChannel(dropped);
+    }
 });
 
 test('should close buffer search with Escape key', async () => {
@@ -143,6 +154,37 @@ test.describe('buffer search arrow navigation', () => {
     // plain fill on #buffer-search filters the list, so the workaround was solving a problem this
     // app does not have. It is gone; these tests type into the dialog.
 
+    // The arrow keys move a highlight between the rows the dialog is showing, so the number of
+    // rows is this group's precondition. A query reaching however many buffers the fixture happens
+    // to hold is not one: on a fresh fixture `g` reaches two buffers, which is not enough for a
+    // highlight to move across three rows. This group joins three channels of its own. Their names
+    // share the prefix `gbownar`, which no other buffer here carries, so the query these tests type
+    // reaches exactly those three rows.
+    const owned: string[] = [];
+
+    test.beforeAll(async () => {
+        for (const suffix of ['a', 'b', 'c']) owned.push(await openSpecChatChannel(page, `ar${suffix}`));
+    });
+
+    test.afterAll(async () => {
+        // Leave a stable buffer first: closing the buffer the app is showing moves it somewhere
+        // the next test did not choose.
+        await switchToBuffer(page, '#glowing-bear').catch(() => {});
+        for (const channel of owned) closeSpecChatChannel(channel);
+    });
+
+    /** Open the dialog on this group's three channels, and state that arrangement. */
+    async function openQuery() {
+        const searchInput = page.locator('#buffer-search');
+        await searchInput.fill('gbownar');
+        const results = page.locator('[data-search-index]');
+        // The count is the arrangement, stated as the number of channels this group joined. A row
+        // left over from an aborted run that also matches the token fails here instead of quietly
+        // shifting the highlight assertions onto another row.
+        await expect(results).toHaveCount(owned.length, { timeout: 10000 });
+        return { searchInput, results };
+    }
+
     test.beforeEach(async () => {
         // Close search modal if already open (from previous test)
         const modal = page.locator('#buffer-search-modal');
@@ -159,43 +201,27 @@ test.describe('buffer search arrow navigation', () => {
     });
 
     test('should open search dropdown with matching results', async () => {
-        const searchInput = page.locator('#buffer-search');
-        // 'g' reaches gbtest, glowing-bear, gbbot2 and the grep buffer.
-        await searchInput.fill('g');
-        const results = page.locator('[data-search-index]');
-        await expect(results).not.toHaveCount(0, { timeout: 5000 });
+        await openQuery();
+        // The dropdown lists the buffers the query reaches — here, all three this group joined.
+        for (const channel of owned) {
+            await expect(page.locator('[data-search-index]').filter({ hasText: channel })).toHaveCount(1);
+        }
     });
 
     test('should highlight first result by default', async () => {
-        const searchInput = page.locator('#buffer-search');
-        await searchInput.fill('g');
-        await expect(page.locator('[data-search-index="0"]')).toHaveClass(/bg-accent/, { timeout: 5000 });
+        await openQuery();
+        await expect(page.locator('[data-search-index="0"]')).toHaveClass(/bg-accent/);
     });
 
     test('should move highlight down on ArrowDown', async () => {
-        const searchInput = page.locator('#buffer-search');
-        await searchInput.fill('g');
-
-        const results = page.locator('[data-search-index]');
-        // A stated precondition, not a guard that skips: if the fixture ever stops offering two
-        // matching buffers this test has to say so instead of quietly disappearing from the run.
-        await expect.poll(async () => await results.count()).toBeGreaterThanOrEqual(2);
-
+        await openQuery();
         await page.dispatchEvent('#buffer-search', 'keydown', { key: 'ArrowDown' });
         await expect(page.locator('[data-search-index="0"]')).not.toHaveClass(/bg-accent/);
         await expect(page.locator('[data-search-index="1"]')).toHaveClass(/bg-accent/);
     });
 
     test('should move highlight up on ArrowUp', async () => {
-        const searchInput = page.locator('#buffer-search');
-        // 'g', not '#': the query has to reach at least three buffers for a highlight to move
-        // between rows, and '#' reaches only the two IRC channels gbtest keeps. That is why this
-        // test used to disappear from a run whenever the fixture was thin.
-        await searchInput.fill('g');
-
-        const results = page.locator('[data-search-index]');
-        await expect.poll(async () => await results.count()).toBeGreaterThanOrEqual(3);
-
+        await openQuery();
         await page.dispatchEvent('#buffer-search', 'keydown', { key: 'ArrowDown' });
         await page.dispatchEvent('#buffer-search', 'keydown', { key: 'ArrowDown' });
         await expect(page.locator('[data-search-index="2"]')).toHaveClass(/bg-accent/);
@@ -204,40 +230,23 @@ test.describe('buffer search arrow navigation', () => {
     });
 
     test('should wrap from last to first on ArrowDown', async () => {
-        const searchInput = page.locator('#buffer-search');
-        await searchInput.fill('g');
-
-        const results = page.locator('[data-search-index]');
-        await expect.poll(async () => await results.count()).toBeGreaterThanOrEqual(1);
-        const count = await results.count();
-
+        await openQuery();
         // Walking one row past the end has to land back on the first row.
-        for (let i = 0; i < count; i++) {
+        for (let step = 0; step < owned.length; step++) {
             await page.dispatchEvent('#buffer-search', 'keydown', { key: 'ArrowDown' });
         }
         await expect(page.locator('[data-search-index="0"]')).toHaveClass(/bg-accent/);
     });
 
     test('should wrap from first to last on ArrowUp', async () => {
-        const searchInput = page.locator('#buffer-search');
-        await searchInput.fill('g');
-
-        const results = page.locator('[data-search-index]');
-        await expect.poll(async () => await results.count()).toBeGreaterThanOrEqual(1);
-        const count = await results.count();
-
+        await openQuery();
         // And the other way round: one row before the top is the bottom row.
         await page.dispatchEvent('#buffer-search', 'keydown', { key: 'ArrowUp' });
-        await expect(page.locator(`[data-search-index="${count - 1}"]`)).toHaveClass(/bg-accent/);
+        await expect(page.locator(`[data-search-index="${owned.length - 1}"]`)).toHaveClass(/bg-accent/);
     });
 
     test('should activate the highlighted result on Enter', async () => {
-        const searchInput = page.locator('#buffer-search');
-        await searchInput.fill('g');
-
-        const results = page.locator('[data-search-index]');
-        await expect.poll(async () => await results.count()).toBeGreaterThanOrEqual(2);
-
+        const { searchInput } = await openQuery();
         await page.dispatchEvent('#buffer-search', 'keydown', { key: 'ArrowDown' });
         await searchInput.press('Enter');
         // Enter acts on the highlighted row: the dialog closes and the chat is looking at that
@@ -247,20 +256,17 @@ test.describe('buffer search arrow navigation', () => {
     });
 
     test('should reset highlight to top when query changes', async () => {
-        const searchInput = page.locator('#buffer-search');
-        await searchInput.fill('g');
-
-        const results = page.locator('[data-search-index]');
-        await expect.poll(async () => await results.count()).toBeGreaterThanOrEqual(3);
-
+        const { searchInput, results } = await openQuery();
         await page.dispatchEvent('#buffer-search', 'keydown', { key: 'ArrowDown' });
         await page.dispatchEvent('#buffer-search', 'keydown', { key: 'ArrowDown' });
         await expect(page.locator('[data-search-index="2"]')).toHaveClass(/bg-accent/);
 
         // Narrowing the query re-ranks the list, so the highlight restarts at the top instead of
         // following a buffer that has moved somewhere else in it — the dialog's own oninput resets
-        // selectedIndex (BufferSearchModal.svelte:198).
-        await searchInput.fill('gl');
+        // selectedIndex (BufferSearchModal.svelte:198). The narrower query here reaches one of the
+        // three channels this group joined.
+        await searchInput.fill('gbownara');
+        await expect(results).toHaveCount(1);
         await expect(page.locator('[data-search-index="0"]')).toHaveClass(/bg-accent/, { timeout: 5000 });
     });
 

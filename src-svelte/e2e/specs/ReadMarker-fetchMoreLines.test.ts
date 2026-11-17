@@ -5,20 +5,75 @@ import { disconnect, reconnect } from '../helpers/connection';
 import { irc } from '../helpers/irc-control';
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
 import { waitForChatSettled } from '../helpers/waits';
+import { closeSpecChatChannel, openSpecChatChannel } from '../helpers/spec-chat-channel';
 
 let page: import('@playwright/test').Page;
 
+
 test.describe.configure({ mode: 'serial' });
+
+// The app asks each relay for `maxBufferLines` lines: two screenfuls plus ten, clamped to
+// [200, 1000] (src-svelte/src/lib/stores/models.ts:871-876). A buffer offers a page upward only
+// when it holds more than that window, and #glowing-bear holds only what the fixture's last run
+// left there — measured as 4 rows on a fresh fixture, and more on a long-lived one. Both halves
+// of that are a lie to assert against, so this file fills its own channels and pages in those.
+//
+// Each test that pages gets its own channel. Paging widens the app's retained window for that
+// buffer only, so a shared channel would leave the second and third test looking at a buffer the
+// earlier tests had already widened past its depth: no page to fetch, and an assertion about
+// paging that never paged.
+const SEND_BATCH = 60;
+// The fill bound is tied to the app's floor rather than chosen on its own: `maxBufferLines`
+// clamps to at least 200 lines (models.ts:871-876), so 400 planted lines is the least depth that
+// offers a page for any viewport. If that floor rises, FILL_LIMIT has to rise with it — the
+// failure below says which bound was reached.
+const RETAINED_WINDOW_FLOOR = 200;
+const FILL_LIMIT = RETAINED_WINDOW_FLOOR * 2;
+const channels: string[] = [];
 
 test.beforeAll(async ({ browser }) => {
     page = await createConnectedPage(browser);
     setupEffectOrphanFilter(page);
-    await waitForBuffer(page, '#glowing-bear', 15000);
 });
 
 test.afterAll(async () => {
+    // Leave a stable buffer first: closing the buffer the app is showing moves it somewhere the
+    // next spec did not choose.
+    await switchToBuffer(page, '#glowing-bear').catch(() => {});
+    for (const channel of channels) closeSpecChatChannel(channel);
     await page.close();
 });
+
+/**
+ * Join a channel for this test, fill it past the app's retained window, and return it.
+ *
+ * The fill is proved by the fetch-more control. Without that control the test's precondition is
+ * absent and a paging assertion checks nothing: `clickFetchMore` would report "the app stopped
+ * offering a page" and a test that only counts pages would fail on the arrangement, not on the
+ * product.
+ */
+async function openPagedChannel(label: string): Promise<string> {
+    const channel = await openSpecChatChannel(page, label);
+    channels.push(channel);
+
+    // State which buffer this is filling. `/join` answers in the buffer the command was typed in:
+    // measured, the sidebar row then read 361 unread while the chat was still showing
+    // #glowing-bear, so the control below was polled in a buffer that held none of these lines.
+    await switchToBuffer(page, channel);
+
+    const fetchMore = page.getByTestId('fetch-more-lines');
+    for (let sent = 0; sent < FILL_LIMIT; sent += SEND_BATCH) {
+        for (let i = 0; i < SEND_BATCH; i++) {
+            await irc.sendMessage(channel, `${label}-depth-${sent + i}`);
+        }
+        if (await fetchMore.waitFor({ state: 'visible', timeout: 4000 }).then(() => true, () => false)) return channel;
+    }
+    await expect(
+        fetchMore,
+        `planting ${FILL_LIMIT} lines into ${channel} left no page to fetch: the app's retained window is not smaller than that fill`,
+    ).toBeVisible({ timeout: 15000 });
+    return channel;
+}
 
 /**
  * Snapshot of the rendered read-marker state. `needle` (when given) identifies
@@ -54,16 +109,14 @@ function chatState(needle?: string) {
     }, needle);
 }
 
-// Commit a clean reading state: view #glowing-bear at the bottom, then leave.
-// gbtest persists across specs, so the channel may already carry unread.
-async function markBufferRead() {
-    await waitForBuffer(page, '#glowing-bear', 15000);
-    await switchToBuffer(page, '#glowing-bear');
+// Commit a clean reading state: view the channel at the bottom, then leave it.
+async function markBufferRead(channel: string) {
+    await switchToBuffer(page, channel);
     await page.locator('[data-testid="chat-messages"]').evaluate((el) => {
         el.scrollTop = el.scrollHeight;
     });
-    await waitForBuffer(page, 'gbtest', 10000);
-    await switchToBuffer(page, 'gbtest');
+    await waitForChatSettled(page);
+    await switchToBuffer(page, '#glowing-bear');
 }
 
 /**
@@ -93,15 +146,15 @@ async function clickFetchMore(): Promise<boolean> {
     return true;
 }
 
-
 // Loading older history only widens the retained window. It must not turn the
 // lines it loads into unread ones: the separator and its "N new" badge stay
 // exactly where they were.
 test('first visit in a fresh session does not mark the whole buffer unread', async () => {
+    const channel = await openPagedChannel('fresh');
     await disconnect(page);
     await reconnect(page, { preserveLastBuffer: true });
-    await waitForBuffer(page, '#glowing-bear', 15000);
-    await switchToBuffer(page, '#glowing-bear');
+    await waitForBuffer(page, channel, 15000);
+    await switchToBuffer(page, channel);
     await expect.poll(async () => (await chatState()).lines, { timeout: 15000 }).toBeGreaterThan(5);
 
     const first = await chatState();
@@ -116,8 +169,9 @@ test('first visit in a fresh session does not mark the whole buffer unread', asy
 });
 
 test('fetching older history does not create a read marker on a read buffer', async () => {
-    await markBufferRead();
-    await switchToBuffer(page, '#glowing-bear');
+    const channel = await openPagedChannel('read');
+    await markBufferRead(channel);
+    await switchToBuffer(page, channel);
 
     const before = await chatState();
     expect(before.markerAtEnd).toBe(true);
@@ -134,14 +188,14 @@ test('fetching older history does not create a read marker on a read buffer', as
 });
 
 test('fetching older history keeps an existing marker and its badge fixed', async () => {
-    await markBufferRead();
+    const channel = await openPagedChannel('marker');
+    await markBufferRead(channel);
     // Create unread lines while viewing another buffer.
-    await switchToBuffer(page, 'gbtest');
     const runId = Date.now();
     const unread = Array.from({ length: 3 }, (_, i) => `fetchmore-unread-${runId}-${i}`);
-    for (const text of unread) await irc.sendMessage('#glowing-bear', text);
+    for (const text of unread) await irc.sendMessage(channel, text);
 
-    await switchToBuffer(page, '#glowing-bear');
+    await switchToBuffer(page, channel);
     await expect.poll(() => chatState(unread[0]), { timeout: 15000 }).toMatchObject({
         hasReadmarker: true,
         markerImmediatelyBeforeFirstUnread: true,
@@ -162,5 +216,5 @@ test('fetching older history keeps an existing marker and its badge fixed', asyn
             markerImmediatelyBeforeFirstUnread: true,
         });
     }
-    expect(pages, 'a channel this deep should offer at least one page').toBeGreaterThanOrEqual(1);
+    expect(pages, `${channel} was filled past the app's window, so it should offer at least one page`).toBeGreaterThanOrEqual(1);
 });

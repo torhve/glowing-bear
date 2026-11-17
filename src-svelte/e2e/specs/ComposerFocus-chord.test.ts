@@ -3,6 +3,12 @@ import { createConnectedPage } from '../fixtures/auth';
 import { switchToBuffer, waitForBuffer } from '../helpers/buffers';
 import { expectInputFocused, rawInputValue, waitForInputValue } from '../helpers/input';
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
+import { closeSpecChatChannel, openSpecChatChannel } from '../helpers/spec-chat-channel';
+
+// The second conversation of each switch in this file. It has to be a channel the spec
+// joined itself: `grep` (the `python.grep` buffer) is created by the first content search
+// of a run, so switching to it was reading whichever spec happened to run before.
+let ownedChannel: string;
 
 let page: import('@playwright/test').Page;
 
@@ -13,10 +19,12 @@ test.beforeAll(async ({ browser }) => {
     setupEffectOrphanFilter(page);
     await waitForBuffer(page, '#glowing-bear', 15000);
     await switchToBuffer(page, '#glowing-bear');
+    ownedChannel = await openSpecChatChannel(page, 'focus');
 });
 
 test.afterAll(async () => {
     await switchToBuffer(page, '#glowing-bear');
+    closeSpecChatChannel(ownedChannel);
     await page.close();
 });
 
@@ -33,7 +41,7 @@ async function focusSomethingElse(): Promise<void> {
 
 test.describe('focus-composer (Alt+L)', () => {
     test('finds the composer after the chat has been re-rendered by a buffer switch', async () => {
-        await switchToBuffer(page, 'grep');
+        await switchToBuffer(page, ownedChannel);
         await focusSomethingElse();
 
         await page.keyboard.press('Alt+L');

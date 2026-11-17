@@ -42,6 +42,9 @@ export async function openSpecChatChannel(page: Page, label: string): Promise<st
             { cause: error },
         );
     }
+    // The join leaves the app showing the buffer the command was typed in, and the new channel
+    // counts every line it receives as unread. A spec that asserts on what this buffer renders has
+    // to switch to it itself.
     return name;
 }
 
