@@ -412,18 +412,60 @@ describe('rankCandidates', () => {
     });
 });
 
+/**
+ * Candidate shapes, add_space flags and the text left after the replaced span
+ * are the live answers in test/fixtures/api-dossier/raw/completion-shapes.json.
+ */
 describe('completionInsert', () => {
-    it('adds a trailing space to a bare nick candidate (older relay API)', () => {
-        expect(completionInsert('Bear:', false, 'auto')).toBe('Bear: ');
+    it('adds the space a bare nick candidate lacks (older relay API)', () => {
+        expect(completionInsert('Bear:', false, 'auto', '')).toBe('Bear: ');
     });
 
-    it('leaves a nick candidate that already ends in a space (recent WeeChat)', () => {
-        expect(completionInsert('gbbot2: ', false, 'auto')).toBe('gbbot2: ');
+    it('leaves the space a first-word nick candidate already carries', () => {
+        // {"command":"te","position":2} -> add_space false, list ["testuser: "]
+        expect(completionInsert('testuser: ', false, 'auto', '')).toBe('testuser: ');
+    });
+
+    it('adds one space to a mid-sentence nick the relay asked to space out', () => {
+        // {"command":"hello te","position":8} -> add_space true, list ["testuser"]
+        expect(completionInsert('testuser', true, 'auto', '')).toBe('testuser ');
+        expect(completionInsert('gbbot', true, 'auto', '')).toBe('gbbot ');
+    });
+
+    it('never adds a second space to a candidate that already ends in one', () => {
+        expect(completionInsert('gbbot ', true, 'auto', '')).toBe('gbbot ');
+    });
+
+    it('gives up its space when the reader already typed one after the word', () => {
+        // {"command":"say hi to gb now","position":12} -> add_space true, list ["gbbot"],
+        // and " now" stays in the composer.
+        expect(completionInsert('gbbot', true, 'auto', ' now')).toBe('gbbot');
+        // {"command":"te hello","position":2} -> add_space false, list ["testuser: "],
+        // so the baked space goes and the reader's space is the separator.
+        expect(completionInsert('testuser: ', false, 'auto', ' hello')).toBe('testuser:');
+    });
+
+    it('gives up its space when a newline follows the word', () => {
+        expect(completionInsert('testuser: ', false, 'auto', '\nnext line')).toBe('testuser:');
+    });
+
+    it('applies the seam rule in any context and leaves reader spacing alone', () => {
+        // No captured answer carries a trailing space outside the nick context or
+        // more than one, so these pin the rule rather than a relay shape.
+        expect(completionInsert('Bear: ', false, 'command', ' x')).toBe('Bear:');
+        expect(completionInsert('gbbot  ', true, 'auto', ' now')).toBe('gbbot');
+        expect(completionInsert('gbbot  ', true, 'auto', '')).toBe('gbbot ');
+        // Two spaces the reader typed are the composer's, not the client's to fold.
+        expect(completionInsert('gbbot ', true, 'auto', '  now')).toBe('gbbot');
     });
 
     it('respects add_space for command contexts', () => {
-        expect(completionInsert('version', true, 'command')).toBe('version ');
-        expect(completionInsert('probebot', true, 'command_arg')).toBe('probebot ');
-        expect(completionInsert('foo', false, 'command_arg')).toBe('foo');
+        expect(completionInsert('version', true, 'command', '')).toBe('version ');
+        expect(completionInsert('probebot', true, 'command_arg', '')).toBe('probebot ');
+        expect(completionInsert('foo', false, 'command_arg', '')).toBe('foo');
+    });
+
+    it('inserts nothing for an empty candidate', () => {
+        expect(completionInsert('', true, 'auto', '')).toBe('');
     });
 });

@@ -535,8 +535,9 @@
       index = stepIndex(cycle, direction);
     }
     const candidate = cycle.candidates[index]!;
-    const insert = completionInsert(candidate, cycle.addSpace, cycle.context);
-    const resultText = text.slice(0, cycle.start) + insert + text.slice(cycle.end);
+    const after = text.slice(cycle.end);
+    const insert = completionInsert(candidate, cycle.addSpace, cycle.context, after);
+    const resultText = text.slice(0, cycle.start) + insert + after;
     // One candidate is a finished completion, not a list to keep walking: the
     // cycle is dropped so the next Tab asks the relay about the new word.
     _apiCycle = cycle.candidates.length > 1
@@ -577,8 +578,9 @@
       index = stepIndex(cycle, direction);
     }
     const candidate = cycle.candidates[index]!;
-    const insert = candidate + (cycle.addSpace ? ' ' : '');
-    const resultText = text.slice(0, cycle.start) + insert + text.slice(cycle.end);
+    const after = text.slice(cycle.end);
+    const insert = completionInsert(candidate, cycle.addSpace, cycle.context, after);
+    const resultText = text.slice(0, cycle.start) + insert + after;
     // One candidate is a finished completion, not a list to keep walking: the
     // cycle is dropped so the next Tab asks the relay about the new word.
     _legacyCycle = cycle.candidates.length > 1

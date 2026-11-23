@@ -38,6 +38,7 @@ form; this directory keeps the reproducible evidence.
                                           # fixture first, it owns that port)
    node probes/probe-legacy-buffer-fields.mjs  # legacy hdata: what full_name / short_name /
                                           # plugin actually say (gbtest legacy relay, port 9001)
+   node probes/probe-completion-shapes.mjs  # one nick completion, two answer shapes by word position
    node probes/probe-endpoint-matrix.mjs 9010   # every endpoint the transport uses,
                                           # diff 4.10.1 vs 5.0 (also 9011)
    node probes/probe-weechat5-schema.mjs 9011  # buffer/line key sets, id type +
@@ -232,9 +233,27 @@ No PUT/DELETE resources exist despite the CORS Allow header.
 ### Completion (live)
 
 - `gbb` → `{"context":"auto","base_word":"gbb","position_replace":0,"add_space":false,"list":["gbbot2: "]}`
-  (nick candidates embed the configured completer suffix).
+  (a nick candidate at the start of the composer embeds the configured completer suffix).
 - `/msg prob` → context `command_arg`, `position_replace:5`, `list:["probebot"]`.
 - `/ver` (core) → context `command`, `position_replace:1`, `list:["version"]`.
+- **A nick answer changes shape with the word's position** (`probes/probe-completion-shapes.mjs`,
+  raw capture `raw/completion-shapes.json`, WeeChat 4.10.1, 2026-11-29). The first word of the
+  composer carries the completer suffix and the trailing space inside the candidate, with
+  `add_space:false`. Any later word comes back bare, with `add_space:true`.
+
+  | composer (caret at `position`) | text after the caret | answer |
+  |---|---|---|
+  | `te`@2 | `""` | `context:"auto"`, `add_space:false`, `list:["testuser: "]` |
+  | `hello te`@8 | `""` | `context:"auto"`, `add_space:true`, `list:["testuser"]` |
+  | `te hello`@2 | `" hello"` | `context:"auto"`, `add_space:false`, `list:["testuser: "]` |
+  | `say hi to gb now`@12 | `" now"` | `context:"auto"`, `add_space:true`, `list:["gbbot"]` |
+
+  Each shape says who appends the space. `add_space` says nothing about what already follows the
+  caret, and the composer keeps that text: a space the reader typed is a separator the client must
+  not add a second copy of.
+  The capture holds the contexts `auto`, `command` and `command_arg`; `add_space:false` appears
+  only on the first-word nick answers. It also records the buffer's nicklist
+  (`gbbot`, `testuser`), because every answer above is a match against those two names.
 - A **completed command is answered as its arguments, not as its remaining
   candidates**: `/msgbuf `@8 → context `command_arg`, `position_replace:8`,
   `list:[core.weechat, irc.gbtest.#gbperf9, …]`; `/version `@9 → context

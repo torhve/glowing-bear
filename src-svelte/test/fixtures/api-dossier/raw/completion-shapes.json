@@ -1,0 +1,138 @@
+{
+  "probed_at": "2026-11-23T19:45:02.917Z",
+  "transport": "ws://127.0.0.1:9010/api",
+  "buffer": "irc.gbtest.#glowing-bear",
+  "buffer_id": 1794904838392692,
+  "nicklist": [
+    "gbbot",
+    "testuser"
+  ],
+  "answers": [
+    {
+      "ask": "a nick as the only word",
+      "request": {
+        "command": "te",
+        "position": 2
+      },
+      "text_after_caret": "",
+      "code": 200,
+      "body": {
+        "context": "auto",
+        "base_word": "te",
+        "position_replace": 0,
+        "add_space": false,
+        "list": [
+          "testuser: "
+        ]
+      }
+    },
+    {
+      "ask": "a nick as the first word, fully typed",
+      "request": {
+        "command": "testuser",
+        "position": 8
+      },
+      "text_after_caret": "",
+      "code": 200,
+      "body": {
+        "context": "auto",
+        "base_word": "testuser",
+        "position_replace": 0,
+        "add_space": false,
+        "list": [
+          "testuser: "
+        ]
+      }
+    },
+    {
+      "ask": "a nick after a word, caret at the end",
+      "request": {
+        "command": "hello te",
+        "position": 8
+      },
+      "text_after_caret": "",
+      "code": 200,
+      "body": {
+        "context": "auto",
+        "base_word": "te",
+        "position_replace": 6,
+        "add_space": true,
+        "list": [
+          "testuser"
+        ]
+      }
+    },
+    {
+      "ask": "a first word with a word after the caret",
+      "request": {
+        "command": "te hello",
+        "position": 2
+      },
+      "text_after_caret": " hello",
+      "code": 200,
+      "body": {
+        "context": "auto",
+        "base_word": "te",
+        "position_replace": 0,
+        "add_space": false,
+        "list": [
+          "testuser: "
+        ]
+      }
+    },
+    {
+      "ask": "a nick between words",
+      "request": {
+        "command": "say hi to gb now",
+        "position": 12
+      },
+      "text_after_caret": " now",
+      "code": 200,
+      "body": {
+        "context": "auto",
+        "base_word": "gb",
+        "position_replace": 10,
+        "add_space": true,
+        "list": [
+          "gbbot"
+        ]
+      }
+    },
+    {
+      "ask": "a command argument",
+      "request": {
+        "command": "/msg te",
+        "position": 7
+      },
+      "text_after_caret": "",
+      "code": 200,
+      "body": {
+        "context": "command_arg",
+        "base_word": "te",
+        "position_replace": 5,
+        "add_space": true,
+        "list": [
+          "testuser"
+        ]
+      }
+    },
+    {
+      "ask": "a command name",
+      "request": {
+        "command": "/ver",
+        "position": 4
+      },
+      "text_after_caret": "",
+      "code": 200,
+      "body": {
+        "context": "command",
+        "base_word": "ver",
+        "position_replace": 1,
+        "add_space": true,
+        "list": [
+          "version"
+        ]
+      }
+    }
+  ]
+}

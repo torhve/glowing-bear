@@ -380,16 +380,29 @@ export function rankCandidates(candidates: string[], spokeAt: Map<string, number
 }
 
 /**
- * Build the text inserted by a completion candidate. WeeChat bakes the
- * completer suffix into nick candidates and, on recent versions, the
- * nick_add_space trailing space as well ("gbbot2: "). Older relay API
- * versions sent bare "nick:" candidates with add_space false, leaving the
- * input stuck onto the next word ("Bear:hello"). Restore the trailing
- * space for the nick (auto) context when the candidate lacks one.
+ * Build the text a completion candidate inserts. The client never adds a second
+ * separator between the candidate and what the composer keeps after it. Three
+ * things claim that space: the relay bakes it into a first-word nick candidate
+ * ("testuser: ", add_space false), the relay asks for it on a later word
+ * ("testuser", add_space true) — both shapes come from one buffer, live, in
+ * `test/fixtures/api-dossier/raw/completion-shapes.json` — and the reader may
+ * have typed it. When what follows the replaced span already starts with
+ * whitespace, the candidate contributes none and the reader's text stays as it
+ * was typed; otherwise a completion that wants a space ends the candidate with one.
+ *
+ * The want for a space is `add_space`, plus the nick (auto) context on relay API
+ * versions that sent a bare "Bear:" with add_space false and left the input stuck
+ * onto the next word. In the capture, add_space false with context "auto" appears
+ * only on the first-word nick answers, which is what makes that fallback safe.
  */
-export function completionInsert(candidate: string, addSpace: boolean, context: string): string {
-    let insert = candidate;
-    if (context === 'auto' && !/\s$/.test(insert)) insert += ' ';
-    if (addSpace) insert += ' ';
-    return insert;
+export function completionInsert(
+    candidate: string,
+    addSpace: boolean,
+    context: string,
+    textAfterSpan: string,
+): string {
+    if (!candidate) return candidate;
+    if (/^\s/.test(textAfterSpan)) return candidate.replace(/\s+$/, '');
+    if (!addSpace && context !== 'auto') return candidate;
+    return `${candidate.replace(/\s+$/, '')} `;
 }

@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { createConnectedPage } from '../fixtures/auth';
 import { waitForBuffer, switchToBuffer } from '../helpers/buffers';
+import { irc } from '../helpers/irc-control';
 
 import { setupEffectOrphanFilter } from '../helpers/pageerror';
 
@@ -21,28 +22,46 @@ test.beforeEach(async () => {
     setupEffectOrphanFilter(page)
 });
 
+/**
+ * The `gb…` nick the shared fixture channel holds.
+ *
+ * Completion picks it from WeeChat's nicklist, so the spec reads that arrangement
+ * instead of naming a nick a previous spec happened to leave behind.
+ */
+async function fixtureBotNick(): Promise<string> {
+    const members = await irc.channelMembers('#glowing-bear');
+    const bots = members.filter((name) => /^gb/i.test(name));
+    expect(bots, `expected exactly one gb nick in #glowing-bear, members: ${members.join(', ')}`).toHaveLength(1);
+    return bots[0]!;
+}
+
+/**
+ * Type `text`, walk the caret `back` characters left, press Tab, and hand back the
+ * composer once a completion has landed in it.
+ */
+async function completeInComposer(text: string, back = 0): Promise<string> {
+    const input = page.getByTestId('message-input');
+    await input.focus();
+    await input.fill(text);
+    for (let i = 0; i < back; i++) {
+        await input.press('ArrowLeft');
+    }
+    await input.press('Tab');
+    await expect
+        .poll(() => input.inputValue(), { timeout: 5000, message: `Tab left ${JSON.stringify(text)} unchanged` })
+        .not.toBe(text);
+    return input.inputValue();
+}
+
 test('Tab key completes partial nick at start of input', async () => {
     await waitForBuffer(page, '#glowing-bear', 10000);
     await switchToBuffer(page, '#glowing-bear');
     await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 5000 });
 
-    const input = page.getByTestId('message-input');
-    await input.focus();
-    await input.fill('te');
-    await page.evaluate(() => new Promise(r => requestAnimationFrame(r)));
-
-    await input.press('Tab');
-
-    // Wait for nick completion to appear
-    await expect(async () => {
-        const val = await input.inputValue();
-        expect(val.length).toBeGreaterThan(2);
-        if (/^(testuser|root|gbbot)/i.test(val)) {
-            // matched a known nick pattern
-        } else {
-            expect(val).toContain(':');
-        }
-    }).toPass({ timeout: 5000 });
+    // The first word of the composer arrives with the completer suffix and its
+    // space inside the candidate, so the composer gets one space and not two.
+    const bot = await fixtureBotNick();
+    expect(await completeInComposer('gb')).toBe(`${bot}: `);
 });
 
 test('nick-complete button completes nick', async () => {
@@ -101,18 +120,21 @@ test('Tab completes nick in middle of message', async () => {
     await switchToBuffer(page, '#glowing-bear');
     await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 5000 });
 
-    const input = page.getByTestId('message-input');
-    await input.focus();
+    // A later word comes back bare with add_space true, so the client supplies the
+    // separator the reader did not type — exactly one space.
+    const bot = await fixtureBotNick();
+    expect(await completeInComposer('hello gb')).toBe(`hello ${bot} `);
+});
 
-    await input.fill('hello te');
-    await page.evaluate(() => new Promise(r => requestAnimationFrame(r)));
+test('Tab does not add a space where the reader already typed one', async () => {
+    await waitForBuffer(page, '#glowing-bear', 10000);
+    await switchToBuffer(page, '#glowing-bear');
+    await expect(page.getByTestId('topic-bar')).toBeVisible({ timeout: 5000 });
 
-    await input.press('Tab');
-
-    await expect(async () => {
-        const val = await input.inputValue();
-        expect(val).toMatch(/^hello\s+/i);
-    }).toPass({ timeout: 5000 });
+    // Four ArrowLeft steps put the caret just past 'gb', so ' now' stays in the
+    // composer. A second space before it is the bug this pins.
+    const bot = await fixtureBotNick();
+    expect(await completeInComposer('say hi to gb now', 4)).toBe(`say hi to ${bot} now`);
 });
 
 test('no change when no nick matches the prefix', async () => {
